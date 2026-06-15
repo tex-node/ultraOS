@@ -148,6 +148,63 @@ database hosting, file storage, and real-time transport are selected.
 
 ## Session Updates
 
+### 2026-06-15 - UI Deployment
+
+**Objective**
+
+- Validate the supplied Vite UI and deploy it to the shared VPS without replacing
+  existing application files or Caddy site definitions.
+
+**Completed**
+
+- Added the supplied UI prototype under `UI/`.
+- Installed dependencies and generated a reproducible npm lockfile.
+- Built the production bundle successfully with Vite.
+- Selected a static Caddy deployment to avoid consuming or conflicting with existing
+  application ports.
+- Reserved `app.neonultra.ng` for the application.
+- Deployed release `20260615-020000` to
+  `/opt/ultraleagueos-ui/releases/20260615-020000`.
+- Added the `app.neonultra.ng` Caddy site without replacing existing site blocks.
+- Obtained a valid Let's Encrypt certificate and activated public HTTPS.
+
+**Decisions**
+
+- Deploy immutable timestamped releases under `/opt/ultraleagueos-ui/releases`.
+- Point `/opt/ultraleagueos-ui/current` to the active release.
+- Serve the single-page application directly through Caddy with an `index.html`
+  fallback.
+- Do not apply `npm audit fix --force`; it would upgrade React Router outside the
+  supplied dependency range and requires a separate compatibility test.
+
+**Verification**
+
+- `npm run build`: Passed.
+- Vite transformed 2,218 modules and generated the production bundle.
+- Existing VPS directories, application containers, ports, and Caddy entries were
+  inspected before deployment.
+- `app.neonultra.ng` and `/opt/ultraleagueos-ui` were unused.
+- Caddy configuration validation: Passed.
+- Public homepage: `200 OK`.
+- Immutable JavaScript asset caching: Verified.
+- SPA fallback route `/dashboard`: `200 OK`.
+- Browser smoke test: Login and dashboard navigation passed.
+
+**Known issues**
+
+- The production dependency audit reports a high-severity advisory for the pinned
+  React Router version. The prototype does not currently import React Router, but the
+  dependency should be upgraded and retested.
+- The generated JavaScript bundle is approximately 623 KB before gzip and should be
+  split as the application grows.
+- This deployment is a UI prototype with in-memory sample data, not the full Next.js
+  and PostgreSQL application.
+
+**Next step**
+
+- Begin the full application scaffold and connect the approved UI flows to
+  authenticated backend data.
+
 ### 2026-06-14 - Project Initialization
 
 **Completed**
