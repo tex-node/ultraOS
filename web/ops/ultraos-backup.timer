@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly Ultra League OS database backup
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 Africa/Lagos
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

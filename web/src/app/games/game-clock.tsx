@@ -1,0 +1,2 @@
+"use client";import { useEffect,useState } from "react";
+export function GameClock({seconds,status,startedAt}:{seconds:number;status:string;startedAt:string|null}){const[value,setValue]=useState(seconds);useEffect(()=>{if(status!=="LIVE"||!startedAt)return;const base=Date.now();const timer=setInterval(()=>setValue(Math.max(0,seconds-Math.floor((Date.now()-base)/1000))),250);return()=>clearInterval(timer)},[seconds,status,startedAt]);return <span>{Math.floor(value/60).toString().padStart(2,"0")}:{(value%60).toString().padStart(2,"0")}</span>}

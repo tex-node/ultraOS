@@ -1,0 +1,15 @@
+[Unit]
+Description=Ultra League OS PostgreSQL backup
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ultraos
+WorkingDirectory=/opt/ultraleagueos/current/web
+EnvironmentFile=/etc/ultraleagueos/web.env
+Environment=ULTRA_BACKUP_DIR=/var/backups/ultraleagueos
+Environment=ULTRA_BACKUP_RETENTION_DAYS=14
+ExecStart=/opt/ultraleagueos/current/web/scripts/backup-database.sh
+
+[Install]
+WantedBy=multi-user.target
