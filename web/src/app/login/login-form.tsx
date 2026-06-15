@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { signIn } from "next-auth/react";
+import { getSession, signIn } from "next-auth/react";
 
 type LoginState = {
   error?: string;
@@ -21,7 +21,8 @@ async function loginAction(
     return { error: "Invalid email or password." };
   }
 
-  window.location.href = "/dashboard";
+  const session = await getSession();
+  window.location.href = session?.user.role === "FAN" ? "/public/events" : "/dashboard";
   return {};
 }
 

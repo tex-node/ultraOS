@@ -760,3 +760,52 @@ Append new entries below using this structure:
 
 - Change the generated administrator password after handoff and run a production
   restore drill before the first live event.
+
+### 2026-06-15 - Fan Signup and Password Recovery Entry
+
+**Objective**
+
+- Add visible authentication entry points for signup and password recovery without
+  granting operational roles.
+
+**Completed**
+
+- Added `/signup` with full name, email, password, and password confirmation.
+- Added server-side validation, bcrypt password hashing, duplicate-email handling,
+  and `FAN` role assignment.
+- Added immediate server-side sign-in after successful signup, redirecting fans to
+  `/public/events`.
+- Added prominent signup and forgot-password buttons to the login page.
+- Added signup links from public navigation.
+- Added `/forgot-password` with neutral reset-request messaging and audit logging
+  for active accounts.
+- Updated login redirects so fans land on public events while operators continue to
+  the dashboard.
+- Added `USER_SIGNED_UP` audit logging for created accounts.
+
+**Decisions**
+
+- Public signup only creates `FAN` users. Operational roles remain controlled by
+  administrators.
+- Signup does not return the password to client state; the server action performs
+  sign-in directly after account creation.
+- Forgot-password requests do not reveal whether an email exists.
+- Full reset-token delivery is deferred until an email/SMS provider is configured.
+
+**Verification**
+
+- TypeScript, ESLint, unit tests, and production build: Passed.
+- Applied migrations and seed to a temporary PostgreSQL 16 database.
+- Browser-tested signup, automatic sign-in, and fan redirect to `/public/events`.
+- Verified created users are active `FAN` accounts and audit rows are recorded.
+- Deployed release `20260615-234638` and browser-tested the live login buttons,
+  `/signup`, and `/forgot-password` on `app.neonultra.ng`.
+
+**Known issues**
+
+- Email verification and reset-token delivery are not implemented yet.
+
+**Next step**
+
+- Add email verification and reset-token delivery before opening public signup
+  beyond controlled launch testing.

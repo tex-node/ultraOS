@@ -1,9 +1,9 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { LoginForm } from "./login-form";
+import { ForgotPasswordForm } from "./forgot-password-form";
 
-export default async function LoginPage() {
+export default async function ForgotPasswordPage() {
   const session = await auth();
   if (session?.user) {
     redirect(session.user.role === "FAN" ? "/public/events" : "/dashboard");
@@ -16,24 +16,25 @@ export default async function LoginPage() {
           Ultra Basketball
         </p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight">
-          League operating system
+          Forgot password
         </h1>
         <p className="mt-3 text-sm leading-6 text-zinc-400">
-          Sign in with an authorized Season Zero operations account.
+          Enter your account email. For now, reset requests are routed to league
+          operations until email delivery is configured.
         </p>
-        <LoginForm />
+        <ForgotPasswordForm />
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <Link
+            href="/login"
+            className="rounded-xl border border-white/10 px-4 py-3 text-center text-sm font-semibold text-zinc-200 transition hover:border-emerald-400/50"
+          >
+            Back to login
+          </Link>
           <Link
             href="/signup"
             className="rounded-xl border border-emerald-400/30 px-4 py-3 text-center text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
           >
-            Sign up
-          </Link>
-          <Link
-            href="/forgot-password"
-            className="rounded-xl border border-white/10 px-4 py-3 text-center text-sm font-semibold text-zinc-200 transition hover:border-emerald-400/50"
-          >
-            Forgot password
+            Create account
           </Link>
         </div>
       </section>
