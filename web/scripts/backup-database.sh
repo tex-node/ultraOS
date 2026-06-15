@@ -7,10 +7,14 @@ backup_dir="${ULTRA_BACKUP_DIR:-/var/backups/ultraleagueos}"
 retention_days="${ULTRA_BACKUP_RETENTION_DAYS:-14}"
 timestamp="$(date -u +%Y%m%d-%H%M%S)"
 backup_path="${backup_dir}/ultraos-${timestamp}.dump"
+database_url="$(
+  printf '%s' "${DATABASE_URL}" |
+    sed -E 's/([?&])schema=[^&]*&?/\1/; s/\?&/\?/; s/[?&]$//'
+)"
 
 install -d -m 0750 "${backup_dir}"
 pg_dump \
-  --dbname="${DATABASE_URL}" \
+  --dbname="${database_url}" \
   --format=custom \
   --compress=9 \
   --file="${backup_path}"

@@ -106,22 +106,106 @@ enum ScoutReportVisibility {
   PUBLIC
 }
 
+enum AccreditationCategory {
+  PLAYER
+  COACH
+  OFFICIAL
+  MEDIA
+  VIP_GUEST
+  FAN
+}
+
+enum AccreditationStatus {
+  PENDING
+  APPROVED
+  REVOKED
+}
+
+enum ReservationStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+enum TicketStatus {
+  ACTIVE
+  USED
+  CANCELLED
+}
+
+enum ProductCategory {
+  SOFT_DRINK
+  WATER
+  ENERGY_DRINK
+  POPCORN
+  HOTDOG
+  BURGER
+  PIZZA
+  MERCHANDISE
+  OTHER
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PREPARING
+  READY
+  COLLECTED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum CheckInType {
+  VENUE_ENTRY
+  ACCREDITATION
+  ORDER_COLLECTION
+}
+
+enum ContentType {
+  DRAFT_ANNOUNCEMENT
+  FIXTURE_ANNOUNCEMENT
+  RESULT_ANNOUNCEMENT
+  MVP_ANNOUNCEMENT
+  STANDINGS_UPDATE
+  SPONSOR_REPORT
+  FAN_CLUB_REPORT
+}
+
+enum ContentJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model User {
-  id             String          @id @default(cuid())
-  name           String
-  email          String          @unique
-  emailVerified  DateTime?
-  image          String?
-  passwordHash   String?
-  role           UserRole        @default(FAN)
-  isActive       Boolean         @default(true)
-  staffProfile   Staff?
-  fanMemberships FanMembership[]
-  scoutReports   ScoutReport[]   @relation("ScoutReports")
-  mvpVotes       MVPVote[]
-  auditLogs      AuditLog[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                String            @id @default(cuid())
+  name              String
+  email             String            @unique
+  emailVerified     DateTime?
+  image             String?
+  passwordHash      String?
+  role              UserRole          @default(FAN)
+  isActive          Boolean           @default(true)
+  staffProfile      Staff?
+  fanMemberships    FanMembership[]
+  scoutReports      ScoutReport[]     @relation("ScoutReports")
+  mvpVotes          MVPVote[]
+  auditLogs         AuditLog[]
+  seatReservations  SeatReservation[]
+  tickets           Ticket[]
+  orders            Order[]
+  accreditations    Accreditation[]
+  performedCheckIns CheckIn[]         @relation("CheckInOperator")
+  contentJobs       ContentJob[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@index([role, isActive])
 }
@@ -138,17 +222,18 @@ model Sport {
 }
 
 model Competition {
-  id          String     @id @default(cuid())
-  sportId     String
-  sport       Sport      @relation(fields: [sportId], references: [id], onDelete: Restrict)
-  name        String
-  slug        String
-  description String?
-  isActive    Boolean    @default(true)
-  divisions   Division[]
-  seasons     Season[]
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id               String            @id @default(cuid())
+  sportId          String
+  sport            Sport             @relation(fields: [sportId], references: [id], onDelete: Restrict)
+  name             String
+  slug             String
+  description      String?
+  isActive         Boolean           @default(true)
+  divisions        Division[]
+  seasons          Season[]
+  contentTemplates ContentTemplate[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@unique([sportId, name])
   @@unique([sportId, slug])
@@ -390,7 +475,7 @@ model DraftPick {
 }
 
 model Venue {
-  id            String    @id @default(cuid())
+  id            String         @id @default(cuid())
   name          String
   address       String
   city          String
@@ -399,56 +484,336 @@ model Venue {
   contactPhone  String?
   events        Event[]
   fixtures      Fixture[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  sections      VenueSection[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   @@unique([name, city])
 }
 
 model Event {
-  id            String      @id @default(cuid())
-  name          String
-  date          DateTime
-  venueId       String
-  venue         Venue       @relation(fields: [venueId], references: [id], onDelete: Restrict)
-  seasonId      String
-  season        Season      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  doorsOpenTime DateTime?
-  startTime     DateTime
-  endTime       DateTime?
-  status        EventStatus @default(DRAFT)
-  fixtures      Fixture[]
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id               String            @id @default(cuid())
+  name             String
+  date             DateTime
+  venueId          String
+  venue            Venue             @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  seasonId         String
+  season           Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  doorsOpenTime    DateTime?
+  startTime        DateTime
+  endTime          DateTime?
+  status           EventStatus       @default(DRAFT)
+  fixtures         Fixture[]
+  seatZones        SeatZone[]
+  reservations     SeatReservation[]
+  accreditations   Accreditation[]
+  inventories      VendorInventory[]
+  orders           Order[]
+  promoCodes       PromoCode[]
+  sponsorCampaigns SponsorCampaign[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@index([seasonId, date])
   @@index([venueId, date])
 }
 
+model VenueSection {
+  id        String     @id @default(cuid())
+  venueId   String
+  venue     Venue      @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  name      String
+  code      String
+  capacity  Int
+  isActive  Boolean    @default(true)
+  seatZones SeatZone[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([venueId, code])
+  @@index([venueId, isActive])
+}
+
+model SeatZone {
+  id                   String            @id @default(cuid())
+  eventId              String
+  event                Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  venueSectionId       String
+  venueSection         VenueSection      @relation(fields: [venueSectionId], references: [id], onDelete: Restrict)
+  name                 String
+  capacity             Int
+  priceKobo            Int
+  reservedQuantity     Int               @default(0)
+  salesOpenAt          DateTime?
+  salesCloseAt         DateTime?
+  fanClubId            String?
+  fanClub              FanClub?          @relation(fields: [fanClubId], references: [id], onDelete: SetNull)
+  fanClubEarlyAccessAt DateTime?
+  fanClubDiscountBps   Int               @default(0)
+  isActive             Boolean           @default(true)
+  reservations         SeatReservation[]
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@unique([eventId, name])
+  @@index([eventId, isActive])
+  @@index([fanClubId])
+}
+
+model SeatReservation {
+  id               String            @id @default(cuid())
+  eventId          String
+  event            Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  seatZoneId       String
+  seatZone         SeatZone          @relation(fields: [seatZoneId], references: [id], onDelete: Restrict)
+  userId           String?
+  user             User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  fanClubId        String?
+  fanClub          FanClub?          @relation(fields: [fanClubId], references: [id], onDelete: SetNull)
+  guestName        String?
+  guestEmail       String?
+  guestPhone       String?
+  quantity         Int               @default(1)
+  unitPriceKobo    Int
+  totalKobo        Int
+  status           ReservationStatus @default(CONFIRMED)
+  paymentStatus    PaymentStatus     @default(UNPAID)
+  paymentReference String?
+  paidAt           DateTime?
+  ticket           Ticket?
+  order            Order?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([eventId, status])
+  @@index([seatZoneId, status])
+  @@index([userId, createdAt])
+  @@index([guestEmail, createdAt])
+}
+
+model Ticket {
+  id            String          @id @default(cuid())
+  reservationId String          @unique
+  reservation   SeatReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  userId        String?
+  user          User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  code          String          @unique
+  status        TicketStatus    @default(ACTIVE)
+  issuedAt      DateTime        @default(now())
+  usedAt        DateTime?
+  checkIns      CheckIn[]
+
+  @@index([code, status])
+}
+
+model Accreditation {
+  id           String                @id @default(cuid())
+  eventId      String
+  event        Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId       String?
+  user         User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  personName   String
+  email        String?
+  phone        String?
+  category     AccreditationCategory
+  organization String?
+  roleTitle    String?
+  code         String                @unique
+  status       AccreditationStatus   @default(PENDING)
+  approvedAt   DateTime?
+  checkIns     CheckIn[]
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([eventId, category, status])
+}
+
+model Vendor {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  contactName String?
+  email       String?
+  phone       String?
+  logoUrl     String?
+  isActive    Boolean         @default(true)
+  products    VendorProduct[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model VendorProduct {
+  id                 String            @id @default(cuid())
+  vendorId           String
+  vendor             Vendor            @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  name               String
+  description        String?
+  category           ProductCategory
+  priceKobo          Int
+  imageUrl           String?
+  fanClubDiscountBps Int               @default(0)
+  isActive           Boolean           @default(true)
+  inventories        VendorInventory[]
+  orderItems         OrderItem[]
+  sponsorCampaigns   SponsorCampaign[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([vendorId, name])
+  @@index([category, isActive])
+}
+
+model VendorInventory {
+  id        String        @id @default(cuid())
+  eventId   String
+  event     Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  productId String
+  product   VendorProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stock     Int
+  reserved  Int           @default(0)
+  sold      Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([eventId, productId])
+  @@index([eventId])
+}
+
+model Order {
+  id               String           @id @default(cuid())
+  eventId          String
+  event            Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId           String?
+  user             User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  reservationId    String?          @unique
+  reservation      SeatReservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  fanClubId        String?
+  fanClub          FanClub?         @relation(fields: [fanClubId], references: [id], onDelete: SetNull)
+  guestName        String?
+  guestEmail       String?
+  guestPhone       String?
+  promoCodeId      String?
+  promoCode        PromoCode?       @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  subtotalKobo     Int
+  discountKobo     Int              @default(0)
+  totalKobo        Int
+  status           OrderStatus      @default(PENDING_PAYMENT)
+  paymentStatus    PaymentStatus    @default(UNPAID)
+  paymentReference String?
+  collectionCode   String           @unique
+  paidAt           DateTime?
+  collectedAt      DateTime?
+  items            OrderItem[]
+  checkIns         CheckIn[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([eventId, status])
+  @@index([userId, createdAt])
+  @@index([collectionCode])
+}
+
+model OrderItem {
+  id            String        @id @default(cuid())
+  orderId       String
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId     String
+  product       VendorProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantity      Int
+  unitPriceKobo Int
+  discountKobo  Int           @default(0)
+  totalKobo     Int
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model CheckIn {
+  id              String         @id @default(cuid())
+  type            CheckInType
+  ticketId        String?
+  ticket          Ticket?        @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  accreditationId String?
+  accreditation   Accreditation? @relation(fields: [accreditationId], references: [id], onDelete: SetNull)
+  orderId         String?
+  order           Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  checkedInById   String
+  checkedInBy     User           @relation("CheckInOperator", fields: [checkedInById], references: [id], onDelete: Restrict)
+  notes           String?
+  checkedInAt     DateTime       @default(now())
+
+  @@index([ticketId, checkedInAt])
+  @@index([accreditationId, checkedInAt])
+  @@index([orderId, checkedInAt])
+}
+
+model PromoCode {
+  id                String           @id @default(cuid())
+  eventId           String?
+  event             Event?           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  code              String           @unique
+  description       String?
+  discountBps       Int              @default(0)
+  maxRedemptions    Int?
+  redemptionCount   Int              @default(0)
+  startsAt          DateTime?
+  endsAt            DateTime?
+  isActive          Boolean          @default(true)
+  orders            Order[]
+  sponsorCampaignId String?
+  sponsorCampaign   SponsorCampaign? @relation(fields: [sponsorCampaignId], references: [id], onDelete: SetNull)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([eventId, isActive])
+}
+
+model SponsorCampaign {
+  id          String         @id @default(cuid())
+  name        String
+  sponsorName String
+  eventId     String?
+  event       Event?         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     VendorProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  impressions Int            @default(0)
+  redemptions Int            @default(0)
+  unitsSold   Int            @default(0)
+  revenueKobo Int            @default(0)
+  promoCodes  PromoCode[]
+  startsAt    DateTime?
+  endsAt      DateTime?
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([eventId, isActive])
+  @@index([sponsorName])
+}
+
 model Fixture {
-  id                 String        @id @default(cuid())
+  id                 String            @id @default(cuid())
   seasonId           String
-  season             Season        @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  season             Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   divisionId         String
-  division           Division      @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  division           Division          @relation(fields: [divisionId], references: [id], onDelete: Restrict)
   eventId            String?
-  event              Event?        @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  event              Event?            @relation(fields: [eventId], references: [id], onDelete: SetNull)
   homeSeasonClubId   String
-  homeSeasonClub     SeasonClub    @relation("HomeSeasonClub", fields: [homeSeasonClubId], references: [id], onDelete: Restrict)
+  homeSeasonClub     SeasonClub        @relation("HomeSeasonClub", fields: [homeSeasonClubId], references: [id], onDelete: Restrict)
   awaySeasonClubId   String
-  awaySeasonClub     SeasonClub    @relation("AwaySeasonClub", fields: [awaySeasonClubId], references: [id], onDelete: Restrict)
+  awaySeasonClub     SeasonClub        @relation("AwaySeasonClub", fields: [awaySeasonClubId], references: [id], onDelete: Restrict)
   scheduledAt        DateTime
   venueId            String
-  venue              Venue         @relation(fields: [venueId], references: [id], onDelete: Restrict)
-  status             FixtureStatus @default(SCHEDULED)
-  homeScore          Int           @default(0)
-  awayScore          Int           @default(0)
+  venue              Venue             @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  status             FixtureStatus     @default(SCHEDULED)
+  homeScore          Int               @default(0)
+  awayScore          Int               @default(0)
   winnerSeasonClubId String?
-  winnerSeasonClub   SeasonClub?   @relation("WinnerSeasonClub", fields: [winnerSeasonClubId], references: [id], onDelete: SetNull)
+  winnerSeasonClub   SeasonClub?       @relation("WinnerSeasonClub", fields: [winnerSeasonClubId], references: [id], onDelete: SetNull)
   game               Game?
   officials          FixtureOfficial[]
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
   @@index([seasonId, divisionId, scheduledAt])
   @@index([status, scheduledAt])
@@ -561,15 +926,18 @@ model Standing {
 }
 
 model FanClub {
-  id          String          @id @default(cuid())
-  clubId      String          @unique
-  club        Club            @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  name        String
-  captainName String
-  description String
-  memberships FanMembership[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id           String            @id @default(cuid())
+  clubId       String            @unique
+  club         Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  name         String
+  captainName  String
+  description  String
+  memberships  FanMembership[]
+  seatZones    SeatZone[]
+  reservations SeatReservation[]
+  orders       Order[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 }
 
 model FanMembership {
@@ -634,4 +1002,59 @@ model AuditLog {
   @@index([userId, createdAt])
   @@index([entityType, entityId, createdAt])
   @@index([action, createdAt])
+}
+
+model ContentTemplate {
+  id            String       @id @default(cuid())
+  competitionId String?
+  competition   Competition? @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  type          ContentType
+  name          String
+  textTemplate  String
+  htmlTemplate  String
+  isActive      Boolean      @default(true)
+  version       Int          @default(1)
+  jobs          ContentJob[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([competitionId, type, version])
+  @@index([type, isActive])
+}
+
+model ContentJob {
+  id            String           @id @default(cuid())
+  templateId    String
+  template      ContentTemplate  @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  requestedById String
+  requestedBy   User             @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+  type          ContentType
+  sourceType    String
+  sourceId      String
+  status        ContentJobStatus @default(PENDING)
+  errorMessage  String?
+  asset         ContentAsset?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([status, createdAt])
+  @@index([sourceType, sourceId])
+  @@index([requestedById, createdAt])
+}
+
+model ContentAsset {
+  id          String     @id @default(cuid())
+  jobId       String     @unique
+  job         ContentJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  slug        String     @unique
+  title       String
+  textContent String
+  htmlContent String
+  graphicData Json
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([createdAt])
 }

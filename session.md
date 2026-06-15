@@ -574,6 +574,67 @@ environment template, and implement the initial database schema and seed structu
 - Install the nightly backup timer during the production release and complete a
   documented restore drill against a temporary database.
 
+### 2026-06-15 - Ultra Event Operations Module v2
+
+**Objective**
+
+- Add bootstrap event access, accreditation, QR check-in, zone reservations,
+  concessions, merchandise, fan-club benefits, and sponsor reporting.
+
+**Completed**
+
+- Added permanent venue sections and event-specific VIP Courtside, Premium, and
+  General Admission zones with atomic capacity controls.
+- Added guest and authenticated fan reservations, unguessable QR tickets,
+  provider-neutral payment status, and audited venue check-in.
+- Added player, coach, official, media, VIP guest, and fan accreditation with
+  approval, revocation, QR identification, and check-in.
+- Added vendors, categorized products, event inventory, stock reservation, payment
+  settlement, fulfillment states, and QR collection.
+- Added a fan wallet order combining admission, snacks, drinks, and merchandise.
+- Added fan-club-only zones, early access fields, seat discounts, and product
+  discounts.
+- Added promo codes, sponsor campaigns, public impression tracking, redemptions,
+  units sold, and attributed revenue.
+- Seeded a published Season Zero opening event with 20 VIP, 80 Premium, and 200
+  General Admission places plus concessions, merchandise, and a sponsor offer.
+
+**Decisions**
+
+- Season Zero uses zone inventory rather than individual seat maps.
+- Prices use integer kobo; the application does not store floating-point money.
+- Fan Wallet is an order interface, not stored monetary value.
+- Payment remains provider-neutral until a gateway is selected. Operators confirm a
+  verified reference before admission or collection.
+- QR scans open a protected verification screen; GET requests never perform
+  check-in or collection writes.
+
+**Verification**
+
+- Applied all three migrations from zero to PostgreSQL 16 and seeded twice
+  successfully.
+- Browser-tested public event discovery, two-seat Premium reservation, ticket QR,
+  snack ordering, sponsor promo discount, operator payment, ready status, fan
+  entry, order collection, media accreditation, approval, and check-in.
+- Verified sponsor metrics for impressions, redemptions, sponsored units, and
+  revenue.
+- Verified append-only audit records for settlement, fulfillment, fan entry,
+  accreditation changes, and collection.
+- Prisma validation and generation, TypeScript, ESLint, unit tests, and production
+  build: Passed.
+
+**Known issues**
+
+- A payment provider and webhook reconciliation are intentionally not implemented.
+- Camera scanning is delegated to the device QR reader; manual code entry remains
+  available.
+- Individual section, row, and seat mapping remains a future capacity upgrade.
+
+**Next step**
+
+- Select a Nigerian payment provider, implement signed webhook reconciliation, and
+  perform production event-load testing before enabling paid public bookings.
+
 ## Update Template
 
 Append new entries below using this structure:
@@ -605,3 +666,97 @@ Append new entries below using this structure:
 
 - The highest-priority continuation point.
 ```
+
+### 2026-06-15 - Communications and Content Engine
+
+**Objective**
+
+- Generate operational announcements and reports directly from league records.
+
+**Completed**
+
+- Added versioned content templates, auditable generation jobs, and immutable
+  generated assets.
+- Added draft, fixture, result, MVP, standings, sponsor, and fan-club adapters.
+- Added operator studio and template editing routes under `/content`.
+- Added text, HTML, JSON graphic data, 1080x1080 PNG, and PDF exports.
+- Added public structured graphic endpoints under `/api/content`.
+- Seeded templates plus representative draft, final match, MVP, and standings data.
+
+**Decisions**
+
+- Generation is deterministic and template-driven; no AI dependency is required.
+- Generated HTML escapes all record-derived values.
+- Content jobs record failures and successful generation is audit logged.
+- A future `Organization` belongs above `Competition`, not between `Competition`
+  and `Season`.
+
+**Verification**
+
+- Applied all four migrations from zero to PostgreSQL 16 and seeded repeatedly.
+- Browser-tested operator login, the content studio, result generation, asset
+  preview, template management, export links, completion state, and audit logging.
+- Verified all seven structured graphic-data API adapters.
+- Prisma validation and generation, TypeScript, ESLint, seven unit tests including
+  PNG/PDF rendering, and production build: Passed.
+
+**Known issues**
+
+- Social-network publishing and editable visual design templates are intentionally
+  deferred.
+
+**Next step**
+
+- Connect approved design templates or social publishing clients to the structured
+  graphic-data API after Season Zero content operations are validated.
+
+### 2026-06-15 - Full-Stack VPS Deployment
+
+**Objective**
+
+- Deploy the authenticated Next.js application to `app.neonultra.ng` without
+  replacing other VPS applications, directories, ports, or Caddy sites.
+
+**Completed**
+
+- Deployed immutable release `20260615-224119` under
+  `/opt/ultraleagueos/releases/20260615-224119`.
+- Activated `/opt/ultraleagueos/current` as a release symlink.
+- Added the isolated `ultraos-web.service` bound to `127.0.0.1:4110`.
+- Added a dedicated PostgreSQL 16 container bound to `127.0.0.1:55411`, with data
+  stored under `/opt/ultraleagueos/shared/postgres`.
+- Applied all four migrations and seeded the production administrator, Season Zero,
+  clubs, fixtures, event operations, and content templates.
+- Installed and verified nightly database backups with SHA-256 checksums.
+- Updated only the existing `app.neonultra.ng` Caddy block to proxy the full
+  application while preserving the previous static UI at `/demo/`.
+- Preserved a full Caddy backup at
+  `/etc/caddy/Caddyfile.backup-before-ultraos-full-20260615-224700`.
+
+**Decisions**
+
+- Application releases are read-only and owned by `root:ultraos`.
+- Runtime secrets, PostgreSQL data, npm cache, and backups remain outside releases.
+- Caddy is the only public ingress; application and database ports bind to loopback.
+- Existing Caddy content outside the Ultra site block must remain byte-for-byte
+  unchanged.
+
+**Verification**
+
+- VPS Linux production build: Passed.
+- PostgreSQL health check, migrations, seed, and manual backup checksum: Passed.
+- Caddy validation and reload: Passed.
+- Non-Ultra Caddy content comparison: Identical.
+- Browser-tested HTTPS login, dashboard, content studio, public events, and `/demo/`.
+- Representative existing applications returned HTTP 200 after deployment.
+- Active TLS certificate is valid from June 14 through September 12, 2026.
+
+**Known issues**
+
+- `npm audit` reports six moderate dependency advisories; no forced major-version
+  upgrades were applied during deployment.
+
+**Next step**
+
+- Change the generated administrator password after handoff and run a production
+  restore drill before the first live event.

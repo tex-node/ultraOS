@@ -1,0 +1,25 @@
+[Unit]
+Description=Ultra League OS web application
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=ultraos
+Group=ultraos
+WorkingDirectory=/opt/ultraleagueos/current/web
+EnvironmentFile=/opt/ultraleagueos/shared/web.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm start -- --hostname 127.0.0.1 --port 4110
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/ultraleagueos/shared
+
+[Install]
+WantedBy=multi-user.target

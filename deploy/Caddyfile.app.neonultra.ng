@@ -1,18 +1,26 @@
-# Ultra League OS UI
+# Ultra League OS
 app.neonultra.ng {
 	encode zstd gzip
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
-		X-Frame-Options "DENY"
+		X-Frame-Options "SAMEORIGIN"
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 
-	@assets path /assets/*
-	header @assets Cache-Control "public, max-age=31536000, immutable"
+	redir /demo /demo/ 308
 
-	root * /opt/ultraleagueos-ui/current
-	try_files {path} /index.html
-	file_server
+	@demo_assets path /demo/assets/*
+	header @demo_assets Cache-Control "public, max-age=31536000, immutable"
+
+	handle_path /demo/* {
+		root * /opt/ultraleagueos-ui/current
+		try_files {path} /index.html
+		file_server
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:4110
+	}
 }

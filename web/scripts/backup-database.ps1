@@ -18,8 +18,11 @@ New-Item -ItemType Directory -Force -Path $resolvedOutput | Out-Null
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $backupPath = Join-Path $resolvedOutput "ultraos-$timestamp.dump"
 $checksumPath = "$backupPath.sha256"
+$databaseUrl = ($env:DATABASE_URL -replace "([?&])schema=[^&]*&?", '$1') `
+  -replace "\?&", "?"
+$databaseUrl = $databaseUrl.TrimEnd("?", "&")
 
-& pg_dump --dbname=$env:DATABASE_URL --format=custom --compress=9 --file=$backupPath
+& pg_dump --dbname=$databaseUrl --format=custom --compress=9 --file=$backupPath
 if ($LASTEXITCODE -ne 0) {
   throw "pg_dump failed with exit code $LASTEXITCODE."
 }

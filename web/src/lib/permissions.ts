@@ -10,6 +10,13 @@ export type Permission =
   | "game:operate"
   | "result:confirm"
   | "audit:view"
+  | "event:manage"
+  | "accreditation:manage"
+  | "check-in:operate"
+  | "reservation:manage"
+  | "vendor:manage"
+  | "order:manage"
+  | "content:manage"
   | "club:view-assigned"
   | "roster:view"
   | "availability:submit"
@@ -30,6 +37,13 @@ const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
     "game:operate",
     "result:confirm",
     "audit:view",
+    "event:manage",
+    "accreditation:manage",
+    "check-in:operate",
+    "reservation:manage",
+    "vendor:manage",
+    "order:manage",
+    "content:manage",
     "club:view-assigned",
     "roster:view",
     "availability:submit",
@@ -44,6 +58,13 @@ const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
     "game:operate",
     "result:confirm",
     "audit:view",
+    "event:manage",
+    "accreditation:manage",
+    "check-in:operate",
+    "reservation:manage",
+    "vendor:manage",
+    "order:manage",
+    "content:manage",
     "roster:view",
     "stats:view",
     "public:view",

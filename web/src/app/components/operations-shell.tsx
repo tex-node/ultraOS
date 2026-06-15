@@ -15,6 +15,11 @@ const navigation = [
   { href: "/players", label: "Athletes" },
   { href: "/drafts", label: "Drafts" },
   { href: "/fixtures", label: "Fixtures" },
+  { href: "/events", label: "Events" },
+  { href: "/vendors", label: "Vendors" },
+  { href: "/orders", label: "Orders" },
+  { href: "/content", label: "Content" },
+  { href: "/check-in", label: "Check-in" },
   { href: "/standings", label: "Standings" },
   { href: "/audit", label: "Audit" },
 ];
@@ -34,7 +39,7 @@ export function OperationsShell({ children, user }: OperationsShellProps) {
           </div>
           <nav className="flex items-center gap-2">
             {navigation.filter((item) =>
-              item.href !== "/audit" ||
+              !["/audit", "/events", "/vendors", "/orders", "/content", "/check-in"].includes(item.href) ||
               user.role === "SUPER_ADMIN" ||
               user.role === "LEAGUE_OPERATOR",
             ).map((item) => (

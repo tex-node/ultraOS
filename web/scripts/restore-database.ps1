@@ -24,9 +24,12 @@ $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $resolvedBackup).Hash.ToL
 if ($expected -ne $actual) {
   throw "Backup checksum verification failed."
 }
+$databaseUrl = ($env:DATABASE_URL -replace "([?&])schema=[^&]*&?", '$1') `
+  -replace "\?&", "?"
+$databaseUrl = $databaseUrl.TrimEnd("?", "&")
 
 $arguments = @(
-  "--dbname=$($env:DATABASE_URL)",
+  "--dbname=$databaseUrl",
   "--exit-on-error",
   "--no-owner",
   "--no-privileges"
