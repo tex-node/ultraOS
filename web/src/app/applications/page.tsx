@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { applicationReviewRoutes } from "@/app/applications/application-routes";
 import { ApplicationStatus } from "@/generated/prisma/enums";
@@ -6,6 +8,11 @@ import { requirePermission } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 
 export default async function ApplicationsPage() {
+  const currentSession = await auth();
+  if (!currentSession?.user) {
+    redirect("/login?callbackUrl=/applications");
+  }
+
   const session = await requirePermission("application:review");
   const [counts, recentApplications] = await Promise.all([
     prisma.application.groupBy({

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { updateApplicationStatus } from "@/app/applications/actions";
 import {
@@ -33,6 +34,11 @@ export default async function ApplicationCategoryPage({ params }: ApplicationCat
   const type = applicationCategoryToType[category];
   if (!type) {
     notFound();
+  }
+
+  const currentSession = await auth();
+  if (!currentSession?.user) {
+    redirect(`/login?callbackUrl=/applications/${category}`);
   }
 
   const session = await requirePermission("application:review");
