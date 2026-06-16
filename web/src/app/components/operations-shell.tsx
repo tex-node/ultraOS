@@ -6,6 +6,7 @@ type OperationsShellProps = {
   user: {
     name?: string | null;
     role: string;
+    roles?: string[];
   };
 };
 
@@ -16,6 +17,7 @@ const navigation = [
   { href: "/drafts", label: "Drafts" },
   { href: "/fixtures", label: "Fixtures" },
   { href: "/events", label: "Events" },
+  { href: "/applications", label: "Applications" },
   { href: "/vendors", label: "Vendors" },
   { href: "/orders", label: "Orders" },
   { href: "/content", label: "Content" },
@@ -39,7 +41,17 @@ export function OperationsShell({ children, user }: OperationsShellProps) {
           </div>
           <nav className="flex items-center gap-2">
             {navigation.filter((item) =>
-              !["/audit", "/events", "/vendors", "/orders", "/content", "/check-in"].includes(item.href) ||
+              ![
+                "/audit",
+                "/events",
+                "/applications",
+                "/vendors",
+                "/orders",
+                "/content",
+                "/check-in",
+              ].includes(item.href) ||
+              user.roles?.includes("SUPER_ADMIN") ||
+              user.roles?.includes("LEAGUE_OPERATOR") ||
               user.role === "SUPER_ADMIN" ||
               user.role === "LEAGUE_OPERATOR",
             ).map((item) => (
@@ -55,7 +67,9 @@ export function OperationsShell({ children, user }: OperationsShellProps) {
           <div className="flex items-center gap-4">
             <div className="text-right">
               <p className="text-sm font-medium">{user.name}</p>
-              <p className="text-[10px] uppercase tracking-wider text-zinc-500">{user.role}</p>
+              <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+                {(user.roles?.length ? user.roles : [user.role]).join(" · ")}
+              </p>
             </div>
             <form
               action={async () => {

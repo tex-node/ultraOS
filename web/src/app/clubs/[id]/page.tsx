@@ -14,7 +14,7 @@ export default async function ClubDetailPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const session = await requireSession();
-  const canManage = hasPermission(session.user.role, "club:manage");
+  const canManage = hasPermission(session.user.roles, "club:manage");
   const { id } = await params;
   const query = await searchParams;
   const club = await prisma.club.findUnique({

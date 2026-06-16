@@ -1,12 +1,18 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { ForgotPasswordForm } from "./forgot-password-form";
 
 export default async function ForgotPasswordPage() {
   const session = await auth();
   if (session?.user) {
-    redirect(session.user.role === "FAN" ? "/public/events" : "/dashboard");
+    redirect(
+      hasPermission(session.user.roles, "fixture:manage") ||
+        hasPermission(session.user.roles, "event:manage")
+        ? "/dashboard"
+        : "/public/events",
+    );
   }
 
   return (

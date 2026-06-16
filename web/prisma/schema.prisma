@@ -11,8 +11,13 @@ enum UserRole {
   SUPER_ADMIN
   LEAGUE_OPERATOR
   TEAM_MANAGER
+  PLAYER
   COACH
   SCOUT
+  OFFICIAL
+  VENDOR
+  MEDIA
+  VOLUNTEER
   FAN
 }
 
@@ -53,8 +58,10 @@ enum StaffRole {
   HEAD_COACH
   ASSISTANT_COACH
   SCOUT
+  OFFICIAL
   TEAM_MANAGER
   FAN_CAPTAIN
+  VOLUNTEER
 }
 
 enum DraftStatus {
@@ -119,6 +126,24 @@ enum AccreditationStatus {
   PENDING
   APPROVED
   REVOKED
+}
+
+enum ApplicationType {
+  PLAYER
+  COACH
+  SCOUT
+  OFFICIAL
+  MEDIA
+  VENDOR
+  VOLUNTEER
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  WITHDRAWN
 }
 
 enum ReservationStatus {
@@ -193,7 +218,13 @@ model User {
   passwordHash      String?
   role              UserRole          @default(FAN)
   isActive          Boolean           @default(true)
+  roles             UserRoleAssignment[] @relation("AssignedUserRoles")
+  rolesGranted      UserRoleAssignment[] @relation("GrantedUserRoles")
   staffProfile      Staff?
+  athleteProfile    Athlete?
+  vendorProfile     Vendor?
+  mediaProfile      MediaProfile?
+  volunteerProfile  VolunteerProfile?
   fanMemberships    FanMembership[]
   scoutReports      ScoutReport[]     @relation("ScoutReports")
   mvpVotes          MVPVote[]
@@ -202,12 +233,31 @@ model User {
   tickets           Ticket[]
   orders            Order[]
   accreditations    Accreditation[]
+  applicationsSubmitted Application[]     @relation("ApplicantApplications")
+  applicationsReviewed  Application[]     @relation("ReviewedApplications")
   performedCheckIns CheckIn[]         @relation("CheckInOperator")
   contentJobs       ContentJob[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
   @@index([role, isActive])
+}
+
+model UserRoleAssignment {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("AssignedUserRoles", fields: [userId], references: [id], onDelete: Cascade)
+  role        UserRole
+  grantedById String?
+  grantedBy   User?    @relation("GrantedUserRoles", fields: [grantedById], references: [id], onDelete: SetNull)
+  grantedAt   DateTime @default(now())
+  revokedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, role])
+  @@index([role, revokedAt])
+  @@index([grantedById, grantedAt])
 }
 
 model Sport {
@@ -341,6 +391,8 @@ model SeasonClub {
 
 model Athlete {
   id               String         @id @default(cuid())
+  userId           String?        @unique
+  user             User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
   firstName        String
   lastName         String
   gender           AthleteGender
@@ -628,8 +680,29 @@ model Accreditation {
   @@index([eventId, category, status])
 }
 
+model Application {
+  id              String            @id @default(cuid())
+  applicantUserId String?
+  applicantUser   User?             @relation("ApplicantApplications", fields: [applicantUserId], references: [id], onDelete: SetNull)
+  type            ApplicationType
+  status          ApplicationStatus @default(SUBMITTED)
+  submittedData   Json
+  reviewedById    String?
+  reviewedBy      User?             @relation("ReviewedApplications", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt      DateTime?
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([type, status, createdAt])
+  @@index([applicantUserId, createdAt])
+  @@index([reviewedById, reviewedAt])
+}
+
 model Vendor {
   id          String          @id @default(cuid())
+  userId      String?         @unique
+  user        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   name        String          @unique
   contactName String?
   email       String?
@@ -639,6 +712,31 @@ model Vendor {
   products    VendorProduct[]
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
+}
+
+model MediaProfile {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization String
+  roleTitle    String
+  equipment    String?
+  socialLinks  String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model VolunteerProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  areaOfInterest String
+  availability   String
+  experience     String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model VendorProduct {

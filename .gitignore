@@ -3,4 +3,5 @@ UI/dist/
 UI/.env
 UI/.env.*
 !UI/.env.example
+cred/
 *.log

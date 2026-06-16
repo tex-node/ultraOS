@@ -2,12 +2,14 @@
 
 import { useActionState } from "react";
 import { getSession, signIn } from "next-auth/react";
+import { hasPermission } from "@/lib/permissions";
 
 type LoginState = {
   error?: string;
 };
 
 async function loginAction(
+  callbackUrl: string | undefined,
   _previousState: LoginState,
   formData: FormData,
 ): Promise<LoginState> {
@@ -22,12 +24,17 @@ async function loginAction(
   }
 
   const session = await getSession();
-  window.location.href = session?.user.role === "FAN" ? "/public/events" : "/dashboard";
+  window.location.href =
+    callbackUrl ||
+    (hasPermission(session?.user.roles, "fixture:manage") ||
+    hasPermission(session?.user.roles, "event:manage")
+      ? "/dashboard"
+      : "/public/events");
   return {};
 }
 
-export function LoginForm() {
-  const [state, action, pending] = useActionState(loginAction, {});
+export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
+  const [state, action, pending] = useActionState(loginAction.bind(null, callbackUrl), {});
 
   return (
     <form action={action} className="mt-8 space-y-5">

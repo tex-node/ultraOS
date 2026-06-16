@@ -16,7 +16,7 @@ export default async function AthletePage({
   const session = await requireSession();
   const { id } = await params;
   const query = await searchParams;
-  const canManage = hasPermission(session.user.role, "player:manage");
+  const canManage = hasPermission(session.user.roles, "player:manage");
   const athlete = await prisma.athlete.findUnique({
     where: { id },
     include: {

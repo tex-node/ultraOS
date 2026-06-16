@@ -17,7 +17,7 @@ export default async function FixturePage({
 }) {
   const session = await requireSession();
   const { id } = await params;
-  const canManage = hasPermission(session.user.role, "fixture:manage");
+  const canManage = hasPermission(session.user.roles, "fixture:manage");
   const fixture = await prisma.fixture.findUnique({
     where: { id },
     include: {

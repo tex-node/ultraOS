@@ -1,8 +1,10 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
 import { compare } from "bcryptjs";
 import { z } from "zod";
 import { UserRole } from "@/generated/prisma/enums";
+import { primaryRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 const credentialsSchema = z.object({
@@ -10,10 +12,73 @@ const credentialsSchema = z.object({
   password: z.string().min(8),
 });
 
+async function getSessionUser(email: string) {
+  const user = await prisma.user.findUnique({
+    where: { email: email.toLowerCase() },
+    include: {
+      roles: {
+        where: { revokedAt: null },
+        select: { role: true },
+      },
+    },
+  });
+
+  if (!user?.isActive) {
+    return null;
+  }
+
+  const roles = user.roles.map((assignment) => assignment.role);
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    image: user.image,
+    role: primaryRole(roles.length > 0 ? roles : [user.role]),
+    roles: roles.length > 0 ? roles : [user.role, UserRole.FAN],
+  };
+}
+
+async function upsertGoogleUser(user: { email?: string | null; name?: string | null; image?: string | null }) {
+  if (!user.email) {
+    return null;
+  }
+
+  const email = user.email.toLowerCase();
+  const name = user.name?.trim() || email.split("@")[0];
+  const createdOrUpdated = await prisma.user.upsert({
+    where: { email },
+    update: {
+      name,
+      image: user.image,
+      isActive: true,
+    },
+    create: {
+      name,
+      email,
+      image: user.image,
+      role: UserRole.FAN,
+      isActive: true,
+      roles: {
+        create: { role: UserRole.FAN },
+      },
+    },
+    select: { id: true },
+  });
+
+  await prisma.userRoleAssignment.upsert({
+    where: { userId_role: { userId: createdOrUpdated.id, role: UserRole.FAN } },
+    update: { revokedAt: null },
+    create: { userId: createdOrUpdated.id, role: UserRole.FAN },
+  });
+
+  return getSessionUser(email);
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   providers: [
+    Google,
     Credentials({
       credentials: {
         email: { label: "Email", type: "email" },
@@ -38,21 +103,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
-        };
+        return getSessionUser(user.email);
       },
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async signIn({ account, profile, user }) {
+      if (account?.provider !== "google") {
+        return true;
+      }
+
+      if (profile && "email_verified" in profile && profile.email_verified === false) {
+        return false;
+      }
+
+      const sessionUser = await upsertGoogleUser(user);
+      return Boolean(sessionUser);
+    },
+    async jwt({ token, user, account }) {
+      if (account?.provider === "google" && user?.email) {
+        const sessionUser = await getSessionUser(user.email);
+        if (sessionUser) {
+          token.id = sessionUser.id;
+          token.role = sessionUser.role;
+          token.roles = sessionUser.roles;
+        }
+        return token;
+      }
+
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.roles = user.roles;
       }
       return token;
     },
@@ -64,6 +146,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       ) {
         session.user.id = token.id;
         session.user.role = token.role as UserRole;
+        session.user.roles = Array.isArray(token.roles)
+          ? token.roles.filter((role): role is UserRole =>
+              Object.values(UserRole).includes(role as UserRole),
+            )
+          : [token.role as UserRole];
       }
       return session;
     },

@@ -26,7 +26,7 @@ export async function requireSession() {
 
 export async function requirePermission(permission: Permission) {
   const session = await requireSession();
-  if (!hasPermission(session.user.role, permission)) {
+  if (!hasPermission(session.user.roles, permission)) {
     throw new AuthorizationError(permission);
   }
 

@@ -23,6 +23,7 @@ const signupSchema = z
       .min(8, "Password must contain at least 8 characters.")
       .max(128, "Password must contain 128 characters or fewer."),
     confirmPassword: z.string(),
+    callbackUrl: z.string().trim().optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match.",
@@ -62,6 +63,9 @@ export async function createFanAccount(
           passwordHash: await hash(parsed.data.password, 12),
           role: UserRole.FAN,
           isActive: true,
+          roles: {
+            create: { role: UserRole.FAN },
+          },
         },
       });
       await writeAuditLog(tx, {
@@ -76,7 +80,7 @@ export async function createFanAccount(
     await signIn("credentials", {
       email: parsed.data.email,
       password: parsed.data.password,
-      redirectTo: "/public/events",
+      redirectTo: parsed.data.callbackUrl || "/public/events",
     });
     return {};
   } catch (error) {

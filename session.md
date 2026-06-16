@@ -809,3 +809,62 @@ Append new entries below using this structure:
 
 - Add email verification and reset-token delivery before opening public signup
   beyond controlled launch testing.
+
+### 2026-06-16 - Multi-Role Applications and Google OAuth
+
+**Objective**
+
+- Separate public fan signup from participant applications, support one user with
+  multiple roles and profiles, and add Google sign-in/sign-up.
+
+**Completed**
+
+- Added `/apply` as the participant application hub for player, coach, scout,
+  official, media, vendor, and volunteer applications.
+- Added `/applications` review queues for league operators and administrators.
+- Added `Application`, `ApplicationType`, and `ApplicationStatus` with reviewer
+  tracking and audit logging.
+- Added `UserRoleAssignment` so one `User` can hold multiple active roles.
+- Added explicit role support for player, official, vendor, media, and volunteer
+  access.
+- Kept `FAN` as the base capability for every authenticated user.
+- Added account-linked application submission; unauthenticated applicants are sent
+  to login or fan signup before submitting.
+- Added approval provisioning that creates or links athlete, player registration,
+  staff, vendor, media, and volunteer profiles and grants the approved role.
+- Added `/account` with active roles, fan capabilities, submitted applications,
+  reservations, orders, fan memberships, accreditation status, and profile summary.
+- Added Google OAuth through Auth.js while preserving credential login.
+- Configured Google users to upsert by unique email and receive the default `FAN`
+  role without creating duplicate accounts.
+- Documented required Google OAuth environment variables in `web/.env.example`.
+- Added `cred/` to `.gitignore` so local OAuth credential files are not committed.
+
+**Decisions**
+
+- Keep `User.role` temporarily as a compatibility display/primary-role field while
+  authorization moves to active `UserRoleAssignment` rows.
+- Access is granted if any active role has the required permission.
+- Application approval performs conservative provisioning and leaves sensitive
+  operational assignment details, such as exact club placement, under operator
+  control.
+- Google OAuth uses the same `User.email` identity boundary as password accounts.
+
+**Verification**
+
+- Prisma validation and client generation: Passed.
+- TypeScript, ESLint, unit tests, and production build: Passed.
+- Google OAuth credentials were sourced from the local ignored `cred/` directory
+  and written to the ignored local `web/.env`.
+
+**Known issues**
+
+- Password reset email delivery and email verification are still pending provider
+  selection.
+- OAuth production secrets must remain in `/opt/ultraleagueos/shared/web.env` and
+  must not be committed.
+
+**Next step**
+
+- Deploy the multi-role and Google OAuth release to `app.neonultra.ng`, apply the
+  new migrations, and browser-test Google and password login paths.

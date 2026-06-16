@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 
 export default async function PlayersPage() {
   const session = await requireSession();
-  const canManage = hasPermission(session.user.role, "player:manage");
+  const canManage = hasPermission(session.user.roles, "player:manage");
   const athletes = await prisma.athlete.findMany({
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     include: {

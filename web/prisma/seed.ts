@@ -50,7 +50,7 @@ async function main() {
   const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "admin@neonultra.ng";
   const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "change-me-before-use";
 
-  await prisma.user.upsert({
+  const admin = await prisma.user.upsert({
     where: { email: adminEmail },
     update: {
       name: "Ultra League Admin",
@@ -65,6 +65,15 @@ async function main() {
       role: UserRole.SUPER_ADMIN,
     },
   });
+  await Promise.all(
+    [UserRole.SUPER_ADMIN, UserRole.FAN].map((role) =>
+      prisma.userRoleAssignment.upsert({
+        where: { userId_role: { userId: admin.id, role } },
+        update: { revokedAt: null },
+        create: { userId: admin.id, role },
+      }),
+    ),
+  );
 
   const sport = await prisma.sport.upsert({
     where: { slug: "basketball" },

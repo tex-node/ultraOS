@@ -6,7 +6,7 @@ import { requireSession } from "@/lib/authorization";
 
 export default async function ClubsPage() {
   const session = await requireSession();
-  const canManage = hasPermission(session.user.role, "club:manage");
+  const canManage = hasPermission(session.user.roles, "club:manage");
   const clubs = await prisma.club.findMany({
     include: {
       sport: { select: { name: true } },

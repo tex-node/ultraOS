@@ -10,6 +10,7 @@ export type Permission =
   | "game:operate"
   | "result:confirm"
   | "audit:view"
+  | "application:review"
   | "event:manage"
   | "accreditation:manage"
   | "check-in:operate"
@@ -37,6 +38,7 @@ const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
     "game:operate",
     "result:confirm",
     "audit:view",
+    "application:review",
     "event:manage",
     "accreditation:manage",
     "check-in:operate",
@@ -58,6 +60,7 @@ const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
     "game:operate",
     "result:confirm",
     "audit:view",
+    "application:review",
     "event:manage",
     "accreditation:manage",
     "check-in:operate",
@@ -76,6 +79,14 @@ const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
     "stats:view",
     "public:view",
   ]),
+  PLAYER: new Set<Permission>([
+    "roster:view",
+    "availability:submit",
+    "stats:view",
+    "fan-club:join",
+    "mvp:vote",
+    "public:view",
+  ]),
   COACH: new Set<Permission>([
     "club:view-assigned",
     "roster:view",
@@ -87,9 +98,58 @@ const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
     "scout-note:manage",
     "public:view",
   ]),
+  OFFICIAL: new Set<Permission>([
+    "fixture:manage",
+    "game:operate",
+    "stats:view",
+    "public:view",
+  ]),
+  VENDOR: new Set<Permission>([
+    "vendor:manage",
+    "order:manage",
+    "fan-club:join",
+    "mvp:vote",
+    "public:view",
+  ]),
+  MEDIA: new Set<Permission>([
+    "accreditation:manage",
+    "stats:view",
+    "fan-club:join",
+    "mvp:vote",
+    "public:view",
+  ]),
+  VOLUNTEER: new Set<Permission>([
+    "check-in:operate",
+    "fan-club:join",
+    "mvp:vote",
+    "public:view",
+  ]),
   FAN: new Set<Permission>(["fan-club:join", "mvp:vote", "public:view"]),
 };
 
-export function hasPermission(role: UserRole, permission: Permission) {
-  return rolePermissions[role].has(permission);
+export function normalizeRoles(roles: UserRole | UserRole[] | undefined) {
+  const normalized = Array.isArray(roles) ? roles : roles ? [roles] : [];
+  return normalized.includes("FAN") ? normalized : [...normalized, "FAN" as UserRole];
+}
+
+export function hasPermission(roles: UserRole | UserRole[] | undefined, permission: Permission) {
+  return normalizeRoles(roles).some((role) => rolePermissions[role]?.has(permission));
+}
+
+export function primaryRole(roles: UserRole[] | undefined): UserRole {
+  const rank: UserRole[] = [
+    "SUPER_ADMIN",
+    "LEAGUE_OPERATOR",
+    "TEAM_MANAGER",
+    "COACH",
+    "SCOUT",
+    "OFFICIAL",
+    "PLAYER",
+    "VENDOR",
+    "MEDIA",
+    "VOLUNTEER",
+    "FAN",
+  ];
+  const normalized = normalizeRoles(roles);
+  return rank.find((role) => normalized.includes(role)) ?? "FAN";
 }

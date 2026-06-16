@@ -8,7 +8,7 @@ function FieldError({ errors }: { errors?: string[] }) {
   return <p className="mt-1 text-xs text-rose-300">{errors[0]}</p>;
 }
 
-export function SignupForm() {
+export function SignupForm({ callbackUrl }: { callbackUrl?: string }) {
   const [state, action, pending] = useActionState<SignupState, FormData>(
     createFanAccount,
     {},
@@ -16,6 +16,7 @@ export function SignupForm() {
 
   return (
     <form action={action} className="mt-8 space-y-5">
+      <input name="callbackUrl" type="hidden" value={callbackUrl ?? ""} />
       <label className="block text-sm font-medium text-zinc-300">
         Full name
         <input
