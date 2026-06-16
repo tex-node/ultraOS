@@ -839,6 +839,10 @@ Append new entries below using this structure:
   role without creating duplicate accounts.
 - Documented required Google OAuth environment variables in `web/.env.example`.
 - Added `cred/` to `.gitignore` so local OAuth credential files are not committed.
+- Deployed release `20260616-080000` to `/opt/ultraleagueos/releases/20260616-080000`.
+- Applied the applications and multi-role profile migrations to production.
+- Added Google OAuth runtime values to `/opt/ultraleagueos/shared/web.env`.
+- Preserved the existing Caddy site and `/demo/` static UI route.
 
 **Decisions**
 
@@ -856,6 +860,8 @@ Append new entries below using this structure:
 - TypeScript, ESLint, unit tests, and production build: Passed.
 - Google OAuth credentials were sourced from the local ignored `cred/` directory
   and written to the ignored local `web/.env`.
+- Production build, migration deploy, service restart, Caddy validation, HTTPS
+  route checks, and Auth.js provider discovery: Passed.
 
 **Known issues**
 
@@ -866,5 +872,6 @@ Append new entries below using this structure:
 
 **Next step**
 
-- Deploy the multi-role and Google OAuth release to `app.neonultra.ng`, apply the
-  new migrations, and browser-test Google and password login paths.
+- Complete a live Google OAuth browser sign-in after the Google consent screen is
+  available to the operator, then configure email verification and password reset
+  delivery.
