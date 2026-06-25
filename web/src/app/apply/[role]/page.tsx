@@ -53,7 +53,7 @@ export default async function ApplyRolePage({ params }: ApplyRolePageProps) {
                 className="rounded-xl bg-emerald-400 px-4 py-3 text-center text-sm font-semibold text-zinc-950 transition hover:bg-emerald-300"
                 href={`/signup?callbackUrl=${encodeURIComponent(callbackUrl)}`}
               >
-                Create fan account
+                Signup
               </Link>
               <Link
                 className="rounded-xl border border-white/10 px-4 py-3 text-center text-sm font-semibold text-zinc-200 transition hover:border-emerald-400/50"

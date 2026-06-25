@@ -73,7 +73,7 @@ export function SignupForm({ callbackUrl }: { callbackUrl?: string }) {
         type="submit"
         disabled={pending}
       >
-        {pending ? "Creating account..." : "Create fan account"}
+        {pending ? "Creating account..." : "Signup"}
       </button>
     </form>
   );
