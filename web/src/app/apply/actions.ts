@@ -39,6 +39,20 @@ function validateSubmittedData(type: ApplicationType, formData: FormData) {
     if (field.required && value.length === 0) {
       fieldErrors[field.name] = fieldError("This field is required.");
     }
+    if (
+      field.type === "select" &&
+      value.length > 0 &&
+      field.options &&
+      !field.options.includes(value)
+    ) {
+      fieldErrors[field.name] = fieldError("Choose one of the listed options.");
+    }
+    if (field.type === "number" && value.length > 0) {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        fieldErrors[field.name] = fieldError("Enter a number greater than zero.");
+      }
+    }
     if (field.type === "email" && value.length > 0 && !zEmail(value)) {
       fieldErrors[field.name] = fieldError("Enter a valid email address.");
     }

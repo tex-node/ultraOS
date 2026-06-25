@@ -42,12 +42,16 @@ export function ApplicationForm({ config }: ApplicationFormProps) {
       {config.fields.map((field) => {
         const id = `${config.type}-${field.name}`;
         const error = state.fieldErrors?.[field.name]?.[0];
+        const label = field.required ? `${field.label}**` : field.label;
         if (field.type === "textarea") {
           return (
             <div key={field.name}>
               <label className="text-sm font-medium text-zinc-200" htmlFor={id}>
-                {field.label}
+                {label}
               </label>
+              {field.description ? (
+                <p className="mt-1 text-xs leading-5 text-zinc-500">{field.description}</p>
+              ) : null}
               <textarea
                 className="mt-2 min-h-28 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm outline-none transition focus:border-emerald-400"
                 id={id}
@@ -72,6 +76,36 @@ export function ApplicationForm({ config }: ApplicationFormProps) {
                 />
                 <span>{field.label}</span>
               </label>
+              {field.description ? (
+                <p className="mt-1 text-xs leading-5 text-zinc-500">{field.description}</p>
+              ) : null}
+              {error ? <p className="mt-1 text-xs text-red-300">{error}</p> : null}
+            </div>
+          );
+        }
+
+        if (field.type === "select") {
+          return (
+            <div key={field.name}>
+              <label className="text-sm font-medium text-zinc-200" htmlFor={id}>
+                {label}
+              </label>
+              {field.description ? (
+                <p className="mt-1 text-xs leading-5 text-zinc-500">{field.description}</p>
+              ) : null}
+              <select
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm outline-none transition focus:border-emerald-400"
+                id={id}
+                name={field.name}
+                required={field.required}
+              >
+                <option value="">Select {field.label.toLowerCase()}</option>
+                {field.options?.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
               {error ? <p className="mt-1 text-xs text-red-300">{error}</p> : null}
             </div>
           );
@@ -80,14 +114,18 @@ export function ApplicationForm({ config }: ApplicationFormProps) {
         return (
           <div key={field.name}>
             <label className="text-sm font-medium text-zinc-200" htmlFor={id}>
-              {field.label}
+              {label}
             </label>
+            {field.description ? (
+              <p className="mt-1 text-xs leading-5 text-zinc-500">{field.description}</p>
+            ) : null}
             <input
               className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm outline-none transition focus:border-emerald-400"
               id={id}
               name={field.name}
               placeholder={field.placeholder}
               required={field.required}
+              step={field.type === "number" ? "0.01" : undefined}
               type={field.type ?? "text"}
             />
             {error ? <p className="mt-1 text-xs text-red-300">{error}</p> : null}

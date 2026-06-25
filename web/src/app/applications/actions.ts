@@ -28,10 +28,31 @@ function numberValue(data: SubmittedData, key: string, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function heightFeetToCm(data: SubmittedData) {
+  const heightFeet = numberValue(data, "heightFeet", 0);
+  if (heightFeet <= 0) {
+    return numberValue(data, "heightCm", 180);
+  }
+  return Math.round(heightFeet * 30.48);
+}
+
 function applicationName(data: SubmittedData) {
+  const fullName = text(data, "fullName");
+  if (fullName) {
+    return fullName;
+  }
   const firstName = text(data, "firstName");
   const lastName = text(data, "lastName");
   return text(data, "name", `${firstName} ${lastName}`.trim() || "Applicant");
+}
+
+function splitFullName(data: SubmittedData) {
+  const name = applicationName(data);
+  const [firstName, ...rest] = name.split(/\s+/).filter(Boolean);
+  return {
+    firstName: text(data, "firstName", firstName || "Applicant"),
+    lastName: text(data, "lastName", rest.join(" ") || "Applicant"),
+  };
 }
 
 async function grantRole(
@@ -68,11 +89,12 @@ async function provisionApprovedApplication(
 
   if (application.type === ApplicationType.PLAYER) {
     const email = text(data, "email");
+    const applicantName = splitFullName(data);
     const athleteData = {
       userId,
-      firstName: text(data, "firstName", applicationName(data)),
-      lastName: text(data, "lastName", "Applicant"),
-      gender: text(data, "genderDivision").toLowerCase().includes("women")
+      firstName: applicantName.firstName,
+      lastName: applicantName.lastName,
+      gender: text(data, "gender", text(data, "genderDivision")).toLowerCase().includes("female")
         ? AthleteGender.FEMALE
         : AthleteGender.MALE,
       dateOfBirth: text(data, "dateOfBirth")
@@ -81,7 +103,7 @@ async function provisionApprovedApplication(
       dominantHand: "RIGHT",
       phone: text(data, "phone") || null,
       email: email || null,
-      previousTeam: text(data, "previousTeam") || null,
+      previousTeam: text(data, "academyTeam", text(data, "previousTeam")) || null,
       emergencyContact: text(data, "emergencyContact") || null,
     };
     const existingAthlete = await tx.athlete.findFirst({
@@ -109,7 +131,7 @@ async function provisionApprovedApplication(
         where: { athleteId_seasonId: { athleteId: athlete.id, seasonId: season.id } },
         update: {
           position: text(data, "position", "TBD"),
-          heightCm: numberValue(data, "heightCm", 180),
+          heightCm: heightFeetToCm(data),
           weightKg: numberValue(data, "weightKg", 75),
           status: PlayerStatus.DRAFT_ELIGIBLE,
         },
@@ -117,7 +139,7 @@ async function provisionApprovedApplication(
           athleteId: athlete.id,
           seasonId: season.id,
           position: text(data, "position", "TBD"),
-          heightCm: numberValue(data, "heightCm", 180),
+          heightCm: heightFeetToCm(data),
           weightKg: numberValue(data, "weightKg", 75),
           status: PlayerStatus.DRAFT_ELIGIBLE,
         },
