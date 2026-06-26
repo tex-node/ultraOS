@@ -111,6 +111,28 @@ export function ApplicationForm({ config }: ApplicationFormProps) {
           );
         }
 
+        if (field.type === "file") {
+          return (
+            <div key={field.name}>
+              <label className="text-sm font-medium text-zinc-200" htmlFor={id}>
+                {label}
+              </label>
+              {field.description ? (
+                <p className="mt-1 text-xs leading-5 text-zinc-500">{field.description}</p>
+              ) : null}
+              <input
+                accept="image/jpeg,image/png,image/webp"
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm outline-none transition file:mr-4 file:rounded-lg file:border-0 file:bg-emerald-400 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-zinc-950 focus:border-emerald-400"
+                id={id}
+                name={field.name}
+                required={field.required}
+                type="file"
+              />
+              {error ? <p className="mt-1 text-xs text-red-300">{error}</p> : null}
+            </div>
+          );
+        }
+
         return (
           <div key={field.name}>
             <label className="text-sm font-medium text-zinc-200" htmlFor={id}>

@@ -55,6 +55,20 @@ function splitFullName(data: SubmittedData) {
   };
 }
 
+function profilePhotoUrl(data: SubmittedData) {
+  const profilePhoto = data.profilePhoto;
+  if (!profilePhoto || typeof profilePhoto !== "object" || Array.isArray(profilePhoto)) {
+    return null;
+  }
+  const url = (profilePhoto as SubmittedData).url;
+  const key = (profilePhoto as SubmittedData).key;
+  return typeof url === "string" && url.length > 0
+    ? url
+    : typeof key === "string" && key.length > 0
+      ? key
+      : null;
+}
+
 async function grantRole(
   tx: Prisma.TransactionClient,
   userId: string,
@@ -105,6 +119,7 @@ async function provisionApprovedApplication(
       email: email || null,
       previousTeam: text(data, "academyTeam", text(data, "previousTeam")) || null,
       emergencyContact: text(data, "emergencyContact") || null,
+      photoUrl: profilePhotoUrl(data),
     };
     const existingAthlete = await tx.athlete.findFirst({
       where: { OR: [{ userId }, ...(email ? [{ email }] : [])] },

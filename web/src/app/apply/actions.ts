@@ -6,6 +6,7 @@ import { ApplicationType } from "@/generated/prisma/enums";
 import { applicationConfigs } from "@/app/apply/application-config";
 import { formDataToRecord } from "@/lib/club-validation";
 import { prisma } from "@/lib/prisma";
+import { uploadProfilePhoto } from "@/lib/r2";
 
 export type ApplicationFormState = {
   success?: boolean;
@@ -22,7 +23,7 @@ function validateSubmittedData(type: ApplicationType, formData: FormData) {
   const config = applicationConfigs[type];
   const input = formDataToRecord(formData);
   const fieldErrors: Record<string, string[] | undefined> = {};
-  const data: Record<string, string | boolean> = {};
+  const data: Record<string, unknown> = {};
 
   for (const field of config.fields) {
     if (field.type === "checkbox") {
@@ -31,6 +32,14 @@ function validateSubmittedData(type: ApplicationType, formData: FormData) {
         fieldErrors[field.name] = fieldError("This confirmation is required.");
       }
       data[field.name] = checked;
+      continue;
+    }
+
+    if (field.type === "file") {
+      const file = formData.get(field.name);
+      if (field.required && (!(file instanceof File) || file.size === 0)) {
+        fieldErrors[field.name] = fieldError("This file is required.");
+      }
       continue;
     }
 
@@ -100,6 +109,20 @@ export async function submitApplication(
   if (!session?.user?.id) {
     return { error: "Create an account or sign in before submitting this application." };
   }
+
+  try {
+    const profilePhoto = formData.get("profilePhoto");
+    if (profilePhoto instanceof File && profilePhoto.size > 0) {
+      data.profilePhoto = await uploadProfilePhoto(profilePhoto, session.user.id);
+    }
+  } catch (error) {
+    return {
+      fieldErrors: {
+        profilePhoto: [error instanceof Error ? error.message : "Profile picture upload failed."],
+      },
+    };
+  }
+
   const submittedData = JSON.parse(JSON.stringify(data)) as Prisma.InputJsonObject;
   const application = await prisma.application.create({
     data: {

@@ -18,6 +18,7 @@
     "db:restore": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/restore-database.ps1"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1075.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "bcryptjs": "^3.0.3",

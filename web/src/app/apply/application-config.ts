@@ -3,7 +3,7 @@ import { ApplicationType } from "@/generated/prisma/enums";
 export type ApplicationField = {
   name: string;
   label: string;
-  type?: "text" | "email" | "tel" | "url" | "number" | "textarea" | "checkbox" | "select" | "date";
+  type?: "text" | "email" | "tel" | "url" | "number" | "textarea" | "checkbox" | "select" | "date" | "file";
   required?: boolean;
   placeholder?: string;
   description?: string;
@@ -16,6 +16,14 @@ export type ApplicationConfig = {
   description: string;
   reviewNote: string;
   fields: ApplicationField[];
+};
+
+const profilePhotoField: ApplicationField = {
+  name: "profilePhoto",
+  label: "Profile picture",
+  type: "file",
+  required: true,
+  description: "Basketball picture or profile photo. JPG, PNG, or WebP; maximum 5MB.",
 };
 
 export const applicationConfigs: Record<ApplicationType, ApplicationConfig> = {
@@ -34,6 +42,7 @@ export const applicationConfigs: Record<ApplicationType, ApplicationConfig> = {
         description: "Enter your legal first and last name as it should appear on league records.",
         placeholder: "e.g. Tunde Adebayo",
       },
+      profilePhotoField,
       {
         name: "dateOfBirth",
         label: "Date of birth",
@@ -155,6 +164,7 @@ export const applicationConfigs: Record<ApplicationType, ApplicationConfig> = {
     reviewNote: "Approval allows an operator to create/link a Staff profile and assign coach access.",
     fields: [
       { name: "name", label: "Full name", required: true },
+      profilePhotoField,
       { name: "email", label: "Email", type: "email", required: true },
       { name: "phone", label: "Phone", type: "tel", required: true },
       { name: "coachingExperience", label: "Coaching experience", type: "textarea", required: true },
@@ -171,6 +181,7 @@ export const applicationConfigs: Record<ApplicationType, ApplicationConfig> = {
     reviewNote: "Approval allows an operator to create/link a Staff profile and assign scout access.",
     fields: [
       { name: "name", label: "Full name", required: true },
+      profilePhotoField,
       { name: "email", label: "Email", type: "email", required: true },
       { name: "phone", label: "Phone", type: "tel", required: true },
       { name: "basketballBackground", label: "Basketball background", type: "textarea", required: true },
