@@ -8,7 +8,7 @@ import {
   applicationReviewRoutes,
 } from "@/app/applications/application-routes";
 import { ApplicationStatus } from "@/generated/prisma/enums";
-import { requirePermission } from "@/lib/authorization";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 type ApplicationCategoryPageProps = {
@@ -36,12 +36,32 @@ export default async function ApplicationCategoryPage({ params }: ApplicationCat
     notFound();
   }
 
-  const currentSession = await auth();
-  if (!currentSession?.user) {
+  const session = await auth();
+  if (!session?.user) {
     redirect(`/login?callbackUrl=/applications/${category}`);
   }
 
-  const session = await requirePermission("application:review");
+  if (!hasPermission(session.user.roles, "application:review")) {
+    return (
+      <OperationsShell user={session.user}>
+        <main className="mx-auto max-w-3xl px-6 py-16">
+          <Link className="text-sm text-emerald-400 hover:text-emerald-300" href="/applications">
+            Back to applications
+          </Link>
+          <p className="mt-8 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">
+            {type} review queue
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight">Access required</h1>
+          <p className="mt-3 text-sm leading-6 text-zinc-400">
+            Your account is signed in, but it does not have application review
+            permission. Ask a super admin to grant you `SUPER_ADMIN` or
+            `LEAGUE_OPERATOR` access.
+          </p>
+        </main>
+      </OperationsShell>
+    );
+  }
+
   const route = applicationReviewRoutes.find((item) => item.type === type);
   const applications = await prisma.application.findMany({
     where: { type },
