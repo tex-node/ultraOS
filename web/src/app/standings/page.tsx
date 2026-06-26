@@ -1,9 +1,14 @@
 import { OperationsShell } from "@/app/components/operations-shell";
-import { requireSession } from "@/lib/authorization";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
 export default async function Standings() {
-  const session = await requireSession();
+  const session = await auth();
+  if (!session?.user) {
+    redirect("/login?callbackUrl=/standings");
+  }
+
   const season = await prisma.season.findFirst({
     where: { status: "ACTIVE" },
     include: { standings: { include: { seasonClub: { include: { club: true, division: true } } } } },
