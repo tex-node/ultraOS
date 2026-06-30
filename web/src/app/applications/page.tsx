@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { applicationReviewRoutes } from "@/app/applications/application-routes";
-import { ApplicationStatus } from "@/generated/prisma/enums";
+import {
+  emptyApplicationSummary,
+  summarizeApplicationsByType,
+} from "@/app/applications/application-summary";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
@@ -31,10 +34,13 @@ export default async function ApplicationsPage() {
     );
   }
 
-  const [counts, recentApplications] = await Promise.all([
-    prisma.application.groupBy({
-      by: ["type", "status"],
-      _count: { _all: true },
+  const [summaryApplications, recentApplications] = await Promise.all([
+    prisma.application.findMany({
+      select: {
+        type: true,
+        status: true,
+        submittedData: true,
+      },
     }),
     prisma.application.findMany({
       include: {
@@ -46,11 +52,7 @@ export default async function ApplicationsPage() {
     }),
   ]);
 
-  function countFor(type: string, status?: ApplicationStatus) {
-    return counts
-      .filter((count) => count.type === type && (!status || count.status === status))
-      .reduce((total, count) => total + count._count._all, 0);
-  }
+  const summaries = summarizeApplicationsByType(summaryApplications);
 
   return (
     <OperationsShell user={session.user}>
@@ -65,45 +67,40 @@ export default async function ApplicationsPage() {
         </p>
 
         <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {applicationReviewRoutes.map((route) => (
-            <Link
-              className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-5 transition hover:border-emerald-400/40 hover:bg-emerald-400/[0.04]"
-              href={route.href}
-              key={route.type}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">
-                    {route.type}
-                  </p>
-                  <h2 className="mt-2 text-xl font-semibold">{route.label}</h2>
+          {applicationReviewRoutes.map((route) => {
+            const summary = summaries.get(route.type) ?? emptyApplicationSummary();
+            return (
+              <Link
+                className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-5 transition hover:border-emerald-400/40 hover:bg-emerald-400/[0.04]"
+                href={route.href}
+                key={route.type}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">
+                      {route.type}
+                    </p>
+                    <h2 className="mt-2 text-xl font-semibold">{route.label}</h2>
+                  </div>
+                  <span className="rounded-full border border-white/10 px-3 py-1 text-sm text-zinc-300">
+                    {summary.total}
+                  </span>
                 </div>
-                <span className="rounded-full border border-white/10 px-3 py-1 text-sm text-zinc-300">
-                  {countFor(route.type)}
-                </span>
-              </div>
-              <div className="mt-5 grid grid-cols-3 gap-3 text-xs">
-                <div>
-                  <p className="text-zinc-500">Submitted</p>
-                  <p className="mt-1 font-semibold text-white">
-                    {countFor(route.type, ApplicationStatus.SUBMITTED)}
-                  </p>
+                <div className="mt-5 grid grid-cols-2 gap-3 text-xs sm:grid-cols-5">
+                  <SummaryMetric label="Submitted" value={summary.submitted} />
+                  <SummaryMetric label="Review" value={summary.underReview} />
+                  <SummaryMetric label="Approved" value={summary.approved} />
+                  <SummaryMetric label="Rejected" value={summary.rejected} />
+                  <SummaryMetric label="Withdrawn" value={summary.withdrawn} />
                 </div>
-                <div>
-                  <p className="text-zinc-500">Review</p>
-                  <p className="mt-1 font-semibold text-white">
-                    {countFor(route.type, ApplicationStatus.UNDER_REVIEW)}
-                  </p>
+                <div className="mt-5 grid grid-cols-3 gap-3 rounded-xl border border-white/[0.06] bg-white/[0.025] p-3 text-xs">
+                  <SummaryMetric label="Male" value={summary.male} />
+                  <SummaryMetric label="Female" value={summary.female} />
+                  <SummaryMetric label="Unspecified" value={summary.unspecifiedGender} />
                 </div>
-                <div>
-                  <p className="text-zinc-500">Approved</p>
-                  <p className="mt-1 font-semibold text-white">
-                    {countFor(route.type, ApplicationStatus.APPROVED)}
-                  </p>
-                </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </section>
 
         <section className="mt-10 rounded-2xl border border-white/[0.08] bg-[#0b100e]">
@@ -149,5 +146,14 @@ export default async function ApplicationsPage() {
         </section>
       </main>
     </OperationsShell>
+  );
+}
+
+function SummaryMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <p className="text-zinc-500">{label}</p>
+      <p className="mt-1 font-semibold text-white">{value}</p>
+    </div>
   );
 }

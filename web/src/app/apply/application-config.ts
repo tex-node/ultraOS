@@ -26,6 +26,14 @@ const profilePhotoField: ApplicationField = {
   description: "Basketball picture or profile photo. JPG, PNG, or WebP; maximum 5MB.",
 };
 
+const genderField: ApplicationField = {
+  name: "gender",
+  label: "Gender",
+  type: "select",
+  description: "Select the category you are applying under.",
+  options: ["Male", "Female"],
+};
+
 export const applicationConfigs: Record<ApplicationType, ApplicationConfig> = {
   PLAYER: {
     type: ApplicationType.PLAYER,
@@ -180,6 +188,7 @@ export const applicationConfigs: Record<ApplicationType, ApplicationConfig> = {
       profilePhotoField,
       { name: "email", label: "Email", type: "email", required: true },
       { name: "phone", label: "Phone", type: "tel", required: true },
+      genderField,
       { name: "coachingExperience", label: "Coaching experience", type: "textarea", required: true },
       { name: "certifications", label: "Certifications", type: "textarea" },
       { name: "preferredDivision", label: "Preferred division" },
@@ -197,6 +206,7 @@ export const applicationConfigs: Record<ApplicationType, ApplicationConfig> = {
       profilePhotoField,
       { name: "email", label: "Email", type: "email", required: true },
       { name: "phone", label: "Phone", type: "tel", required: true },
+      genderField,
       { name: "basketballBackground", label: "Basketball background", type: "textarea", required: true },
       { name: "affiliation", label: "Organization / club affiliation" },
       { name: "scoutingRegion", label: "Scouting region", required: true },
@@ -214,6 +224,7 @@ export const applicationConfigs: Record<ApplicationType, ApplicationConfig> = {
       { name: "name", label: "Full name", required: true },
       { name: "email", label: "Email", type: "email", required: true },
       { name: "phone", label: "Phone", type: "tel", required: true },
+      genderField,
       { name: "refereeExperience", label: "Referee experience", type: "textarea", required: true },
       { name: "certifications", label: "Certifications", type: "textarea" },
       { name: "availability", label: "Availability", type: "textarea", required: true },

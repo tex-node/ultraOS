@@ -7,6 +7,7 @@ import {
   applicationCategoryToType,
   applicationReviewRoutes,
 } from "@/app/applications/application-routes";
+import { summarizeApplications } from "@/app/applications/application-summary";
 import { ApplicationStatus } from "@/generated/prisma/enums";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -71,6 +72,7 @@ export default async function ApplicationCategoryPage({ params }: ApplicationCat
     },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
   });
+  const summary = summarizeApplications(applications);
 
   return (
     <OperationsShell user={session.user}>
@@ -88,6 +90,35 @@ export default async function ApplicationCategoryPage({ params }: ApplicationCat
           Review submissions, add notes, and change status. Approval records operator
           approval only; account roles and operational records remain controlled actions.
         </p>
+
+        <section className="mt-8 grid gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-5">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-semibold">Status summary</h2>
+              <span className="rounded-full border border-white/10 px-3 py-1 text-sm text-zinc-300">
+                {summary.total} total
+              </span>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+              <SummaryMetric label="Submitted" value={summary.submitted} />
+              <SummaryMetric label="Review" value={summary.underReview} />
+              <SummaryMetric label="Approved" value={summary.approved} />
+              <SummaryMetric label="Rejected" value={summary.rejected} />
+              <SummaryMetric label="Withdrawn" value={summary.withdrawn} />
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-5">
+            <h2 className="text-lg font-semibold">Gender summary</h2>
+            <p className="mt-1 text-xs text-zinc-500">
+              Existing applications without a gender field are counted as unspecified.
+            </p>
+            <div className="mt-5 grid grid-cols-3 gap-3 text-sm">
+              <SummaryMetric label="Male" value={summary.male} />
+              <SummaryMetric label="Female" value={summary.female} />
+              <SummaryMetric label="Unspecified" value={summary.unspecifiedGender} />
+            </div>
+          </div>
+        </section>
 
         <section className="mt-8 grid gap-5">
           {applications.map((application) => {
@@ -178,5 +209,14 @@ export default async function ApplicationCategoryPage({ params }: ApplicationCat
         ) : null}
       </main>
     </OperationsShell>
+  );
+}
+
+function SummaryMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <p className="text-zinc-500">{label}</p>
+      <p className="mt-1 font-semibold text-white">{value}</p>
+    </div>
   );
 }
