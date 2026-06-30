@@ -14,9 +14,9 @@ export default function ApplyPage() {
           </p>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight">Apply to join Ultra operations</h1>
           <p className="mt-4 text-sm leading-6 text-zinc-400">
-            Fans should use the public signup. Players, coaches, scouts, officials,
-            vendors, media, and volunteers submit role-specific applications for review.
-            Sensitive roles are never assigned automatically.
+            Use Signup to create an account. Players, coaches, scouts, officials,
+            vendors, media, and volunteers submit role-specific applications for
+            review. Sensitive roles are never assigned automatically.
           </p>
         </div>
 

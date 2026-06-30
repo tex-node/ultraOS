@@ -29,14 +29,14 @@ export default async function SignupPage({
           Ultra Basketball
         </p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight">
-          Create your fan account
+          Signup
         </h1>
         <p className="mt-3 text-sm leading-6 text-zinc-400">
-          Sign up to reserve seats, join fan clubs, vote for MVP, and follow
-          Season Zero events.
+          Create your account to reserve seats, join fan clubs, vote for MVP,
+          follow Season Zero events, or apply for participant roles.
         </p>
         <div className="mt-8">
-          <GoogleAuthButton callbackUrl={callbackUrl} label="Sign up with Google" />
+          <GoogleAuthButton callbackUrl={callbackUrl} label="Signup with Google" />
         </div>
         <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-zinc-500">
           <span className="h-px flex-1 bg-white/10" />
