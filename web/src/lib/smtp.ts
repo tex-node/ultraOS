@@ -11,10 +11,11 @@ type SmtpConfig = {
 };
 
 type SendMailInput = {
-  bcc: string[];
+  bcc?: string[];
   html: string;
   subject: string;
   text: string;
+  to?: string;
 };
 
 type SmtpSocket = net.Socket | tls.TLSSocket;
@@ -51,7 +52,11 @@ export async function sendSmtpMail(config: SmtpConfig, input: SendMailInput) {
 
     const fromAddress = extractEmailAddress(config.from);
     await command(socket, reader, `MAIL FROM:<${fromAddress}>`);
-    for (const recipient of input.bcc) {
+    const recipients = [
+      ...(input.to ? [input.to] : []),
+      ...(input.bcc ?? []),
+    ];
+    for (const recipient of recipients) {
       await command(socket, reader, `RCPT TO:<${extractEmailAddress(recipient)}>`);
     }
     await command(socket, reader, "DATA");

@@ -75,6 +75,12 @@ export function BulkEmailForm() {
       </label>
       <label className="grid gap-2 text-sm">
         <span className="text-zinc-300">Message</span>
+        <span className="text-xs leading-5 text-zinc-500">
+          Use <code className="rounded bg-white/10 px-1 py-0.5 text-emerald-200">{"{{name}}"}</code>{" "}
+          for the recipient&apos;s full name or{" "}
+          <code className="rounded bg-white/10 px-1 py-0.5 text-emerald-200">{"{{firstName}}"}</code>{" "}
+          for their first name.
+        </span>
         <textarea
           className="min-h-36 rounded-xl border border-white/10 bg-[#050807] px-3 py-3 outline-none focus:border-emerald-400"
           name="message"
@@ -89,8 +95,8 @@ export function BulkEmailForm() {
         {pending ? "Sending..." : "Send email"}
       </button>
       <p className="text-xs leading-5 text-zinc-500">
-        Messages are sent by BCC so recipients cannot see each other. SMTP must be
-        configured before sending works.
+        Messages are sent one recipient at a time so merge tags can be personalized.
+        SMTP must be configured before sending works.
       </p>
     </form>
   );

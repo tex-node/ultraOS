@@ -399,14 +399,14 @@ export async function sendBulkApplicationEmail(
 
   const audience = types.map((type) => exportableTypeLabels[type]).join(", ");
   const statusLabel = status ? status.replaceAll("_", " ") : "ALL";
-  const batches = chunk(recipients.map((recipient) => recipient.email), 50);
   try {
-    for (const batch of batches) {
+    for (const recipient of recipients) {
+      const personalizedMessage = personalizeMessage(message, recipient.name);
       await sendSmtpMail(mailConfig, {
-        bcc: batch,
-        html: plainTextToHtml(message),
-        subject,
-        text: message,
+        html: plainTextToHtml(personalizedMessage),
+        subject: personalizeMessage(subject, recipient.name),
+        text: personalizedMessage,
+        to: recipient.email,
       });
     }
   } catch (error) {
@@ -423,7 +423,8 @@ export async function sendBulkApplicationEmail(
       entityId: "bulk-email",
       details: {
         audience,
-        batchCount: batches.length,
+        batchCount: recipients.length,
+        personalized: true,
         recipientCount: recipients.length,
         status: statusLabel,
         subject,
@@ -437,14 +438,6 @@ export async function sendBulkApplicationEmail(
 function value(formData: FormData, key: string) {
   const field = formData.get(key);
   return typeof field === "string" ? field : "";
-}
-
-function chunk<T>(items: T[], size: number) {
-  const chunks: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
-  }
-  return chunks;
 }
 
 function plainTextToHtml(value: string) {
@@ -461,6 +454,16 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function personalizeMessage(value: string, name: string) {
+  const trimmedName = name.trim() || "there";
+  const firstName = trimmedName.split(/\s+/)[0] || trimmedName;
+  return value
+    .replaceAll("{{name}}", trimmedName)
+    .replaceAll("{{Name}}", trimmedName)
+    .replaceAll("{{firstName}}", firstName)
+    .replaceAll("{{FirstName}}", firstName);
 }
 
 function smtpErrorMessage(error: unknown) {
