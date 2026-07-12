@@ -1,4 +1,4 @@
-import { ApplicationType } from "@/generated/prisma/enums";
+import { ApplicationStatus, ApplicationType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 
 export const exportableApplicationTypes = [
@@ -16,6 +16,14 @@ export const exportableTypeLabels: Record<ExportableApplicationType, string> = {
   SCOUT: "Scouts",
   VENDOR: "Vendors",
 };
+
+export const emailStatusOptions = [
+  ApplicationStatus.APPROVED,
+  ApplicationStatus.REJECTED,
+  ApplicationStatus.SUBMITTED,
+] as const;
+
+export type EmailStatusFilter = (typeof emailStatusOptions)[number];
 
 export function parseExportableTypes(value: string | null) {
   if (!value || value === "ALL") {
@@ -36,9 +44,26 @@ export function isExportableApplicationType(type: ApplicationType): type is Expo
   return exportableApplicationTypes.includes(type as ExportableApplicationType);
 }
 
-export async function getApplicationData(types: ExportableApplicationType[]) {
+export function parseEmailStatusFilter(value: string | null) {
+  if (!value || value === "ALL") {
+    return null;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  return emailStatusOptions.includes(normalized as EmailStatusFilter)
+    ? (normalized as EmailStatusFilter)
+    : null;
+}
+
+export async function getApplicationData(
+  types: ExportableApplicationType[],
+  status?: EmailStatusFilter | null,
+) {
   return prisma.application.findMany({
-    where: { type: { in: types } },
+    where: {
+      type: { in: types },
+      ...(status ? { status } : {}),
+    },
     include: {
       applicantUser: { select: { name: true, email: true } },
       reviewedBy: { select: { name: true, email: true } },

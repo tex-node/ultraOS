@@ -16,6 +16,13 @@ const audienceOptions = [
   { label: "Vendors only", value: "VENDOR" },
 ];
 
+const statusOptions = [
+  { label: "All", value: "ALL" },
+  { label: "Approved", value: "APPROVED" },
+  { label: "Rejected", value: "REJECTED" },
+  { label: "Submitted", value: "SUBMITTED" },
+];
+
 export function BulkEmailForm() {
   const [state, action, pending] = useActionState(sendBulkApplicationEmail, initialState);
 
@@ -38,6 +45,19 @@ export function BulkEmailForm() {
           name="types"
         >
           {audienceOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="grid gap-2 text-sm">
+        <span className="text-zinc-300">Application status</span>
+        <select
+          className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 outline-none focus:border-emerald-400"
+          name="status"
+        >
+          {statusOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>

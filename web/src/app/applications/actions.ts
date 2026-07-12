@@ -14,6 +14,7 @@ import {
   applicationRecipients,
   exportableTypeLabels,
   getApplicationData,
+  parseEmailStatusFilter,
   parseExportableTypes,
 } from "@/app/applications/application-data";
 import { writeAuditLog } from "@/lib/audit";
@@ -358,6 +359,7 @@ export async function sendBulkApplicationEmail(
 ): Promise<BulkEmailState> {
   const session = await requirePermission("application:review");
   const types = parseExportableTypes(value(formData, "types"));
+  const status = parseEmailStatusFilter(value(formData, "status"));
   const subject = value(formData, "subject").trim();
   const message = value(formData, "message").trim();
 
@@ -381,10 +383,10 @@ export async function sendBulkApplicationEmail(
     };
   }
 
-  const applications = await getApplicationData(types);
+  const applications = await getApplicationData(types, status);
   const recipients = applicationRecipients(applications);
   if (recipients.length === 0) {
-    return { error: "No valid recipient emails found for the selected audience." };
+    return { error: "No valid recipient emails found for the selected audience and status." };
   }
 
   const mailConfig = {
@@ -396,6 +398,7 @@ export async function sendBulkApplicationEmail(
   };
 
   const audience = types.map((type) => exportableTypeLabels[type]).join(", ");
+  const statusLabel = status ? status.replaceAll("_", " ") : "ALL";
   const batches = chunk(recipients.map((recipient) => recipient.email), 50);
   for (const batch of batches) {
     await sendSmtpMail(mailConfig, {
@@ -416,6 +419,7 @@ export async function sendBulkApplicationEmail(
         audience,
         batchCount: batches.length,
         recipientCount: recipients.length,
+        status: statusLabel,
         subject,
       },
     }),
