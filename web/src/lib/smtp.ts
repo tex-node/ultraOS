@@ -18,41 +18,50 @@ type SendMailInput = {
 };
 
 type SmtpSocket = net.Socket | tls.TLSSocket;
+const smtpTimeoutMs = 30_000;
 
 export async function sendSmtpMail(config: SmtpConfig, input: SendMailInput) {
   const secure = config.port === 465;
   let socket: SmtpSocket = secure
     ? tls.connect({ host: config.host, port: config.port, servername: config.host })
     : net.connect({ host: config.host, port: config.port });
+  socket.setTimeout(smtpTimeoutMs);
 
-  await waitForConnect(socket);
-  const reader = createSmtpReader(socket);
-  await reader.read();
-
-  let ehlo = await command(socket, reader, `EHLO ${smtpHostname()}`);
-  if (!secure && ehlo.lines.some((line) => line.toUpperCase().includes("STARTTLS"))) {
-    await command(socket, reader, "STARTTLS");
-    socket = tls.connect({ socket, servername: config.host });
+  try {
     await waitForConnect(socket);
-    reader.replaceSocket(socket);
-    ehlo = await command(socket, reader, `EHLO ${smtpHostname()}`);
-  }
+    const reader = createSmtpReader(socket);
+    await reader.read();
 
-  if (ehlo.lines.some((line) => line.toUpperCase().includes("AUTH"))) {
-    await command(socket, reader, "AUTH LOGIN");
-    await command(socket, reader, Buffer.from(config.user).toString("base64"));
-    await command(socket, reader, Buffer.from(config.password).toString("base64"));
-  }
+    let ehlo = await command(socket, reader, `EHLO ${smtpHostname()}`);
+    if (!secure && ehlo.lines.some((line) => line.toUpperCase().includes("STARTTLS"))) {
+      await command(socket, reader, "STARTTLS");
+      socket.removeAllListeners("timeout");
+      socket = tls.connect({ socket, servername: config.host });
+      socket.setTimeout(smtpTimeoutMs);
+      await waitForConnect(socket);
+      reader.replaceSocket(socket);
+      ehlo = await command(socket, reader, `EHLO ${smtpHostname()}`);
+    }
 
-  const fromAddress = extractEmailAddress(config.from);
-  await command(socket, reader, `MAIL FROM:<${fromAddress}>`);
-  for (const recipient of input.bcc) {
-    await command(socket, reader, `RCPT TO:<${extractEmailAddress(recipient)}>`);
+    if (ehlo.lines.some((line) => line.toUpperCase().includes("AUTH"))) {
+      await command(socket, reader, "AUTH LOGIN");
+      await command(socket, reader, Buffer.from(config.user).toString("base64"));
+      await command(socket, reader, Buffer.from(config.password).toString("base64"));
+    }
+
+    const fromAddress = extractEmailAddress(config.from);
+    await command(socket, reader, `MAIL FROM:<${fromAddress}>`);
+    for (const recipient of input.bcc) {
+      await command(socket, reader, `RCPT TO:<${extractEmailAddress(recipient)}>`);
+    }
+    await command(socket, reader, "DATA");
+    await writeData(socket, buildMessage(config.from, input));
+    await reader.read();
+    socket.end("QUIT\r\n");
+  } catch (error) {
+    socket.destroy();
+    throw error;
   }
-  await command(socket, reader, "DATA");
-  await writeData(socket, buildMessage(config.from, input));
-  await reader.read();
-  socket.end("QUIT\r\n");
 }
 
 function createSmtpReader(initialSocket: SmtpSocket) {
@@ -78,11 +87,19 @@ function createSmtpReader(initialSocket: SmtpSocket) {
     socket = nextSocket;
     socket.on("data", onData);
     socket.on("error", onError);
+    socket.on("timeout", onTimeout);
   };
 
   const detach = () => {
     socket.off("data", onData);
     socket.off("error", onError);
+    socket.off("timeout", onTimeout);
+  };
+
+  const onTimeout = () => {
+    pending?.reject(new Error("SMTP connection timed out."));
+    pending = null;
+    socket.destroy();
   };
 
   const flush = () => {
@@ -130,9 +147,28 @@ async function command(socket: SmtpSocket, reader: ReturnType<typeof createSmtpR
 function waitForConnect(socket: SmtpSocket) {
   if (!socket.connecting) return Promise.resolve();
   return new Promise<void>((resolve, reject) => {
-    socket.once("connect", resolve);
-    socket.once("secureConnect", resolve);
-    socket.once("error", reject);
+    const timeout = setTimeout(() => {
+      cleanup();
+      socket.destroy();
+      reject(new Error("SMTP connection timed out."));
+    }, smtpTimeoutMs);
+    const cleanup = () => {
+      clearTimeout(timeout);
+      socket.off("connect", onConnect);
+      socket.off("secureConnect", onConnect);
+      socket.off("error", onError);
+    };
+    const onConnect = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    socket.once("connect", onConnect);
+    socket.once("secureConnect", onConnect);
+    socket.once("error", onError);
   });
 }
 

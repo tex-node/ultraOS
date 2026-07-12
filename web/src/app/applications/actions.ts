@@ -400,13 +400,19 @@ export async function sendBulkApplicationEmail(
   const audience = types.map((type) => exportableTypeLabels[type]).join(", ");
   const statusLabel = status ? status.replaceAll("_", " ") : "ALL";
   const batches = chunk(recipients.map((recipient) => recipient.email), 50);
-  for (const batch of batches) {
-    await sendSmtpMail(mailConfig, {
-      bcc: batch,
-      html: plainTextToHtml(message),
-      subject,
-      text: message,
-    });
+  try {
+    for (const batch of batches) {
+      await sendSmtpMail(mailConfig, {
+        bcc: batch,
+        html: plainTextToHtml(message),
+        subject,
+        text: message,
+      });
+    }
+  } catch (error) {
+    return {
+      error: `Email failed to send: ${smtpErrorMessage(error)}`,
+    };
   }
 
   await prisma.$transaction((tx) =>
@@ -455,4 +461,14 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function smtpErrorMessage(error: unknown) {
+  if (!(error instanceof Error)) {
+    return "Unknown SMTP error.";
+  }
+  if (error.message.includes("535") || error.message.toLowerCase().includes("badcredentials")) {
+    return "SMTP username or password was rejected. For Gmail, use a valid 16-character app password.";
+  }
+  return error.message;
 }
