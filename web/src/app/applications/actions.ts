@@ -10,9 +10,16 @@ import {
   StaffRole,
   UserRole,
 } from "@/generated/prisma/enums";
+import {
+  applicationRecipients,
+  exportableTypeLabels,
+  getApplicationData,
+  parseExportableTypes,
+} from "@/app/applications/application-data";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePermission } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
+import { sendSmtpMail } from "@/lib/smtp";
 
 type SubmittedData = Record<string, unknown>;
 
@@ -337,4 +344,111 @@ export async function updateApplicationStatus(formData: FormData) {
   });
 
   revalidatePath("/applications");
+}
+
+export type BulkEmailState = {
+  success?: boolean;
+  error?: string;
+  sentCount?: number;
+};
+
+export async function sendBulkApplicationEmail(
+  _previousState: BulkEmailState,
+  formData: FormData,
+): Promise<BulkEmailState> {
+  const session = await requirePermission("application:review");
+  const types = parseExportableTypes(value(formData, "types"));
+  const subject = value(formData, "subject").trim();
+  const message = value(formData, "message").trim();
+
+  if (!subject) {
+    return { error: "Email subject is required." };
+  }
+  if (!message) {
+    return { error: "Email message is required." };
+  }
+
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = Number(process.env.SMTP_PORT ?? "587");
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPassword = process.env.SMTP_PASSWORD;
+  const emailFrom = process.env.EMAIL_FROM;
+
+  if (!smtpHost || !smtpUser || !smtpPassword || !emailFrom || !Number.isFinite(smtpPort)) {
+    return {
+      error:
+        "Bulk email is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and EMAIL_FROM.",
+    };
+  }
+
+  const applications = await getApplicationData(types);
+  const recipients = applicationRecipients(applications);
+  if (recipients.length === 0) {
+    return { error: "No valid recipient emails found for the selected audience." };
+  }
+
+  const mailConfig = {
+    from: emailFrom,
+    host: smtpHost,
+    password: smtpPassword,
+    port: smtpPort,
+    user: smtpUser,
+  };
+
+  const audience = types.map((type) => exportableTypeLabels[type]).join(", ");
+  const batches = chunk(recipients.map((recipient) => recipient.email), 50);
+  for (const batch of batches) {
+    await sendSmtpMail(mailConfig, {
+      bcc: batch,
+      html: plainTextToHtml(message),
+      subject,
+      text: message,
+    });
+  }
+
+  await prisma.$transaction((tx) =>
+    writeAuditLog(tx, {
+      userId: session.user.id,
+      action: "APPLICATION_BULK_EMAIL_SENT",
+      entityType: "Application",
+      entityId: "bulk-email",
+      details: {
+        audience,
+        batchCount: batches.length,
+        recipientCount: recipients.length,
+        subject,
+      },
+    }),
+  );
+
+  return { success: true, sentCount: recipients.length };
+}
+
+function value(formData: FormData, key: string) {
+  const field = formData.get(key);
+  return typeof field === "string" ? field : "";
+}
+
+function chunk<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function plainTextToHtml(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => `<p>${escapeHtml(line) || "&nbsp;"}</p>`)
+    .join("");
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }

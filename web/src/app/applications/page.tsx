@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { applicationReviewRoutes } from "@/app/applications/application-routes";
+import { BulkEmailForm } from "@/app/applications/bulk-email-form";
+import { exportableApplicationTypes, exportableTypeLabels } from "@/app/applications/application-data";
 import {
   emptyApplicationSummary,
   summarizeApplicationsByType,
@@ -65,6 +67,40 @@ export default async function ApplicationsPage() {
           Participant applications are reviewed here before any sensitive role, staff
           profile, vendor profile, accreditation, or player registration is created.
         </p>
+
+        <section className="mt-8 grid gap-5 lg:grid-cols-[1fr_420px]">
+          <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-5">
+            <h2 className="text-lg font-semibold">Export application data</h2>
+            <p className="mt-2 text-sm leading-6 text-zinc-400">
+              Download player, coach, scout, and vendor application data as Excel
+              workbooks for offline review.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link
+                className="rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-300"
+                href="/applications/export?types=ALL"
+              >
+                Export all Excel
+              </Link>
+              {exportableApplicationTypes.map((type) => (
+                <Link
+                  className="rounded-xl border border-white/10 px-4 py-3 text-sm text-zinc-200 transition hover:border-emerald-400/50 hover:text-emerald-200"
+                  href={`/applications/export?types=${type}`}
+                  key={type}
+                >
+                  Export {exportableTypeLabels[type]}
+                </Link>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-5">
+            <h2 className="text-lg font-semibold">Email applicants</h2>
+            <p className="mt-2 text-sm leading-6 text-zinc-400">
+              Send one message to player, coach, scout, and vendor applicants.
+            </p>
+            <BulkEmailForm />
+          </div>
+        </section>
 
         <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {applicationReviewRoutes.map((route) => {

@@ -7,6 +7,7 @@ import {
   applicationCategoryToType,
   applicationReviewRoutes,
 } from "@/app/applications/application-routes";
+import { isExportableApplicationType } from "@/app/applications/application-data";
 import { summarizeApplications } from "@/app/applications/application-summary";
 import { ApplicationStatus } from "@/generated/prisma/enums";
 import { hasPermission } from "@/lib/permissions";
@@ -90,6 +91,16 @@ export default async function ApplicationCategoryPage({ params }: ApplicationCat
           Review submissions, add notes, and change status. Approval records operator
           approval only; account roles and operational records remain controlled actions.
         </p>
+        {isExportableApplicationType(type) ? (
+          <div className="mt-5">
+            <Link
+              className="inline-flex rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-300"
+              href={`/applications/export?types=${type}`}
+            >
+              Export {route?.label ?? type} Excel
+            </Link>
+          </div>
+        ) : null}
 
         <section className="mt-8 grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-5">
