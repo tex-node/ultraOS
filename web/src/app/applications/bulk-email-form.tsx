@@ -34,8 +34,25 @@ export function BulkEmailForm() {
         </div>
       ) : null}
       {state.error ? (
-        <div className="rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">
-          {state.error}
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
+          <p>{state.error}</p>
+          {state.failedRecipients?.length ? (
+            <div className="mt-3">
+              <p className="font-semibold">Failed recipients</p>
+              <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-amber-50/80">
+                {state.failedRecipients.slice(0, 10).map((recipient) => (
+                  <li key={recipient.email}>
+                    {recipient.email}: {recipient.error}
+                  </li>
+                ))}
+              </ul>
+              {state.failedRecipients.length > 10 ? (
+                <p className="mt-2 text-xs text-amber-50/70">
+                  Showing 10 of {state.failedRecipients.length} failed recipients.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
       <label className="grid gap-2 text-sm">

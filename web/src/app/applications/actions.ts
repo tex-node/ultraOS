@@ -350,6 +350,7 @@ export async function updateApplicationStatus(formData: FormData) {
 export type BulkEmailState = {
   success?: boolean;
   error?: string;
+  failedRecipients?: { email: string; error: string }[];
   sentCount?: number;
 };
 
@@ -399,20 +400,24 @@ export async function sendBulkApplicationEmail(
 
   const audience = types.map((type) => exportableTypeLabels[type]).join(", ");
   const statusLabel = status ? status.replaceAll("_", " ") : "ALL";
-  try {
-    for (const recipient of recipients) {
-      const personalizedMessage = personalizeMessage(message, recipient.name);
+  const failedRecipients: { email: string; error: string }[] = [];
+  let sentCount = 0;
+  for (const recipient of recipients) {
+    const personalizedMessage = personalizeMessage(message, recipient.name);
+    try {
       await sendSmtpMail(mailConfig, {
         html: plainTextToHtml(personalizedMessage),
         subject: personalizeMessage(subject, recipient.name),
         text: personalizedMessage,
         to: recipient.email,
       });
+      sentCount += 1;
+    } catch (error) {
+      failedRecipients.push({
+        email: recipient.email,
+        error: smtpErrorMessage(error),
+      });
     }
-  } catch (error) {
-    return {
-      error: `Email failed to send: ${smtpErrorMessage(error)}`,
-    };
   }
 
   await prisma.$transaction((tx) =>
@@ -423,16 +428,34 @@ export async function sendBulkApplicationEmail(
       entityId: "bulk-email",
       details: {
         audience,
-        batchCount: recipients.length,
+        attemptedCount: recipients.length,
+        failedCount: failedRecipients.length,
+        failedRecipients: failedRecipients.slice(0, 50),
         personalized: true,
         recipientCount: recipients.length,
+        sentCount,
         status: statusLabel,
         subject,
       },
     }),
   );
 
-  return { success: true, sentCount: recipients.length };
+  if (sentCount === 0) {
+    return {
+      error: `No emails were sent. ${failedRecipients.length} recipient${failedRecipients.length === 1 ? "" : "s"} failed.`,
+      failedRecipients,
+      sentCount,
+    };
+  }
+
+  return {
+    error: failedRecipients.length
+      ? `${sentCount} email${sentCount === 1 ? "" : "s"} sent. ${failedRecipients.length} recipient${failedRecipients.length === 1 ? "" : "s"} failed.`
+      : undefined,
+    failedRecipients,
+    success: failedRecipients.length === 0,
+    sentCount,
+  };
 }
 
 function value(formData: FormData, key: string) {
