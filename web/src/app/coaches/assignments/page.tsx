@@ -1,11 +1,28 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { StaffRole } from "@/generated/prisma/enums";
-import { requirePermission } from "@/lib/authorization";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { assignSeasonClubCoach, clearSeasonClubCoach } from "../actions";
 
 export default async function CoachAssignmentsPage() {
-  const session = await requirePermission("staff:manage");
+  const session = await auth();
+  if (!session?.user) {
+    redirect("/login?callbackUrl=/coaches/assignments");
+  }
+  if (!hasPermission(session.user.roles, "staff:manage")) {
+    return (
+      <OperationsShell user={session.user}>
+        <main className="mx-auto max-w-3xl px-6 py-16">
+          <h1 className="text-3xl font-semibold">Access required</h1>
+          <p className="mt-3 text-sm text-zinc-400">
+            Your account does not have staff management permission.
+          </p>
+        </main>
+      </OperationsShell>
+    );
+  }
   const [seasonClubs, coaches] = await Promise.all([
     prisma.seasonClub.findMany({
       include: {

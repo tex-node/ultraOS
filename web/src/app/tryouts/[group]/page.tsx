@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { DraftSelectionGroup } from "@/generated/prisma/enums";
-import { requirePermission } from "@/lib/authorization";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { bulkUpdateTryoutGroup, updatePlayerTryout } from "../actions";
 
@@ -34,8 +35,23 @@ type TryoutPlayer = {
 };
 
 export default async function TryoutGroupPage({ params }: { params: Promise<{ group: string }> }) {
-  const session = await requirePermission("draft:manage");
   const { group: groupParam } = await params;
+  const session = await auth();
+  if (!session?.user) {
+    redirect(`/login?callbackUrl=/tryouts/${groupParam}`);
+  }
+  if (!hasPermission(session.user.roles, "draft:manage")) {
+    return (
+      <OperationsShell user={session.user}>
+        <main className="mx-auto max-w-3xl px-6 py-16">
+          <h1 className="text-3xl font-semibold">Access required</h1>
+          <p className="mt-3 text-sm text-zinc-400">
+            Your account does not have draft management permission.
+          </p>
+        </main>
+      </OperationsShell>
+    );
+  }
   const group = groupFromSlug(groupParam);
   if (!group) notFound();
 

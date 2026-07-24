@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { DraftSelectionGroup } from "@/generated/prisma/enums";
-import { requirePermission } from "@/lib/authorization";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 const groups = [
@@ -20,7 +22,22 @@ function groupLabel(group: DraftSelectionGroup) {
 }
 
 export default async function TryoutsPage() {
-  const session = await requirePermission("draft:manage");
+  const session = await auth();
+  if (!session?.user) {
+    redirect("/login?callbackUrl=/tryouts");
+  }
+  if (!hasPermission(session.user.roles, "draft:manage")) {
+    return (
+      <OperationsShell user={session.user}>
+        <main className="mx-auto max-w-3xl px-6 py-16">
+          <h1 className="text-3xl font-semibold">Access required</h1>
+          <p className="mt-3 text-sm text-zinc-400">
+            Your account does not have draft management permission.
+          </p>
+        </main>
+      </OperationsShell>
+    );
+  }
   const counts = await prisma.player.groupBy({
     by: ["draftSelectionGroup"],
     _count: { _all: true },
