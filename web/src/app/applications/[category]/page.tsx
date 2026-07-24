@@ -9,7 +9,7 @@ import {
 } from "@/app/applications/application-routes";
 import { isExportableApplicationType } from "@/app/applications/application-data";
 import { summarizeApplications } from "@/app/applications/application-summary";
-import { ApplicationStatus } from "@/generated/prisma/enums";
+import { ApplicationStatus, ApplicationType, DraftSelectionGroup } from "@/generated/prisma/enums";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
@@ -208,6 +208,34 @@ export default async function ApplicationCategoryPage({ params }: ApplicationCat
                     Update
                   </button>
                 </form>
+                {type === ApplicationType.PLAYER ? (
+                  <div className="mt-3 grid gap-2 rounded-xl border border-white/[0.06] bg-black/20 p-4 md:grid-cols-4">
+                    <SelectionButton
+                      applicationId={application.id}
+                      group={DraftSelectionGroup.MAIN_DRAFT}
+                      label="Approve: main draft"
+                      notes={application.notes}
+                    />
+                    <SelectionButton
+                      applicationId={application.id}
+                      group={DraftSelectionGroup.SECONDARY_DRAFT}
+                      label="Approve: secondary"
+                      notes={application.notes}
+                    />
+                    <SelectionButton
+                      applicationId={application.id}
+                      group={DraftSelectionGroup.NOT_SELECTED}
+                      label="Approve: not selected"
+                      notes={application.notes}
+                    />
+                    <SelectionButton
+                      applicationId={application.id}
+                      group={DraftSelectionGroup.PENDING_SELECTION}
+                      label="Return to pending"
+                      notes={application.notes}
+                    />
+                  </div>
+                ) : null}
               </article>
             );
           })}
@@ -220,6 +248,33 @@ export default async function ApplicationCategoryPage({ params }: ApplicationCat
         ) : null}
       </main>
     </OperationsShell>
+  );
+}
+
+function SelectionButton({
+  applicationId,
+  group,
+  label,
+  notes,
+}: {
+  applicationId: string;
+  group: DraftSelectionGroup;
+  label: string;
+  notes: string | null;
+}) {
+  return (
+    <form action={updateApplicationStatus}>
+      <input name="applicationId" type="hidden" value={applicationId} />
+      <input name="status" type="hidden" value={ApplicationStatus.APPROVED} />
+      <input name="draftSelectionGroup" type="hidden" value={group} />
+      <input name="notes" type="hidden" value={notes ?? ""} />
+      <button
+        className="w-full rounded-xl border border-white/10 px-3 py-3 text-left text-xs font-semibold text-zinc-200 transition hover:border-emerald-400 hover:text-emerald-300"
+        type="submit"
+      >
+        {label}
+      </button>
+    </form>
   );
 }
 

@@ -56,6 +56,9 @@ const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
     "public:view",
   ]),
   LEAGUE_OPERATOR: new Set<Permission>([
+    "player:manage",
+    "staff:manage",
+    "draft:manage",
     "fixture:manage",
     "game:operate",
     "result:confirm",

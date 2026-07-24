@@ -13,6 +13,9 @@
     "db:validate": "prisma validate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:system": "tsx prisma/seed.ts --mode=system",
+    "db:seed:demo": "tsx prisma/seed.ts --mode=demo",
+    "db:reset:real": "tsx scripts/clear-demo-data.ts",
     "db:studio": "prisma studio",
     "db:backup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-database.ps1",
     "db:restore": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/restore-database.ps1"

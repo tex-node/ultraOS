@@ -6,6 +6,7 @@ import {
   ApplicationStatus,
   ApplicationType,
   AthleteGender,
+  DraftSelectionGroup,
   PlayerStatus,
   StaffRole,
   UserRole,
@@ -75,6 +76,15 @@ function profilePhotoUrl(data: SubmittedData) {
     : typeof key === "string" && key.length > 0
       ? key
       : null;
+}
+
+function parseDraftSelectionGroup(value: FormDataEntryValue | null) {
+  if (typeof value !== "string" || value.length === 0) {
+    return null;
+  }
+  return Object.values(DraftSelectionGroup).includes(value as DraftSelectionGroup)
+    ? (value as DraftSelectionGroup)
+    : null;
 }
 
 async function grantRole(
@@ -165,6 +175,7 @@ async function provisionApprovedApplication(
           heightCm: heightFeetToCm(data),
           weightKg: numberValue(data, "weightKg", 75),
           status: PlayerStatus.DRAFT_ELIGIBLE,
+          draftSelectionGroup: DraftSelectionGroup.PENDING_SELECTION,
         },
       });
     }
@@ -299,6 +310,7 @@ export async function updateApplicationStatus(formData: FormData) {
   const applicationId = formData.get("applicationId");
   const status = formData.get("status");
   const notesValue = formData.get("notes");
+  const draftSelectionGroup = parseDraftSelectionGroup(formData.get("draftSelectionGroup"));
 
   if (typeof applicationId !== "string" || applicationId.length === 0) {
     throw new Error("Application ID is required.");
@@ -331,6 +343,36 @@ export async function updateApplicationStatus(formData: FormData) {
       await provisionApprovedApplication(tx, application, session.user.id);
     }
 
+    if (application.type === ApplicationType.PLAYER && draftSelectionGroup) {
+      if (nextStatus !== ApplicationStatus.APPROVED) {
+        throw new Error("Player draft selection can only be set for approved applications.");
+      }
+      if (!application.applicantUserId) {
+        throw new Error("Player application must be linked to a user before draft selection.");
+      }
+      const activeSeason = await tx.season.findFirst({
+        orderBy: { startDate: "desc" },
+        select: { id: true },
+        where: { status: { in: ["ACTIVE", "DRAFT"] } },
+      });
+      const athlete = await tx.athlete.findUnique({
+        select: { id: true },
+        where: { userId: application.applicantUserId },
+      });
+      if (!activeSeason || !athlete) {
+        throw new Error("Approved player registration was not found for draft selection.");
+      }
+      await tx.player.update({
+        data: {
+          draftSelectionGroup,
+          selectedAt: new Date(),
+          selectedById: session.user.id,
+          selectionNotes: notes,
+        },
+        where: { athleteId_seasonId: { athleteId: athlete.id, seasonId: activeSeason.id } },
+      });
+    }
+
     await writeAuditLog(tx, {
       userId: session.user.id,
       action: "APPLICATION_STATUS_UPDATED",
@@ -340,6 +382,7 @@ export async function updateApplicationStatus(formData: FormData) {
         type: application.type,
         status: application.status,
         notes,
+        draftSelectionGroup,
       },
     });
   });

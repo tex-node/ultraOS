@@ -24,6 +24,8 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString }),
 });
 
+const seedMode = process.env.SEED_MODE ?? process.argv.find((arg) => arg.startsWith("--mode="))?.split("=")[1] ?? "demo";
+
 const clubs = [
   ["Vortex", "VTX", "#16F2B3", "#071713"],
   ["Apex", "APX", "#9B5CFF", "#160C24"],
@@ -209,6 +211,11 @@ async function main() {
       slug: "women",
     },
   });
+
+  if (seedMode === "system") {
+    console.log("Seeded system records only. Demo clubs, players, events, fixtures, and orders were skipped.");
+    return;
+  }
 
   const season = await prisma.season.upsert({
     where: {

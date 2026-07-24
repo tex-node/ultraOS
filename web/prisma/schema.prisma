@@ -54,6 +54,18 @@ enum PlayerStatus {
   INACTIVE
 }
 
+enum DraftSelectionGroup {
+  PENDING_SELECTION
+  MAIN_DRAFT
+  SECONDARY_DRAFT
+  NOT_SELECTED
+}
+
+enum DraftTier {
+  MAIN
+  SECONDARY
+}
+
 enum StaffRole {
   HEAD_COACH
   ASSISTANT_COACH
@@ -235,6 +247,7 @@ model User {
   accreditations    Accreditation[]
   applicationsSubmitted Application[]     @relation("ApplicantApplications")
   applicationsReviewed  Application[]     @relation("ReviewedApplications")
+  playersSelected        Player[]          @relation("PlayerSelectedBy")
   performedCheckIns CheckIn[]         @relation("CheckInOperator")
   contentJobs       ContentJob[]
   createdAt         DateTime          @default(now())
@@ -415,29 +428,39 @@ model Athlete {
 }
 
 model Player {
-  id           String       @id @default(cuid())
-  athleteId    String
-  athlete      Athlete      @relation(fields: [athleteId], references: [id], onDelete: Restrict)
-  seasonId     String
-  season       Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  seasonClubId String?
-  seasonClub   SeasonClub?  @relation(fields: [seasonClubId], references: [id], onDelete: SetNull)
-  position     String
-  heightCm     Int
-  weightKg     Int
-  jerseyNumber Int?
-  status       PlayerStatus @default(REGISTERED)
-  draftPicks   DraftPick[]
-  gameEvents   GameEvent[]
-  playerStats  PlayerStat[]
-  mvpVotes     MVPVote[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id                  String              @id @default(cuid())
+  athleteId           String
+  athlete             Athlete             @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  seasonId            String
+  season              Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  seasonClubId        String?
+  seasonClub          SeasonClub?         @relation(fields: [seasonClubId], references: [id], onDelete: SetNull)
+  position            String
+  heightCm            Int
+  weightKg            Int
+  jerseyNumber        Int?
+  status              PlayerStatus        @default(REGISTERED)
+  draftSelectionGroup DraftSelectionGroup @default(PENDING_SELECTION)
+  tryoutNumber        String?
+  tryoutScore         Decimal?            @db.Decimal(5, 2)
+  selectionNotes      String?
+  selectedAt          DateTime?
+  selectedById        String?
+  selectedBy          User?               @relation("PlayerSelectedBy", fields: [selectedById], references: [id], onDelete: SetNull)
+  draftedAt           DateTime?
+  draftPicks          DraftPick[]
+  gameEvents          GameEvent[]
+  playerStats         PlayerStat[]
+  mvpVotes            MVPVote[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
   @@unique([athleteId, seasonId])
   @@unique([seasonClubId, jerseyNumber])
   @@index([seasonId, status])
+  @@index([seasonId, draftSelectionGroup])
   @@index([seasonClubId])
+  @@index([selectedById, selectedAt])
 }
 
 model AthleteAward {
@@ -496,6 +519,7 @@ model Draft {
   season         Season      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   divisionId     String
   division       Division    @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  tier           DraftTier   @default(MAIN)
   status         DraftStatus @default(NOT_STARTED)
   currentRound   Int         @default(1)
   nextPickNumber Int         @default(1)
@@ -506,7 +530,7 @@ model Draft {
   updatedAt      DateTime    @updatedAt
 
   @@unique([seasonId, divisionId, name])
-  @@index([seasonId, divisionId, status])
+  @@index([seasonId, divisionId, tier, status])
 }
 
 model DraftPick {

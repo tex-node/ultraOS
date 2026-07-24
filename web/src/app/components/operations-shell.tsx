@@ -14,6 +14,8 @@ const navigation = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/clubs", label: "Clubs" },
   { href: "/players", label: "Athletes" },
+  { href: "/coaches", label: "Coaches" },
+  { href: "/tryouts", label: "Tryouts" },
   { href: "/drafts", label: "Drafts" },
   { href: "/fixtures", label: "Fixtures" },
   { href: "/events", label: "Events" },
