@@ -1,11 +1,18 @@
 import { z } from "zod";
-import { ClubStatus, SeasonClubStatus } from "@/generated/prisma/enums";
+import { ClubBrandingStatus, ClubStatus, SeasonClubStatus } from "@/generated/prisma/enums";
 
 const optionalUrl = z
   .string()
   .trim()
   .refine((value) => value === "" || z.url().safeParse(value).success, {
     message: "Enter a valid URL.",
+  });
+
+const optionalHexColor = z
+  .string()
+  .trim()
+  .refine((value) => value === "" || /^#[0-9A-Fa-f]{6}$/.test(value), {
+    message: "Use a 6-digit hex color or leave blank.",
   });
 
 export const clubSchema = z.object({
@@ -18,8 +25,14 @@ export const clubSchema = z.object({
     .max(8)
     .transform((value) => value.toUpperCase()),
   logoUrl: optionalUrl,
-  primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Use a 6-digit hex color."),
-  secondaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Use a 6-digit hex color."),
+  primaryColor: optionalHexColor,
+  secondaryColor: optionalHexColor,
+  brandingStatus: z.enum(ClubBrandingStatus),
+  motto: z.string().trim().max(120, "Motto must be 120 characters or fewer."),
+  publicBio: z.string().trim().max(1500, "Public biography must be 1,500 characters or fewer."),
+  officialSlogan: z.string().trim().max(120, "Official slogan must be 120 characters or fewer."),
+  crowdChant: z.string().trim().max(120, "Crowd chant must be 120 characters or fewer."),
+  identityKeywords: z.string().trim().max(300, "Identity keywords must be 300 characters or fewer."),
   foundedYear: z
     .string()
     .trim()

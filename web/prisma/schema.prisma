@@ -33,6 +33,12 @@ enum ClubStatus {
   ARCHIVED
 }
 
+enum ClubBrandingStatus {
+  IDENTITY_READY
+  BRANDING_INCOMPLETE
+  READY
+}
+
 enum SeasonClubStatus {
   ACTIVE
   INACTIVE
@@ -116,6 +122,94 @@ enum GameEventType {
   TIMEOUT
   SUBSTITUTION
   NOTE
+  // Additive lifecycle/ledger event types (Ultra canonical scoring model). SCORE remains the
+  // event type emitted by the existing scorer for a made shot — these are available for the
+  // native ledger to use going forward without breaking any code that already filters on SCORE.
+  GAME_STARTED
+  PERIOD_STARTED
+  PERIOD_ENDED
+  GAME_ENDED
+  ULTRA_TIME_STARTED
+  ULTRA_TIME_ENDED
+  SHOT_ATTEMPT
+  SHOT_MADE
+  SHOT_MISSED
+  FREE_THROW_ATTEMPT
+  FREE_THROW_MADE
+  FREE_THROW_MISSED
+  SCORE_CORRECTION
+  EVENT_CORRECTION
+  // Added in G.15 for the statistician console's rebound entry — split out of the coarse
+  // REBOUND type (still valid and still used by the scorer console) so OREB/DREB can be
+  // distinguished at the ledger level, matching PlayerStat.offensiveRebounds/defensiveRebounds.
+  OFFENSIVE_REBOUND
+  DEFENSIVE_REBOUND
+}
+
+enum GameEventStatus {
+  ACTIVE
+  VOIDED
+  CORRECTED
+  SUPERSEDED
+}
+
+enum FourPointQualificationMethod {
+  MANUAL_SCORER_SELECTION
+  COURT_ZONE
+  SHOT_COORDINATE
+  EXTERNAL_PROVIDER
+}
+
+enum FourPointDefinitionType {
+  OPPOSITE_HALF_ORIGIN
+  DESIGNATED_ZONE
+  DISABLED
+}
+
+enum MandatorySubstitutionPolicy {
+  NONE
+  AT_LEAST_ONE_PER_HALF
+  FULL_ROTATION
+}
+
+// Coarse, per-game signal of what depth of data actually exists for that game — lets API
+// consumers and UI know what can safely be shown (e.g. don't render a shot chart for a
+// BOX_SCORE_ONLY game). Complements, not replaces, the finer null-vs-zero convention used on
+// individual stat fields (see PlayerStat/TeamStat comments).
+enum GameDataCapability {
+  BOX_SCORE_ONLY
+  PLAY_BY_PLAY
+  ULTRA_NATIVE_EVENTS
+  SHOT_LOCATION
+  VISION_ENRICHED
+}
+
+// The category of where a game's results/stats came from. Distinct from the free-text
+// resultSource/sourceReference fields (e.g. an exact filename) already on Game — this is the
+// queryable category those specific references fall under.
+enum StatDataSource {
+  ULTRA_NATIVE_LIVE_SCORER
+  FIBA_LIVESTATS_PDF_IMPORT
+  GENIUS_SPORTS_IMPORT
+  MANUAL_ADMIN_ENTRY
+  CSV_IMPORT
+  EXTERNAL_PROVIDER
+  // Added in G.15: events written by the independent statistician console, distinct from
+  // ULTRA_NATIVE_LIVE_SCORER (the scorer's own console). The two sources' events are compared
+  // for score reconciliation precisely because they come from separately-operated consoles.
+  ULTRA_NATIVE_LIVE_STATISTICIAN
+  // Added in G.16: stamped on PlayerStat/TeamStat rows materialized by rebuildGameStatsFromEvents()
+  // from a VERIFIED statistician GameEvent ledger - distinct from ULTRA_NATIVE_LIVE_STATISTICIAN
+  // (which tags the raw events themselves) so a reader can tell "this row is a derived,
+  // verified snapshot" apart from "this row was written incrementally, event-by-event."
+  EVENT_DERIVED
+}
+
+enum FoulType {
+  PERSONAL
+  TECHNICAL
+  FLAGRANT
+  OFFENSIVE
 }
 
 enum ScoutReportVisibility {
@@ -156,6 +250,146 @@ enum ApplicationStatus {
   APPROVED
   REJECTED
   WITHDRAWN
+}
+
+enum ImportType {
+  PLAYER
+  COACH
+  CLUB
+}
+
+enum ImportStatus {
+  UPLOADED
+  PARSED
+  NEEDS_REVIEW
+  READY
+  PROCESSING
+  COMPLETED
+  PARTIALLY_COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ImportRowStatus {
+  PENDING
+  VALID
+  WARNING
+  ERROR
+  RESOLVED
+  IMPORTED
+  SKIPPED
+  FAILED
+}
+
+enum ImportResolutionAction {
+  CREATE
+  LINK_EXISTING
+  UPDATE_EXISTING
+  SKIP
+  REJECT
+}
+
+enum DraftEventStatus {
+  DRAFT
+  READY
+  LIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum DraftEventOperatingMode {
+  REHEARSAL
+  LIVE
+}
+
+enum DraftEventStage {
+  INTRO
+  CLUB_REVEAL
+  MEN_COACH_ALLOCATION
+  WOMEN_COACH_ALLOCATION
+  MEN_SQUAD_ALLOCATION
+  WOMEN_SQUAD_ALLOCATION
+  TEAM_INTRODUCTIONS
+  COMPLETED
+}
+
+enum AllocationSubjectType {
+  COACH
+  SQUAD
+}
+
+enum AllocationStatus {
+  PENDING
+  RESERVED
+  REVEALING
+  REVEALED
+  CONFIRMED
+  CORRECTED
+  CANCELLED
+}
+
+enum AllocationMode {
+  RANDOM_DRAW
+  MANUAL_PREASSIGNED
+}
+
+enum OpsHealthStatus {
+  GREEN
+  AMBER
+  RED
+}
+
+enum OpsItemStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETE
+  BLOCKED
+  CANCELLED
+}
+
+enum OpsSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentType {
+  MEDICAL
+  TECHNICAL
+  VENUE
+  POWER
+  NETWORK
+  OFFICIAL
+  PLAYER
+  FAN
+  SECURITY
+  OTHER
+}
+
+enum EquipmentStatus {
+  AVAILABLE
+  ASSIGNED
+  IN_USE
+  MAINTENANCE
+  MISSING
+  RETIRED
+}
+
+enum DisplaySurface {
+  PUBLIC_DISPLAY
+  MC_SCREEN
+  OPERATOR_SCREEN
+  OVERLAY
+  SCOREBOARD
+}
+
+enum LaunchBlockerPriority {
+  P0
+  P1
+  P2
+  P3
 }
 
 enum ReservationStatus {
@@ -221,52 +455,209 @@ enum ContentJobStatus {
   FAILED
 }
 
+enum RecordOrigin {
+  SYSTEM
+  DEMO
+  REHEARSAL
+  IMPORT
+  APPLICATION
+  ADMIN
+  ADMIN_OFFLINE_INTAKE
+  PRODUCTION
+}
+
+enum AdminOfflineIntakeStatus {
+  DRAFT
+  READY_FOR_PROVISIONING
+  PROVISIONED
+}
+
+enum ApplicationProvisioningStatus {
+  APPROVED_ONLY
+  PROFILE_PROVISIONED
+  SEASON_REGISTRATION_CREATED
+  ROLE_GRANTED
+  READY_FOR_OPERATIONS
+  BLOCKED
+}
+
+enum CoachSeasonZeroSelectionStatus {
+  PENDING
+  SEASON_ZERO_SELECTED
+  NOT_SELECTED
+}
+
+enum CoachSeasonZeroDivision {
+  MEN
+  WOMEN
+}
+
+enum TrainingSessionType {
+  TEAM_PRACTICE
+  SKILLS
+  STRENGTH
+  CONDITIONING
+  SHOOTING
+  TACTICAL
+  RECOVERY
+  ASSESSMENT
+  OTHER
+}
+
+enum TrainingAttendanceStatus {
+  PRESENT
+  LATE
+  EXCUSED
+  ABSENT
+  LIMITED
+}
+
+enum MetricValueType {
+  NUMERIC
+  TEXT
+  BOOLEAN
+}
+
+enum AthleteMediaType {
+  PHOTO
+  VIDEO
+  HIGHLIGHT
+  INTERVIEW
+  DOCUMENT
+  PRESS
+  SOCIAL
+  OTHER
+}
+
+enum MediaVisibility {
+  PRIVATE
+  TEAM
+  LEAGUE
+  SCOUT
+  PUBLIC
+}
+
+enum MediaStorageProvider {
+  CLOUDFLARE_OBJECT_STORAGE
+  LOCAL_PERSISTENT_STORAGE
+}
+
+enum MediaAssetStatus {
+  UPLOADED
+  PROCESSING
+  READY
+  REJECTED
+  ARCHIVED
+}
+
+enum MediaAssetPurpose {
+  CLUB_LOGO
+  CLUB_SECONDARY_LOGO
+  PLAYER_PROFILE_PHOTO
+  PLAYER_ACTION_PHOTO
+  COACH_PROFILE_PHOTO
+  STAFF_PROFILE_PHOTO
+  SPONSOR_LOGO
+  JERSEY_IMAGE
+  DRAFT_BACKGROUND
+  DRAFT_VIDEO
+  DRAFT_AUDIO
+  CONTENT_ASSET
+  // G.21: a registered game video (full game, camera ISO, broadcast program, etc.) - see
+  // GameVideo. MediaAsset already handled DRAFT_VIDEO's storage/playback needs; this reuses the
+  // exact same model rather than a second file-storage system.
+  GAME_VIDEO
+}
+
+enum ParticipantDocumentType {
+  CONSENT_FORM
+  WAIVER
+  MEDICAL_CLEARANCE
+  IDENTIFICATION
+  GUARDIAN_AUTHORIZATION
+  PLAYER_CONTRACT
+  MEDIA_RELEASE
+  ELIGIBILITY_DOCUMENT
+  OTHER
+}
+
+enum DocumentApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
 model User {
-  id                String            @id @default(cuid())
-  name              String
-  email             String            @unique
-  emailVerified     DateTime?
-  image             String?
-  passwordHash      String?
-  role              UserRole          @default(FAN)
-  isActive          Boolean           @default(true)
-  roles             UserRoleAssignment[] @relation("AssignedUserRoles")
-  rolesGranted      UserRoleAssignment[] @relation("GrantedUserRoles")
-  staffProfile      Staff?
-  athleteProfile    Athlete?
-  vendorProfile     Vendor?
-  mediaProfile      MediaProfile?
-  volunteerProfile  VolunteerProfile?
-  fanMemberships    FanMembership[]
-  scoutReports      ScoutReport[]     @relation("ScoutReports")
-  mvpVotes          MVPVote[]
-  auditLogs         AuditLog[]
-  seatReservations  SeatReservation[]
-  tickets           Ticket[]
-  orders            Order[]
-  accreditations    Accreditation[]
-  applicationsSubmitted Application[]     @relation("ApplicantApplications")
-  applicationsReviewed  Application[]     @relation("ReviewedApplications")
-  playersSelected        Player[]          @relation("PlayerSelectedBy")
-  performedCheckIns CheckIn[]         @relation("CheckInOperator")
-  contentJobs       ContentJob[]
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  id                           String                  @id @default(cuid())
+  name                         String
+  email                        String                  @unique
+  emailVerified                DateTime?
+  image                        String?
+  passwordHash                 String?
+  role                         UserRole                @default(FAN)
+  isActive                     Boolean                 @default(true)
+  roles                        UserRoleAssignment[]    @relation("AssignedUserRoles")
+  rolesGranted                 UserRoleAssignment[]    @relation("GrantedUserRoles")
+  staffProfile                 Staff?
+  athleteProfile               Athlete?
+  vendorProfile                Vendor?
+  mediaProfile                 MediaProfile?
+  volunteerProfile             VolunteerProfile?
+  fanMemberships               FanMembership[]
+  scoutReports                 ScoutReport[]           @relation("ScoutReports")
+  mvpVotes                     MVPVote[]
+  auditLogs                    AuditLog[]
+  seatReservations             SeatReservation[]
+  tickets                      Ticket[]
+  orders                       Order[]
+  accreditations               Accreditation[]
+  applicationsSubmitted        Application[]           @relation("ApplicantApplications")
+  applicationsReviewed         Application[]           @relation("ReviewedApplications")
+  offlineIntakesCreated        AdminOfflineIntake[]    @relation("OfflineIntakeCreatedBy")
+  draftPicksCreated            DraftPick[]             @relation("DraftPickCreatedBy")
+  playersSelected              Player[]                @relation("PlayerSelectedBy")
+  draftEventsCreated           DraftEvent[]            @relation("DraftEventCreatedBy")
+  draftAllocationsCreated      DraftAllocation[]       @relation("DraftAllocationCreatedBy")
+  draftAllocationsConfirmed    DraftAllocation[]       @relation("DraftAllocationConfirmedBy")
+  performedCheckIns            CheckIn[]               @relation("CheckInOperator")
+  contentJobs                  ContentJob[]
+  importJobs                   ImportJob[]
+  trainingSessionsCreated      TrainingSession[]
+  trainingRecordsCreated       AthleteTrainingRecord[]
+  mediaUploaded                AthleteMedia[]
+  mediaAssetsUploaded          MediaAsset[]            @relation("MediaAssetsUploaded")
+  participantDocumentsUploaded ParticipantDocument[]
+  eventDebriefsCreated         EventDebrief[]          @relation("EventDebriefCreatedBy")
+  eventVendorReviewsCreated    EventVendorReview[]     @relation("EventVendorReviewCreatedBy")
+  eventVolunteerReviews        EventVolunteerReview[]  @relation("EventVolunteerReviewVolunteer")
+  eventVolunteerReviewsCreated EventVolunteerReview[]  @relation("EventVolunteerReviewCreatedBy")
+  announcementsCreated         Announcement[]          @relation("AnnouncementCreatedBy")
+  wellWishesAuthored           WellWish[]              @relation("WellWishAuthor")
+  wellWishesModerated          WellWish[]              @relation("WellWishModeratedBy")
+  gameVideosRegistered         GameVideo[]             @relation("GameVideoRegisteredBy")
+  timelineAnchorsCreated       VideoTimelineAnchor[]   @relation("VideoTimelineAnchorCreatedBy")
+  courtCalibrationsCreated     CourtCalibration[]      @relation("CourtCalibrationCreatedBy")
+  visionAnalysisRunsRequested  VisionAnalysisRun[]     @relation("VisionAnalysisRunRequestedBy")
+  courtSpecificationsCreated   CourtSpecification[]    @relation("CourtSpecificationCreatedBy")
+  recordOrigin                 RecordOrigin            @default(PRODUCTION)
+  createdAt                    DateTime                @default(now())
+  updatedAt                    DateTime                @updatedAt
 
   @@index([role, isActive])
 }
 
 model UserRoleAssignment {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
-  user        User     @relation("AssignedUserRoles", fields: [userId], references: [id], onDelete: Cascade)
+  user        User      @relation("AssignedUserRoles", fields: [userId], references: [id], onDelete: Cascade)
   role        UserRole
   grantedById String?
-  grantedBy   User?    @relation("GrantedUserRoles", fields: [grantedById], references: [id], onDelete: SetNull)
-  grantedAt   DateTime @default(now())
+  grantedBy   User?     @relation("GrantedUserRoles", fields: [grantedById], references: [id], onDelete: SetNull)
+  grantedAt   DateTime  @default(now())
   revokedAt   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@unique([userId, role])
   @@index([role, revokedAt])
@@ -295,6 +686,7 @@ model Competition {
   divisions        Division[]
   seasons          Season[]
   contentTemplates ContentTemplate[]
+  systemSettings   SystemSetting[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
@@ -304,62 +696,80 @@ model Competition {
 }
 
 model Division {
-  id            String       @id @default(cuid())
-  competitionId String
-  competition   Competition  @relation(fields: [competitionId], references: [id], onDelete: Restrict)
-  name          String
-  slug          String
-  isActive      Boolean      @default(true)
-  seasonClubs   SeasonClub[]
-  drafts        Draft[]
-  fixtures      Fixture[]
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id                    String                @id @default(cuid())
+  competitionId         String
+  competition           Competition           @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  name                  String
+  slug                  String
+  isActive              Boolean               @default(true)
+  seasonClubs           SeasonClub[]
+  drafts                Draft[]
+  fixtures              Fixture[]
+  draftSquads           DraftSquad[]
+  draftAllocations      DraftAllocation[]
+  draftCoachPoolEntries DraftCoachPoolEntry[]
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
 
   @@unique([competitionId, name])
   @@unique([competitionId, slug])
 }
 
 model Season {
-  id            String         @id @default(cuid())
-  competitionId String
-  competition   Competition    @relation(fields: [competitionId], references: [id], onDelete: Restrict)
-  name          String
-  startDate     DateTime
-  endDate       DateTime
-  status        SeasonStatus   @default(DRAFT)
-  seasonClubs   SeasonClub[]
-  players       Player[]
-  drafts        Draft[]
-  events        Event[]
-  fixtures      Fixture[]
-  standings     Standing[]
-  athleteAwards AthleteAward[]
-  scoutReports  ScoutReport[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                    String                 @id @default(cuid())
+  competitionId         String
+  competition           Competition            @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  name                  String
+  startDate             DateTime
+  endDate               DateTime
+  status                SeasonStatus           @default(DRAFT)
+  seasonClubs           SeasonClub[]
+  players               Player[]
+  drafts                Draft[]
+  events                Event[]
+  fixtures              Fixture[]
+  standings             Standing[]
+  athleteAwards         AthleteAward[]
+  scoutReports          ScoutReport[]
+  draftEvents           DraftEvent[]
+  draftSquads           DraftSquad[]
+  systemSettings        SystemSetting[]
+  launchReadinessChecks LaunchReadinessCheck[]
+  trainingSessions      TrainingSession[]
+  ruleSets              RuleSet[]
+  courtSpecifications   CourtSpecification[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 
   @@unique([competitionId, name])
   @@index([competitionId, status])
 }
 
 model Club {
-  id             String       @id @default(cuid())
-  sportId        String
-  sport          Sport        @relation(fields: [sportId], references: [id], onDelete: Restrict)
-  name           String
-  shortName      String
-  logoUrl        String?
-  primaryColor   String
-  secondaryColor String
-  foundedYear    Int?
-  status         ClubStatus   @default(ACTIVE)
-  websiteUrl     String?
-  socialLinks    Json?
-  seasonClubs    SeasonClub[]
-  fanClub        FanClub?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id                           String             @id @default(cuid())
+  sportId                      String
+  sport                        Sport              @relation(fields: [sportId], references: [id], onDelete: Restrict)
+  name                         String
+  shortName                    String
+  logoUrl                      String?
+  primaryColor                 String?
+  secondaryColor               String?
+  foundedYear                  Int?
+  status                       ClubStatus         @default(ACTIVE)
+  brandingStatus               ClubBrandingStatus @default(BRANDING_INCOMPLETE)
+  motto                        String?
+  publicBio                    String?
+  officialSlogan               String?
+  crowdChant                   String?
+  identityKeywords             String[]           @default([])
+  websiteUrl                   String?
+  socialLinks                  Json?
+  seasonClubs                  SeasonClub[]
+  fanClub                      FanClub?
+  announcementVisibilityScopes Announcement[]
+  recordOrigin                 RecordOrigin       @default(PRODUCTION)
+  createdAt                    DateTime           @default(now())
+  updatedAt                    DateTime           @updatedAt
 
   @@unique([sportId, name])
   @@unique([sportId, shortName])
@@ -367,35 +777,39 @@ model Club {
 }
 
 model SeasonClub {
-  id               String           @id @default(cuid())
+  id               String            @id @default(cuid())
   seasonId         String
-  season           Season           @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  season           Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   clubId           String
-  club             Club             @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  club             Club              @relation(fields: [clubId], references: [id], onDelete: Restrict)
   divisionId       String
-  division         Division         @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  division         Division          @relation(fields: [divisionId], references: [id], onDelete: Restrict)
   headCoachId      String?
-  headCoach        Staff?           @relation("HeadCoachAssignments", fields: [headCoachId], references: [id], onDelete: SetNull)
+  headCoach        Staff?            @relation("HeadCoachAssignments", fields: [headCoachId], references: [id], onDelete: SetNull)
   assistantCoachId String?
-  assistantCoach   Staff?           @relation("AssistantCoachAssignments", fields: [assistantCoachId], references: [id], onDelete: SetNull)
+  assistantCoach   Staff?            @relation("AssistantCoachAssignments", fields: [assistantCoachId], references: [id], onDelete: SetNull)
   teamManagerId    String?
-  teamManager      Staff?           @relation("TeamManagerAssignments", fields: [teamManagerId], references: [id], onDelete: SetNull)
+  teamManager      Staff?            @relation("TeamManagerAssignments", fields: [teamManagerId], references: [id], onDelete: SetNull)
   scoutId          String?
-  scout            Staff?           @relation("ScoutAssignments", fields: [scoutId], references: [id], onDelete: SetNull)
+  scout            Staff?            @relation("ScoutAssignments", fields: [scoutId], references: [id], onDelete: SetNull)
   fanCaptainId     String?
-  fanCaptain       Staff?           @relation("FanCaptainAssignments", fields: [fanCaptainId], references: [id], onDelete: SetNull)
-  status           SeasonClubStatus @default(ACTIVE)
+  fanCaptain       Staff?            @relation("FanCaptainAssignments", fields: [fanCaptainId], references: [id], onDelete: SetNull)
+  status           SeasonClubStatus  @default(ACTIVE)
   players          Player[]
   draftPicks       DraftPick[]
-  homeFixtures     Fixture[]        @relation("HomeSeasonClub")
-  awayFixtures     Fixture[]        @relation("AwaySeasonClub")
-  wonFixtures      Fixture[]        @relation("WinnerSeasonClub")
+  homeFixtures     Fixture[]         @relation("HomeSeasonClub")
+  awayFixtures     Fixture[]         @relation("AwaySeasonClub")
+  wonFixtures      Fixture[]         @relation("WinnerSeasonClub")
   gameEvents       GameEvent[]
   playerStats      PlayerStat[]
   teamStats        TeamStat[]
+  gameStarters     GameStarter[]
   standing         Standing?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  draftAllocations DraftAllocation[]
+  trainingSessions TrainingSession[]
+  recordOrigin     RecordOrigin      @default(PRODUCTION)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@unique([seasonId, clubId, divisionId])
   @@index([seasonId, divisionId, status])
@@ -403,16 +817,17 @@ model SeasonClub {
 }
 
 model Athlete {
-  id               String         @id @default(cuid())
-  userId           String?        @unique
-  user             User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id               String                  @id @default(cuid())
+  ultraAthleteId   String?                 @unique
+  userId           String?                 @unique
+  user             User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
   firstName        String
   lastName         String
   gender           AthleteGender
   dateOfBirth      DateTime
   dominantHand     String
   phone            String?
-  email            String?        @unique
+  email            String?                 @unique
   emergencyContact String?
   previousTeam     String?
   photoUrl         String?
@@ -420,40 +835,60 @@ model Athlete {
   registrations    Player[]
   awards           AthleteAward[]
   videos           AthleteVideo[]
+  media            AthleteMedia[]
+  documents        ParticipantDocument[]
+  trainingRecords  AthleteTrainingRecord[]
   scoutReports     ScoutReport[]
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  recordOrigin     RecordOrigin            @default(PRODUCTION)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
 
   @@index([lastName, firstName])
 }
 
 model Player {
-  id                  String              @id @default(cuid())
-  athleteId           String
-  athlete             Athlete             @relation(fields: [athleteId], references: [id], onDelete: Restrict)
-  seasonId            String
-  season              Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  seasonClubId        String?
-  seasonClub          SeasonClub?         @relation(fields: [seasonClubId], references: [id], onDelete: SetNull)
-  position            String
-  heightCm            Int
-  weightKg            Int
-  jerseyNumber        Int?
-  status              PlayerStatus        @default(REGISTERED)
-  draftSelectionGroup DraftSelectionGroup @default(PENDING_SELECTION)
-  tryoutNumber        String?
-  tryoutScore         Decimal?            @db.Decimal(5, 2)
-  selectionNotes      String?
-  selectedAt          DateTime?
-  selectedById        String?
-  selectedBy          User?               @relation("PlayerSelectedBy", fields: [selectedById], references: [id], onDelete: SetNull)
-  draftedAt           DateTime?
-  draftPicks          DraftPick[]
-  gameEvents          GameEvent[]
-  playerStats         PlayerStat[]
-  mvpVotes            MVPVote[]
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  id                         String                  @id @default(cuid())
+  athleteId                  String
+  athlete                    Athlete                 @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  seasonId                   String
+  season                     Season                  @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  seasonClubId               String?
+  seasonClub                 SeasonClub?             @relation(fields: [seasonClubId], references: [id], onDelete: SetNull)
+  position                   String
+  heightCm                   Int
+  weightKg                   Int
+  jerseyNumber               Int?
+  status                     PlayerStatus            @default(REGISTERED)
+  draftSelectionGroup        DraftSelectionGroup     @default(PENDING_SELECTION)
+  tryoutNumber               String?
+  tryoutScore                Decimal?                @db.Decimal(5, 2)
+  selectionNotes             String?
+  selectedAt                 DateTime?
+  selectedById               String?
+  selectedBy                 User?                   @relation("PlayerSelectedBy", fields: [selectedById], references: [id], onDelete: SetNull)
+  draftedAt                  DateTime?
+  draftPicks                 DraftPick[]
+  draftSquadMembers          DraftSquadMember[]
+  gameEvents                 GameEvent[]             @relation("GameEventPlayer")
+  fouledInGameEvents         GameEvent[]             @relation("GameEventFouledPlayer")
+  assistedGameEvents         GameEvent[]             @relation("GameEventAssist")
+  substitutedOutGameEvents   GameEvent[]             @relation("GameEventSubstitutedOut")
+  gameStarterEntries         GameStarter[]           @relation("GameStarterPlayer")
+  playerStats                PlayerStat[]
+  noveltyGameEvents          NoveltyGameEvent[]      @relation("NoveltyGameEventPlayer")
+  fouledInNoveltyGameEvents  NoveltyGameEvent[]      @relation("NoveltyGameEventFouledPlayer")
+  noveltyPlayerStats         NoveltyPlayerStat[]
+  mvpVotes                   MVPVote[]
+  trainingRecords            AthleteTrainingRecord[]
+  media                      AthleteMedia[]
+  announcements              Announcement[]
+  // G.21: candidate identity only - never player identity itself. See VisionTrack/
+  // VisionObservation doc comments.
+  visionTrackCandidate       VisionTrack[]           @relation("VisionTrackPlayerCandidate")
+  visionObservationCandidate VisionObservation[]     @relation("VisionObservationPlayerCandidate")
+  visionSpatialSummaries     VisionSpatialSummary[]
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
 
   @@unique([athleteId, seasonId])
   @@unique([seasonClubId, jerseyNumber])
@@ -493,21 +928,230 @@ model AthleteVideo {
   @@index([athleteId, recordedAt])
 }
 
+model TrainingSession {
+  id              String                  @id @default(cuid())
+  seasonId        String?
+  season          Season?                 @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  seasonClubId    String?
+  seasonClub      SeasonClub?             @relation(fields: [seasonClubId], references: [id], onDelete: SetNull)
+  title           String
+  sessionType     TrainingSessionType
+  occurredAt      DateTime
+  durationMinutes Int?
+  location        String?
+  coachId         String?
+  coach           Staff?                  @relation(fields: [coachId], references: [id], onDelete: SetNull)
+  notes           String?
+  recordOrigin    RecordOrigin            @default(PRODUCTION)
+  createdById     String
+  createdBy       User                    @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  participants    AthleteTrainingRecord[]
+  media           AthleteMedia[]
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@index([seasonId, occurredAt])
+  @@index([seasonClubId, occurredAt])
+  @@index([coachId, occurredAt])
+}
+
+model AthleteTrainingRecord {
+  id                String                   @id @default(cuid())
+  trainingSessionId String
+  trainingSession   TrainingSession          @relation(fields: [trainingSessionId], references: [id], onDelete: Cascade)
+  athleteId         String
+  athlete           Athlete                  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  playerId          String?
+  player            Player?                  @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  attendanceStatus  TrainingAttendanceStatus
+  exertionRating    Int?
+  coachRating       Decimal?                 @db.Decimal(5, 2)
+  performanceNotes  String?
+  developmentFocus  String?
+  restrictions      String?
+  publicSummary     String?
+  createdById       String
+  createdBy         User                     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  metrics           AthleteTrainingMetric[]
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  @@unique([trainingSessionId, athleteId])
+  @@index([athleteId, createdAt])
+  @@index([playerId])
+}
+
+model TrainingMetricDefinition {
+  id        String                  @id @default(cuid())
+  key       String                  @unique
+  name      String
+  unit      String?
+  valueType MetricValueType
+  active    Boolean                 @default(true)
+  metrics   AthleteTrainingMetric[]
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+}
+
+model AthleteTrainingMetric {
+  id                      String                   @id @default(cuid())
+  athleteTrainingRecordId String
+  athleteTrainingRecord   AthleteTrainingRecord    @relation(fields: [athleteTrainingRecordId], references: [id], onDelete: Cascade)
+  metricDefinitionId      String
+  metricDefinition        TrainingMetricDefinition @relation(fields: [metricDefinitionId], references: [id], onDelete: Restrict)
+  numericValue            Decimal?                 @db.Decimal(10, 2)
+  textValue               String?
+  booleanValue            Boolean?
+  createdAt               DateTime                 @default(now())
+
+  @@unique([athleteTrainingRecordId, metricDefinitionId])
+}
+
+model AthleteMedia {
+  id                String           @id @default(cuid())
+  athleteId         String
+  athlete           Athlete          @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  playerId          String?
+  player            Player?          @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  fixtureId         String?
+  fixture           Fixture?         @relation(fields: [fixtureId], references: [id], onDelete: SetNull)
+  trainingSessionId String?
+  trainingSession   TrainingSession? @relation(fields: [trainingSessionId], references: [id], onDelete: SetNull)
+  type              AthleteMediaType
+  title             String
+  description       String?
+  url               String
+  thumbnailUrl      String?
+  visibility        MediaVisibility  @default(PRIVATE)
+  approved          Boolean          @default(false)
+  featured          Boolean          @default(false)
+  capturedAt        DateTime?
+  uploadedById      String
+  uploadedBy        User             @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([athleteId, visibility, approved])
+  @@index([playerId])
+  @@index([fixtureId])
+}
+
+model MediaAsset {
+  id               String               @id @default(cuid())
+  storageProvider  MediaStorageProvider
+  objectKey        String
+  publicUrl        String?
+  originalFilename String?
+  mimeType         String
+  byteSize         Int
+  width            Int?
+  height           Int?
+  checksumSha256   String
+  visibility       MediaVisibility      @default(PRIVATE)
+  status           MediaAssetStatus     @default(UPLOADED)
+  purpose          MediaAssetPurpose
+  title            String?
+  altText          String?
+  caption          String?
+  source           String?
+  capturedAt       DateTime?
+  uploadedById     String
+  uploadedBy       User                 @relation("MediaAssetsUploaded", fields: [uploadedById], references: [id], onDelete: Restrict)
+  usages           MediaAssetUsage[]
+  variants         MediaAssetVariant[]
+  gameVideo        GameVideo?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@unique([storageProvider, objectKey])
+  @@index([purpose, status, visibility])
+  @@index([uploadedById, createdAt])
+  @@index([checksumSha256])
+}
+
+model MediaAssetVariant {
+  id              String               @id @default(cuid())
+  assetId         String
+  asset           MediaAsset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  name            String
+  storageProvider MediaStorageProvider
+  objectKey       String
+  publicUrl       String?
+  mimeType        String
+  byteSize        Int
+  width           Int?
+  height          Int?
+  checksumSha256  String
+  createdAt       DateTime             @default(now())
+
+  @@unique([assetId, name])
+  @@unique([storageProvider, objectKey])
+}
+
+model MediaAssetUsage {
+  id           String            @id @default(cuid())
+  assetId      String
+  asset        MediaAsset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  purpose      MediaAssetPurpose
+  entityType   String
+  entityId     String
+  isPrimary    Boolean           @default(false)
+  active       Boolean           @default(true)
+  assignedById String
+  assignedAt   DateTime          @default(now())
+
+  @@index([entityType, entityId, active])
+  @@index([purpose, isPrimary, active])
+  @@index([assignedById, assignedAt])
+}
+
+model ParticipantDocument {
+  id             String                  @id @default(cuid())
+  athleteId      String?
+  athlete        Athlete?                @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  staffId        String?
+  staff          Staff?                  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  type           ParticipantDocumentType
+  title          String
+  fileUrl        String
+  mimeType       String?
+  fileSizeBytes  Int?
+  approvalStatus DocumentApprovalStatus  @default(PENDING)
+  expiresAt      DateTime?
+  uploadedById   String
+  uploadedBy     User                    @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  approvedById   String?
+  approvedAt     DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@index([athleteId, type])
+  @@index([staffId, type])
+  @@index([approvalStatus, expiresAt])
+}
+
 model Staff {
-  id                        String       @id @default(cuid())
+  id                        String                @id @default(cuid())
+  ultraStaffId              String?               @unique
   name                      String
   role                      StaffRole
   phone                     String?
   email                     String?
-  userId                    String?      @unique
-  user                      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-  headCoachAssignments      SeasonClub[] @relation("HeadCoachAssignments")
-  assistantCoachAssignments SeasonClub[] @relation("AssistantCoachAssignments")
-  teamManagerAssignments    SeasonClub[] @relation("TeamManagerAssignments")
-  scoutAssignments          SeasonClub[] @relation("ScoutAssignments")
-  fanCaptainAssignments     SeasonClub[] @relation("FanCaptainAssignments")
-  createdAt                 DateTime     @default(now())
-  updatedAt                 DateTime     @updatedAt
+  photoUrl                  String?
+  userId                    String?               @unique
+  user                      User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  headCoachAssignments      SeasonClub[]          @relation("HeadCoachAssignments")
+  assistantCoachAssignments SeasonClub[]          @relation("AssistantCoachAssignments")
+  teamManagerAssignments    SeasonClub[]          @relation("TeamManagerAssignments")
+  scoutAssignments          SeasonClub[]          @relation("ScoutAssignments")
+  fanCaptainAssignments     SeasonClub[]          @relation("FanCaptainAssignments")
+  draftCoachPoolEntries     DraftCoachPoolEntry[]
+  draftAllocations          DraftAllocation[]
+  trainingSessionsCoached   TrainingSession[]
+  documents                 ParticipantDocument[]
+  recordOrigin              RecordOrigin          @default(PRODUCTION)
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
 
   @@index([role])
 }
@@ -523,6 +1167,15 @@ model Draft {
   status         DraftStatus @default(NOT_STARTED)
   currentRound   Int         @default(1)
   nextPickNumber Int         @default(1)
+  // Optional link to the governing DraftEvent. When set, Draft/DraftPick's
+  // REHEARSAL-vs-LIVE behavior is derived from draftEvent.operatingMode —
+  // this is what lets Secondary Draft (Draft/DraftPick) participate in the
+  // same rehearsal-isolation guarantees as the Main Draft (DraftEvent/
+  // DraftAllocation) instead of being a separate, unguarded system. A Draft
+  // with no linked DraftEvent is always treated as REHEARSAL (never writes
+  // official Player.seasonClubId) — the safe default.
+  draftEventId   String?
+  draftEvent     DraftEvent? @relation(fields: [draftEventId], references: [id], onDelete: SetNull)
   startedAt      DateTime?
   completedAt    DateTime?
   picks          DraftPick[]
@@ -531,54 +1184,493 @@ model Draft {
 
   @@unique([seasonId, divisionId, name])
   @@index([seasonId, divisionId, tier, status])
+  @@index([draftEventId])
+}
+
+enum DraftPickStatus {
+  RESERVED
+  REVEALING
+  REVEALED
+  CONFIRMED
+  CORRECTED
 }
 
 model DraftPick {
-  id           String     @id @default(cuid())
-  draftId      String
-  draft        Draft      @relation(fields: [draftId], references: [id], onDelete: Cascade)
-  round        Int
-  pickNumber   Int
-  seasonClubId String
-  seasonClub   SeasonClub @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
-  playerId     String
-  player       Player     @relation(fields: [playerId], references: [id], onDelete: Restrict)
-  pickedAt     DateTime   @default(now())
+  id               String                  @id @default(cuid())
+  draftId          String
+  draft            Draft                   @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  round            Int
+  pickNumber       Int
+  seasonClubId     String
+  seasonClub       SeasonClub              @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
+  playerId         String
+  player           Player                  @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  // Recorded at creation time and never changed afterward — the permanent,
+  // immutable record of whether this specific pick was made under REHEARSAL
+  // or LIVE, independent of whatever the Draft/DraftEvent's mode is later
+  // changed to. Mirrors DraftAllocation.operatingMode.
+  operatingMode    DraftEventOperatingMode @default(REHEARSAL)
+  status           DraftPickStatus         @default(RESERVED)
+  reservedAt       DateTime                @default(now())
+  revealedAt       DateTime?
+  confirmedAt      DateTime?
+  correctedAt      DateTime?
+  correctionReason String?
+  // Nullable: legacy/seed DraftPick rows created before this column existed
+  // have no recorded actor. All new picks created through
+  // reserveSecondaryDraftPick()/makeDraftPick() always populate this.
+  createdById      String?
+  createdBy        User?                   @relation("DraftPickCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  pickedAt         DateTime                @default(now())
 
   @@unique([draftId, pickNumber])
   @@unique([draftId, playerId])
   @@index([seasonClubId])
+  @@index([draftId, status])
+}
+
+model DraftEvent {
+  id                  String                  @id @default(cuid())
+  name                String
+  publicTitle         String
+  seasonId            String
+  season              Season                  @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  eventId             String?
+  event               Event?                  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  status              DraftEventStatus        @default(DRAFT)
+  operatingMode       DraftEventOperatingMode @default(REHEARSAL)
+  currentStage        DraftEventStage         @default(INTRO)
+  currentAllocationId String?
+  displaySequence     Int                     @default(0)
+  publicMessage       String?
+  sponsorName         String?
+  sponsorLogoUrl      String?
+  allocationMode      AllocationMode          @default(RANDOM_DRAW)
+  displayToken        String                  @unique
+  startedAt           DateTime?
+  pausedAt            DateTime?
+  completedAt         DateTime?
+  createdById         String
+  createdBy           User                    @relation("DraftEventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  squads              DraftSquad[]
+  coachPoolEntries    DraftCoachPoolEntry[]
+  allocations         DraftAllocation[]
+  drafts              Draft[]
+  recordOrigin        RecordOrigin            @default(PRODUCTION)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([seasonId, status])
+  @@index([eventId])
+}
+
+model DraftSquad {
+  id           String             @id @default(cuid())
+  draftEventId String
+  draftEvent   DraftEvent         @relation(fields: [draftEventId], references: [id], onDelete: Cascade)
+  seasonId     String
+  season       Season             @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  divisionId   String
+  division     Division           @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  name         String
+  shortName    String?
+  publicLabel  String?
+  color        String?
+  iconUrl      String?
+  photoUrl     String?
+  sequence     Int
+  status       String             @default("DRAFT")
+  members      DraftSquadMember[]
+  allocations  DraftAllocation[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@unique([draftEventId, divisionId, sequence])
+  @@index([seasonId, divisionId])
+}
+
+model DraftSquadMember {
+  id           String     @id @default(cuid())
+  draftSquadId String
+  draftSquad   DraftSquad @relation(fields: [draftSquadId], references: [id], onDelete: Cascade)
+  playerId     String
+  player       Player     @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  sequence     Int?
+  captain      Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+
+  @@unique([draftSquadId, playerId])
+  @@unique([playerId, draftSquadId])
+  @@index([playerId])
+}
+
+model DraftCoachPoolEntry {
+  id                     String     @id @default(cuid())
+  draftEventId           String
+  draftEvent             DraftEvent @relation(fields: [draftEventId], references: [id], onDelete: Cascade)
+  divisionId             String
+  division               Division   @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  staffId                String
+  staff                  Staff      @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  eligibleHeadCoach      Boolean    @default(true)
+  eligibleAssistantCoach Boolean    @default(false)
+  publicBio              String?
+  photoUrl               String?
+  sequence               Int?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  @@unique([draftEventId, staffId, divisionId])
+  @@index([draftEventId, divisionId])
+}
+
+model DraftAllocation {
+  id                String                  @id @default(cuid())
+  draftEventId      String
+  draftEvent        DraftEvent              @relation(fields: [draftEventId], references: [id], onDelete: Cascade)
+  operatingMode     DraftEventOperatingMode @default(REHEARSAL)
+  divisionId        String
+  division          Division                @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  subjectType       AllocationSubjectType
+  draftSquadId      String?
+  draftSquad        DraftSquad?             @relation(fields: [draftSquadId], references: [id], onDelete: SetNull)
+  staffId           String?
+  staff             Staff?                  @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  seasonClubId      String
+  seasonClub        SeasonClub              @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
+  sequence          Int
+  status            AllocationStatus        @default(PENDING)
+  randomSeed        String?
+  randomMethod      String?
+  candidateSnapshot Json?
+  reservedAt        DateTime?
+  revealedAt        DateTime?
+  confirmedAt       DateTime?
+  correctedAt       DateTime?
+  createdById       String
+  createdBy         User                    @relation("DraftAllocationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  confirmedById     String?
+  confirmedBy       User?                   @relation("DraftAllocationConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  correctionReason  String?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@unique([draftEventId, operatingMode, subjectType, sequence])
+  @@unique([draftEventId, operatingMode, subjectType, draftSquadId])
+  @@unique([draftEventId, operatingMode, subjectType, staffId])
+  @@unique([draftEventId, operatingMode, subjectType, seasonClubId, divisionId])
+  @@index([draftEventId, status])
+  @@index([draftEventId, operatingMode])
+  @@index([seasonClubId])
+}
+
+model OperationalChecklist {
+  id          String                     @id @default(cuid())
+  name        String
+  category    String
+  eventId     String?
+  status      OpsItemStatus              @default(OPEN)
+  createdById String
+  items       OperationalChecklistItem[]
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+
+  @@index([eventId, status])
+  @@index([category, status])
+}
+
+model OperationalChecklistItem {
+  id            String               @id @default(cuid())
+  checklistId   String
+  checklist     OperationalChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  label         String
+  description   String?
+  status        OpsItemStatus        @default(OPEN)
+  ownerUserId   String?
+  dueAt         DateTime?
+  completedAt   DateTime?
+  completedById String?
+  notes         String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([checklistId, status])
+  @@index([ownerUserId, dueAt])
+}
+
+model Incident {
+  id           String        @id @default(cuid())
+  title        String
+  type         IncidentType
+  severity     OpsSeverity   @default(MEDIUM)
+  status       OpsItemStatus @default(OPEN)
+  eventId      String?
+  ownerUserId  String?
+  description  String?
+  timeline     Json?
+  resolution   String?
+  reportedById String
+  resolvedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([eventId, status, severity])
+  @@index([type, status])
+}
+
+model Runbook {
+  id          String        @id @default(cuid())
+  name        String
+  category    String
+  eventId     String?
+  status      OpsItemStatus @default(OPEN)
+  createdById String
+  tasks       RunbookTask[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([eventId, status])
+  @@index([category, status])
+}
+
+model RunbookTask {
+  id          String        @id @default(cuid())
+  runbookId   String
+  runbook     Runbook       @relation(fields: [runbookId], references: [id], onDelete: Cascade)
+  title       String
+  responsible String?
+  dueAt       DateTime?
+  status      OpsItemStatus @default(OPEN)
+  notes       String?
+  attachments Json?
+  completedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([runbookId, status, dueAt])
+}
+
+model OperatorMessage {
+  id          String        @id @default(cuid())
+  title       String
+  message     String
+  severity    OpsSeverity   @default(MEDIUM)
+  status      OpsItemStatus @default(OPEN)
+  eventId     String?
+  createdById String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([eventId, status, severity])
+  @@index([createdAt])
+}
+
+model DisplayHeartbeat {
+  id         String          @id @default(cuid())
+  eventId    String?
+  surface    DisplaySurface
+  label      String
+  status     OpsHealthStatus @default(AMBER)
+  lastSeenAt DateTime?
+  metadata   Json?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@unique([eventId, surface, label])
+  @@index([eventId, status, lastSeenAt])
+}
+
+model Rehearsal {
+  id                 String        @id @default(cuid())
+  name               String
+  type               String
+  eventId            String?
+  rehearsalDate      DateTime
+  durationMinutes    Int?
+  status             OpsItemStatus @default(OPEN)
+  issuesFound        String?
+  issuesResolved     String?
+  outstandingActions String?
+  createdById        String
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([eventId, rehearsalDate])
+  @@index([type, status])
+}
+
+model Equipment {
+  id                 String          @id @default(cuid())
+  name               String
+  type               String
+  serial             String?
+  assignedOperatorId String?
+  status             EquipmentStatus @default(AVAILABLE)
+  batteryPercent     Int?
+  notes              String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([serial])
+  @@index([type, status])
+  @@index([assignedOperatorId])
+}
+
+model EventStaffAssignment {
+  id         String        @id @default(cuid())
+  eventId    String
+  role       String
+  userId     String?
+  staffId    String?
+  personName String?
+  status     OpsItemStatus @default(OPEN)
+  notes      String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@unique([eventId, role, userId])
+  @@index([eventId, role, status])
+}
+
+model VenueZone {
+  id        String          @id @default(cuid())
+  eventId   String?
+  name      String
+  category  String
+  capacity  Int?
+  occupancy Int             @default(0)
+  status    OpsHealthStatus @default(GREEN)
+  notes     String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([eventId, category])
+  @@index([status])
+}
+
+model SystemSetting {
+  id            String       @id @default(cuid())
+  key           String       @unique
+  value         Json
+  description   String?
+  category      String       @default("season-zero")
+  competitionId String?
+  competition   Competition? @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  seasonId      String?
+  season        Season?      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([category])
+  @@index([competitionId])
+  @@index([seasonId])
+}
+
+model LaunchReadinessCheck {
+  id          String                @id @default(cuid())
+  seasonId    String?
+  season      Season?               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  eventId     String?
+  category    String
+  title       String
+  details     String?
+  priority    LaunchBlockerPriority @default(P2)
+  status      OpsItemStatus         @default(OPEN)
+  ownerUserId String?
+  evidenceUrl String?
+  dueAt       DateTime?
+  resolvedAt  DateTime?
+  createdById String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([seasonId, category])
+  @@index([eventId, category])
+  @@index([priority, status])
+}
+
+model OpsTask {
+  id          String        @id @default(cuid())
+  title       String
+  eventId     String?
+  ownerUserId String?
+  dueAt       DateTime?
+  status      OpsItemStatus @default(OPEN)
+  priority    OpsSeverity   @default(MEDIUM)
+  dependsOnId String?
+  notes       String?
+  createdById String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([eventId, status, dueAt])
+  @@index([ownerUserId, dueAt])
+  @@index([priority, status])
+}
+
+model OpsNotification {
+  id          String        @id @default(cuid())
+  title       String
+  message     String
+  category    String
+  severity    OpsSeverity   @default(MEDIUM)
+  status      OpsItemStatus @default(OPEN)
+  eventId     String?
+  createdById String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([eventId, status, severity])
+  @@index([category, createdAt])
+}
+
+model OpsDocument {
+  id           String        @id @default(cuid())
+  title        String
+  category     String
+  eventId      String?
+  fileUrl      String?
+  notes        String?
+  status       OpsItemStatus @default(OPEN)
+  uploadedById String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([eventId, category])
+  @@index([uploadedById, createdAt])
 }
 
 model Venue {
-  id            String         @id @default(cuid())
-  name          String
-  address       String
-  city          String
-  capacity      Int
-  contactPerson String?
-  contactPhone  String?
-  events        Event[]
-  fixtures      Fixture[]
-  sections      VenueSection[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                  String               @id @default(cuid())
+  name                String
+  address             String
+  city                String
+  capacity            Int
+  contactPerson       String?
+  contactPhone        String?
+  events              Event[]
+  fixtures            Fixture[]
+  noveltyMatches      NoveltyMatch[]
+  sections            VenueSection[]
+  courtSpecifications CourtSpecification[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   @@unique([name, city])
 }
 
 model Event {
-  id               String            @id @default(cuid())
+  id               String                 @id @default(cuid())
   name             String
   date             DateTime
   venueId          String
-  venue            Venue             @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  venue            Venue                  @relation(fields: [venueId], references: [id], onDelete: Restrict)
   seasonId         String
-  season           Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  season           Season                 @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   doorsOpenTime    DateTime?
   startTime        DateTime
   endTime          DateTime?
-  status           EventStatus       @default(DRAFT)
+  status           EventStatus            @default(DRAFT)
   fixtures         Fixture[]
   seatZones        SeatZone[]
   reservations     SeatReservation[]
@@ -587,11 +1679,124 @@ model Event {
   orders           Order[]
   promoCodes       PromoCode[]
   sponsorCampaigns SponsorCampaign[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  draftEvents      DraftEvent[]
+  noveltyMatches   NoveltyMatch[]
+  debrief          EventDebrief?
+  vendorReviews    EventVendorReview[]
+  volunteerReviews EventVolunteerReview[]
+  recordOrigin     RecordOrigin           @default(PRODUCTION)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
 
   @@index([seasonId, date])
   @@index([venueId, date])
+}
+
+// Post-event retrospective data - deliberately separate from the pre-event Runbook
+// (execution checklists) and Incident (live safety/ops issues) models. This is where
+// "how did it actually go" gets captured for improving the next edition.
+model EventDebrief {
+  id                String   @id @default(cuid())
+  eventId           String   @unique
+  event             Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  actualAttendance  Int?
+  weatherConditions String?
+  whatWentWell      String?
+  whatToImprove     String?
+  generalNotes      String?
+  createdById       String
+  createdBy         User     @relation("EventDebriefCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model EventVendorReview {
+  id              String   @id @default(cuid())
+  eventId         String
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  vendorId        String
+  vendor          Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  rating          Int?
+  wouldInviteBack Boolean?
+  notes           String?
+  createdById     String
+  createdBy       User     @relation("EventVendorReviewCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime @default(now())
+
+  @@unique([eventId, vendorId])
+}
+
+model EventVolunteerReview {
+  id              String   @id @default(cuid())
+  eventId         String
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  volunteerId     String
+  volunteer       User     @relation("EventVolunteerReviewVolunteer", fields: [volunteerId], references: [id], onDelete: Cascade)
+  roleDescription String?
+  rating          Int?
+  notes           String?
+  createdById     String
+  createdBy       User     @relation("EventVolunteerReviewCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime @default(now())
+
+  @@unique([eventId, volunteerId])
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  PUBLISHED
+  HIDDEN
+}
+
+enum AnnouncementVisibility {
+  PUBLIC
+  FAN_ZONE_MEMBERS
+  CLUB_FAN_ZONE
+}
+
+model Announcement {
+  id               String                 @id @default(cuid())
+  playerId         String
+  player           Player                 @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  celebrationYear  Int
+  status           AnnouncementStatus     @default(DRAFT)
+  visibility       AnnouncementVisibility @default(PUBLIC)
+  visibilityClubId String?
+  visibilityClub   Club?                  @relation(fields: [visibilityClubId], references: [id], onDelete: SetNull)
+  message          String?
+  publishedAt      DateTime?
+  createdById      String
+  createdBy        User                   @relation("AnnouncementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  wellWishes       WellWish[]
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@unique([playerId, celebrationYear])
+  @@index([status, celebrationYear])
+  @@index([visibilityClubId])
+}
+
+enum WellWishStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model WellWish {
+  id             String         @id @default(cuid())
+  announcementId String
+  announcement   Announcement   @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  authorUserId   String?
+  authorUser     User?          @relation("WellWishAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  authorName     String
+  message        String
+  status         WellWishStatus @default(PENDING)
+  moderatedById  String?
+  moderatedBy    User?          @relation("WellWishModeratedBy", fields: [moderatedById], references: [id], onDelete: SetNull)
+  moderatedAt    DateTime?
+  createdAt      DateTime       @default(now())
+
+  @@index([announcementId, status])
 }
 
 model VenueSection {
@@ -705,37 +1910,150 @@ model Accreditation {
 }
 
 model Application {
-  id              String            @id @default(cuid())
-  applicantUserId String?
-  applicantUser   User?             @relation("ApplicantApplications", fields: [applicantUserId], references: [id], onDelete: SetNull)
-  type            ApplicationType
-  status          ApplicationStatus @default(SUBMITTED)
-  submittedData   Json
-  reviewedById    String?
-  reviewedBy      User?             @relation("ReviewedApplications", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt      DateTime?
-  notes           String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id                             String                         @id @default(cuid())
+  applicantUserId                String?
+  applicantUser                  User?                          @relation("ApplicantApplications", fields: [applicantUserId], references: [id], onDelete: SetNull)
+  type                           ApplicationType
+  status                         ApplicationStatus              @default(SUBMITTED)
+  submittedData                  Json
+  provisioningStatus             ApplicationProvisioningStatus  @default(APPROVED_ONLY)
+  coachSeasonZeroSelectionStatus CoachSeasonZeroSelectionStatus @default(PENDING)
+  coachSeasonZeroDivision        CoachSeasonZeroDivision?
+  provisionedUserId              String?
+  provisionedAthleteId           String?
+  provisionedPlayerId            String?
+  provisionedStaffId             String?
+  provisionedAt                  DateTime?
+  recordOrigin                   RecordOrigin                   @default(APPLICATION)
+  reviewedById                   String?
+  reviewedBy                     User?                          @relation("ReviewedApplications", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt                     DateTime?
+  notes                          String?
+  createdAt                      DateTime                       @default(now())
+  updatedAt                      DateTime                       @updatedAt
 
   @@index([type, status, createdAt])
+  @@index([provisioningStatus])
   @@index([applicantUserId, createdAt])
   @@index([reviewedById, reviewedAt])
 }
 
+// Participants recruited or onboarded by an administrator outside the public
+// Application workflow (e.g. offline recruitment). Never backfilled with a
+// fabricated Application — this model is the record of how they entered.
+model AdminOfflineIntake {
+  id                             String                         @id @default(cuid())
+  participantType                ApplicationType
+  status                         AdminOfflineIntakeStatus       @default(DRAFT)
+  fullName                       String
+  email                          String?
+  phone                          String?
+  seasonId                       String?
+  notes                          String?
+  coachSeasonZeroSelectionStatus CoachSeasonZeroSelectionStatus @default(PENDING)
+  coachSeasonZeroDivision        CoachSeasonZeroDivision?
+  // Staged player eligibility profile (gender/dateOfBirth/dominantHand/position/heightCm/weightKg).
+  // Player and Athlete both require these fields as NOT NULL, so a PLAYER-type intake stays in
+  // DRAFT/READY_FOR_PROVISIONING until every key here is present — never backfilled with guesses.
+  playerProfile                  Json?
+  provisionedUserId              String?
+  provisionedStaffId             String?
+  provisionedAthleteId           String?
+  provisionedPlayerId            String?
+  provisionedAt                  DateTime?
+  createdById                    String
+  createdBy                      User                           @relation("OfflineIntakeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  reason                         String?
+  recordOrigin                   RecordOrigin                   @default(ADMIN_OFFLINE_INTAKE)
+  createdAt                      DateTime                       @default(now())
+  updatedAt                      DateTime                       @updatedAt
+
+  @@index([participantType, status, createdAt])
+  @@index([email])
+  @@index([phone])
+}
+
+model PublicIdCounter {
+  namespace String   @id
+  nextValue BigInt
+  updatedAt DateTime @updatedAt
+}
+
+model PublicIdAlias {
+  id         String   @id @default(cuid())
+  alias      String   @unique
+  entityType String
+  entityId   String
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+}
+
+model ImportJob {
+  id           String       @id @default(cuid())
+  type         ImportType
+  status       ImportStatus @default(UPLOADED)
+  fileName     String
+  uploadedById String
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  totalRows    Int          @default(0)
+  validRows    Int          @default(0)
+  warningRows  Int          @default(0)
+  errorRows    Int          @default(0)
+  importedRows Int          @default(0)
+  skippedRows  Int          @default(0)
+  failedRows   Int          @default(0)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  rows         ImportRow[]
+  recordOrigin RecordOrigin @default(IMPORT)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([type, status, createdAt])
+  @@index([uploadedById, createdAt])
+}
+
+model ImportRow {
+  id                 String                  @id @default(cuid())
+  importJobId        String
+  importJob          ImportJob               @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+  rowNumber          Int
+  rawData            Json
+  normalizedData     Json?
+  status             ImportRowStatus
+  errors             Json?
+  warnings           Json?
+  matchedEntityType  String?
+  matchedEntityId    String?
+  resolutionAction   ImportResolutionAction?
+  resolutionData     Json?
+  importedEntityType String?
+  importedEntityId   String?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@unique([importJobId, rowNumber])
+  @@index([importJobId, status])
+  @@index([matchedEntityType, matchedEntityId])
+}
+
 model Vendor {
-  id          String          @id @default(cuid())
-  userId      String?         @unique
-  user        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  name        String          @unique
-  contactName String?
-  email       String?
-  phone       String?
-  logoUrl     String?
-  isActive    Boolean         @default(true)
-  products    VendorProduct[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id           String              @id @default(cuid())
+  userId       String?             @unique
+  user         User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name         String              @unique
+  contactName  String?
+  email        String?
+  phone        String?
+  logoUrl      String?
+  isActive     Boolean             @default(true)
+  recordOrigin RecordOrigin        @default(PRODUCTION)
+  products     VendorProduct[]
+  eventReviews EventVendorReview[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 }
 
 model MediaProfile {
@@ -890,23 +2208,24 @@ model PromoCode {
 }
 
 model SponsorCampaign {
-  id          String         @id @default(cuid())
-  name        String
-  sponsorName String
-  eventId     String?
-  event       Event?         @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  productId   String?
-  product     VendorProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  impressions Int            @default(0)
-  redemptions Int            @default(0)
-  unitsSold   Int            @default(0)
-  revenueKobo Int            @default(0)
-  promoCodes  PromoCode[]
-  startsAt    DateTime?
-  endsAt      DateTime?
-  isActive    Boolean        @default(true)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id           String         @id @default(cuid())
+  name         String
+  sponsorName  String
+  eventId      String?
+  event        Event?         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  productId    String?
+  product      VendorProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  impressions  Int            @default(0)
+  redemptions  Int            @default(0)
+  unitsSold    Int            @default(0)
+  revenueKobo  Int            @default(0)
+  promoCodes   PromoCode[]
+  startsAt     DateTime?
+  endsAt       DateTime?
+  isActive     Boolean        @default(true)
+  recordOrigin RecordOrigin   @default(PRODUCTION)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   @@index([eventId, isActive])
   @@index([sponsorName])
@@ -934,6 +2253,9 @@ model Fixture {
   winnerSeasonClub   SeasonClub?       @relation("WinnerSeasonClub", fields: [winnerSeasonClubId], references: [id], onDelete: SetNull)
   game               Game?
   officials          FixtureOfficial[]
+  media              AthleteMedia[]
+  gameVideos         GameVideo[]
+  recordOrigin       RecordOrigin      @default(PRODUCTION)
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
@@ -957,74 +2279,368 @@ model FixtureOfficial {
 }
 
 model Game {
-  id                    String       @id @default(cuid())
-  fixtureId             String       @unique
-  fixture               Fixture      @relation(fields: [fixtureId], references: [id], onDelete: Cascade)
-  status                GameStatus   @default(NOT_STARTED)
-  currentPeriod         Int          @default(1)
-  clockSecondsRemaining Int          @default(600)
-  clockStartedAt        DateTime?
-  startedAt             DateTime?
-  endedAt               DateTime?
-  events                GameEvent[]
-  playerStats           PlayerStat[]
-  teamStats             TeamStat[]
-  mvpVotes              MVPVote[]
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  id                         String             @id @default(cuid())
+  fixtureId                  String             @unique
+  fixture                    Fixture            @relation(fields: [fixtureId], references: [id], onDelete: Cascade)
+  status                     GameStatus         @default(NOT_STARTED)
+  currentPeriod              Int                @default(1)
+  clockSecondsRemaining      Int                @default(600)
+  clockStartedAt             DateTime?
+  // Ultra Rules Engine: 20-second shot clock, tracked the same computed-remaining way as the
+  // game clock (secondsRemaining snapshot + startedAt timestamp). Manually controlled by the
+  // scorer, not auto-reset on possession change.
+  shotClockSecondsRemaining  Int                @default(20)
+  shotClockStartedAt         DateTime?
+  // Explicit, persisted Ultra Time state — not re-derived from the clock alone (see
+  // GameRuleSnapshot / UltraScoringEngine docs). Set true when the ULTRA_TIME_STARTED
+  // transition fires, false again on ULTRA_TIME_ENDED / period end.
+  isUltraTimeActive          Boolean            @default(false)
+  // Monotonic per-game counter for GameEvent.sequenceNumber; incremented atomically on write.
+  nextEventSequence          Int                @default(1)
+  startedAt                  DateTime?
+  endedAt                    DateTime?
+  events                     GameEvent[]
+  playerStats                PlayerStat[]
+  teamStats                  TeamStat[]
+  starters                   GameStarter[]
+  periodScores               GamePeriodScore[]
+  mvpVotes                   MVPVote[]
+  ruleSnapshot               GameRuleSnapshot?
+  // Provenance for results entered via an external stats report (e.g. a FIBA/Genius Sports
+  // box score) rather than this app's own live scorer — never set alongside real GameEvents
+  // from the live console. Null means the game's result came from the live scorer as usual.
+  // resultSource holds the specific reference (e.g. a filename); statSource is the queryable
+  // category it falls under.
+  resultSource               String?
+  resultImportedAt           DateTime?
+  statSource                 StatDataSource?
+  sourceImportBatchId        String?
+  // What depth of data actually exists for this game — see GameDataCapability doc comment.
+  // Defaults conservatively to BOX_SCORE_ONLY; explicitly upgraded to ULTRA_NATIVE_EVENTS by
+  // the live scorer's start-game path, never assumed.
+  dataCapability             GameDataCapability @default(BOX_SCORE_ONLY)
+  // Statistics-verification gate (G.15), separate from Fixture/Game FINAL status. Set when an
+  // authorized user confirms the statistician's independently-derived score matches the
+  // official score (or explicitly overrides a mismatch with a reason recorded in AuditLog).
+  // Finalizing the official game result never depends on this — an Event Director can still
+  // finalize with statistics unverified; this only tracks whether the box score has been
+  // cross-checked.
+  statisticsVerifiedAt       DateTime?
+  statisticsVerifiedById     String?
+  gameVideos                 GameVideo[]
+  // G.22 Part VIII: which basket the HOME team attacks in period 1 - the one piece of game
+  // setup this system never previously captured, needed to interpret any court coordinate
+  // spatially (which half is "backcourt" vs "frontcourt" for a given team/period). Nullable and
+  // never guessed; attackingBasketForPeriod() (attacking-direction.ts) derives every other
+  // period's direction from this ONE explicit value via the standard basketball assumption that
+  // teams switch baskets at halftime - documented there, not assumed silently. Null means
+  // "unknown," and every spatial function that needs it must handle that explicitly rather than
+  // defaulting to a guess.
+  homeAttacksBasketFirstHalf CourtBasketSide?
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime           @updatedAt
+}
+
+// A versioned, named rule configuration. New games at a Season use whichever RuleSet is
+// currently linked to that Season; a game's actual rules are frozen into a GameRuleSnapshot
+// at game-start time so later edits here never retroactively change a played game.
+model RuleSet {
+  id       String  @id @default(cuid())
+  name     String
+  version  Int     @default(1)
+  isActive Boolean @default(true)
+  seasonId String?
+  season   Season? @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+
+  periodCount             Int @default(2)
+  periodDurationSeconds   Int @default(600)
+  overtimeDurationSeconds Int @default(300)
+  shotClockSeconds        Int @default(20)
+
+  fourPointEnabled        Boolean                 @default(true)
+  fourPointDefinitionType FourPointDefinitionType @default(OPPOSITE_HALF_ORIGIN)
+  fourPointBaseValue      Int                     @default(4)
+
+  ultraTimeEnabled                Boolean @default(true)
+  ultraTimeStartRemainingSeconds  Int     @default(60)
+  ultraTimeMultiplier             Int     @default(2)
+  ultraTimeAppliesFinalPeriodOnly Boolean @default(true)
+
+  mandatorySubstitutionEnabled Boolean                     @default(true)
+  mandatorySubstitutionPeriod  Int                         @default(2)
+  mandatorySubstitutionPolicy  MandatorySubstitutionPolicy @default(AT_LEAST_ONE_PER_HALF)
+
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  gameSnapshots GameRuleSnapshot[]
+
+  @@index([seasonId, isActive])
+}
+
+// A frozen copy of every rule value a specific Game was played under. All fields are
+// duplicated from RuleSet at snapshot-creation time (not just a foreign key) so that editing
+// or even deleting the source RuleSet later can never change what an already-played game's
+// rules were. ruleSetId is kept only for traceability.
+model GameRuleSnapshot {
+  id             String   @id @default(cuid())
+  gameId         String   @unique
+  game           Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  ruleSetId      String?
+  ruleSet        RuleSet? @relation(fields: [ruleSetId], references: [id], onDelete: SetNull)
+  ruleSetName    String
+  ruleSetVersion Int
+
+  periodCount             Int
+  periodDurationSeconds   Int
+  overtimeDurationSeconds Int
+  shotClockSeconds        Int
+
+  fourPointEnabled        Boolean
+  fourPointDefinitionType FourPointDefinitionType
+  fourPointBaseValue      Int
+
+  ultraTimeEnabled                Boolean
+  ultraTimeStartRemainingSeconds  Int
+  ultraTimeMultiplier             Int
+  ultraTimeAppliesFinalPeriodOnly Boolean
+
+  mandatorySubstitutionEnabled Boolean
+  mandatorySubstitutionPeriod  Int
+  mandatorySubstitutionPolicy  MandatorySubstitutionPolicy
+
+  createdAt DateTime @default(now())
+}
+
+// Cumulative score at the end of each period, for games where only period-level (not
+// play-by-play) scoring resolution is available — e.g. an imported FIBA box score, which
+// reports "Scoring by 5 Minute intervals" as one cumulative figure per half/OT period.
+model GamePeriodScore {
+  id        String   @id @default(cuid())
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  period    Int
+  label     String
+  homeScore Int
+  awayScore Int
+  createdAt DateTime @default(now())
+
+  @@unique([gameId, period])
 }
 
 model GameEvent {
-  id           String        @id @default(cuid())
-  gameId       String
-  game         Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  seasonClubId String
-  seasonClub   SeasonClub    @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
-  playerId     String?
-  player       Player?       @relation(fields: [playerId], references: [id], onDelete: SetNull)
-  eventType    GameEventType
-  points       Int?
-  period       Int
-  clockSeconds Int
-  description  String
-  createdAt    DateTime      @default(now())
+  id                           String                        @id @default(cuid())
+  gameId                       String
+  game                         Game                          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  // Monotonic per-game ordering, assigned from Game.nextEventSequence at write time. Lets the
+  // ledger be replayed deterministically even if createdAt timestamps ever collide.
+  sequenceNumber               Int?
+  // Nullable: most events belong to a team, but game/period-level ledger events
+  // (GAME_STARTED, ULTRA_TIME_STARTED/ENDED, PERIOD_STARTED/ENDED, GAME_ENDED) aren't
+  // attributable to either side and must not be forced onto one.
+  seasonClubId                 String?
+  seasonClub                   SeasonClub?                   @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
+  playerId                     String?
+  player                       Player?                       @relation("GameEventPlayer", fields: [playerId], references: [id], onDelete: SetNull)
+  // Who was fouled - optional. Some fouls (technicals, unclear contact) don't have a
+  // clearly attributable other party, so this is never required even when eventType is FOUL.
+  fouledPlayerId               String?
+  fouledPlayer                 Player?                       @relation("GameEventFouledPlayer", fields: [fouledPlayerId], references: [id], onDelete: SetNull)
+  foulType                     FoulType?
+  eventType                    GameEventType
+  points                       Int?
+  // Shot provenance for Ultra Time: basePointValue is the shot actually taken (1-4),
+  // multiplier is 1 normally or 2 during Ultra Time (final minute of the final half).
+  // points remains the actual scoreboard delta (basePointValue * multiplier for a made
+  // shot; a raw uncategorized delta for manual corrections, where both are null).
+  basePointValue               Int?
+  multiplier                   Int?
+  // Whether the underlying shot attempt was made — null for non-shot events, or for legacy
+  // rows recorded before this field existed (the old scorer only ever wrote made shots).
+  made                         Boolean?
+  isFourPointAttempt           Boolean                       @default(false)
+  isUltraTime                  Boolean                       @default(false)
+  fourPointQualificationMethod FourPointQualificationMethod?
+  assistedByPlayerId           String?
+  assistedByPlayer             Player?                       @relation("GameEventAssist", fields: [assistedByPlayerId], references: [id], onDelete: SetNull)
+  // G.16 structured substitution model: for eventType SUBSTITUTION, `playerId` is the player
+  // coming IN and `substitutedOutPlayerId` is the player going OUT of the same swap - one event
+  // records the whole substitution, not two directional events with the direction encoded in
+  // free text. Null for every non-substitution event type.
+  substitutedOutPlayerId       String?
+  substitutedOutPlayer         Player?                       @relation("GameEventSubstitutedOut", fields: [substitutedOutPlayerId], references: [id], onDelete: SetNull)
+  // Shot location — all null until a scorer/AI-vision pipeline actually supplies them. Never
+  // fabricated to make an older event "look" located.
+  x                            Float?
+  y                            Float?
+  courtZone                    String?
+
+  homeScoreBefore Int?
+  awayScoreBefore Int?
+  homeScoreAfter  Int?
+  awayScoreAfter  Int?
+
+  // Where this event originated (native scorer vs. an import). Distinct from Game.statSource,
+  // which is the whole-game-level category — an individual event can in principle differ
+  // (e.g. one manually-entered correction inside an otherwise event-derived native game).
+  source        StatDataSource?
+  sourceEventId String?
+  createdById   String?
+
+  status            GameEventStatus @default(ACTIVE)
+  correctedAt       DateTime?
+  correctedById     String?
+  correctionReason  String?
+  // Self-referential: a correcting event points back at the event it replaces. The original
+  // event is never deleted or mutated in place — its status flips to CORRECTED/VOIDED/
+  // SUPERSEDED and it stays in the ledger for a full audit trail.
+  supersedesEventId String?
+  supersedesEvent   GameEvent?      @relation("GameEventSupersession", fields: [supersedesEventId], references: [id], onDelete: SetNull)
+  supersededBy      GameEvent[]     @relation("GameEventSupersession")
+
+  period             Int
+  clockSeconds       Int
+  description        String
+  createdAt          DateTime           @default(now())
+  // G.21: candidate matches from the AI vision pipeline against this canonical event. A match
+  // existing here is never itself a promotion into x/y/courtZone above - that stays a distinct,
+  // explicitly human-audited action outside this track's scope.
+  visionEventMatches VisionEventMatch[]
 
   @@index([gameId, createdAt])
+  @@index([gameId, sequenceNumber])
   @@index([playerId])
+  @@index([fouledPlayerId])
+  @@index([assistedByPlayerId])
+  @@index([substitutedOutPlayerId])
+  @@index([status])
 }
 
-model PlayerStat {
+// G.16 starting-five capture (Part X). A structured, auditable record of who began the game for
+// each team - required before minutes/lineup analytics can be trusted. Exactly 5 rows per
+// SeasonClub per Game once confirmed; never auto-selected, never inferred from the first
+// statistical event. `confirmedById`/`confirmedAt` record who attested the lineup and when,
+// same audit shape as the existing mandatory-substitution confirmation.
+model GameStarter {
   id            String     @id @default(cuid())
   gameId        String
   game          Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  playerId      String
-  player        Player     @relation(fields: [playerId], references: [id], onDelete: Restrict)
   seasonClubId  String
   seasonClub    SeasonClub @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
-  points        Int        @default(0)
-  rebounds      Int        @default(0)
-  assists       Int        @default(0)
-  steals        Int        @default(0)
-  blocks        Int        @default(0)
-  turnovers     Int        @default(0)
-  fouls         Int        @default(0)
-  minutesPlayed Int        @default(0)
+  playerId      String
+  player        Player     @relation("GameStarterPlayer", fields: [playerId], references: [id], onDelete: Restrict)
+  confirmedById String
+  confirmedAt   DateTime   @default(now())
+  createdAt     DateTime   @default(now())
+
+  @@unique([gameId, playerId])
+  @@index([gameId, seasonClubId])
+}
+
+model PlayerStat {
+  id                   String     @id @default(cuid())
+  gameId               String
+  game                 Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  playerId             String
+  player               Player     @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  seasonClubId         String
+  seasonClub           SeasonClub @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
+  points               Int        @default(0)
+  rebounds             Int        @default(0)
+  assists              Int        @default(0)
+  steals               Int        @default(0)
+  blocks               Int        @default(0)
+  turnovers            Int        @default(0)
+  fouls                Int        @default(0)
+  minutesPlayed        Int        @default(0)
+  // Additive detail available from a full FIBA-style box score. Nullable — never required,
+  // never inferred from `points`/`rebounds` when absent. All conventional (non-Ultra) stats.
+  fieldGoalsMade       Int?
+  fieldGoalsAttempted  Int?
+  twoPointsMade        Int?
+  twoPointsAttempted   Int?
+  threePointsMade      Int?
+  threePointsAttempted Int?
+  freeThrowsMade       Int?
+  freeThrowsAttempted  Int?
+  offensiveRebounds    Int?
+  defensiveRebounds    Int?
+  foulsDrawn           Int?
+  plusMinus            Int?
+  efficiency           Int?
+  didNotPlay           Boolean    @default(false)
+
+  // Ultra-specific aggregates. NULL means NOT_CAPTURED (the source this row came from doesn't
+  // support the dimension at all — e.g. every Season Zero FIBA-imported row); a real 0 means
+  // it was actually measured and happened to be zero. Never conflate the two. These are
+  // reproducible from the GameEvent ledger for ULTRA_NATIVE_EVENTS games — see stat-provenance
+  // docs — but persisted here too for read performance and for import-derived games where no
+  // ledger exists.
+  fourPointsMade                Int?
+  fourPointsAttempted           Int?
+  assistedFourPointMakes        Int?
+  unassistedFourPointMakes      Int?
+  ultraTimePoints               Int?
+  ultraTimeFieldGoalsMade       Int?
+  ultraTimeFieldGoalsAttempted  Int?
+  ultraTimeTwoPointsMade        Int?
+  ultraTimeTwoPointsAttempted   Int?
+  ultraTimeThreePointsMade      Int?
+  ultraTimeThreePointsAttempted Int?
+  ultraTimeFourPointsMade       Int?
+  ultraTimeFourPointsAttempted  Int?
+  ultraTimeFreeThrowsMade       Int?
+  ultraTimeFreeThrowsAttempted  Int?
+  ultraTimeRebounds             Int?
+  ultraTimeAssists              Int?
+  ultraTimeSteals               Int?
+  ultraTimeTurnovers            Int?
+  ultraTimeBlocks               Int?
+  ultraTimeFouls                Int?
+  // EVENT_DERIVED (aggregated from this game's GameEvent ledger), IMPORT_DERIVED (written
+  // directly by an external-report importer), or MANUAL_ENTRY. Null only for rows written
+  // before this field existed.
+  statSource                    StatDataSource?
 
   @@unique([gameId, playerId])
   @@index([seasonClubId])
 }
 
 model TeamStat {
-  id           String     @id @default(cuid())
-  gameId       String
-  game         Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  seasonClubId String
-  seasonClub   SeasonClub @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
-  points       Int        @default(0)
-  rebounds     Int        @default(0)
-  assists      Int        @default(0)
-  turnovers    Int        @default(0)
-  fouls        Int        @default(0)
+  id                           String     @id @default(cuid())
+  gameId                       String
+  game                         Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  seasonClubId                 String
+  seasonClub                   SeasonClub @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
+  points                       Int        @default(0)
+  rebounds                     Int        @default(0)
+  assists                      Int        @default(0)
+  turnovers                    Int        @default(0)
+  fouls                        Int        @default(0)
+  // Additive advanced team metrics available from a full FIBA-style box score. Nullable —
+  // never required, never inferred when a source doesn't report them.
+  pointsFromTurnovers          Int?
+  pointsInPaint                Int?
+  pointsInPaintMade            Int?
+  pointsInPaintAttempted       Int?
+  secondChancePoints           Int?
+  fastBreakPoints              Int?
+  fastBreakPointsFromTurnovers Int?
+  benchPoints                  Int?
+  biggestLead                  Int?
+  biggestScoringRun            Int?
+  pointsPerPossession          Decimal?   @db.Decimal(4, 2)
+  leadChanges                  Int?
+  timesTied                    Int?
+  timeWithLeadSeconds          Int?
+
+  // Ultra-specific team aggregates. Same NULL = NOT_CAPTURED convention as PlayerStat above.
+  fourPointsMade               Int?
+  fourPointsAttempted          Int?
+  ultraTimePointsFor           Int?
+  ultraTimePointsAgainst       Int?
+  ultraTimeFieldGoalsMade      Int?
+  ultraTimeFieldGoalsAttempted Int?
+  statSource                   StatDataSource?
 
   @@unique([gameId, seasonClubId])
 }
@@ -1045,6 +2661,114 @@ model Standing {
   updatedAt       DateTime   @updatedAt
 
   @@index([seasonId, leaguePoints, won, pointDifference, pointsFor])
+}
+
+// Exhibition/novelty teams (e.g. All-Star squads) - durable across events, deliberately
+// separate from Club/SeasonClub so they never touch real league standings. Players in a
+// novelty match are still real league Players; only the "team" side is a lightweight entity.
+model NoveltyTeam {
+  id           String              @id @default(cuid())
+  name         String              @unique
+  shortName    String?
+  logoUrl      String?
+  primaryColor String?
+  description  String?
+  homeMatches  NoveltyMatch[]      @relation("HomeNoveltyTeam")
+  awayMatches  NoveltyMatch[]      @relation("AwayNoveltyTeam")
+  wonMatches   NoveltyMatch[]      @relation("WinnerNoveltyTeam")
+  events       NoveltyGameEvent[]
+  playerStats  NoveltyPlayerStat[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+enum NoveltyMatchStatus {
+  SCHEDULED
+  LIVE
+  FINAL
+  CANCELLED
+}
+
+model NoveltyMatch {
+  id           String             @id @default(cuid())
+  name         String
+  eventId      String?
+  event        Event?             @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  venueId      String?
+  venue        Venue?             @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  scheduledAt  DateTime
+  status       NoveltyMatchStatus @default(SCHEDULED)
+  homeTeamId   String
+  homeTeam     NoveltyTeam        @relation("HomeNoveltyTeam", fields: [homeTeamId], references: [id], onDelete: Restrict)
+  awayTeamId   String
+  awayTeam     NoveltyTeam        @relation("AwayNoveltyTeam", fields: [awayTeamId], references: [id], onDelete: Restrict)
+  homeScore    Int                @default(0)
+  awayScore    Int                @default(0)
+  winnerTeamId String?
+  winnerTeam   NoveltyTeam?       @relation("WinnerNoveltyTeam", fields: [winnerTeamId], references: [id], onDelete: SetNull)
+  game         NoveltyGame?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+}
+
+model NoveltyGame {
+  id                    String              @id @default(cuid())
+  matchId               String              @unique
+  match                 NoveltyMatch        @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  status                GameStatus          @default(NOT_STARTED)
+  currentPeriod         Int                 @default(1)
+  clockSecondsRemaining Int                 @default(600)
+  clockStartedAt        DateTime?
+  startedAt             DateTime?
+  endedAt               DateTime?
+  events                NoveltyGameEvent[]
+  playerStats           NoveltyPlayerStat[]
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+}
+
+model NoveltyGameEvent {
+  id             String        @id @default(cuid())
+  gameId         String
+  game           NoveltyGame   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  teamId         String
+  team           NoveltyTeam   @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  playerId       String?
+  player         Player?       @relation("NoveltyGameEventPlayer", fields: [playerId], references: [id], onDelete: SetNull)
+  // Who was fouled - optional, same reasoning as GameEvent.fouledPlayerId.
+  fouledPlayerId String?
+  fouledPlayer   Player?       @relation("NoveltyGameEventFouledPlayer", fields: [fouledPlayerId], references: [id], onDelete: SetNull)
+  foulType       FoulType?
+  eventType      GameEventType
+  points         Int?
+  period         Int
+  clockSeconds   Int
+  description    String
+  createdAt      DateTime      @default(now())
+
+  @@index([gameId, createdAt])
+  @@index([playerId])
+  @@index([fouledPlayerId])
+}
+
+model NoveltyPlayerStat {
+  id        String      @id @default(cuid())
+  gameId    String
+  game      NoveltyGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  playerId  String
+  player    Player      @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  teamId    String
+  team      NoveltyTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  points    Int         @default(0)
+  rebounds  Int         @default(0)
+  assists   Int         @default(0)
+  steals    Int         @default(0)
+  blocks    Int         @default(0)
+  turnovers Int         @default(0)
+  fouls     Int         @default(0)
+
+  @@unique([gameId, playerId])
+  @@index([teamId])
 }
 
 model FanClub {
@@ -1179,4 +2903,467 @@ model ContentAsset {
   updatedAt   DateTime   @updatedAt
 
   @@index([createdAt])
+}
+
+// ============================================================================
+// G.21 — AI VISION & PLAYER INTELLIGENCE FOUNDATION
+//
+// Core boundary this whole domain enforces: AI OBSERVES. HUMANS / THE CANONICAL GAME SYSTEM
+// VERIFY. Nothing in this block ever writes Fixture.homeScore/awayScore, GameEvent's canonical
+// fields (including the pre-existing x/y/courtZone - see GameEvent's own doc comment), PlayerStat,
+// TeamStat, or Standing. VisionObservation/VisionTrack/VisionEventMatch are a strictly separate,
+// clearly-labeled candidate domain - a CONFIRMED VisionObservation is still not a GameEvent.
+// ============================================================================
+
+enum VideoSourceType {
+  FULL_GAME
+  CAMERA_ISO
+  BROADCAST_PROGRAM
+  PHONE_RECORDING
+  TRAINING_CLIP
+  HIGHLIGHT_CLIP
+}
+
+// Part LVI: a separate completeness axis from GameDataCapability (BOX_SCORE_ONLY/EVENT_LEVEL/
+// FULL_ULTRA), which describes canonical game-data depth and must never be redefined by AI
+// activity. This describes how far the VIDEO/VISION pipeline has progressed for a given
+// GameVideo - entirely independent of what basketball-truth capability the game itself has.
+enum VisionCapability {
+  NO_VISION
+  VIDEO_REGISTERED
+  VISION_ANALYZED
+  VISION_REVIEWED
+  SPATIAL_TRACKING
+}
+
+enum TimelineAnchorSource {
+  MANUAL
+  AUTO_DETECTED
+}
+
+enum VisionAnalysisRunStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// Deliberately not exhaustive of every future basketball event - only what this track actually
+// implements observation storage for (Part XII: "do NOT name every future basketball event in
+// v1 unless actually implemented").
+enum VisionObservationType {
+  PERSON_DETECTED
+  PLAYER_TRACK
+  BALL_DETECTED
+  SHOT_ATTEMPT_CANDIDATE
+  SHOT_MADE_CANDIDATE
+  REBOUND_CANDIDATE
+  PASS_CANDIDATE
+  COURT_POSITION
+  JERSEY_NUMBER_CANDIDATE
+}
+
+enum VisionObservationStatus {
+  PENDING
+  MATCHED
+  REJECTED
+  CONFIRMED
+  AMBIGUOUS
+}
+
+// Part XXVI: a deterministic MATCH SCORE band, not an opaque "AI confidence" figure - see
+// vision-match-confidence.ts for the documented weighting that produces this.
+enum VisionMatchBand {
+  STRONG_MATCH
+  POSSIBLE_MATCH
+  AMBIGUOUS
+  NO_MATCH
+}
+
+// Game Video Registry (Part V). Reuses MediaAsset for actual file storage/provenance/checksum -
+// this model only adds video-specific metadata and the fixture/game association. A video does
+// not have to live on the application server; MediaAsset's existing CLOUDFLARE_OBJECT_STORAGE
+// provider already supports that.
+model GameVideo {
+  id                 String            @id @default(cuid())
+  fixtureId          String
+  fixture            Fixture           @relation(fields: [fixtureId], references: [id], onDelete: Cascade)
+  gameId             String?
+  game               Game?             @relation(fields: [gameId], references: [id], onDelete: SetNull)
+  mediaAssetId       String            @unique
+  mediaAsset         MediaAsset        @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+  sourceType         VideoSourceType
+  durationSeconds    Int?
+  frameRate          Float?
+  resolutionWidth    Int?
+  resolutionHeight   Int?
+  // When actual recording started, in real-world time - distinct from "video time" (elapsed ms
+  // from the start of the file), which is what timeline anchors are expressed in.
+  recordingStartedAt DateTime?
+  cameraLabel        String?
+  // Whether this video is eligible for AI analysis at all - an operator can register a video
+  // (e.g. a low-quality phone clip) without ever queuing it for vision processing.
+  analysisEligible   Boolean           @default(true)
+  visionCapability   VisionCapability  @default(VIDEO_REGISTERED)
+  // G.22 Part IX-XIII: the practical ingestion pipeline deferred by G.21. REGISTERED (default) ->
+  // PROBING -> PROBE_FAILED | READY_FOR_ALIGNMENT (probe succeeded, no proxy yet or proxy not
+  // needed) -> PROXY_GENERATING -> PROXY_FAILED | READY_FOR_ANALYSIS. Never advanced by a web
+  // request - see VISION_WORKER_ARCHITECTURE.md.
+  ingestStatus       VideoIngestStatus @default(REGISTERED)
+  // Technical metadata a real media probe (ffprobe or equivalent) would populate - byteSize and
+  // checksum are deliberately NOT duplicated here (they already live on the related MediaAsset;
+  // Part V's "do not create duplicated court truth" applies equally to media truth).
+  codec              String?
+  container          String?
+  hasAudio           Boolean?
+  probedAt           DateTime?
+  probeError         String?
+  registeredById     String
+  registeredBy       User              @relation("GameVideoRegisteredBy", fields: [registeredById], references: [id], onDelete: Restrict)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  anchors             VideoTimelineAnchor[]
+  calibration         CourtCalibration?
+  analysisRuns        VisionAnalysisRun[]
+  observations        VisionObservation[]
+  tracks              VisionTrack[]
+  trajectoryArtifacts VisionTrajectoryArtifact[]
+  spatialSummaries    VisionSpatialSummary[]
+
+  @@index([fixtureId])
+  @@index([gameId])
+  @@index([visionCapability])
+}
+
+// Manual Sync Anchors (Part VIII) + the auto-detection extension point (Part XI). An
+// AUTO_DETECTED anchor is never itself canonical - `accepted` starts false for those and only
+// becomes true via an explicit operator review action, exactly the "AUTO-DETECTED ANCHOR ->
+// REVIEW -> ACCEPT -> CANONICAL VIDEO ANCHOR" workflow the track specifies.
+model VideoTimelineAnchor {
+  id               String               @id @default(cuid())
+  gameVideoId      String
+  gameVideo        GameVideo            @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
+  videoTimeMs      Int
+  period           Int
+  gameClockSeconds Int
+  source           TimelineAnchorSource @default(MANUAL)
+  confidence       Float?
+  accepted         Boolean              @default(true)
+  createdById      String
+  createdBy        User                 @relation("VideoTimelineAnchorCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt        DateTime             @default(now())
+
+  @@index([gameVideoId, videoTimeMs])
+}
+
+// Court Calibration (Part XVI-XVII). One calibration per video for now (Part XVI notes
+// reusability across a fixed camera is desirable, but reusing a calibration safely requires
+// verifying the camera genuinely didn't move between games - not attempted this track; every
+// video gets its own explicit calibration instead of assuming reuse is safe).
+model CourtCalibration {
+  id                     String    @id @default(cuid())
+  gameVideoId            String    @unique
+  gameVideo              GameVideo @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
+  // [{ imageX, imageY, courtX, courtY }, ...] - the point correspondences a homography is fit
+  // from. See COURT_CALIBRATION.md for the coordinate system definition.
+  referencePoints        Json
+  basketLocations        Json?
+  // Real-world court dimensions are NOT filled in for Season Zero - no canonical court geometry
+  // (length/width/4PT boundary) is defined anywhere in this codebase (audited: game-rules.ts's
+  // ULTRA_RULES has no spatial fields, Venue has no court dimensions). Left null rather than
+  // guessed; see COURT_CALIBRATION.md's "what is and isn't defined" section.
+  courtWidthUnits        Float?
+  courtLengthUnits       Float?
+  units                  String    @default("meters")
+  // G.22 Part XXVIII: computed by meanReprojectionError() (court-homography.ts) once the
+  // homography is fit - how well the transform explains its own reference points. Null until a
+  // calibration is actually computed (never guessed). qualityBand is the calibration-quality.ts
+  // classification of that error (HIGH/MEDIUM/LOW/FAILED) plus landmark coverage - every
+  // downstream spatial metric inherits this band (Part XXVIII: "court metrics must inherit
+  // calibration quality").
+  reprojectionErrorUnits Float?
+  qualityBand            String?
+  createdById            String
+  createdBy              User      @relation("CourtCalibrationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt              DateTime  @default(now())
+}
+
+// Model Registry (Part XV) - identity/version only, not an ML platform.
+model VisionModel {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  version     String
+  description String?
+  configHash  String?
+  createdAt   DateTime @default(now())
+
+  analysisRuns VisionAnalysisRun[]
+}
+
+// Analysis Run (Part XIV) - one row per model execution, for reproducibility. Never mutated in
+// place by a later model version; a re-analysis is a new run, not an update to an old one.
+model VisionAnalysisRun {
+  id               String                  @id @default(cuid())
+  gameVideoId      String
+  gameVideo        GameVideo               @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
+  visionModelId    String
+  visionModel      VisionModel             @relation(fields: [visionModelId], references: [id], onDelete: Restrict)
+  status           VisionAnalysisRunStatus @default(QUEUED)
+  configHash       String?
+  requestedById    String
+  requestedBy      User                    @relation("VisionAnalysisRunRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  observationCount Int                     @default(0)
+  errorMessage     String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  observations           VisionObservation[]
+  tracks                 VisionTrack[]
+  visionSpatialSummaries VisionSpatialSummary[]
+  trajectoryArtifacts    VisionTrajectoryArtifact[]
+
+  @@index([gameVideoId, status])
+}
+
+// Tracking Foundation (Part XX). A track is a temporal identity hypothesis ("likely the same
+// detected person across frames") - NEVER player identity itself. playerCandidatePlayerId is a
+// candidate, always paired with identityConfidence, always subject to human review.
+model VisionTrack {
+  id                        String            @id @default(cuid())
+  gameVideoId               String
+  gameVideo                 GameVideo         @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
+  analysisRunId             String
+  analysisRun               VisionAnalysisRun @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+  startVideoTimeMs          Int
+  endVideoTimeMs            Int
+  teamCandidateSeasonClubId String?
+  playerCandidatePlayerId   String?
+  playerCandidatePlayer     Player?           @relation("VisionTrackPlayerCandidate", fields: [playerCandidatePlayerId], references: [id], onDelete: SetNull)
+  identityConfidence        Float?
+  createdAt                 DateTime          @default(now())
+
+  observations VisionObservation[]
+
+  @@index([gameVideoId])
+  @@index([analysisRunId])
+}
+
+// Vision Observation Model (Part XII-XIII) - the central architectural boundary of this track.
+// Every field here is a CANDIDATE, never truth. playerCandidatePlayerId/teamCandidateSeasonClubId/
+// jerseyCandidateNumber/eventCandidateType are all explicitly named "candidate" so no future
+// caller mistakes this for a verified attribution the way a GameEvent's fields are.
+model VisionObservation {
+  id                        String                  @id @default(cuid())
+  analysisRunId             String
+  analysisRun               VisionAnalysisRun       @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+  gameVideoId               String
+  gameVideo                 GameVideo               @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
+  trackId                   String?
+  track                     VisionTrack?            @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  videoTimeMs               Int
+  videoTimeEndMs            Int?
+  observationType           VisionObservationType
+  // Normalized [0,1] image-space box: { x, y, width, height }. Null for observation types that
+  // aren't a single-frame detection (e.g. an aggregated jersey candidate).
+  boundingBox               Json?
+  // Court-space coordinates, only populated when a CourtCalibration exists for this video and
+  // the observation includes a court-position estimate. See COURT_CALIBRATION.md.
+  courtX                    Float?
+  courtY                    Float?
+  teamCandidateSeasonClubId String?
+  playerCandidatePlayerId   String?
+  playerCandidatePlayer     Player?                 @relation("VisionObservationPlayerCandidate", fields: [playerCandidatePlayerId], references: [id], onDelete: SetNull)
+  jerseyCandidateNumber     Int?
+  eventCandidateType        String?
+  confidence                Float
+  rawMetadata               Json?
+  status                    VisionObservationStatus @default(PENDING)
+  // G.22 Part LII: set by a reviewer alongside REJECTED/AMBIGUOUS - structured, queryable
+  // categories for the model-improvement backlog, rather than only free-text reasons.
+  failureCategory           VisionFailureCategory?
+  createdAt                 DateTime                @default(now())
+
+  eventMatches VisionEventMatch[]
+
+  @@index([gameVideoId, videoTimeMs])
+  @@index([analysisRunId])
+  @@index([status])
+  @@index([observationType])
+}
+
+// Event Match Model (Part XXV-XXVI) - the ground-truth bridge. One VisionObservation may have
+// zero, one, or several candidate VisionEventMatch rows (ambiguity is represented, never forced
+// into a single guess). matchBand is a deterministic score band, not "AI confidence" - see
+// vision-match-confidence.ts.
+model VisionEventMatch {
+  id              String                  @id @default(cuid())
+  observationId   String
+  observation     VisionObservation       @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  gameEventId     String
+  gameEvent       GameEvent               @relation(fields: [gameEventId], references: [id], onDelete: Cascade)
+  matchBand       VisionMatchBand
+  temporalErrorMs Int?
+  playerMatch     Boolean?
+  teamMatch       Boolean?
+  eventTypeMatch  Boolean?
+  confidence      Float
+  reviewStatus    VisionObservationStatus @default(PENDING)
+  reviewedById    String?
+  reviewedAt      DateTime?
+  reviewReason    String?
+  failureCategory VisionFailureCategory?
+  createdAt       DateTime                @default(now())
+
+  @@unique([observationId, gameEventId])
+  @@index([gameEventId])
+  @@index([observationId])
+  @@index([reviewStatus])
+}
+
+// Spatial Summaries (Part XXXVII) - the ONLY vision spatial data this track persists in
+// PostgreSQL. Raw per-frame trajectories are deliberately NOT modeled here - see
+// HIGH_FREQUENCY_DATA_STORAGE.md for why (a 30fps game x 10 players can produce millions of
+// rows; this track made an explicit decision not to do that to the primary OLTP database without
+// a real, evaluated pipeline producing that volume of data first).
+model VisionSpatialSummary {
+  id                   String            @id @default(cuid())
+  gameVideoId          String
+  gameVideo            GameVideo         @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
+  analysisRunId        String
+  analysisRun          VisionAnalysisRun @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+  playerId             String?
+  player               Player?           @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  averageCourtX        Float?
+  averageCourtY        Float?
+  distanceCoveredUnits Float?
+  samplesUsed          Int
+  quality              String
+  createdAt            DateTime          @default(now())
+
+  @@index([gameVideoId])
+  @@index([playerId])
+}
+
+// ============================================================================
+// G.22 — EMPIRICAL AI VISION VALIDATION & ULTRA COURT INTELLIGENCE
+//
+// Builds on G.21's architecture. Same rule: AI observes, humans/canonical truth verify.
+// CourtSpecification/VisionTrajectoryArtifact are additive, read-only-from-canonical-truth's
+// perspective - nothing here can be referenced BY Fixture/Game/GameEvent/PlayerStat/TeamStat/
+// Standing, only the reverse.
+// ============================================================================
+
+// Part IV-V: physical court geometry, honestly incomplete. A row existing here does NOT mean
+// official geometry is known - `status` distinguishes an operator's in-progress DRAFT
+// configuration from a confirmed OFFICIAL one, and every geometry field is nullable because no
+// real Ultra Basketball court dimensions are known anywhere in this codebase as of G.22 (audited
+// again - ULTRA_RULES, RuleSet, Venue all still have zero spatial fields). Tied to Venue, not
+// RuleSet - physical court dimensions are a property of a physical place, not a rule variant;
+// the 4PT RULE (which zone qualifies) stays owned by RuleSet.fourPointDefinitionType, unchanged
+// from G.21 - this avoids duplicating court truth (Part V) by keeping "how big is the court" and
+// "which part of it counts for 4PT" as two different, separately-versioned concerns.
+enum CourtSpecificationStatus {
+  DRAFT
+  OFFICIAL
+}
+
+enum CourtBasketSide {
+  A
+  B
+}
+
+model CourtSpecification {
+  id                 String                   @id @default(cuid())
+  venueId            String
+  venue              Venue                    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  version            Int                      @default(1)
+  status             CourtSpecificationStatus @default(DRAFT)
+  courtLengthUnits   Float?
+  courtWidthUnits    Float?
+  units              String                   @default("meters")
+  // Free-text description of what (0,0) represents in this specification's coordinate frame -
+  // deliberately text, not assumed, since no single Ultra-wide convention exists yet (see
+  // ULTRA_COURT_SPECIFICATION.md).
+  originDescription  String?
+  basketACourtX      Float?
+  basketACourtY      Float?
+  basketBCourtX      Float?
+  basketBCourtY      Float?
+  halfCourtX         Float?
+  paintGeometry      Json?
+  threePointGeometry Json?
+  // The Ultra 4PT rule's actual spatial boundary - see FOUR_POINT_SPATIAL_RULE.md. Null unless
+  // an operator has entered a real, confirmed geometry; four-point-spatial-rule.ts's pure
+  // function refuses to evaluate QUALIFIES/DOES_NOT_QUALIFY without both this AND status=OFFICIAL.
+  fourPointGeometry  Json?
+  effectiveSeasonId  String?
+  effectiveSeason    Season?                  @relation(fields: [effectiveSeasonId], references: [id], onDelete: SetNull)
+  createdById        String
+  createdBy          User                     @relation("CourtSpecificationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  @@unique([venueId, version])
+  @@index([venueId, status])
+}
+
+// Part IX-XIII: practical video-ingestion pipeline states, never advanced by a web request.
+enum VideoIngestStatus {
+  REGISTERED
+  PROBING
+  PROBE_FAILED
+  PROXY_GENERATING
+  PROXY_FAILED
+  READY_FOR_ALIGNMENT
+  READY_FOR_ANALYSIS
+}
+
+// Part LII: structured failure categories for the model-improvement backlog - set by a reviewer
+// alongside REJECTED/AMBIGUOUS, queryable across observations and event matches, never inferred
+// automatically.
+enum VisionFailureCategory {
+  FALSE_POSITIVE
+  FALSE_NEGATIVE
+  ID_SWITCH
+  BAD_CALIBRATION
+  JERSEY_ERROR
+  TIMELINE_ERROR
+  OCCLUSION
+  AMBIGUOUS
+}
+
+// Part XXXI-XXXII: the Postgres side of G.21's high-frequency-storage decision, now actually
+// implemented (the decision itself was made and documented in G.21; no raw trajectory data has
+// ever been generated in this environment to populate it - see HIGH_FREQUENCY_DATA_STORAGE.md).
+// Raw/high-frequency per-frame trajectory samples live in object storage (Parquet or another
+// compact analytical format) as ONE artifact file per (video, analysis run, optionally track) -
+// this table is only the metadata pointer + summary, never the samples themselves.
+model VisionTrajectoryArtifact {
+  id               String               @id @default(cuid())
+  gameVideoId      String
+  gameVideo        GameVideo            @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
+  analysisRunId    String
+  analysisRun      VisionAnalysisRun    @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+  storageProvider  MediaStorageProvider
+  objectKey        String
+  format           String               @default("jsonl")
+  checksumSha256   String
+  byteSize         Int
+  sampleCount      Int
+  timeRangeStartMs Int
+  timeRangeEndMs   Int
+  // Which tracks/players this artifact covers, for discoverability without reading the file -
+  // e.g. ["TRACK_001", "TRACK_002"]. Not a foreign key list (a track may not survive review).
+  trackRefs        Json?
+  filtered         Boolean              @default(false)
+  filterMethod     String?
+  createdAt        DateTime             @default(now())
+
+  @@unique([storageProvider, objectKey])
+  @@index([gameVideoId])
+  @@index([analysisRunId])
 }

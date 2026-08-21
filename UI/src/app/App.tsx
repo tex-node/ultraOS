@@ -285,10 +285,10 @@ function DashboardScreen({ nav }: { nav: (s: string) => void }) {
   const alertColor = (l: string) => l === "error" ? PK : l === "warn" ? OR : BL;
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[22px] font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>
+          <h1 className="text-xl sm:text-[22px] font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>
             League Dashboard
           </h1>
           <p className="text-xs text-white/40 mt-1">Ultra Basketball · Season Zero 2026</p>
@@ -313,12 +313,12 @@ function DashboardScreen({ nav }: { nav: (s: string) => void }) {
       </div>
 
       {/* Stat grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {statCards.map(s => (
-          <Card key={s.label} className="p-4">
-            <div className="text-[10px] text-white/30 uppercase tracking-wider mb-2">{s.label}</div>
-            <div className="text-xl font-black truncate" style={{ color: s.color, fontFamily: "'Barlow Condensed', sans-serif", fontSize: 24 }}>{s.value}</div>
-            <div className="text-[11px] text-white/25 mt-1">{s.sub}</div>
+          <Card key={s.label} className="p-3 sm:p-4">
+            <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5 leading-tight">{s.label}</div>
+            <div className="font-black truncate" style={{ color: s.color, fontFamily: "'Barlow Condensed', sans-serif", fontSize: 22 }}>{s.value}</div>
+            <div className="text-[10px] text-white/25 mt-1">{s.sub}</div>
           </Card>
         ))}
       </div>
@@ -411,7 +411,7 @@ function DashboardScreen({ nav }: { nav: (s: string) => void }) {
 // ─── SCREEN: CLUBS ────────────────────────────────────────────────────────────
 function ClubsScreen({ nav, setClub }: { nav: (s: string) => void; setClub: (c: Club) => void }) {
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>Clubs</h1>
@@ -486,7 +486,7 @@ function ClubDetailScreen({ club, nav }: { club: Club; nav: (s: string) => void 
   const clubFixtures = FIXTURES.filter(f => f.home === club.name || f.away === club.name);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <button onClick={() => nav("clubs")} className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors mb-5">
         <ArrowLeft size={13} /> Back to Clubs
       </button>
@@ -497,26 +497,26 @@ function ClubDetailScreen({ club, nav }: { club: Club; nav: (s: string) => void 
         style={{ background: `${club.color}06`, borderColor: `${club.color}18` }}
       >
         <div className="absolute right-0 top-0 bottom-0 w-72 pointer-events-none" style={{ background: `radial-gradient(ellipse at 90% 50%, ${club.color}12, transparent 70%)` }} />
-        <div className="flex flex-col sm:flex-row items-start gap-6">
+        <div className="flex flex-wrap items-start gap-4">
           <div
-            className="w-20 h-20 rounded-2xl flex items-center justify-center text-xl font-black border flex-shrink-0"
+            className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center text-lg sm:text-xl font-black border flex-shrink-0"
             style={{ background: `${club.color}18`, borderColor: `${club.color}40`, color: club.color, fontFamily: "'Exo 2', sans-serif", boxShadow: `0 0 30px ${club.color}25` }}
           >
             {club.abbr}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-3xl font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>{club.name}</div>
+            <div className="text-2xl sm:text-3xl font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>{club.name}</div>
             <div className="text-sm text-white/40 mt-1">{club.city} · {club.div} Division</div>
-            <div className="flex flex-wrap items-center gap-4 mt-3 text-sm">
+            <div className="flex flex-wrap items-center gap-3 mt-2 text-sm">
               <div><span className="text-white/35 text-xs">Coach </span><span className="text-white font-semibold">{club.coach}</span></div>
               <div><span className="text-white/35 text-xs">Roster </span><span className="font-bold" style={{ color: club.color }}>{club.roster}</span></div>
               <div><span className="text-white/35 text-xs">Fans </span><span className="font-bold" style={{ color: club.color }}>{club.fans.toLocaleString()}</span></div>
             </div>
           </div>
-          <div className="flex gap-8 flex-shrink-0">
+          <div className="flex gap-5 sm:gap-8 flex-shrink-0">
             {([["Pts", club.pts, club.color], ["W", club.w, GR], ["L", club.l, PK]] as [string, number, string][]).map(([l, v, c]) => (
               <div key={l} className="text-center">
-                <div className="text-4xl font-black" style={{ color: c, fontFamily: "'Barlow Condensed', sans-serif" }}>{v}</div>
+                <div className="text-3xl sm:text-4xl font-black" style={{ color: c, fontFamily: "'Barlow Condensed', sans-serif" }}>{v}</div>
                 <div className="text-[10px] text-white/30 uppercase tracking-wider">{l}</div>
               </div>
             ))}
@@ -722,7 +722,7 @@ function PlayersScreen({ nav, setPlayer }: { nav: (s: string) => void; setPlayer
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>Player Database</h1>
@@ -835,7 +835,7 @@ function DraftRoomScreen() {
   const drafted   = pool.filter(p => p.drafted);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>Draft Room</h1>
@@ -847,7 +847,7 @@ function DraftRoomScreen() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         {/* Clock */}
         <div className="space-y-4">
           <Card className="p-6 text-center" style={{ borderColor: urgent ? `${PK}50` : `${BL}18`, boxShadow: urgent ? `0 0 30px ${PK}18` : "none" }}>
@@ -907,7 +907,7 @@ function DraftRoomScreen() {
         </div>
 
         {/* Right: selected + pool */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="xl:col-span-2 space-y-4">
           {selected && (
             <Card className="p-5" style={{ borderColor: `${pickingClub.color}25`, background: `${pickingClub.color}05` }}>
               <div className="flex items-start justify-between mb-4">
@@ -1005,7 +1005,7 @@ function DraftRoomScreen() {
 // ─── SCREEN: FIXTURES ─────────────────────────────────────────────────────────
 function FixturesScreen() {
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
         <h1 className="text-[22px] font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>Fixtures & Schedule</h1>
         <p className="text-xs text-white/40 mt-1">Ultra Basketball Season Zero · 2026</p>
@@ -1144,7 +1144,7 @@ function LiveGameScreen() {
   const fmtT = (t: number) => `${String(Math.floor(t / 60)).padStart(2,"0")}:${String(t % 60).padStart(2,"0")}`;
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>Live Game Center</h1>
@@ -1157,108 +1157,96 @@ function LiveGameScreen() {
       </div>
 
       {/* Main scoreboard panel */}
-      <Card className="p-6 mb-4" style={{ borderColor: `${BL}18`, background: `linear-gradient(135deg, #0e1018, #0f111e)` }}>
-        <div className="grid grid-cols-3 items-center gap-4">
+      <Card className="p-4 sm:p-6 mb-4" style={{ borderColor: `${BL}18`, background: "linear-gradient(135deg, #0e1018, #0f111e)" }}>
+        {/* Score row: always horizontal but score sizes shrink on mobile */}
+        <div className="flex items-center justify-between gap-2 mb-4">
           {/* Home */}
-          <div className="text-center">
-            <div
-              className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center text-lg font-black border"
-              style={{ background: `${homeClub.color}18`, borderColor: `${homeClub.color}40`, color: homeClub.color, fontFamily: "'Exo 2', sans-serif" }}
-            >
+          <div className="text-center flex-1 min-w-0">
+            <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl mx-auto mb-2 flex items-center justify-center text-sm sm:text-lg font-black border"
+              style={{ background: `${homeClub.color}18`, borderColor: `${homeClub.color}40`, color: homeClub.color, fontFamily: "'Exo 2', sans-serif" }}>
               {homeClub.abbr}
             </div>
-            <div className="text-lg font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>{homeClub.name}</div>
+            <div className="text-sm sm:text-lg font-black text-white truncate" style={{ fontFamily: "'Exo 2', sans-serif" }}>{homeClub.name}</div>
             <div className="text-[9px] text-white/25 uppercase tracking-wider">HOME</div>
-            <div
-              className="text-[90px] font-black leading-tight mt-2"
-              style={{ color: homeClub.color, fontFamily: "'Barlow Condensed', sans-serif", textShadow: `0 0 50px ${homeClub.color}35` }}
-            >
+            <div className="font-black leading-tight mt-1"
+              style={{ color: homeClub.color, fontFamily: "'Barlow Condensed', sans-serif", fontSize: "clamp(52px, 14vw, 90px)", textShadow: `0 0 50px ${homeClub.color}35` }}>
               {homeScore}
             </div>
-            <div className="flex justify-center gap-2 mt-3">
+            <div className="flex justify-center gap-1.5 mt-2">
               {[1, 2, 3].map(pts => (
-                <button
-                  key={pts}
-                  onClick={() => scoreHome(pts)}
-                  className="w-10 h-10 rounded-xl font-black text-sm transition-all hover:scale-105 active:scale-95"
-                  style={{ background: `${homeClub.color}18`, color: homeClub.color, border: `1px solid ${homeClub.color}30` }}
-                >
+                <button key={pts} onClick={() => scoreHome(pts)}
+                  className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl font-black text-sm transition-all hover:scale-105 active:scale-95"
+                  style={{ background: `${homeClub.color}18`, color: homeClub.color, border: `1px solid ${homeClub.color}30` }}>
                   +{pts}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Center controls */}
-          <div className="text-center flex flex-col items-center gap-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/25">Q{quarter} · QUARTER</div>
-            <div
-              className="text-6xl font-black tabular-nums"
-              style={{ color: BL, fontFamily: "'Barlow Condensed', sans-serif", textShadow: `0 0 40px ${BL}45` }}
-            >
+          {/* Center */}
+          <div className="text-center flex-shrink-0 px-1 sm:px-3">
+            <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.2em] text-white/25 mb-1">Q{quarter}</div>
+            <div className="font-black tabular-nums"
+              style={{ color: BL, fontFamily: "'Barlow Condensed', sans-serif", fontSize: "clamp(28px, 7vw, 56px)", textShadow: `0 0 40px ${BL}45` }}>
               {fmtT(gameTimer)}
             </div>
-            <div className="flex gap-2 w-full justify-center">
-              <button
-                onClick={() => setRunning(r => !r)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex-1"
-                style={{ background: running ? `${OR}18` : `${GR}18`, color: running ? OR : GR, border: `1px solid ${running ? OR : GR}30` }}
-              >
-                {running ? <Pause size={11} /> : <Play size={11} />}
-                {running ? "Pause" : "Start"}
-              </button>
-              <button
-                onClick={() => setQuarter(q => Math.min(4, q + 1))}
-                className="px-3 py-2 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-white/10 transition-all"
-                style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.08)" }}
-              >
-                Next Q
-              </button>
-            </div>
-            <button
-              className="w-full py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all hover:opacity-90"
-              style={{ background: `${PK}18`, color: PK, border: `1px solid ${PK}30` }}
-            >
-              <Square size={10} className="inline mr-1.5" />
-              End Game
-            </button>
-            <button
-              className="w-full py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all hover:opacity-90"
-              style={{ background: `${GR}18`, color: GR, border: `1px solid ${GR}30` }}
-            >
-              Confirm Final Result
-            </button>
+            <div className="text-white/15 font-black text-lg mt-0.5">—</div>
           </div>
 
           {/* Away */}
-          <div className="text-center">
-            <div
-              className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center text-lg font-black border"
-              style={{ background: `${awayClub.color}18`, borderColor: `${awayClub.color}40`, color: awayClub.color, fontFamily: "'Exo 2', sans-serif" }}
-            >
+          <div className="text-center flex-1 min-w-0">
+            <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl mx-auto mb-2 flex items-center justify-center text-sm sm:text-lg font-black border"
+              style={{ background: `${awayClub.color}18`, borderColor: `${awayClub.color}40`, color: awayClub.color, fontFamily: "'Exo 2', sans-serif" }}>
               {awayClub.abbr}
             </div>
-            <div className="text-lg font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>{awayClub.name}</div>
+            <div className="text-sm sm:text-lg font-black text-white truncate" style={{ fontFamily: "'Exo 2', sans-serif" }}>{awayClub.name}</div>
             <div className="text-[9px] text-white/25 uppercase tracking-wider">AWAY</div>
-            <div
-              className="text-[90px] font-black leading-tight mt-2"
-              style={{ color: awayClub.color, fontFamily: "'Barlow Condensed', sans-serif", textShadow: `0 0 50px ${awayClub.color}35` }}
-            >
+            <div className="font-black leading-tight mt-1"
+              style={{ color: awayClub.color, fontFamily: "'Barlow Condensed', sans-serif", fontSize: "clamp(52px, 14vw, 90px)", textShadow: `0 0 50px ${awayClub.color}35` }}>
               {awayScore}
             </div>
-            <div className="flex justify-center gap-2 mt-3">
+            <div className="flex justify-center gap-1.5 mt-2">
               {[1, 2, 3].map(pts => (
-                <button
-                  key={pts}
-                  onClick={() => scoreAway(pts)}
-                  className="w-10 h-10 rounded-xl font-black text-sm transition-all hover:scale-105 active:scale-95"
-                  style={{ background: `${awayClub.color}18`, color: awayClub.color, border: `1px solid ${awayClub.color}30` }}
-                >
+                <button key={pts} onClick={() => scoreAway(pts)}
+                  className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl font-black text-sm transition-all hover:scale-105 active:scale-95"
+                  style={{ background: `${awayClub.color}18`, color: awayClub.color, border: `1px solid ${awayClub.color}30` }}>
                   +{pts}
                 </button>
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Controls row — full width below scores */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-white/[0.06]">
+          <button
+            onClick={() => setRunning(r => !r)}
+            className="flex items-center justify-center gap-1.5 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all col-span-1"
+            style={{ background: running ? `${OR}18` : `${GR}18`, color: running ? OR : GR, border: `1px solid ${running ? OR : GR}30` }}
+          >
+            {running ? <Pause size={11} /> : <Play size={11} />}
+            {running ? "Pause" : "Start"}
+          </button>
+          <button
+            onClick={() => setQuarter(q => Math.min(4, q + 1))}
+            className="py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all hover:bg-white/10"
+            style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.08)" }}
+          >
+            Next Q
+          </button>
+          <button
+            className="py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all hover:opacity-90"
+            style={{ background: `${PK}18`, color: PK, border: `1px solid ${PK}30` }}
+          >
+            <Square size={10} className="inline mr-1" />
+            End Game
+          </button>
+          <button
+            className="py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all hover:opacity-90"
+            style={{ background: `${GR}18`, color: GR, border: `1px solid ${GR}30` }}
+          >
+            Confirm Result
+          </button>
         </div>
       </Card>
 
@@ -1420,7 +1408,7 @@ function ScoreboardScreen() {
 function LeagueTableScreen() {
   const sorted = [...CLUBS].sort((a, b) => b.pts - a.pts);
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
         <h1 className="text-[22px] font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>League Table</h1>
         <p className="text-xs text-white/40 mt-1">Ultra Basketball Premier Division · Season Zero 2026</p>
@@ -1497,7 +1485,7 @@ function PlayerProfileScreen({ player, nav }: { player: Player; nav: (s: string)
   const tabs = [{ id:"overview", label:"Overview" }, { id:"game-log", label:"Game Log" }, { id:"scout-notes", label:"Scout Notes" }];
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <button onClick={() => nav("players")} className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors mb-5">
         <ArrowLeft size={13} /> Back to Players
       </button>
@@ -1627,7 +1615,7 @@ function PlayerProfileScreen({ player, nav }: { player: Player; nav: (s: string)
       )}
 
       {tab === "scout-notes" && (
-        <Card className="p-6">
+        <Card className="p-4 sm:p-6">
           <SectionLabel color={color}>Scouting Report</SectionLabel>
           <div className="space-y-4 text-sm text-white/65 leading-relaxed">
             <p><span className="font-bold text-white">Elite court vision</span> — reads the defense before the play develops. Exceptional at finding cutters late in the shot clock. Rarely turns it over under pressure.</p>
@@ -1654,7 +1642,7 @@ function FanClubScreen() {
   const clubPlayers = PLAYERS.filter(p => p.club === activeClub.name).slice(0, 4);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
         <h1 className="text-[22px] font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>Fan Club</h1>
         <p className="text-xs text-white/40 mt-1">Community Hub · Season Zero 2026</p>
@@ -1809,7 +1797,7 @@ function MatchReportScreen() {
   ];
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-black text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>Match Report</h1>
@@ -1925,14 +1913,26 @@ function MatchReportScreen() {
 }
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-function Sidebar({ screen, setScreen }: { screen: string; setScreen: (s: string) => void }) {
+function Sidebar({
+  screen,
+  setScreen,
+  mobileOpen,
+  onMobileClose,
+}: {
+  screen: string;
+  setScreen: (s: string) => void;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}) {
   const [collapsed, setCollapsed] = useState(false);
 
-  return (
-    <div
-      className="flex flex-col h-full flex-shrink-0 border-r transition-all duration-200"
-      style={{ width: collapsed ? 60 : 220, background: "#0a0c14", borderColor: "rgba(0,212,255,0.07)" }}
-    >
+  function navTo(id: string) {
+    setScreen(id);
+    onMobileClose?.();
+  }
+
+  const NavContent = () => (
+    <>
       {/* Logo area */}
       <div className="flex items-center gap-3 px-3 py-4 border-b" style={{ borderColor: "rgba(0,212,255,0.07)" }}>
         <div
@@ -1948,7 +1948,7 @@ function Sidebar({ screen, setScreen }: { screen: string; setScreen: (s: string)
           </div>
         )}
         <button
-          onClick={() => setCollapsed(c => !c)}
+          onClick={() => { setCollapsed(c => !c); onMobileClose?.(); }}
           className="ml-auto p-1 rounded-lg hover:bg-white/5 transition-colors flex-shrink-0"
         >
           <Menu size={13} className="text-white/25" />
@@ -1973,7 +1973,7 @@ function Sidebar({ screen, setScreen }: { screen: string; setScreen: (s: string)
           return (
             <button
               key={item.id}
-              onClick={() => setScreen(item.id)}
+              onClick={() => navTo(item.id)}
               title={collapsed ? item.label : undefined}
               className="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl transition-all text-left"
               style={{
@@ -2000,7 +2000,37 @@ function Sidebar({ screen, setScreen }: { screen: string; setScreen: (s: string)
           {!collapsed && <span className="text-xs font-semibold text-white/25">Sign Out</span>}
         </button>
       </div>
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop sidebar — hidden on mobile */}
+      <div
+        className="hidden md:flex flex-col h-full flex-shrink-0 border-r transition-all duration-200"
+        style={{ width: collapsed ? 60 : 220, background: "#0a0c14", borderColor: "rgba(0,212,255,0.07)" }}
+      >
+        <NavContent />
+      </div>
+
+      {/* Mobile overlay drawer */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={onMobileClose}
+          />
+          {/* Drawer */}
+          <div
+            className="relative flex flex-col h-full border-r z-10"
+            style={{ width: 240, background: "#0a0c14", borderColor: "rgba(0,212,255,0.07)" }}
+          >
+            <NavContent />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -2009,9 +2039,11 @@ export default function App() {
   const [screen,         setScreen]         = useState("login");
   const [selectedClub,   setSelectedClub]   = useState<Club>(CLUBS[0]);
   const [selectedPlayer, setSelectedPlayer] = useState<Player>(PLAYERS[0]);
+  const [mobileNavOpen,  setMobileNavOpen]  = useState(false);
 
   function nav(s: string) {
     setScreen(s);
+    setMobileNavOpen(false);
     document.getElementById("main-content")?.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -2030,6 +2062,13 @@ export default function App() {
       </div>
     );
   }
+
+  const screenLabels: Record<string, string> = {
+    dashboard: "Dashboard", clubs: "Clubs", "club-detail": "Club Detail",
+    players: "Players", "player-profile": "Player Profile", draft: "Draft Room",
+    fixtures: "Fixtures", live: "Live Game", table: "League Table",
+    report: "Match Report", fanclub: "Fan Club",
+  };
 
   function renderScreen() {
     switch (screen) {
@@ -2053,17 +2092,50 @@ export default function App() {
       className="dark flex h-screen overflow-hidden"
       style={{ background: "#090a0f", fontFamily: "'DM Sans', sans-serif" }}
     >
-      <Sidebar screen={screen} setScreen={nav} />
-      <main
-        id="main-content"
-        className="flex-1 overflow-y-auto"
-        style={{
-          background: "#090a0f",
-          scrollbarWidth: "none",
-        }}
-      >
-        {renderScreen()}
-      </main>
+      <Sidebar
+        screen={screen}
+        setScreen={nav}
+        mobileOpen={mobileNavOpen}
+        onMobileClose={() => setMobileNavOpen(false)}
+      />
+
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        {/* Mobile top header — only visible below md */}
+        <div
+          className="md:hidden flex items-center gap-3 px-4 py-3 border-b flex-shrink-0"
+          style={{ background: "#0a0c14", borderColor: "rgba(0,212,255,0.07)" }}
+        >
+          <button
+            onClick={() => setMobileNavOpen(true)}
+            className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+          >
+            <Menu size={18} className="text-white/60" />
+          </button>
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black border flex-shrink-0"
+            style={{ background: `${BL}12`, borderColor: `${BL}28`, color: BL, fontFamily: "'Exo 2', sans-serif" }}
+          >
+            UB
+          </div>
+          <span className="text-sm font-bold text-white" style={{ fontFamily: "'Exo 2', sans-serif" }}>
+            {screenLabels[screen] ?? "Ultra Basketball"}
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <button className="p-2 rounded-lg hover:bg-white/5 transition-colors relative">
+              <Bell size={16} className="text-white/50" />
+              <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full" style={{ background: PK }} />
+            </button>
+          </div>
+        </div>
+
+        <main
+          id="main-content"
+          className="flex-1 overflow-y-auto"
+          style={{ background: "#090a0f", scrollbarWidth: "none" }}
+        >
+          {renderScreen()}
+        </main>
+      </div>
     </div>
   );
 }

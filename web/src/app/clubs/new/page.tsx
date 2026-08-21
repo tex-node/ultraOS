@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { createClub } from "@/app/clubs/actions";
 import { ClubForm } from "@/app/clubs/club-form";
@@ -6,6 +8,8 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/authorization";
 
 export default async function NewClubPage() {
+  const rawSession = await auth();
+  if (!rawSession?.user) redirect("/login?callbackUrl=/clubs/new");
   const session = await requirePermission("club:manage");
   const sports = await prisma.sport.findMany({
     where: { isActive: true },

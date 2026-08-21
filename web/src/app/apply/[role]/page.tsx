@@ -3,6 +3,10 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { ApplicationForm } from "@/app/apply/application-form";
 import { applicationConfigs, applySlugToType } from "@/app/apply/application-config";
+import { getClosedApplicationTypes } from "@/lib/application-intake";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type ApplyRolePageProps = {
   params: Promise<{ role: string }>;
@@ -18,6 +22,8 @@ export default async function ApplyRolePage({ params }: ApplyRolePageProps) {
   const config = applicationConfigs[type];
   const session = await auth();
   const callbackUrl = `/apply/${role}`;
+  const closedTypes = await getClosedApplicationTypes();
+  const isClosed = closedTypes.includes(type);
 
   return (
     <main className="min-h-screen bg-[#050807] px-6 py-12 text-white">
@@ -36,7 +42,17 @@ export default async function ApplyRolePage({ params }: ApplyRolePageProps) {
             <p className="mt-2 text-sm leading-6 text-zinc-300">{config.reviewNote}</p>
           </div>
         </div>
-        {session?.user ? (
+        {isClosed ? (
+          <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-300">
+              Applications closed
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold">Not accepting new {config.type.toLowerCase()} applications right now</h2>
+            <p className="mt-3 text-sm leading-6 text-zinc-400">
+              This intake is temporarily closed. Please check back later.
+            </p>
+          </div>
+        ) : session?.user ? (
           <ApplicationForm config={config} />
         ) : (
           <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-6">

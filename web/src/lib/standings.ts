@@ -1,4 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { competitiveFixtureScope } from "@/lib/competitive-scope";
 
 type FinalFixture = {
   homeSeasonClubId: string;
@@ -37,7 +38,7 @@ export async function recalculateStandings(tx: Prisma.TransactionClient, seasonI
   const [teams, fixtures] = await Promise.all([
     tx.seasonClub.findMany({ where: { seasonId }, select: { id: true } }),
     tx.fixture.findMany({
-      where: { seasonId, status: "FINAL" },
+      where: { seasonId, status: "FINAL", ...competitiveFixtureScope() },
       select: {
         homeSeasonClubId: true,
         awaySeasonClubId: true,

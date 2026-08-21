@@ -1,10 +1,14 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { requireSession } from "@/lib/authorization";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 export default async function Drafts() {
+  const rawSession = await auth();
+  if (!rawSession?.user) redirect("/login?callbackUrl=/drafts");
   const session = await requireSession();
   const canManageDraft = hasPermission(session.user.roles, "draft:manage");
   const drafts = await prisma.draft.findMany({

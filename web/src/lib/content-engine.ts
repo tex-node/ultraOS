@@ -33,6 +33,84 @@ function athleteName(athlete: { firstName: string; lastName: string }) {
   return `${athlete.firstName} ${athlete.lastName}`;
 }
 
+function clubVariables(prefix: string, club: {
+  crowdChant: string | null;
+  identityKeywords: string[];
+  logoUrl: string | null;
+  name: string;
+  officialSlogan: string | null;
+  shortName: string;
+}) {
+  return {
+    [`${prefix}.name`]: club.name,
+    [`${prefix}.shortName`]: club.shortName,
+    [`${prefix}.logo`]: club.logoUrl ?? "",
+    [`${prefix}.officialSlogan`]: club.officialSlogan ?? "",
+    [`${prefix}.crowdChant`]: club.crowdChant ?? "",
+    [`${prefix}.identityKeywords`]: club.identityKeywords.join(" / "),
+  };
+}
+
+export async function generateClubBrandPayload(sourceId: string) {
+  const club = await prisma.club.findUniqueOrThrow({
+    where: { id: sourceId },
+    include: { seasonClubs: { include: { division: true, season: true }, orderBy: { createdAt: "desc" }, take: 1 } },
+  });
+  const division = club.seasonClubs[0]?.division.name ?? "";
+  return {
+    sourceType: "Club",
+    variables: {
+      ...clubVariables("club", club),
+      division,
+    },
+    graphicData: {
+      type: "CLUB_PROFILE",
+      sourceId,
+      title: club.shortName,
+      headline: club.officialSlogan ?? club.name,
+      subheadline: club.crowdChant ?? undefined,
+      club: {
+        name: club.name,
+        shortName: club.shortName,
+        logo: club.logoUrl,
+        officialSlogan: club.officialSlogan,
+        crowdChant: club.crowdChant,
+        identityKeywords: club.identityKeywords,
+        division,
+      },
+    },
+  };
+}
+
+export async function generateCoachPresentationPayload(draftCoachPoolEntryId: string) {
+  const entry = await prisma.draftCoachPoolEntry.findUniqueOrThrow({
+    where: { id: draftCoachPoolEntryId },
+    include: { staff: true, division: true },
+  });
+  const photo = entry.photoUrl ?? entry.staff.photoUrl ?? null;
+  return {
+    sourceType: "DraftCoachPoolEntry",
+    variables: {
+      "coach.name": entry.staff.name,
+      "coach.ultraStaffId": entry.staff.ultraStaffId ?? "",
+      "coach.division": entry.division.name,
+    },
+    graphicData: {
+      type: "COACH_PROFILE",
+      sourceId: draftCoachPoolEntryId,
+      title: entry.staff.name,
+      headline: entry.staff.name,
+      subheadline: entry.division.name,
+      coach: {
+        name: entry.staff.name,
+        ultraStaffId: entry.staff.ultraStaffId,
+        photo,
+        division: entry.division.name,
+      },
+    },
+  };
+}
+
 function common(
   type: ContentType,
   sourceId: string,
@@ -70,6 +148,7 @@ export async function generateContentPayload(
         title: "Draft Pick",
         player,
         club,
+        ...clubVariables("club", pick.seasonClub.club),
         pick: String(pick.pickNumber),
         pickOrdinal,
         season: pick.draft.season.name,
@@ -86,6 +165,7 @@ export async function generateContentPayload(
           { label: "Position", value: pick.player.position },
         ],
         club,
+        clubBrand: clubVariables("club", pick.seasonClub.club),
         player,
         pick: pick.pickNumber,
         season: pick.draft.season.name,
@@ -115,6 +195,8 @@ export async function generateContentPayload(
         title: "Fixture Release",
         home,
         away,
+        ...clubVariables("homeClub", fixture.homeSeasonClub.club),
+        ...clubVariables("awayClub", fixture.awaySeasonClub.club),
         date,
         time,
         venue: fixture.venue.name,
@@ -129,6 +211,8 @@ export async function generateContentPayload(
         footer: fixture.venue.name,
         home,
         away,
+        homeClub: clubVariables("homeClub", fixture.homeSeasonClub.club),
+        awayClub: clubVariables("awayClub", fixture.awaySeasonClub.club),
         date,
         time,
         venue: fixture.venue.name,

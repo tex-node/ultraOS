@@ -1,10 +1,17 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
+import { auth } from "@/auth";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/authorization";
 
+const FALLBACK_PRIMARY_COLOR = "#16F2B3";
+const FALLBACK_SECONDARY_COLOR = "#071713";
+
 export default async function ClubsPage() {
+  const rawSession = await auth();
+  if (!rawSession?.user) redirect("/login?callbackUrl=/clubs");
   const session = await requireSession();
   const canManage = hasPermission(session.user.roles, "club:manage");
   const clubs = await prisma.club.findMany({
@@ -55,6 +62,8 @@ export default async function ClubsPage() {
               (registration) =>
                 registration.status === "ACTIVE" && registration.season.status === "ACTIVE",
             );
+            const displayPrimaryColor = club.primaryColor ?? FALLBACK_PRIMARY_COLOR;
+            const displaySecondaryColor = club.secondaryColor ?? FALLBACK_SECONDARY_COLOR;
 
             return (
               <article
@@ -64,7 +73,7 @@ export default async function ClubsPage() {
                 <div
                   className="h-1"
                   style={{
-                    background: `linear-gradient(90deg, ${club.primaryColor}, ${club.secondaryColor})`,
+                    background: `linear-gradient(90deg, ${displayPrimaryColor}, ${displaySecondaryColor})`,
                   }}
                 />
                 <div className="p-5">
@@ -73,9 +82,9 @@ export default async function ClubsPage() {
                       <div
                         className="grid h-12 w-12 place-items-center rounded-xl border text-xs font-black"
                         style={{
-                          color: club.primaryColor,
-                          borderColor: `${club.primaryColor}55`,
-                          background: `${club.primaryColor}12`,
+                          color: displayPrimaryColor,
+                          borderColor: `${displayPrimaryColor}55`,
+                          background: `${displayPrimaryColor}12`,
                         }}
                       >
                         {club.shortName}

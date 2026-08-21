@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { Prisma } from "@/generated/prisma/client";
 import { ApplicationType } from "@/generated/prisma/enums";
 import { applicationConfigs } from "@/app/apply/application-config";
+import { getClosedApplicationTypes } from "@/lib/application-intake";
 import { formDataToRecord } from "@/lib/club-validation";
 import { prisma } from "@/lib/prisma";
 import { uploadProfilePhoto } from "@/lib/r2";
@@ -100,6 +101,11 @@ export async function submitApplication(
   }
 
   const type = typeValue as ApplicationType;
+  const closedTypes = await getClosedApplicationTypes();
+  if (closedTypes.includes(type)) {
+    return { error: `${type} applications are temporarily closed. Please check back later.` };
+  }
+
   const { data, fieldErrors } = validateSubmittedData(type, formData);
   if (Object.values(fieldErrors).some(Boolean)) {
     return { fieldErrors };

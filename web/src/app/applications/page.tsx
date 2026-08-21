@@ -9,8 +9,22 @@ import {
   emptyApplicationSummary,
   summarizeApplicationsByType,
 } from "@/app/applications/application-summary";
+import { toggleApplicationIntakeAction } from "@/app/applications/intake-actions";
+import { ApplicationType } from "@/generated/prisma/enums";
+import type { Prisma } from "@/generated/prisma/client";
+import { getClosedApplicationTypes } from "@/lib/application-intake";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type RecentApplication = Prisma.ApplicationGetPayload<{
+  include: {
+    applicantUser: { select: { name: true; email: true } };
+    reviewedBy: { select: { name: true } };
+  };
+}>;
 
 export default async function ApplicationsPage() {
   const session = await auth();
@@ -55,6 +69,7 @@ export default async function ApplicationsPage() {
   ]);
 
   const summaries = summarizeApplicationsByType(summaryApplications);
+  const closedTypes = await getClosedApplicationTypes();
 
   return (
     <OperationsShell user={session.user}>
@@ -67,6 +82,33 @@ export default async function ApplicationsPage() {
           Participant applications are reviewed here before any sensitive role, staff
           profile, vendor profile, accreditation, or player registration is created.
         </p>
+
+        <section className="mt-8 rounded-2xl border border-white/[0.08] bg-[#0b100e] p-5">
+          <h2 className="text-lg font-semibold">Application intake</h2>
+          <p className="mt-2 text-sm leading-6 text-zinc-400">
+            Temporarily close public submissions for a role so no new names come in unexpectedly.
+            Existing applications and drafting are unaffected.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            {([ApplicationType.PLAYER, ApplicationType.COACH] as const).map((type) => {
+              const isClosed = closedTypes.includes(type);
+              return (
+                <form action={toggleApplicationIntakeAction.bind(null, type, !isClosed)} key={type}>
+                  <input name="reason" type="hidden" value={isClosed ? "Reopened by administrator." : "Closed by administrator ahead of draft/tournament to prevent new names being added."} />
+                  <button
+                    className={
+                      isClosed
+                        ? "rounded-xl border border-emerald-400/40 px-4 py-2 text-sm font-semibold text-emerald-300 hover:bg-emerald-400/10"
+                        : "rounded-xl border border-amber-400/40 px-4 py-2 text-sm font-semibold text-amber-300 hover:bg-amber-400/10"
+                    }
+                  >
+                    {type}: {isClosed ? "Closed — reopen" : "Open — close now"}
+                  </button>
+                </form>
+              );
+            })}
+          </div>
+        </section>
 
         <section className="mt-8 grid gap-5 lg:grid-cols-[1fr_420px]">
           <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-5">
@@ -149,29 +191,16 @@ export default async function ApplicationsPage() {
                 <tr>
                   <th className="p-4">Submitted</th>
                   <th className="p-4">Type</th>
-                  <th className="p-4">Status</th>
+                  <th className="p-4">Application Status</th>
+                  <th className="p-4">Profile</th>
+                  <th className="p-4">Draft Cohort</th>
                   <th className="p-4">Applicant</th>
                   <th className="p-4">Reviewer</th>
                 </tr>
               </thead>
               <tbody>
                 {recentApplications.map((application) => (
-                  <tr className="border-t border-white/[0.06]" key={application.id}>
-                    <td className="p-4 whitespace-nowrap">{application.createdAt.toLocaleString()}</td>
-                    <td className="p-4 text-emerald-300">{application.type}</td>
-                    <td className="p-4">{application.status.replaceAll("_", " ")}</td>
-                    <td className="p-4">
-                      {application.applicantUser ? (
-                        <>
-                          <p>{application.applicantUser.name}</p>
-                          <p className="text-xs text-zinc-500">{application.applicantUser.email}</p>
-                        </>
-                      ) : (
-                        <span className="text-zinc-500">Public form applicant</span>
-                      )}
-                    </td>
-                    <td className="p-4 text-zinc-400">{application.reviewedBy?.name ?? "Unreviewed"}</td>
-                  </tr>
+                  <ApplicationRow application={application} key={application.id} />
                 ))}
               </tbody>
             </table>
@@ -191,5 +220,39 @@ function SummaryMetric({ label, value }: { label: string; value: number }) {
       <p className="text-zinc-500">{label}</p>
       <p className="mt-1 font-semibold text-white">{value}</p>
     </div>
+  );
+}
+
+function applicationData(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function ApplicationRow({ application }: { application: RecentApplication }) {
+  const data = applicationData(application.submittedData);
+  const draftCohort = typeof data.draftCohort === "string" ? data.draftCohort : "NOT_SELECTED";
+  const draftSelectionGroup = typeof data.draftSelectionGroup === "string" ? data.draftSelectionGroup : "-";
+  const squad = typeof data.proposedSquadCode === "string" ? data.proposedSquadCode : "-";
+  return (
+    <tr className="border-t border-white/[0.06]">
+      <td className="p-4 whitespace-nowrap">{application.createdAt.toLocaleString()}</td>
+      <td className="p-4 text-emerald-300">{application.type}</td>
+      <td className="p-4">{application.status.replaceAll("_", " ")}</td>
+      <td className="p-4">{application.provisioningStatus.replaceAll("_", " ")}</td>
+      <td className="p-4">
+        <p>{draftCohort === "SEASON_ZERO_DRAFT_COHORT" ? draftSelectionGroup.replaceAll("_", " ") : "NOT SELECTED"}</p>
+        <p className="text-xs text-zinc-500">Squad: {squad}</p>
+      </td>
+      <td className="p-4">
+        {application.applicantUser ? (
+          <>
+            <p>{application.applicantUser.name}</p>
+            <p className="text-xs text-zinc-500">{application.applicantUser.email}</p>
+          </>
+        ) : (
+          <span className="text-zinc-500">Public form applicant</span>
+        )}
+      </td>
+      <td className="p-4 text-zinc-400">{application.reviewedBy?.name ?? "Unreviewed"}</td>
+    </tr>
   );
 }

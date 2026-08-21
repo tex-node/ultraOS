@@ -875,3 +875,201 @@ Append new entries below using this structure:
 - Complete a live Google OAuth browser sign-in after the Google consent screen is
   available to the operator, then configure email verification and password reset
   delivery.
+
+### 2026-08-09 - Season Zero Club Logo Source Validation
+
+**Objective**
+
+- Validate the authoritative Season Zero club logo files in
+  `C:\UltraLeagueOS\assets\clubs` before any media ingestion.
+
+**Completed**
+
+- Confirmed all 8 expected logo files exist.
+- Recorded file sizes and SHA-256 checksums.
+- Validated each file through the existing media upload validation pipeline as a
+  `CLUB_LOGO`.
+- Confirmed each file has a valid PNG signature and readable image dimensions.
+- No alternate, generated, recoloured, prototype, rehearsal, or demo assets were
+  used.
+
+**Validated files**
+
+| Club | File | Size bytes | MIME | Dimensions | SHA-256 |
+| --- | --- | ---: | --- | --- | --- |
+| APEX | `Apex M.png` | 2188954 | image/png | 1024 x 1536 | `abbf1a01522e307b9506e73e25dc90d0c324cf175ee0ba98c9a434d6c28683b4` |
+| SURGE | `Surge M.png` | 897051 | image/png | 873 x 714 | `44df03bae2d3856f7dadb9c693f559b117d4ba6f7eacbd714a2f2089ada115b5` |
+| VORTEX | `Vortex M.png` | 2190669 | image/png | 1024 x 1536 | `ad675f0cc7be255b40650e869f3a1f24ce4a468d631f124d125bff9c6eb3b9af` |
+| FLUX | `Flux M.png` | 2264062 | image/png | 1024 x 1536 | `f52280a93b927e891bd569ddec22cdb80ff64a7ae145c0db5b20259275ca5a83` |
+| EMBER | `Ember F.png` | 687939 | image/png | 877 x 718 | `0dbed3f48fbb39ab119340ab8924eda7dc5ca9e1dcdc2b228c52918063523299` |
+| HALO | `Halo F.png` | 2320412 | image/png | 1024 x 1536 | `0a09633ef50fc2a41219dc1406d6fae9b8b22a8cc12babd80caf9fb9c11b9d81` |
+| ECLIPSE | `Eclipse F.png` | 2204880 | image/png | 1024 x 1536 | `2ad948c263b15e4f2f592dec61b2c5da83692ff9470af9a50b01149e0a5fe66f` |
+| NOVA | `Nova F.png` | 1025115 | image/png | 905 x 744 | `36de71418dc8c4532089bdfb7f83ee6380a5b36e215aa431b26a3e3f56d5712a` |
+
+**Verification**
+
+- File existence: Passed.
+- File readability: Passed.
+- PNG MIME/signature validation: Passed.
+- Existing media pipeline validation: Passed.
+
+**Next step**
+
+- Ingest these exact files as `CLUB_LOGO` media assets once the remaining Club
+  creation inputs, especially official colours, are confirmed.
+
+### 2026-08-09 - Phase 9 Track C Season Zero Club Onboarding Applied to Staging
+
+**Objective**
+
+- Create the 8 real Season Zero permanent Clubs and 8 SeasonClubs on staging.
+- Ingest the exact authoritative club logos from `C:\UltraLeagueOS\assets\clubs`
+  through the existing media pipeline.
+- Keep official colours pending and stored as `NULL`.
+
+**Completed**
+
+- Added a staging migration to allow `Club.primaryColor` and
+  `Club.secondaryColor` to be nullable.
+- Updated club forms, import logic, public club pages, draft display, and
+  scoreboard rendering to tolerate pending colours with UI-only fallbacks.
+- Copied the authoritative logo files to
+  `/opt/ultraos-staging/shared/imports/clubs`.
+- Revalidated staging logo checksums before ingestion.
+- Ran `scripts/season-zero-club-onboarding.ts --apply` on staging.
+- Created 8 permanent Clubs, 8 active SeasonClubs, 8 Standing rows, 8 public
+  `CLUB_LOGO` MediaAssets, and 16 logo variants.
+
+**Backup**
+
+- Staging database backup:
+  `/opt/ultraos-staging/shared/backups/track-c-before-clubs-20260809T114810Z.dump`
+- SHA-256:
+  `e1f4047c6ea7231ae894d9fe65c1370052e75d7ba0ac682de9e736addef13b91`
+
+**Staging verification**
+
+| Check | Result |
+| --- | ---: |
+| Clubs | 8 |
+| SeasonClubs | 8 |
+| Men's SeasonClubs | 4 |
+| Women's SeasonClubs | 4 |
+| Standing rows | 8 |
+| Staff records created | 0 |
+| Selected player SeasonClub assignments | 0 |
+| Draft allocations created | 0 |
+| Active primary club logo usages | 8 |
+| Club logo assets | 8 |
+| Club logo variants | 16 |
+
+**HTTP smoke checks**
+
+- `/login`: 200
+- `/public/clubs`: 200
+- `/public/clubs/cmslqrdfv0000xrkkh3z4bsev`: 200
+- `/media/assets/cmslqrdi00003xrkkeaecs587/file`: 200 image/png
+- `/media/assets/cmslqrecs001uxrkknt80hvoc/file`: 200 image/png
+- `/api/content/club/cmslqrdfv0000xrkkh3z4bsev`: 200
+
+**Validation**
+
+- Local Prisma validation and generation: Passed.
+- Local TypeScript: Passed.
+- Local tests: Passed.
+- Local lint: Passed with existing `<img>` warnings only.
+- Local production build: Passed.
+- Staging Prisma validation, generation, migration deploy, TypeScript, tests,
+  production build, service restart, database verification, and HTTP smoke
+  checks: Passed.
+
+**Notes**
+
+- Official colours intentionally remain unset in the database.
+- No coaches, staff assignments, player assignments, fixtures, draft picks, or
+  official draft allocations were created in this step.
+
+### 2026-08-09 - Phase 9 Track D Coach Onboarding Readiness Gate
+
+**Objective**
+
+- Prepare the people, media, and presentation readiness layer for a full Draft
+  Day rehearsal without running the rehearsal.
+
+**Completed**
+
+- Created and verified a staging backup before Track D work.
+- Verified Track C baseline on `ultraos_staging`.
+- Confirmed all 8 approved coach applications remain `PENDING` for Season Zero
+  selection.
+- Stopped real coach provisioning at the required human decision gate.
+- Added `/draft-readiness` as a read-only Draft Personnel & Media Readiness
+  dashboard.
+- Improved Season Zero coach selection auditing so future status changes record
+  old state, new state, actor, timestamp, and optional reason.
+- Deployed the dashboard and audit improvement to staging only.
+
+**Backup**
+
+- Staging database backup:
+  `/opt/ultraos-staging/shared/backups/ultraos_staging_track_d_pre_coach_onboarding_20260809T123035Z.dump`
+- Size: `409578` bytes
+- SHA-256:
+  `06f6e6c2cd013ee5685cd42f20ba95d8747f7485ec64a41448044ba3c2510d94`
+- Verification: Passed
+
+**Readiness state**
+
+| Area | Result |
+| --- | --- |
+| Clubs | 8 permanent, 8 SeasonClubs, 8 logos |
+| Players | 58 selected, 45 MAIN_DRAFT, 13 SECONDARY_DRAFT |
+| Player SeasonClub assignments | 0 |
+| Official Draft allocations | 0 |
+| Staff | 0 |
+| Coach applications | 8 approved, 8 pending, 0 selected |
+| Coach provisioning | Blocked by human selection gate |
+| Player photos | 58 legacy URLs, 0 primary MediaAsset-backed photos |
+| Club logos | 8 primary MediaAsset-backed logos, 16 variants |
+
+**Validation**
+
+- Staging `npm run db:validate`: Passed.
+- Staging `npm run db:generate`: Passed.
+- Staging `npm run typecheck`: Passed.
+- Staging `npm run lint`: Passed with existing `<img>` warnings only.
+- Staging `npm test`: Passed.
+- Staging `npm run build`: Passed.
+- Staging `npm run data:audit-real`: Passed.
+- HTTP smoke:
+  - `/login`: 200
+  - `/draft-readiness`: 307 unauthenticated redirect
+  - `/coaches/season-zero-selection`: 307 unauthenticated redirect
+  - `/public/clubs`: 200
+  - Apex logo media endpoint: 200 image/png
+
+**Human action required**
+
+- Administrator must classify all approved coach applications at
+  `/coaches/season-zero-selection`.
+- Selected coaches must then receive explicit MEN/WOMEN draft division
+  classification before Staff provisioning and coach pool creation.
+
+**Safety**
+
+- No production data changed.
+- No production deployment occurred.
+- No Caddy changes occurred.
+- No commit or push occurred.
+- No Applications, Users, Athletes, Players, Clubs, SeasonClubs, or MediaAssets
+  were deleted.
+- No coach was selected automatically.
+- No coach was provisioned as Staff.
+- No coach was assigned to a Club or SeasonClub.
+- No selected Player was assigned to a Club or SeasonClub.
+- No official Draft allocation was created.
+- No Draft group was rebalanced.
+- Women Group 4 remains intentionally incomplete.
+- No official Club colour was invented.
+- Official Club logos were not modified.
+- `TryOutsPlayers.xlsx` was not modified.

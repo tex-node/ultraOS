@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import {
   confirmReservationPayment,
@@ -12,6 +13,7 @@ import {
 } from "../actions";
 import { EventStatus } from "@/generated/prisma/enums";
 import { requirePermission } from "@/lib/authorization";
+import { formatLagosDateTime } from "@/lib/format-datetime";
 import { formatNaira } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
 
@@ -20,8 +22,10 @@ export default async function EventDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requirePermission("event:manage");
   const { id } = await params;
+  const rawSession = await auth();
+  if (!rawSession?.user) redirect(`/login?callbackUrl=/events/${id}`);
+  const session = await requirePermission("event:manage");
   const event = await prisma.event.findUnique({
     where: { id },
     include: {
@@ -66,7 +70,7 @@ export default async function EventDetailPage({
             <Link href="/events" className="text-sm text-zinc-400">Back to events</Link>
             <p className="mt-5 text-xs uppercase tracking-[.24em] text-emerald-400">{event.season.name} · {event.status}</p>
             <h1 className="mt-2 text-3xl font-semibold">{event.name}</h1>
-            <p className="mt-2 text-zinc-400">{event.startTime.toLocaleString()} · {event.venue.name}</p>
+            <p className="mt-2 text-zinc-400">{formatLagosDateTime(event.startTime)} · {event.venue.name}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {Object.values(EventStatus).map((status) => (
@@ -75,6 +79,7 @@ export default async function EventDetailPage({
               </form>
             ))}
             <Link href={`/public/events/${id}`} className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-zinc-950">Public booking</Link>
+            <Link href={`/events/${id}/debrief`} className="rounded-lg border border-emerald-400/40 px-3 py-2 text-xs text-emerald-300">Post-event debrief</Link>
           </div>
         </div>
 

@@ -1,0 +1,284 @@
+openapi: 3.0.3
+info:
+  title: Ultra Basketball League OS — Live API
+  version: "1.0.0"
+  description: >
+    Public-safe, versioned live data API for UltraLeagueOS. See ULTRA_LIVE_API_V1.md for the
+    full narrative documentation (rate limits, CORS, identifiers, capability rules).
+servers:
+  - url: https://app.neonultra.ng/api/v1
+components:
+  schemas:
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum: [NOT_FOUND, GAME_NOT_FOUND, GAME_NOT_LIVE, PLAYER_NOT_FOUND, CLUB_NOT_FOUND, SEASON_NOT_FOUND, DATA_NOT_CAPTURED, RATE_LIMITED, UNAUTHORIZED, INTERNAL_ERROR]
+            message:
+              type: string
+          required: [code, message]
+      required: [error]
+    ClubRef:
+      type: object
+      properties:
+        publicId: { type: string, example: vortex }
+        name: { type: string, example: Vortex }
+        shortName: { type: string, example: VORTEX }
+      required: [publicId, name, shortName]
+    PlayerRef:
+      type: object
+      properties:
+        publicId: { type: string, nullable: true, example: UBA-000066 }
+        name: { type: string }
+      required: [publicId, name]
+    Score:
+      type: object
+      properties: { home: { type: integer }, away: { type: integer } }
+      required: [home, away]
+    Clock:
+      type: object
+      properties: { remainingSeconds: { type: integer }, running: { type: boolean } }
+      required: [remainingSeconds, running]
+    UltraTime:
+      type: object
+      properties:
+        active: { type: boolean }
+        approaching: { type: boolean }
+        secondsUntilStart: { type: integer, nullable: true }
+      required: [active, approaching, secondsUntilStart]
+    Capability:
+      type: string
+      enum: [BOX_SCORE_ONLY, EVENT_LEVEL, FULL_ULTRA]
+    LiveGameV1:
+      type: object
+      properties:
+        fixtureId: { type: string }
+        gameId: { type: string }
+        status: { type: string }
+        home: { $ref: '#/components/schemas/ClubRef' }
+        away: { $ref: '#/components/schemas/ClubRef' }
+        score: { $ref: '#/components/schemas/Score' }
+        period: { type: integer }
+        periodLabel: { type: string }
+        clock: { $ref: '#/components/schemas/Clock' }
+        shotClock: { $ref: '#/components/schemas/Clock' }
+        ultraTime: { $ref: '#/components/schemas/UltraTime' }
+        capability: { $ref: '#/components/schemas/Capability' }
+        generatedAt: { type: string, format: date-time }
+        dataUpdatedAt: { type: string, format: date-time }
+    LeaderV1:
+      type: object
+      properties:
+        category: { type: string }
+        player: { $ref: '#/components/schemas/PlayerRef' }
+        club: { $ref: '#/components/schemas/ClubRef' }
+        value: { type: number }
+    TeamComparisonRow:
+      type: object
+      properties: { label: { type: string }, home: { type: string }, away: { type: string } }
+    GameSnapshotV1:
+      allOf:
+        - $ref: '#/components/schemas/LiveGameV1'
+        - type: object
+          properties:
+            leaders: { type: array, items: { $ref: '#/components/schemas/LeaderV1' } }
+            teamComparison: { type: array, items: { $ref: '#/components/schemas/TeamComparisonRow' } }
+            recentEvents: { type: array, items: { $ref: '#/components/schemas/EventV1' }, nullable: true }
+            verification:
+              type: object
+              properties: { verified: { type: boolean } }
+    EventV1:
+      type: object
+      properties:
+        sequence: { type: integer, nullable: true }
+        period: { type: integer }
+        clockSeconds: { type: integer }
+        club: { $ref: '#/components/schemas/ClubRef', nullable: true }
+        player: { $ref: '#/components/schemas/PlayerRef', nullable: true }
+        eventType: { type: string }
+        basePointValue: { type: integer, nullable: true }
+        multiplier: { type: integer, nullable: true }
+        points: { type: integer, nullable: true }
+    BoxScorePlayerV1:
+      type: object
+      properties:
+        player: { $ref: '#/components/schemas/PlayerRef' }
+        club: { $ref: '#/components/schemas/ClubRef' }
+        points: { type: integer }
+        rebounds: { type: integer }
+        assists: { type: integer }
+        steals: { type: integer }
+        blocks: { type: integer }
+        turnovers: { type: integer }
+        fouls: { type: integer }
+        fieldGoalsMade: { type: integer }
+        fieldGoalsAttempted: { type: integer }
+        fourPointsMade: { type: integer }
+        fourPointsAttempted: { type: integer }
+    PlayerSummaryV1:
+      type: object
+      properties:
+        publicId: { type: string }
+        name: { type: string }
+        position: { type: string }
+        jerseyNumber: { type: integer, nullable: true }
+        club: { $ref: '#/components/schemas/ClubRef', nullable: true }
+        generatedAt: { type: string, format: date-time }
+    ClubSummaryV1:
+      type: object
+      properties:
+        publicId: { type: string }
+        name: { type: string }
+        shortName: { type: string }
+        logoUrl: { type: string, nullable: true }
+        division: { type: string }
+        record:
+          type: object
+          nullable: true
+          properties:
+            played: { type: integer }
+            won: { type: integer }
+            lost: { type: integer }
+            pointsFor: { type: integer }
+            pointsAgainst: { type: integer }
+            pointDifference: { type: integer }
+            leaguePoints: { type: integer }
+        generatedAt: { type: string, format: date-time }
+    StandingV1:
+      type: object
+      properties:
+        club: { $ref: '#/components/schemas/ClubRef' }
+        division: { type: string }
+        played: { type: integer }
+        won: { type: integer }
+        lost: { type: integer }
+        pointsFor: { type: integer }
+        pointsAgainst: { type: integer }
+        pointDifference: { type: integer }
+        leaguePoints: { type: integer }
+paths:
+  /live:
+    get:
+      summary: Every currently live PRODUCTION game
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  games: { type: array, items: { $ref: '#/components/schemas/LiveGameV1' } }
+                  generatedAt: { type: string, format: date-time }
+  /games/{fixtureId}:
+    get:
+      summary: One game's current state
+      parameters:
+        - { name: fixtureId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LiveGameV1' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
+  /games/{fixtureId}/snapshot:
+    get:
+      summary: Fuller public snapshot (leaders, team comparison, verification)
+      parameters:
+        - { name: fixtureId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/GameSnapshotV1' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
+  /games/{fixtureId}/box-score:
+    get:
+      summary: Player box score
+      parameters:
+        - { name: fixtureId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fixtureId: { type: string }
+                  gameId: { type: string }
+                  status: { type: string }
+                  capability: { $ref: '#/components/schemas/Capability' }
+                  home: { $ref: '#/components/schemas/ClubRef' }
+                  away: { $ref: '#/components/schemas/ClubRef' }
+                  players: { type: array, items: { $ref: '#/components/schemas/BoxScorePlayerV1' } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
+  /games/{fixtureId}/events:
+    get:
+      summary: Sequenced event ledger (capability-gated - null for BOX_SCORE_ONLY)
+      parameters:
+        - { name: fixtureId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fixtureId: { type: string }
+                  gameId: { type: string }
+                  capability: { $ref: '#/components/schemas/Capability' }
+                  available: { type: boolean }
+                  events: { type: array, items: { $ref: '#/components/schemas/EventV1' }, nullable: true }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
+  /players/{ultraAthleteId}:
+    get:
+      summary: Public player summary
+      parameters:
+        - { name: ultraAthleteId, in: path, required: true, schema: { type: string, example: UBA-000066 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlayerSummaryV1' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
+  /clubs/{shortNameSlug}:
+    get:
+      summary: Public club summary
+      parameters:
+        - { name: shortNameSlug, in: path, required: true, schema: { type: string, example: vortex } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ClubSummaryV1' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
+  /seasons/{seasonPublicId}/standings:
+    get:
+      summary: Season standings ("active" or a real season id)
+      parameters:
+        - { name: seasonPublicId, in: path, required: true, schema: { type: string, example: active } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  seasonPublicId: { type: string }
+                  standings: { type: array, items: { $ref: '#/components/schemas/StandingV1' } }
+                  generatedAt: { type: string, format: date-time }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
+  /seasons/{seasonPublicId}/leaders:
+    get:
+      summary: Season category leaders
+      parameters:
+        - { name: seasonPublicId, in: path, required: true, schema: { type: string, example: active } }
+        - { name: category, in: query, required: false, schema: { type: string, enum: [PPG, RPG, APG, SPG, BPG, FG_PCT, THREE_PCT, FT_PCT, EFF], default: PPG } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  seasonPublicId: { type: string }
+                  category: { type: string }
+                  leaders: { type: array, items: { $ref: '#/components/schemas/LeaderV1' } }
+                  generatedAt: { type: string, format: date-time }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }

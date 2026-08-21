@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-08-10T00:00:00Z",
+  "summary": { "selected": 9, "matchedExistingStaff": 8, "offlineIntake": 1, "ambiguous": 0 },
+  "coaches": [
+    { "name": "Afunku Adeyinka", "division": "MEN", "stagingUltraStaffId": "UBS-000008", "productionStaffId": "cmsm34n7w00046jkkm8brqy39", "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID" },
+    { "name": "Bilqis Adekoya", "division": "WOMEN", "stagingUltraStaffId": "UBS-000005", "productionStaffId": "cmr1tyxgt002gutkkor5xxxuh", "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID" },
+    { "name": "Christopher Ndifon Ekpe", "division": "MEN", "stagingUltraStaffId": "UBS-000006", "productionStaffId": "cmrh7mw160006c9kkuii9i0dk", "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID" },
+    { "name": "Coach David Robinson", "division": "MEN", "stagingUltraStaffId": "UBS-000007", "productionStaffId": "cmrh7meov0003c9kknsj5pq1r", "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID" },
+    { "name": "Mcspencer Akpan", "division": "MEN", "stagingUltraStaffId": "UBS-000003", "productionStaffId": "cmr0m6h8h0000z7kkfov56yoa", "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID" },
+    { "name": "Udeaja Chioma Priscilla", "division": "WOMEN", "stagingUltraStaffId": "UBS-000009", "productionStaffId": "cmsm34grj00016jkkthefvewo", "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID" },
+    { "name": "adetokunbo olaosebikan Ijomah", "division": "WOMEN", "stagingUltraStaffId": "UBS-000004", "productionStaffId": "cmr0nqyoz0001utkkchz8uj8p", "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID" },
+    { "name": "olusegun imah", "division": "MEN", "stagingUltraStaffId": "UBS-000002", "productionStaffId": "cmqurqfhh0001h3kkc6gfa79i", "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID" },
+    { "name": "Imomoh Kewwe Blessing", "division": "WOMEN", "stagingUltraStaffId": "UBS-000001", "productionStaffId": null, "classification": "MISSING_FROM_PRODUCTION", "note": "ADMIN_OFFLINE_INTAKE — no Application expected; provision via the offline intake workflow after schema deployment" }
+  ],
+  "gate": "PASSED (0 ambiguous) — structurally blocked only by pending schema (ultraStaffId, coachSeasonZeroSelectionStatus, coachSeasonZeroDivision, DraftCoachPoolEntry, AdminOfflineIntake do not exist in production yet)"
+}

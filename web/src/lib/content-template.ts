@@ -1,7 +1,7 @@
 import type { ContentType } from "@/generated/prisma/enums";
 
 export type GraphicData = {
-  type: ContentType;
+  type: ContentType | "CLUB_PROFILE" | "COACH_PROFILE";
   title: string;
   kicker?: string;
   headline: string;
@@ -17,7 +17,7 @@ export function renderTemplate(
   variables: Record<string, string>,
   escape: (value: string) => string = (value) => value,
 ) {
-  return template.replace(/\{\{([a-zA-Z0-9]+)\}\}/g, (_match, key: string) =>
+  return template.replace(/\{\{([a-zA-Z0-9_.-]+)\}\}/g, (_match, key: string) =>
     escape(variables[key] ?? ""),
   );
 }

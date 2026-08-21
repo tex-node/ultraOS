@@ -1,10 +1,14 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
+import { auth } from "@/auth";
 import { requireSession } from "@/lib/authorization";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 export default async function PlayersPage() {
+  const rawSession = await auth();
+  if (!rawSession?.user) redirect("/login?callbackUrl=/players");
   const session = await requireSession();
   const canManage = hasPermission(session.user.roles, "player:manage");
   const athletes = await prisma.athlete.findMany({

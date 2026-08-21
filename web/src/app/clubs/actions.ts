@@ -25,6 +25,13 @@ function mutationError(error: unknown): ClubFormState {
   return { error: "The operation could not be completed." };
 }
 
+function parseIdentityKeywords(value: string) {
+  return value
+    .split(/[,/•|]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export async function createClub(
   _state: ClubFormState,
   formData: FormData,
@@ -43,8 +50,14 @@ export async function createClub(
         name: parsed.data.name,
         shortName: parsed.data.shortName,
         logoUrl: parsed.data.logoUrl || null,
-        primaryColor: parsed.data.primaryColor,
-        secondaryColor: parsed.data.secondaryColor,
+        primaryColor: parsed.data.primaryColor || null,
+        secondaryColor: parsed.data.secondaryColor || null,
+        brandingStatus: parsed.data.brandingStatus,
+        motto: parsed.data.motto || null,
+        publicBio: parsed.data.publicBio || null,
+        officialSlogan: parsed.data.officialSlogan || null,
+        crowdChant: parsed.data.crowdChant || null,
+        identityKeywords: parseIdentityKeywords(parsed.data.identityKeywords),
         foundedYear: parsed.data.foundedYear ? Number(parsed.data.foundedYear) : null,
         status: parsed.data.status,
         websiteUrl: parsed.data.websiteUrl || null,
@@ -79,8 +92,14 @@ export async function updateClub(
         name: parsed.data.name,
         shortName: parsed.data.shortName,
         logoUrl: parsed.data.logoUrl || null,
-        primaryColor: parsed.data.primaryColor,
-        secondaryColor: parsed.data.secondaryColor,
+        primaryColor: parsed.data.primaryColor || null,
+        secondaryColor: parsed.data.secondaryColor || null,
+        brandingStatus: parsed.data.brandingStatus,
+        motto: parsed.data.motto || null,
+        publicBio: parsed.data.publicBio || null,
+        officialSlogan: parsed.data.officialSlogan || null,
+        crowdChant: parsed.data.crowdChant || null,
+        identityKeywords: parseIdentityKeywords(parsed.data.identityKeywords),
         foundedYear: parsed.data.foundedYear ? Number(parsed.data.foundedYear) : null,
         status: parsed.data.status,
         websiteUrl: parsed.data.websiteUrl || null,

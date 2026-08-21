@@ -1,0 +1,658 @@
+"use server";
+
+// Statistician console server actions (G.15). Architecturally independent from the scorer
+// console (games/actions.ts): a separate permission (game:record-stats), a separate GameEvent
+// source tag (ULTRA_NATIVE_LIVE_STATISTICIAN), and — deliberately — no writes to
+// Fixture.homeScore/awayScore or to PlayerStat/TeamStat. The scorer's console remains the sole
+// write path for the official score and the canonical box score; the statistician's ledger
+// exists purely as an independently-derived cross-check, reconciled against the official score
+// (see src/lib/reconciliation.ts). This is the safest way to add a second, genuinely
+// independent set of eyes without risking a duplicate/competing scoring truth (Part I.6).
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { requirePermission } from "@/lib/authorization";
+import { writeAuditLog } from "@/lib/audit";
+import { remainingClockSeconds } from "@/lib/game-clock";
+import { prisma } from "@/lib/prisma";
+import {
+  effectiveRuleSnapshot,
+  isUltraTimeUnderRules,
+  scoreShot,
+} from "@/lib/ultra-scoring-engine";
+import { reconcileGameScore, type GameReconciliation } from "@/lib/reconciliation";
+import {
+  derivePlayerStats,
+  deriveTeamStats,
+  deriveTeamScore,
+  emptyPlayerStats,
+  emptyTeamStats,
+  type DerivableEvent,
+  type DerivedPlayerStats,
+  type DerivedTeamStats,
+} from "@/lib/event-derived-stats";
+import { deriveLineup, validateSubstitution, type Lineup } from "@/lib/lineup";
+import type { Prisma } from "@/generated/prisma/client";
+
+const STATISTICIAN_SOURCE = "ULTRA_NATIVE_LIVE_STATISTICIAN" as const;
+
+function assertGameIsMutable(status: string, fixtureStatus: string) {
+  if (status === "FINAL" || fixtureStatus === "FINAL" || fixtureStatus === "CANCELLED") {
+    throw new Error("GAME_NOT_MUTABLE");
+  }
+}
+
+async function loadMutableGame(tx: Prisma.TransactionClient, gameId: string, fixtureId: string, actorId: string) {
+  // Locks the same row the scorer console locks (Fixture, not Game) so a concurrent scorer
+  // write and a concurrent statistician write can never both read the same
+  // Game.nextEventSequence value before either commits - true mutual exclusion requires both
+  // consoles to serialize through one shared lock, even though this path never writes Fixture.
+  await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
+  const game = await tx.game.findUniqueOrThrow({
+    where: { id: gameId },
+    include: { fixture: true, ruleSnapshot: true },
+  });
+  assertGameIsMutable(game.status, game.fixture.status);
+  if (game.status !== "LIVE" && game.status !== "PAUSED") {
+    throw new Error("GAME_NOT_ACTIVE");
+  }
+  if (game.fixtureId !== fixtureId) throw new Error("INVALID_EVENT");
+
+  // Part XXXIV: statistics that have been VERIFIED must not silently keep that badge once the
+  // underlying ledger changes again. Rather than hard-blocking every post-verification entry
+  // (which would make correcting a statistician's own mistake impossible without reopening the
+  // whole game), any new statistician write automatically clears the stale verification stamp
+  // - the reconciliation panel then honestly shows "needs re-verification" instead of a lying
+  // green badge. The clearing itself is audited, same as the verification was.
+  if (game.statisticsVerifiedAt) {
+    await tx.game.update({ where: { id: gameId }, data: { statisticsVerifiedAt: null, statisticsVerifiedById: null } });
+    await writeAuditLog(tx, {
+      userId: actorId,
+      action: "STATISTICS_VERIFICATION_CLEARED",
+      entityType: "Game",
+      entityId: gameId,
+      details: { fixtureId, reason: "New statistician event recorded after verification" },
+    });
+  }
+  return game;
+}
+
+async function nextSequence(tx: Prisma.TransactionClient, gameId: string, current: number) {
+  await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
+  return current;
+}
+
+// Reads this game's current on-court lineup by combining its confirmed starting five with
+// every ACTIVE structured substitution since (Part XII). Pure derivation over persisted data -
+// no in-memory state, so it reconstructs identically after a restart.
+export async function getGameLineup(gameId: string): Promise<Lineup> {
+  const [starters, substitutions] = await Promise.all([
+    prisma.gameStarter.findMany({ where: { gameId }, select: { seasonClubId: true, playerId: true } }),
+    prisma.gameEvent.findMany({
+      where: { gameId, eventType: "SUBSTITUTION", status: "ACTIVE" },
+      orderBy: { sequenceNumber: "asc" },
+      select: { seasonClubId: true, playerId: true, substitutedOutPlayerId: true, sequenceNumber: true },
+    }),
+  ]);
+  return deriveLineup(
+    starters.map((s) => ({ seasonClubId: s.seasonClubId, playerId: s.playerId })),
+    substitutions
+      .filter((s): s is typeof s & { seasonClubId: string; substitutedOutPlayerId: string; sequenceNumber: number } =>
+        Boolean(s.seasonClubId && s.playerId && s.substitutedOutPlayerId && s.sequenceNumber !== null))
+      .map((s) => ({ seasonClubId: s.seasonClubId, playerInId: s.playerId!, playerOutId: s.substitutedOutPlayerId!, sequenceNumber: s.sequenceNumber! })),
+  );
+}
+
+const shotSchema = z.object({
+  seasonClubId: z.string(),
+  playerId: z.string().min(1),
+  shotValue: z.coerce.number().int().min(1).max(4),
+  made: z.enum(["true", "false"]),
+});
+
+// Records one shot attempt (make or miss) into the statistician's own ledger. Deliberately
+// does not touch Fixture.homeScore/awayScore or PlayerStat/TeamStat - see file header.
+export async function recordStatisticianShot(gameId: string, fixtureId: string, formData: FormData) {
+  const session = await requirePermission("game:record-stats");
+  const input = shotSchema.parse(Object.fromEntries(formData.entries()));
+  const made = input.made === "true";
+
+  await prisma.$transaction(async (tx) => {
+    const game = await loadMutableGame(tx, gameId, fixtureId, session.user.id);
+    if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
+      throw new Error("INVALID_TEAM");
+    }
+    const player = await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } });
+    if (!player) throw new Error("INVALID_PLAYER");
+
+    const remaining = remainingClockSeconds(game);
+    const shot = scoreShot({
+      rules: effectiveRuleSnapshot(game.ruleSnapshot),
+      shotValue: input.shotValue,
+      gameStatus: game.status,
+      currentPeriod: game.currentPeriod,
+      remainingClockSeconds: remaining,
+    });
+    if (!shot.valid) throw new Error(shot.error);
+
+    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
+    const eventType =
+      input.shotValue === 1
+        ? made
+          ? "FREE_THROW_MADE"
+          : "FREE_THROW_MISSED"
+        : made
+          ? "SHOT_MADE"
+          : "SHOT_MISSED";
+
+    await tx.gameEvent.create({
+      data: {
+        gameId,
+        seasonClubId: input.seasonClubId,
+        playerId: player.id,
+        eventType,
+        points: made ? shot.pointsAwarded : 0,
+        basePointValue: shot.basePointValue,
+        multiplier: shot.multiplier,
+        made,
+        isFourPointAttempt: input.shotValue === 4,
+        isUltraTime: shot.isUltraTime,
+        period: game.currentPeriod,
+        clockSeconds: remaining,
+        description: `${player.athlete.firstName} ${player.athlete.lastName} — ${input.shotValue}PT ${made ? "MADE" : "MISS"}${shot.isUltraTime ? ` (Ultra Time ×${shot.multiplier})` : ""}`,
+        sequenceNumber,
+        source: STATISTICIAN_SOURCE,
+        createdById: session.user.id,
+      },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/stats`);
+  revalidatePath(`/games/${fixtureId}/live`);
+}
+
+const OTHER_STAT_TYPES = ["OFFENSIVE_REBOUND", "DEFENSIVE_REBOUND", "ASSIST", "STEAL", "BLOCK", "TURNOVER", "FOUL"] as const;
+
+const otherStatSchema = z.object({
+  seasonClubId: z.string(),
+  playerId: z.string().min(1),
+  eventType: z.enum(OTHER_STAT_TYPES),
+  fouledPlayerId: z.string().optional(),
+  foulType: z.preprocess((v) => (v === "" ? undefined : v), z.enum(["PERSONAL", "TECHNICAL", "FLAGRANT", "OFFENSIVE"]).optional()),
+});
+
+export async function recordStatisticianStat(gameId: string, fixtureId: string, formData: FormData) {
+  const session = await requirePermission("game:record-stats");
+  const input = otherStatSchema.parse(Object.fromEntries(formData.entries()));
+
+  await prisma.$transaction(async (tx) => {
+    const game = await loadMutableGame(tx, gameId, fixtureId, session.user.id);
+    if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
+      throw new Error("INVALID_TEAM");
+    }
+    const player = await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } });
+    if (!player) throw new Error("INVALID_PLAYER");
+
+    let fouledPlayerId: string | undefined;
+    if (input.eventType === "FOUL" && input.fouledPlayerId) {
+      const fouledPlayer = await tx.player.findFirst({
+        where: { id: input.fouledPlayerId, seasonClubId: { in: [game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId] } },
+      });
+      if (!fouledPlayer) throw new Error("INVALID_FOULED_PLAYER");
+      fouledPlayerId = fouledPlayer.id;
+    }
+
+    const remaining = remainingClockSeconds(game);
+    const ultraTime = isUltraTimeUnderRules(effectiveRuleSnapshot(game.ruleSnapshot), game.status, game.currentPeriod, remaining);
+    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
+
+    await tx.gameEvent.create({
+      data: {
+        gameId,
+        seasonClubId: input.seasonClubId,
+        playerId: player.id,
+        fouledPlayerId: input.eventType === "FOUL" ? fouledPlayerId : undefined,
+        foulType: input.eventType === "FOUL" ? input.foulType || undefined : undefined,
+        eventType: input.eventType,
+        period: game.currentPeriod,
+        clockSeconds: remaining,
+        description: `${player.athlete.firstName} ${player.athlete.lastName} — ${input.eventType.replaceAll("_", " ")}`,
+        sequenceNumber,
+        isUltraTime: ultraTime,
+        source: STATISTICIAN_SOURCE,
+        createdById: session.user.id,
+      },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/stats`);
+}
+
+const substitutionSchema = z.object({
+  seasonClubId: z.string(),
+  playerInId: z.string().min(1),
+  playerOutId: z.string().min(1),
+});
+
+// G.16 structured substitution model (Part XI): one event records a whole swap - playerId is
+// who came IN, substitutedOutPlayerId is who went OUT - rather than G.15's two directional
+// events with direction encoded in free text. Validated against the actual current lineup
+// (Part XIV), derived fresh inside this same transaction so a concurrent substitution can never
+// corrupt the check (Part XXXIV).
+export async function recordSubstitution(gameId: string, fixtureId: string, formData: FormData) {
+  const session = await requirePermission("game:record-stats");
+  const input = substitutionSchema.parse(Object.fromEntries(formData.entries()));
+
+  await prisma.$transaction(async (tx) => {
+    const game = await loadMutableGame(tx, gameId, fixtureId, session.user.id);
+    if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
+      throw new Error("INVALID_TEAM");
+    }
+    const [playerIn, playerOut] = await Promise.all([
+      tx.player.findFirst({ where: { id: input.playerInId, seasonClubId: input.seasonClubId }, include: { athlete: true } }),
+      tx.player.findFirst({ where: { id: input.playerOutId, seasonClubId: input.seasonClubId }, include: { athlete: true } }),
+    ]);
+    if (!playerIn) throw new Error("INVALID_PLAYER_IN");
+    if (!playerOut) throw new Error("INVALID_PLAYER_OUT");
+
+    const [starters, activeSubs] = await Promise.all([
+      tx.gameStarter.findMany({ where: { gameId }, select: { seasonClubId: true, playerId: true } }),
+      tx.gameEvent.findMany({
+        where: { gameId, eventType: "SUBSTITUTION", status: "ACTIVE" },
+        orderBy: { sequenceNumber: "asc" },
+        select: { seasonClubId: true, playerId: true, substitutedOutPlayerId: true, sequenceNumber: true },
+      }),
+    ]);
+    if (starters.length === 0) throw new Error("STARTING_FIVE_NOT_CONFIRMED");
+    const lineup = deriveLineup(
+      starters.map((s) => ({ seasonClubId: s.seasonClubId, playerId: s.playerId })),
+      activeSubs.map((s) => ({ seasonClubId: s.seasonClubId!, playerInId: s.playerId!, playerOutId: s.substitutedOutPlayerId!, sequenceNumber: s.sequenceNumber! })),
+    );
+    const validation = validateSubstitution(lineup, input.seasonClubId, playerIn.id, playerOut.id);
+    if (!validation.valid) throw new Error(`SUBSTITUTION_INVALID_${validation.error}`);
+
+    const remaining = remainingClockSeconds(game);
+    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
+
+    await tx.gameEvent.create({
+      data: {
+        gameId,
+        seasonClubId: input.seasonClubId,
+        playerId: playerIn.id,
+        substitutedOutPlayerId: playerOut.id,
+        eventType: "SUBSTITUTION",
+        period: game.currentPeriod,
+        clockSeconds: remaining,
+        description: `Substitution: ${playerOut.athlete.firstName} ${playerOut.athlete.lastName} OUT, ${playerIn.athlete.firstName} ${playerIn.athlete.lastName} IN`,
+        sequenceNumber,
+        source: STATISTICIAN_SOURCE,
+        createdById: session.user.id,
+      },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/stats`);
+}
+
+const startingFiveSchema = z.object({
+  seasonClubId: z.string(),
+  playerIds: z.array(z.string().min(1)).length(5, "Exactly five starters are required."),
+});
+
+// G.16 starting-five capture (Part X). Never auto-selected, never inferred - the operator must
+// explicitly choose exactly five rostered players for one team. Re-confirming the same team
+// replaces its prior selection (still fully audited both ways) rather than erroring, so a
+// pre-tip-off correction doesn't require a support workaround.
+export async function confirmStartingFive(gameId: string, fixtureId: string, formData: FormData) {
+  const session = await requirePermission("game:record-stats");
+  const raw = Object.fromEntries(formData.entries());
+  const input = startingFiveSchema.parse({
+    seasonClubId: raw.seasonClubId,
+    playerIds: formData.getAll("playerIds"),
+  });
+
+  await prisma.$transaction(async (tx) => {
+    const game = await loadMutableGame(tx, gameId, fixtureId, session.user.id);
+    if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
+      throw new Error("INVALID_TEAM");
+    }
+    const uniqueIds = new Set(input.playerIds);
+    if (uniqueIds.size !== 5) throw new Error("DUPLICATE_STARTER");
+    const rostered = await tx.player.findMany({ where: { id: { in: [...uniqueIds] }, seasonClubId: input.seasonClubId } });
+    if (rostered.length !== 5) throw new Error("STARTER_NOT_ROSTERED");
+
+    await tx.gameStarter.deleteMany({ where: { gameId, seasonClubId: input.seasonClubId } });
+    await tx.gameStarter.createMany({
+      data: [...uniqueIds].map((playerId) => ({ gameId, seasonClubId: input.seasonClubId, playerId, confirmedById: session.user.id })),
+    });
+    await writeAuditLog(tx, {
+      userId: session.user.id,
+      action: "STARTING_FIVE_CONFIRMED",
+      entityType: "Game",
+      entityId: gameId,
+      details: { fixtureId, seasonClubId: input.seasonClubId, playerIds: [...uniqueIds] },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/stats`);
+}
+
+// Voids the statistician's own most recent ACTIVE event. Never touches scorer-sourced events
+// (the two ledgers are undone independently) and never deletes the row - VOIDED events are
+// excluded from replayScore, so the reconciliation panel updates correctly without losing
+// audit history.
+export async function undoLastStatisticianEvent(gameId: string, fixtureId: string) {
+  const session = await requirePermission("game:record-stats");
+
+  await prisma.$transaction(async (tx) => {
+    await loadMutableGame(tx, gameId, fixtureId, session.user.id);
+
+    const last = await tx.gameEvent.findFirst({
+      where: { gameId, source: STATISTICIAN_SOURCE, status: "ACTIVE" },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!last) throw new Error("NO_EVENTS_TO_UNDO");
+
+    await tx.gameEvent.update({
+      where: { id: last.id },
+      data: { status: "VOIDED", correctedAt: new Date(), correctedById: session.user.id, correctionReason: "OPERATOR_UNDO" },
+    });
+
+    await writeAuditLog(tx, {
+      userId: session.user.id,
+      action: "STATISTICIAN_EVENT_UNDONE",
+      entityType: "GameEvent",
+      entityId: last.id,
+      details: { fixtureId, gameId, undoneEventType: last.eventType, undoneDescription: last.description },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/stats`);
+}
+
+async function loadActiveStatisticianEvents(client: Prisma.TransactionClient | typeof prisma, gameId: string): Promise<DerivableEvent[]> {
+  return client.gameEvent.findMany({
+    where: { gameId, source: STATISTICIAN_SOURCE, status: "ACTIVE" },
+    orderBy: { sequenceNumber: "asc" },
+    select: { eventType: true, status: true, seasonClubId: true, playerId: true, points: true, basePointValue: true, isUltraTime: true },
+  });
+}
+
+// Reads the statistician's own ledger and reconciles it against the official Fixture score,
+// using the same event-derived engine that materialization uses (Part V: one statistical
+// truth, never two independent ways of arriving at "the statistician's score"). Read-only -
+// safe to call from a Server Component render.
+export async function getGameReconciliation(gameId: string): Promise<GameReconciliation> {
+  const game = await prisma.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
+  const events = await loadActiveStatisticianEvents(prisma, gameId);
+  const hasStatisticianEvents = events.length > 0;
+  const teamStats = deriveTeamStats(derivePlayerStats(events));
+  const homeScore = deriveTeamScore(teamStats, game.fixture.homeSeasonClubId);
+  const awayScore = deriveTeamScore(teamStats, game.fixture.awaySeasonClubId);
+  return reconcileGameScore(game.fixture.homeScore, game.fixture.awayScore, homeScore, awayScore, hasStatisticianEvents);
+}
+
+export type LiveBoxScore = {
+  players: DerivedPlayerStats[];
+  teams: { home: DerivedTeamStats; away: DerivedTeamStats };
+};
+
+// Live derived box score (Part IX) - a pure READ MODEL over the ACTIVE event ledger, computed
+// on every render. Never writes PlayerStat/TeamStat itself; that only happens through the
+// audited rebuildGameStatsFromEvents() materialization path below, gated on verification.
+export async function getGameLiveBoxScore(gameId: string): Promise<LiveBoxScore> {
+  const game = await prisma.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
+  const events = await loadActiveStatisticianEvents(prisma, gameId);
+  const playerStats = derivePlayerStats(events);
+  const teamStats = deriveTeamStats(playerStats);
+  return {
+    players: [...playerStats.values()],
+    teams: {
+      home: teamStats.get(game.fixture.homeSeasonClubId) ?? emptyTeamStats(game.fixture.homeSeasonClubId),
+      away: teamStats.get(game.fixture.awaySeasonClubId) ?? emptyTeamStats(game.fixture.awaySeasonClubId),
+    },
+  };
+}
+
+// Materializes PlayerStat/TeamStat from the VERIFIED statistician ledger (Part VIII). Every
+// player who has ever appeared in this game's statistician events (active or not) gets an
+// explicit upsert - including an all-zero row if every one of their events has since been
+// voided - so a rebuild is a genuine full snapshot, not an incremental patch that could leave
+// stale non-zero data behind after a correction. Deterministic and idempotent: called twice
+// against the same ACTIVE event set produces byte-identical PlayerStat/TeamStat rows both times.
+async function rebuildGameStatsFromEvents(tx: Prisma.TransactionClient, gameId: string) {
+  const game = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
+  const [everyPlayer, activeEvents] = await Promise.all([
+    tx.gameEvent.findMany({
+      where: { gameId, source: STATISTICIAN_SOURCE, playerId: { not: null } },
+      distinct: ["playerId"],
+      select: { playerId: true, seasonClubId: true },
+    }),
+    loadActiveStatisticianEvents(tx, gameId),
+  ]);
+
+  const derivedPlayers = derivePlayerStats(activeEvents);
+  for (const { playerId, seasonClubId } of everyPlayer) {
+    if (!playerId || !seasonClubId) continue;
+    const p = derivedPlayers.get(playerId) ?? emptyPlayerStats(playerId, seasonClubId);
+    await tx.playerStat.upsert({
+      where: { gameId_playerId: { gameId, playerId } },
+      create: {
+        gameId, playerId, seasonClubId: p.seasonClubId,
+        points: p.points, rebounds: p.rebounds, assists: p.assists, steals: p.steals, blocks: p.blocks, turnovers: p.turnovers, fouls: p.fouls,
+        fieldGoalsMade: p.fieldGoalsMade, fieldGoalsAttempted: p.fieldGoalsAttempted,
+        twoPointsMade: p.twoPointsMade, twoPointsAttempted: p.twoPointsAttempted,
+        threePointsMade: p.threePointsMade, threePointsAttempted: p.threePointsAttempted,
+        freeThrowsMade: p.freeThrowsMade, freeThrowsAttempted: p.freeThrowsAttempted,
+        offensiveRebounds: p.offensiveRebounds, defensiveRebounds: p.defensiveRebounds,
+        fourPointsMade: p.fourPointsMade, fourPointsAttempted: p.fourPointsAttempted,
+        ultraTimePoints: p.ultraTimePoints, ultraTimeFieldGoalsMade: p.ultraTimeFieldGoalsMade, ultraTimeFieldGoalsAttempted: p.ultraTimeFieldGoalsAttempted,
+        statSource: "EVENT_DERIVED",
+      },
+      update: {
+        points: p.points, rebounds: p.rebounds, assists: p.assists, steals: p.steals, blocks: p.blocks, turnovers: p.turnovers, fouls: p.fouls,
+        fieldGoalsMade: p.fieldGoalsMade, fieldGoalsAttempted: p.fieldGoalsAttempted,
+        twoPointsMade: p.twoPointsMade, twoPointsAttempted: p.twoPointsAttempted,
+        threePointsMade: p.threePointsMade, threePointsAttempted: p.threePointsAttempted,
+        freeThrowsMade: p.freeThrowsMade, freeThrowsAttempted: p.freeThrowsAttempted,
+        offensiveRebounds: p.offensiveRebounds, defensiveRebounds: p.defensiveRebounds,
+        fourPointsMade: p.fourPointsMade, fourPointsAttempted: p.fourPointsAttempted,
+        ultraTimePoints: p.ultraTimePoints, ultraTimeFieldGoalsMade: p.ultraTimeFieldGoalsMade, ultraTimeFieldGoalsAttempted: p.ultraTimeFieldGoalsAttempted,
+        statSource: "EVENT_DERIVED",
+      },
+    });
+  }
+
+  const derivedTeams = deriveTeamStats(derivedPlayers);
+  for (const seasonClubId of [game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId]) {
+    const t = derivedTeams.get(seasonClubId) ?? emptyTeamStats(seasonClubId);
+    await tx.teamStat.upsert({
+      where: { gameId_seasonClubId: { gameId, seasonClubId } },
+      create: {
+        gameId, seasonClubId,
+        points: t.points, rebounds: t.rebounds, assists: t.assists, turnovers: t.turnovers, fouls: t.fouls,
+        fourPointsMade: t.fourPointsMade, fourPointsAttempted: t.fourPointsAttempted, ultraTimePointsFor: t.ultraTimePointsFor,
+        statSource: "EVENT_DERIVED",
+      },
+      update: {
+        points: t.points, rebounds: t.rebounds, assists: t.assists, turnovers: t.turnovers, fouls: t.fouls,
+        fourPointsMade: t.fourPointsMade, fourPointsAttempted: t.fourPointsAttempted, ultraTimePointsFor: t.ultraTimePointsFor,
+        statSource: "EVENT_DERIVED",
+      },
+    });
+  }
+
+  return { players: [...derivedPlayers.values()], teams: [...derivedTeams.values()] };
+}
+
+const verifySchema = z.object({
+  overrideReason: z.string().optional(),
+});
+
+// Marks Game.statisticsVerifiedAt/By - a distinct signal from Fixture/Game FINAL status (Part
+// XVII). Does not require a MATCHED reconciliation: a MISMATCH can be verified through with an
+// explicit override reason, written to AuditLog rather than silently accepted. On success,
+// materializes PlayerStat/TeamStat from the verified ledger (Part XVI) - verification is not a
+// cosmetic flag, it is the gate that promotes the statistician's ledger into the canonical box
+// score.
+export async function verifyStatistics(gameId: string, fixtureId: string, formData: FormData) {
+  const session = await requirePermission("result:confirm");
+  const input = verifySchema.parse(Object.fromEntries(formData.entries()));
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
+    const game = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
+    const events = await loadActiveStatisticianEvents(tx, gameId);
+    const hasStatisticianEvents = events.length > 0;
+    if (!hasStatisticianEvents) throw new Error("NO_STATISTICIAN_EVENTS_TO_VERIFY");
+
+    const teamStats = deriveTeamStats(derivePlayerStats(events));
+    const homeScore = deriveTeamScore(teamStats, game.fixture.homeSeasonClubId);
+    const awayScore = deriveTeamScore(teamStats, game.fixture.awaySeasonClubId);
+    const reconciliation = reconcileGameScore(game.fixture.homeScore, game.fixture.awayScore, homeScore, awayScore, hasStatisticianEvents);
+
+    if (reconciliation.overallStatus === "MISMATCH" && !input.overrideReason?.trim()) {
+      throw new Error("RECONCILIATION_MISMATCH_REQUIRES_OVERRIDE_REASON");
+    }
+
+    const materialized = await rebuildGameStatsFromEvents(tx, gameId);
+
+    await tx.game.update({
+      where: { id: gameId },
+      data: { statisticsVerifiedAt: new Date(), statisticsVerifiedById: session.user.id },
+    });
+    await writeAuditLog(tx, {
+      userId: session.user.id,
+      action: "STATISTICS_VERIFIED",
+      entityType: "Game",
+      entityId: gameId,
+      details: {
+        fixtureId,
+        reconciliationStatus: reconciliation.overallStatus,
+        home: reconciliation.home,
+        away: reconciliation.away,
+        overrideReason: input.overrideReason || null,
+        materializedPlayerCount: materialized.players.length,
+        materializedTeamCount: materialized.teams.length,
+      },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/stats`);
+  revalidatePath(`/games/${fixtureId}/live`);
+}
+
+// --- G.17 Part VII: post-final statistical correction ---
+
+async function loadFinalGameForCorrection(tx: Prisma.TransactionClient, gameId: string, fixtureId: string) {
+  await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
+  const game = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true, ruleSnapshot: true } });
+  if (game.fixtureId !== fixtureId) throw new Error("INVALID_EVENT");
+  if (game.fixture.status === "CANCELLED") throw new Error("GAME_NOT_MUTABLE");
+  // Deliberately the opposite gate from loadMutableGame(): this workflow exists specifically
+  // for a FINAL game. A still-live game should use the ordinary undo/void/re-record flow above
+  // instead - routing a live correction through here would bypass loadMutableGame's LIVE/PAUSED
+  // check for no reason.
+  if (game.status !== "FINAL") throw new Error("GAME_NOT_FINAL_USE_LIVE_CORRECTION_INSTEAD");
+  return game;
+}
+
+const postFinalCorrectionSchema = z.object({
+  eventId: z.string().min(1),
+  reason: z.string().min(5, "A reason is required."),
+  // Present only when replacing the event's value (e.g. a 2PT that should have been a 3PT).
+  // Absent when the correction is a pure removal (e.g. "this rebound never happened").
+  replacementShotValue: z.coerce.number().int().min(1).max(4).optional(),
+  replacementMade: z.enum(["true", "false"]).optional(),
+});
+
+// Corrects (or removes) a single statistician event on an already-FINAL game (Part VII, Stage
+// 9). Gated behind result:confirm - the same tier that finalizes/verifies, not the everyday
+// game:record-stats statistician permission, since altering history after the fact is a bigger
+// deal than live entry. The original event is never deleted: it flips to CORRECTED (or VOIDED,
+// for a pure-removal correction) and, if a replacement value was supplied, a new ACTIVE event is
+// created via supersedesEventId - the exact same non-destructive pattern the live scorer's own
+// correctScoreEventAction already uses. Clears any existing statistics verification
+// unconditionally, since the materialized PlayerStat/TeamStat snapshot is now stale by
+// definition - re-verifying (the existing verifyStatistics(), unchanged) re-derives and
+// re-materializes from the corrected ledger. This function deliberately does NOT itself rebuild
+// or reconcile: "capture once, verify once, derive everything else" means there is exactly one
+// materialization code path, not two.
+export async function correctStatisticianEventPostFinal(gameId: string, fixtureId: string, formData: FormData) {
+  const session = await requirePermission("result:confirm");
+  const input = postFinalCorrectionSchema.parse(Object.fromEntries(formData.entries()));
+  const hasReplacement = input.replacementShotValue !== undefined && input.replacementMade !== undefined;
+
+  await prisma.$transaction(async (tx) => {
+    const game = await loadFinalGameForCorrection(tx, gameId, fixtureId);
+
+    const original = await tx.gameEvent.findUniqueOrThrow({ where: { id: input.eventId } });
+    if (original.gameId !== gameId) throw new Error("INVALID_EVENT");
+    if (original.source !== STATISTICIAN_SOURCE) throw new Error("NOT_A_STATISTICIAN_EVENT");
+    if (original.status !== "ACTIVE") throw new Error("EVENT_NOT_ACTIVE");
+
+    const verificationBefore = game.statisticsVerifiedAt
+      ? { verifiedAt: game.statisticsVerifiedAt.toISOString(), verifiedById: game.statisticsVerifiedById }
+      : null;
+
+    let replacementEventId: string | null = null;
+    if (hasReplacement) {
+      const shot = scoreShot({
+        rules: effectiveRuleSnapshot(game.ruleSnapshot),
+        shotValue: input.replacementShotValue!,
+        gameStatus: "LIVE", // re-evaluated under the ORIGINAL event's own frozen clock context below, not "now"
+        currentPeriod: original.period,
+        remainingClockSeconds: original.clockSeconds,
+      });
+      if (!shot.valid) throw new Error(shot.error);
+      const made = input.replacementMade === "true";
+      const sequenceNumber = game.nextEventSequence;
+      await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
+      const eventType = input.replacementShotValue === 1 ? (made ? "FREE_THROW_MADE" : "FREE_THROW_MISSED") : (made ? "SHOT_MADE" : "SHOT_MISSED");
+      const replacement = await tx.gameEvent.create({
+        data: {
+          gameId, seasonClubId: original.seasonClubId, playerId: original.playerId, eventType,
+          points: made ? shot.pointsAwarded : 0, basePointValue: shot.basePointValue, multiplier: shot.multiplier, made,
+          isFourPointAttempt: input.replacementShotValue === 4, isUltraTime: shot.isUltraTime,
+          period: original.period, clockSeconds: original.clockSeconds,
+          description: `Post-final correction: ${input.reason}`, sequenceNumber,
+          source: STATISTICIAN_SOURCE, createdById: session.user.id, supersedesEventId: original.id,
+        },
+      });
+      replacementEventId = replacement.id;
+      await tx.gameEvent.update({
+        where: { id: original.id },
+        data: { status: "CORRECTED", correctedAt: new Date(), correctedById: session.user.id, correctionReason: input.reason },
+      });
+    } else {
+      await tx.gameEvent.update({
+        where: { id: original.id },
+        data: { status: "VOIDED", correctedAt: new Date(), correctedById: session.user.id, correctionReason: input.reason },
+      });
+    }
+
+    await tx.game.update({ where: { id: gameId }, data: { statisticsVerifiedAt: null, statisticsVerifiedById: null } });
+
+    await writeAuditLog(tx, {
+      userId: session.user.id,
+      action: "POST_FINAL_STATISTICAL_CORRECTION",
+      entityType: "GameEvent",
+      entityId: original.id,
+      details: {
+        fixtureId, gameId,
+        originalEventType: original.eventType, originalDescription: original.description,
+        replacementEventId, reason: input.reason,
+        verificationBefore, verificationAfter: null,
+      },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/stats`);
+  revalidatePath(`/games/${fixtureId}/live`);
+}
+
+// True once any post-final correction has ever been recorded for this game - drives the
+// "STATISTICS CORRECTED AFTER FINAL" banner (Part VII, Stage 9). Read-only.
+export async function hasPostFinalCorrections(gameId: string): Promise<boolean> {
+  const count = await prisma.auditLog.count({ where: { entityType: "GameEvent", action: "POST_FINAL_STATISTICAL_CORRECTION", details: { path: ["gameId"], equals: gameId } } });
+  return count > 0;
+}

@@ -26,6 +26,10 @@ const prisma = new PrismaClient({
 
 const seedMode = process.env.SEED_MODE ?? process.argv.find((arg) => arg.startsWith("--mode="))?.split("=")[1] ?? "demo";
 
+if (seedMode === "demo" && process.env.NODE_ENV === "production") {
+  throw new Error("Demo seed is blocked when NODE_ENV=production.");
+}
+
 const clubs = [
   ["Vortex", "VTX", "#16F2B3", "#071713"],
   ["Apex", "APX", "#9B5CFF", "#160C24"],
@@ -212,11 +216,6 @@ async function main() {
     },
   });
 
-  if (seedMode === "system") {
-    console.log("Seeded system records only. Demo clubs, players, events, fixtures, and orders were skipped.");
-    return;
-  }
-
   const season = await prisma.season.upsert({
     where: {
       competitionId_name: {
@@ -225,18 +224,75 @@ async function main() {
       },
     },
     update: {
-      startDate: new Date("2026-08-15T09:00:00+01:00"),
+      startDate: new Date("2026-08-15T00:00:00+01:00"),
       endDate: new Date("2026-12-20T21:00:00+01:00"),
       status: SeasonStatus.ACTIVE,
     },
     create: {
       competitionId: competition.id,
       name: "Season Zero 2026",
-      startDate: new Date("2026-08-15T09:00:00+01:00"),
+      startDate: new Date("2026-08-15T00:00:00+01:00"),
       endDate: new Date("2026-12-20T21:00:00+01:00"),
       status: SeasonStatus.ACTIVE,
     },
   });
+
+  const settings = [
+    ["season-zero.launchDate", "2026-08-15", "Season Zero launch date."],
+    ["season-zero.timezone", "Africa/Lagos", "Operational timezone for events and schedules."],
+    ["season-zero.currency", "NGN", "Operational currency."],
+    ["season-zero.minRosterSize", 10, "Minimum players required before a SeasonClub is roster-ready."],
+    ["season-zero.maxRosterSize", 14, "Maximum players allowed per SeasonClub roster."],
+    ["season-zero.clubsPerDivision", 4, "Required active SeasonClubs per division."],
+    ["season-zero.squadsPerDivision", 4, "Required Draft Day squads per division."],
+    ["season-zero.playersPerSquad", 12, "Target players per Draft Day squad."],
+    ["MEN_MAIN_DRAFT_TARGET_SIZE", 7, "Target number of players for each men's Main Draft squad."],
+    ["WOMEN_MAIN_DRAFT_TARGET_SIZE", 5, "Target number of players for each women's Main Draft squad."],
+    ["DRAFT_SQUAD_MINIMUM_ALLOWED", 1, "Minimum non-empty draft squad size allowed before Draft Day."],
+    ["season-zero.requiredHeadCoaches", 1, "Required head coaches per SeasonClub."],
+    ["season-zero.optionalAssistantCoaches", 1, "Target assistant coaches per SeasonClub."],
+    ["season-zero.winLeaguePoints", 3, "Default league points for a win."],
+    ["season-zero.lossLeaguePoints", 0, "Default league points for a loss."],
+    ["season-zero.reservationHoldMinutes", 15, "Reservation hold duration before payment confirmation."],
+    [
+      "season-zero.qrCheckInRules",
+      { duplicateScan: "block", allowManualEntry: true, requireOperatorRole: true },
+      "QR check-in operating rules.",
+    ],
+    [
+      "season-zero.contentPublishingDefaults",
+      { previewWatermark: "PREVIEW - NOT FOR PUBLICATION", requireApproval: true, publicByDefault: false },
+      "Default controls for generated launch content.",
+    ],
+  ] as const;
+
+  await Promise.all(
+    settings.map(([key, value, description]) =>
+      prisma.systemSetting.upsert({
+        where: { key },
+        update: {
+          competitionId: competition.id,
+          seasonId: season.id,
+          value,
+          description,
+          category: "season-zero",
+        },
+        create: {
+          key,
+          value,
+          description,
+          category: "season-zero",
+          competitionId: competition.id,
+          seasonId: season.id,
+        },
+      }),
+    ),
+  );
+
+  if (seedMode === "system") {
+    console.log("Seeded system records only. Demo clubs, players, events, fixtures, reservations, orders, vendors, sponsors, and draft allocations were skipped.");
+    return;
+  }
 
   const seededSeasonClubs = [];
   const seededPlayers = [];
@@ -639,12 +695,15 @@ async function main() {
       seasonClubId: seededSeasonClubs[0].id,
     },
     create: {
+      confirmedAt: new Date("2026-07-15T18:05:00+01:00"),
+      createdById: admin.id,
       draftId: draft.id,
       round: 1,
       pickNumber: 1,
       seasonClubId: seededSeasonClubs[0].id,
       playerId: seededPlayers[0].id,
       pickedAt: new Date("2026-07-15T18:05:00+01:00"),
+      status: "CONFIRMED",
     },
   });
 

@@ -1,0 +1,3 @@
+ALTER TABLE "Club"
+  ALTER COLUMN "primaryColor" DROP NOT NULL,
+  ALTER COLUMN "secondaryColor" DROP NOT NULL;

@@ -20,7 +20,9 @@ import {
 } from "@/app/applications/application-data";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePermission } from "@/lib/authorization";
+import { roleForApplication, staffRoleForApplication } from "@/lib/participant-internalization";
 import { prisma } from "@/lib/prisma";
+import { ensureAthletePublicId, ensureStaffPublicId } from "@/lib/public-ids";
 import { sendSmtpMail } from "@/lib/smtp";
 
 type SubmittedData = Record<string, unknown>;
@@ -154,13 +156,14 @@ async function provisionApprovedApplication(
       : await tx.athlete.create({
         data: athleteData,
       });
+    const ultraAthleteId = await ensureAthletePublicId(tx, athlete.id);
     const season = await tx.season.findFirst({
       where: { status: { in: ["ACTIVE", "DRAFT"] } },
       orderBy: { startDate: "desc" },
       select: { id: true },
     });
     if (season) {
-      await tx.player.upsert({
+      const player = await tx.player.upsert({
         where: { athleteId_seasonId: { athleteId: athlete.id, seasonId: season.id } },
         update: {
           position: text(data, "position", "TBD"),
@@ -178,19 +181,35 @@ async function provisionApprovedApplication(
           draftSelectionGroup: DraftSelectionGroup.PENDING_SELECTION,
         },
       });
+      await tx.application.update({
+        where: { id: application.id },
+        data: {
+          provisionedAthleteId: athlete.id,
+          provisionedPlayerId: player.id,
+          provisionedUserId: userId,
+          provisionedAt: new Date(),
+          provisioningStatus: "SEASON_REGISTRATION_CREATED",
+        },
+      });
+    } else {
+      await tx.application.update({
+        where: { id: application.id },
+        data: {
+          provisionedAthleteId: athlete.id,
+          provisionedUserId: userId,
+          provisionedAt: new Date(),
+          provisioningStatus: "PROFILE_PROVISIONED",
+        },
+      });
     }
     await grantRole(tx, userId, UserRole.PLAYER, reviewerId);
+    await writeAuditLog(tx, { userId: reviewerId, action: "PUBLIC_ID_ASSIGNED", entityType: "Athlete", entityId: athlete.id, details: { ultraAthleteId } });
     return;
   }
 
   if (application.type === ApplicationType.COACH || application.type === ApplicationType.SCOUT || application.type === ApplicationType.OFFICIAL) {
-    const role =
-      application.type === ApplicationType.COACH
-        ? StaffRole.HEAD_COACH
-        : application.type === ApplicationType.SCOUT
-          ? StaffRole.SCOUT
-          : StaffRole.OFFICIAL;
-    await tx.staff.upsert({
+    const role = staffRoleForApplication(application.type);
+    const staff = await tx.staff.upsert({
       where: { userId },
       update: {
         name: applicationName(data),
@@ -206,16 +225,18 @@ async function provisionApprovedApplication(
         email: text(data, "email") || null,
       },
     });
-    await grantRole(
-      tx,
-      userId,
-      application.type === ApplicationType.COACH
-        ? UserRole.COACH
-        : application.type === ApplicationType.SCOUT
-          ? UserRole.SCOUT
-          : UserRole.OFFICIAL,
-      reviewerId,
-    );
+    const ultraStaffId = await ensureStaffPublicId(tx, staff.id);
+    await tx.application.update({
+      where: { id: application.id },
+      data: {
+        provisionedStaffId: staff.id,
+        provisionedUserId: userId,
+        provisionedAt: new Date(),
+        provisioningStatus: "PROFILE_PROVISIONED",
+      },
+    });
+    await grantRole(tx, userId, roleForApplication(application.type) ?? UserRole.FAN, reviewerId);
+    await writeAuditLog(tx, { userId: reviewerId, action: "PUBLIC_ID_ASSIGNED", entityType: "Staff", entityId: staff.id, details: { ultraStaffId } });
     return;
   }
 

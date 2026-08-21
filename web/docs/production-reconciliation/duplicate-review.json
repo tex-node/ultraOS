@@ -1,0 +1,166 @@
+{
+  "ekundayooluwatobiloba4@gmail.com": [
+    {
+      "applicationId": "cmrotfxv2009qfekk9lz8e0ww",
+      "status": "SUBMITTED",
+      "normalizedName": "Oluwatobiloba Ekundayo",
+      "maskedEmail": "ek***@gmail.com",
+      "maskedPhone": "***9566",
+      "submittedAt": "2026-07-17T08:49:33.998Z",
+      "reviewedAt": null,
+      "reviewNotes": null,
+      "isWorkbookCanonical": true,
+      "suggestedAction": "USE_AS_CANONICAL"
+    },
+    {
+      "applicationId": "cmrpkn8f200b2fekkzfbyohdr",
+      "status": "SUBMITTED",
+      "normalizedName": "Oluwatobiloba Ekundayo",
+      "maskedEmail": "ek***@gmail.com",
+      "maskedPhone": "***9566",
+      "submittedAt": "2026-07-17T21:31:03.902Z",
+      "reviewedAt": null,
+      "reviewNotes": null,
+      "isWorkbookCanonical": false,
+      "suggestedAction": "KEEP_AS_HISTORY"
+    },
+    {
+      "applicationId": "cmrqejw4n00bifekkod0t7s2g",
+      "status": "SUBMITTED",
+      "normalizedName": "Oluwatobiloba Ekundayo",
+      "maskedEmail": "ek***@gmail.com",
+      "maskedPhone": "***9566",
+      "submittedAt": "2026-07-18T11:28:16.487Z",
+      "reviewedAt": null,
+      "reviewNotes": null,
+      "isWorkbookCanonical": false,
+      "suggestedAction": "KEEP_AS_HISTORY"
+    }
+  ],
+  "ifoghalejustine@gmail.com": [
+    {
+      "applicationId": "cmroxoank00a6fekkyrq4mg1x",
+      "status": "SUBMITTED",
+      "normalizedName": "Ifoghale Justine",
+      "maskedEmail": "if***@gmail.com",
+      "maskedPhone": "***7742",
+      "submittedAt": "2026-07-17T10:48:02.288Z",
+      "reviewedAt": null,
+      "reviewNotes": null,
+      "isWorkbookCanonical": false,
+      "suggestedAction": "KEEP_AS_HISTORY"
+    },
+    {
+      "applicationId": "cmroxtfm800a8fekk9cb94x3n",
+      "status": "SUBMITTED",
+      "normalizedName": "Ifoghale Justine",
+      "maskedEmail": "if***@gmail.com",
+      "maskedPhone": "***7742",
+      "submittedAt": "2026-07-17T10:52:02.000Z",
+      "reviewedAt": null,
+      "reviewNotes": null,
+      "isWorkbookCanonical": true,
+      "suggestedAction": "USE_AS_CANONICAL"
+    }
+  ],
+  "samuel.olaoluwa539@gmail.com": [
+    {
+      "applicationId": "cmrnesorr0060fekkozt9s03s",
+      "status": "SUBMITTED",
+      "normalizedName": "Samuel Kalejaiye",
+      "maskedEmail": "sa***@gmail.com",
+      "maskedPhone": "***3159",
+      "submittedAt": "2026-07-16T09:11:48.327Z",
+      "reviewedAt": null,
+      "reviewNotes": null,
+      "isWorkbookCanonical": false,
+      "suggestedAction": "KEEP_AS_HISTORY"
+    },
+    {
+      "applicationId": "cmrnff0q10061fekkeo6dw7eq",
+      "status": "SUBMITTED",
+      "normalizedName": "Samuel Kalejaiye",
+      "maskedEmail": "sa***@gmail.com",
+      "maskedPhone": "***3159",
+      "submittedAt": "2026-07-16T09:29:10.249Z",
+      "reviewedAt": null,
+      "reviewNotes": null,
+      "isWorkbookCanonical": false,
+      "suggestedAction": "KEEP_AS_HISTORY"
+    },
+    {
+      "applicationId": "cmrnff3x90062fekklg8g03xq",
+      "status": "SUBMITTED",
+      "normalizedName": "Samuel Kalejaiye",
+      "maskedEmail": "sa***@gmail.com",
+      "maskedPhone": "***3159",
+      "submittedAt": "2026-07-16T09:29:14.397Z",
+      "reviewedAt": null,
+      "reviewNotes": null,
+      "isWorkbookCanonical": false,
+      "suggestedAction": "KEEP_AS_HISTORY"
+    },
+    {
+      "applicationId": "cmrnff67o0063fekke2sjpm35",
+      "status": "SUBMITTED",
+      "normalizedName": "Samuel Kalejaiye",
+      "maskedEmail": "sa***@gmail.com",
+      "maskedPhone": "***3159",
+      "submittedAt": "2026-07-16T09:29:17.364Z",
+      "reviewedAt": null,
+      "reviewNotes": null,
+      "isWorkbookCanonical": false,
+      "suggestedAction": "KEEP_AS_HISTORY"
+    },
+    {
+      "applicationId": "cmrnff8d00064fekk8cl20gm0",
+      "status": "SUBMITTED",
+      "normalizedName": "Samuel Kalejaiye",
+      "maskedEmail": "sa***@gmail.com",
+      "maskedPhone": "***3159",
+      "submittedAt": "2026-07-16T09:29:20.148Z",
+      "reviewedAt": null,
+      "reviewNotes": null,
+      "isWorkbookCanonical": false,
+      "suggestedAction": "KEEP_AS_HISTORY"
+    },
+    {
+      "applicationId": "cmrnffavp0065fekk1cxact63",
+      "status": "SUBMITTED",
+      "normalizedName": "Samuel Kalejaiye",
+      "maskedEmail": "sa***@gmail.com",
+      "maskedPhone": "***3159",
+      "submittedAt": "2026-07-16T09:29:23.413Z",
+      "reviewedAt": null,
+      "reviewNotes": null,
+      "isWorkbookCanonical": true,
+      "suggestedAction": "USE_AS_CANONICAL"
+    }
+  ],
+  "mosesbiola17@gmail.com": [
+    {
+      "applicationId": "cmro41cgv007tfekkoeeln27a",
+      "status": "SUBMITTED",
+      "normalizedName": "Biola Moses",
+      "maskedEmail": "mo***@gmail.com",
+      "maskedPhone": "***8423",
+      "submittedAt": "2026-07-16T20:58:22.688Z",
+      "reviewedAt": null,
+      "reviewNotes": null,
+      "isWorkbookCanonical": false,
+      "suggestedAction": "KEEP_AS_HISTORY"
+    },
+    {
+      "applicationId": "cmro4am1h007ufekkgrjohfcv",
+      "status": "SUBMITTED",
+      "normalizedName": "Biola Moses",
+      "maskedEmail": "mo***@gmail.com",
+      "maskedPhone": "***8423",
+      "submittedAt": "2026-07-16T21:05:34.997Z",
+      "reviewedAt": null,
+      "reviewNotes": null,
+      "isWorkbookCanonical": true,
+      "suggestedAction": "USE_AS_CANONICAL"
+    }
+  ]
+}

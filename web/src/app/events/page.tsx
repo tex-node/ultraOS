@@ -1,9 +1,14 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { requirePermission } from "@/lib/authorization";
+import { formatLagosDateTime } from "@/lib/format-datetime";
 import { prisma } from "@/lib/prisma";
 
 export default async function EventsPage() {
+  const rawSession = await auth();
+  if (!rawSession?.user) redirect("/login?callbackUrl=/events");
   const session = await requirePermission("event:manage");
   const events = await prisma.event.findMany({
     include: {
@@ -32,7 +37,7 @@ export default async function EventsPage() {
           {events.map((event) => (
             <Link key={event.id} href={`/events/${event.id}`} className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
               <div className="flex justify-between gap-4"><h2 className="font-semibold">{event.name}</h2><span className="text-xs text-emerald-300">{event.status}</span></div>
-              <p className="mt-2 text-sm text-zinc-400">{event.startTime.toLocaleString()} · {event.venue.name}</p>
+              <p className="mt-2 text-sm text-zinc-400">{formatLagosDateTime(event.startTime)} · {event.venue.name}</p>
               <p className="mt-4 text-xs text-zinc-500">{event._count.fixtures} fixtures · {event._count.seatZones} zones · {event._count.reservations} reservations · {event._count.accreditations} accreditations · {event._count.orders} orders</p>
             </Link>
           ))}

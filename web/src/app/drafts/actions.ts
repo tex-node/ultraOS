@@ -8,6 +8,16 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
 import { formDataToRecord } from "@/lib/club-validation";
+import {
+  confirmSecondaryDraftPick,
+  correctSecondaryDraftPick,
+  draftOperatingMode,
+  markSecondaryDraftPickRevealing,
+  reserveSecondaryDraftPick,
+  resetSecondaryDraftRehearsal,
+  revealSecondaryDraftPick,
+  shouldPersistOfficialAllocation,
+} from "@/lib/draft-events";
 import { prisma } from "@/lib/prisma";
 
 export type DraftState = { error?: string; fieldErrors?: Record<string, string[] | undefined> };
@@ -32,7 +42,7 @@ export async function setDraftStatus(draftId:string,status:DraftStatus){
 export async function makeDraftPick(draftId:string,_s:DraftState,fd:FormData):Promise<DraftState>{
   const session=await requirePermission("draft:manage");const p=pickSchema.safeParse(formDataToRecord(fd));if(!p.success)return{fieldErrors:p.error.flatten().fieldErrors};
   try{await prisma.$transaction(async tx=>{
-    const draft=await tx.draft.findUniqueOrThrow({where:{id:draftId}});
+    const {draft,operatingMode}=await draftOperatingMode(tx,draftId);
     if(draft.status!=="LIVE")throw new Error("DRAFT_NOT_LIVE");
     const [player,team]=await Promise.all([
       tx.player.findUnique({where:{id:p.data.playerId},select:{seasonId:true,status:true,seasonClubId:true,draftSelectionGroup:true}}),
@@ -42,9 +52,69 @@ export async function makeDraftPick(draftId:string,_s:DraftState,fd:FormData):Pr
     if(!player||player.seasonId!==draft.seasonId||!["DRAFT_ELIGIBLE","UNDRAFTED"].includes(player.status)||player.seasonClubId||player.draftSelectionGroup!==requiredGroup)throw new Error("PLAYER_INELIGIBLE");
     if(!team||team.seasonId!==draft.seasonId||team.divisionId!==draft.divisionId||team.status!=="ACTIVE")throw new Error("TEAM_INELIGIBLE");
     const pickNumber=draft.nextPickNumber;
-    await tx.draftPick.create({data:{draftId,round:p.data.round,pickNumber,seasonClubId:p.data.seasonClubId,playerId:p.data.playerId}});
-    await tx.player.update({where:{id:p.data.playerId},data:{seasonClubId:p.data.seasonClubId,status:PlayerStatus.DRAFTED,draftedAt:new Date()}});
+    const persistOfficially=shouldPersistOfficialAllocation(operatingMode);
+    await tx.draftPick.create({data:{createdById:session.user.id,confirmedAt:new Date(),draftId,operatingMode,pickNumber,playerId:p.data.playerId,round:p.data.round,seasonClubId:p.data.seasonClubId,status:"CONFIRMED"}});
+    if(persistOfficially){
+      await tx.player.update({where:{id:p.data.playerId},data:{seasonClubId:p.data.seasonClubId,status:PlayerStatus.DRAFTED,draftedAt:new Date()}});
+    }
     await tx.draft.update({where:{id:draftId},data:{currentRound:p.data.round,nextPickNumber:{increment:1}}});
-    await writeAuditLog(tx,{userId:session.user.id,action:"DRAFT_PICK_MADE",entityType:"DraftPick",entityId:`${draftId}:${pickNumber}`,details:{draftId,playerId:p.data.playerId,seasonClubId:p.data.seasonClubId,round:p.data.round,pickNumber}});
+    await writeAuditLog(tx,{userId:session.user.id,action:"DRAFT_PICK_MADE",entityType:"DraftPick",entityId:`${draftId}:${pickNumber}`,details:{draftId,playerId:p.data.playerId,seasonClubId:p.data.seasonClubId,round:p.data.round,pickNumber,operatingMode,persistedOfficially:persistOfficially}});
   });revalidatePath(`/drafts/${draftId}`);return{};}catch(e){if(e instanceof Error&&e.message==="DRAFT_NOT_LIVE")return{error:"Start the draft before making a pick."};if(e instanceof Error&&e.message==="PLAYER_INELIGIBLE")return{error:"Player is not available in this draft pool."};if(e instanceof Error&&e.message==="TEAM_INELIGIBLE")return{error:"SeasonClub is not eligible for this draft."};return failure(e);}
+}
+
+// Rehearsal-safe reserve → reveal → confirm workflow. Behaves exactly like
+// the Main Draft's control room actions: operatingMode is derived from the
+// Draft's linked DraftEvent (or defaults to REHEARSAL if unlinked), and only
+// a LIVE-governed confirm writes Player.seasonClubId.
+export type SecondaryDraftPickState = { error?: string };
+
+export async function reserveSecondaryDraftPickAction(draftId: string, _state: SecondaryDraftPickState, formData: FormData): Promise<SecondaryDraftPickState> {
+  const session = await requirePermission("draft-event:operate");
+  const p = pickSchema.safeParse(formDataToRecord(formData));
+  if (!p.success) return { error: "Select a player, SeasonClub, and round." };
+  try {
+    await reserveSecondaryDraftPick({ draftId, playerId: p.data.playerId, round: p.data.round, seasonClubId: p.data.seasonClubId, userId: session.user.id });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not reserve pick." };
+  }
+  revalidatePath(`/drafts/${draftId}`);
+  revalidatePath(`/drafts/${draftId}/display`);
+  return {};
+}
+
+export async function startSecondaryDraftSuspenseAction(draftId: string, pickId: string) {
+  const session = await requirePermission("draft-event:reveal");
+  await markSecondaryDraftPickRevealing(pickId, session.user.id);
+  revalidatePath(`/drafts/${draftId}`);
+  revalidatePath(`/drafts/${draftId}/display`);
+}
+
+export async function revealSecondaryDraftPickAction(draftId: string, pickId: string) {
+  const session = await requirePermission("draft-event:reveal");
+  await revealSecondaryDraftPick(pickId, session.user.id);
+  revalidatePath(`/drafts/${draftId}`);
+  revalidatePath(`/drafts/${draftId}/display`);
+}
+
+export async function confirmSecondaryDraftPickAction(draftId: string, pickId: string) {
+  const session = await requirePermission("draft-event:confirm");
+  await confirmSecondaryDraftPick(pickId, session.user.id);
+  revalidatePath(`/drafts/${draftId}`);
+  revalidatePath(`/drafts/${draftId}/display`);
+}
+
+export async function correctSecondaryDraftPickAction(draftId: string, pickId: string, formData: FormData) {
+  const session = await requirePermission("draft-event:correct");
+  const reason = String(formData.get("reason") ?? "").trim();
+  await correctSecondaryDraftPick(pickId, session.user.id, reason);
+  revalidatePath(`/drafts/${draftId}`);
+  revalidatePath(`/drafts/${draftId}/display`);
+}
+
+export async function resetSecondaryDraftRehearsalAction(draftId: string, formData: FormData) {
+  const session = await requirePermission("draft-event:correct");
+  const reason = String(formData.get("reason") ?? "").trim();
+  await resetSecondaryDraftRehearsal(draftId, session.user.id, reason);
+  revalidatePath(`/drafts/${draftId}`);
+  revalidatePath(`/drafts/${draftId}/display`);
 }

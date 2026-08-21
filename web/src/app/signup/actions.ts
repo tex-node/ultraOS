@@ -80,7 +80,7 @@ export async function createFanAccount(
     await signIn("credentials", {
       email: parsed.data.email,
       password: parsed.data.password,
-      redirectTo: parsed.data.callbackUrl || "/public/events",
+      redirectTo: parsed.data.callbackUrl || "/signup/support-club",
     });
     return {};
   } catch (error) {

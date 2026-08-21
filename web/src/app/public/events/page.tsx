@@ -1,5 +1,9 @@
 import Link from "next/link";
+import { formatLagosDateTime } from "@/lib/format-datetime";
 import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function PublicEventsPage() {
   const events = await prisma.event.findMany({
@@ -19,7 +23,7 @@ export default async function PublicEventsPage() {
         {events.map((event) => (
           <Link key={event.id} href={`/public/events/${event.id}`} className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-6">
             <div className="flex justify-between"><h2 className="text-xl font-semibold">{event.name}</h2><span className="text-xs text-emerald-300">{event.status}</span></div>
-            <p className="mt-3 text-zinc-400">{event.startTime.toLocaleString()} · {event.venue.name}</p>
+            <p className="mt-3 text-zinc-400">{formatLagosDateTime(event.startTime)} · {event.venue.name}</p>
             <p className="mt-5 text-sm text-zinc-500">{event.seatZones.length} seating zones · {event._count.reservations} reservations</p>
           </Link>
         ))}

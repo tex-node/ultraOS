@@ -1,0 +1,762 @@
+{
+  "summary": {
+    "players": {
+      "total": 58,
+      "byClassification": {
+        "PRESENT_NEEDS_APPLICATION_APPROVAL": 15,
+        "PRESENT_NEEDS_REJECTION_REVERSAL_DECISION": 3,
+        "PRESENT_NEEDS_ULTRA_ID": 35,
+        "IDENTITY_AMBIGUOUS_DUPLICATE_APPLICATIONS": 4,
+        "PRESENT_NEEDS_SEASON_ZERO_REGISTRATION": 1
+      }
+    },
+    "coaches": {
+      "total": 9,
+      "byClassification": {
+        "PRESENT_NEEDS_ULTRA_STAFF_ID": 8,
+        "MISSING_FROM_PRODUCTION": 1
+      }
+    }
+  },
+  "players": [
+    {
+      "stagingPlayerId": "cmsldl7kj005merkk8awac9sr",
+      "stagingAthleteId": "cmsldl7kd005lerkk1z4wlrja",
+      "name": "Gabriel Adedunmola",
+      "email": "gadedunmola@gmail.com",
+      "ultraAthleteId": "UBA-000050",
+      "draftGroup": "SECONDARY_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmrospww6009hfekkt0phcgdd, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl710001rerkk2km7f5j8",
+      "stagingAthleteId": "cmsldl70r001qerkk6h7an1fu",
+      "name": "Precious Aden",
+      "email": "gracieemmanuel8@gmail.com",
+      "ultraAthleteId": "UBA-000016",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_REJECTION_REVERSAL_DECISION",
+      "note": "single Application cmqzar8bz0037xbkky7izfe17 is REJECTED in production — approving it to match Season Zero selection is a policy reversal requiring explicit human sign-off, not an automatic action",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl79t003rerkk45w3t6pc",
+      "stagingAthleteId": "cmsldl79m003qerkknzsi4lmu",
+      "name": "Joseph Adeshina",
+      "email": "josephadeshina123@gmail.com",
+      "ultraAthleteId": "UBA-000034",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmrb2z2sr00weutkkg6r9s3h4 (schema predates ultraAthleteId column)",
+      "prodMatchCount": 5
+    },
+    {
+      "stagingPlayerId": "cmsldl6ya001berkkyms7foho",
+      "stagingAthleteId": "cmsldl6y1001aerkkj1kz9ikn",
+      "name": "Joshua Agbonkhese",
+      "email": "agbonkhesejoshua26@gmail.com",
+      "ultraAthleteId": "UBA-000012",
+      "draftGroup": "SECONDARY_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4u4e1300lnutkk8wpz5mzl (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7je005ferkk3lvxvzm5",
+      "stagingAthleteId": "cmsldl7j7005eerkkcsvi3j1t",
+      "name": "Oyekan Aishat",
+      "email": "eibukunoluwa894@gmail.com",
+      "ultraAthleteId": "UBA-000049",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmronk4xh008mfekk0rjzxlxv, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl6s7000berkkszvveft2",
+      "stagingAthleteId": "cmsldl6ru000aerkk6musivjm",
+      "name": "Kabir Amir",
+      "email": "amiradeiza079@gmail.com",
+      "ultraAthleteId": "UBA-000003",
+      "draftGroup": "SECONDARY_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4uhyf600ojutkko4ufefrz (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7a9003verkkf41s5khw",
+      "stagingAthleteId": "cmsldl7a4003uerkkzhi3my1f",
+      "name": "Hawau Ayomide",
+      "email": "oresanwoayomide118@gmail.com",
+      "ultraAthleteId": "UBA-000035",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmrb2ysz100wautkkxdrzg45k (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7gx004verkk82l5n5j8",
+      "stagingAthleteId": "cmsldl7go004uerkkxvqwzull",
+      "name": "Kehinde Bamidele",
+      "email": "bamokehinde03@gmail.com",
+      "ultraAthleteId": "UBA-000044",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmrnv0bow006rfekk4lgwj7sl, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl77t003berkkxrg24pj4",
+      "stagingAthleteId": "cmsldl77n003aerkk420mjwwr",
+      "name": "Raluchukwu Brian Joel Ndubisi",
+      "email": "ralbrian221@gmail.com",
+      "ultraAthleteId": "UBA-000030",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4q3jdx007zutkkrynt2dia (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7bg0043erkkuius066a",
+      "stagingAthleteId": "cmsldl7b80042erkkz004qdk0",
+      "name": "Mbah Chinyere",
+      "email": "bennychi12345@gmail.com",
+      "ultraAthleteId": "UBA-000037",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmrh5m3qt00y8utkkgn0xqz8t (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl74c002jerkk7hlkpoj1",
+      "stagingAthleteId": "cmsldl745002ierkk38kdapl5",
+      "name": "Ibrahim Damusa",
+      "email": "damusaibrahim73@gmail.com",
+      "ultraAthleteId": "UBA-000023",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4rr8sd00e9utkkd841ye2h (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl6x40013erkk1b6mz7gf",
+      "stagingAthleteId": "cmsldl6wt0012erkk803jbyhd",
+      "name": "OLAWUNI EMMANUEL",
+      "email": "heiselovemanie@gmail.com",
+      "ultraAthleteId": "UBA-000010",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_REJECTION_REVERSAL_DECISION",
+      "note": "single Application cmqy81ytm0076xykkv5jf9npe is REJECTED in production — approving it to match Season Zero selection is a policy reversal requiring explicit human sign-off, not an automatic action",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl757002rerkkca0ut3xj",
+      "stagingAthleteId": "cmsldl752002qerkke1p7itpj",
+      "name": "Elemchi Ebuka",
+      "email": "ebukaelemchi2@gmail.com",
+      "ultraAthleteId": "UBA-000025",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4r6jkc00coutkk7jitpqwo (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl71h001verkkki8ks7o3",
+      "stagingAthleteId": "cmsldl71c001uerkkge5eld56",
+      "name": "Victor Edet",
+      "email": "victorsamuel20046@gmail.com",
+      "ultraAthleteId": "UBA-000017",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_REJECTION_REVERSAL_DECISION",
+      "note": "single Application cmqzaup0g003hxbkkok4i813z is REJECTED in production — approving it to match Season Zero selection is a policy reversal requiring explicit human sign-off, not an automatic action",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl71z001zerkkh7yqynv1",
+      "stagingAthleteId": "cmsldl71s001yerkk9avp0t3d",
+      "name": "Favour Ejelonu",
+      "email": "favourejelonu1999@gmail.com",
+      "ultraAthleteId": "UBA-000018",
+      "draftGroup": "SECONDARY_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4suhfi00i4utkk0dy9566n (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7lo005uerkk964q3moy",
+      "stagingAthleteId": "cmsldl7le005terkkxsn1c0ut",
+      "name": "Oluwatobiloba Ekundayo",
+      "email": "ekundayooluwatobiloba4@gmail.com",
+      "ultraAthleteId": "UBA-000052",
+      "draftGroup": "SECONDARY_DRAFT",
+      "classification": "IDENTITY_AMBIGUOUS_DUPLICATE_APPLICATIONS",
+      "note": "3 Application rows (SUBMITTED) for this email — human must pick which to link",
+      "prodMatchCount": 3
+    },
+    {
+      "stagingPlayerId": "cmsldl78a003ferkke3h3yc8p",
+      "stagingAthleteId": "cmsldl783003eerkk1diyknj5",
+      "name": "Nwodo Elijah",
+      "email": "nwodoabuchi918@gmail.com",
+      "ultraAthleteId": "UBA-000031",
+      "draftGroup": "SECONDARY_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr7q228b00sxutkkpo1p5klp (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldxv1v000735kkz2dpwmqq",
+      "stagingAthleteId": "cmsldxv19000635kk4kvzjckz",
+      "name": "Akingbade Elizabeth",
+      "email": "eakingbade23@gmail.com",
+      "ultraAthleteId": "UBA-000058",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmrocxxsk007zfekkktdsqvzy, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7fg004nerkk9kh370e0",
+      "stagingAthleteId": "cmsldl7f6004merkk4ea6qzie",
+      "name": "Sanusi Emmanuel",
+      "email": "emmajaeq@gmail.com",
+      "ultraAthleteId": "UBA-000042",
+      "draftGroup": "SECONDARY_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmrnueo37006lfekkmcjg25x1, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl6ub000nerkk3koyx0xu",
+      "stagingAthleteId": "cmsldl6u2000merkkdnbmosxl",
+      "name": "Agomuo Faith",
+      "email": "agomuofaith54@gmail.com",
+      "ultraAthleteId": "UBA-000006",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4ubg4600n3utkk9sdhdl3g (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl6vo000verkkmtt2j6or",
+      "stagingAthleteId": "cmsldl6vb000uerkk9vdrla7h",
+      "name": "Samuel Gideon Gabriel",
+      "email": "samuelgideo2005@gmail.com",
+      "ultraAthleteId": "UBA-000008",
+      "draftGroup": "SECONDARY_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4u9aqj00mnutkkdc8r2a0h (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7oc006aerkkz7mhzzyc",
+      "stagingAthleteId": "cmsldl7o30069erkkvp0g7336",
+      "name": "Emmanuel Godday",
+      "email": "emmanuelgodday63@gmail.com",
+      "ultraAthleteId": "UBA-000056",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmrrnvkz700bvfekkbq833ddw, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7at003zerkkud7qhspt",
+      "stagingAthleteId": "cmsldl7aj003yerkkicgk9rtl",
+      "name": "Ekun God’sGrace",
+      "email": "ekunmyne5@gmail.com",
+      "ultraAthleteId": "UBA-000036",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmrh5mdt300ycutkk6yle2qmd (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl6sw000ferkkig8byxv4",
+      "stagingAthleteId": "cmsldl6sn000eerkk0ggtfabk",
+      "name": "Udoyibo Goodluck",
+      "email": "tinaberry08@gmail.com",
+      "ultraAthleteId": "UBA-000004",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4ubxki00nbutkk3l53lwml (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7dp004ferkkjw2hh9rr",
+      "stagingAthleteId": "cmsldl7dd004eerkk4okw6yft",
+      "name": "Kukoyi Hassan",
+      "email": "kukoyihassan205@gmail.com",
+      "ultraAthleteId": "UBA-000040",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmrki6wlf002pfekkh0270ory, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl6pt0003erkk3ohjbojr",
+      "stagingAthleteId": "cmsldl6ow0002erkkyzb5vc6d",
+      "name": "Michael Igbanesi",
+      "email": "eshimi090@gmail.com",
+      "ultraAthleteId": "UBA-000001",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4uk0xn00p2utkk4fzpuf6d (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl75u002verkkgcco8ep6",
+      "stagingAthleteId": "cmsldl75n002uerkk7hic8zkn",
+      "name": "Friday Jack sifon",
+      "email": "jackgaladima@gmail.com",
+      "ultraAthleteId": "UBA-000026",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4qxjfl00azutkk5jqfs427 (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7l0005qerkkbqxvn168",
+      "stagingAthleteId": "cmsldl7kt005perkkxl964aee",
+      "name": "Rachel John",
+      "email": "rayjohn4199@gmail.com",
+      "ultraAthleteId": "UBA-000051",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmrosq4ka009ifekk8kvpts5w, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7mx0062erkkn63m3h2e",
+      "stagingAthleteId": "cmsldl7ml0061erkkwobjegji",
+      "name": "Ifoghale Justine",
+      "email": "ifoghalejustine@gmail.com",
+      "ultraAthleteId": "UBA-000054",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "IDENTITY_AMBIGUOUS_DUPLICATE_APPLICATIONS",
+      "note": "2 Application rows (SUBMITTED) for this email — human must pick which to link",
+      "prodMatchCount": 2
+    },
+    {
+      "stagingPlayerId": "cmsldl7eo004jerkkhw3lg16j",
+      "stagingAthleteId": "cmsldl7ec004ierkkz3yaqwxf",
+      "name": "Samuel Kalejaiye",
+      "email": "samuel.olaoluwa539@gmail.com",
+      "ultraAthleteId": "UBA-000041",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "IDENTITY_AMBIGUOUS_DUPLICATE_APPLICATIONS",
+      "note": "6 Application rows (SUBMITTED) for this email — human must pick which to link",
+      "prodMatchCount": 6
+    },
+    {
+      "stagingPlayerId": "cmsldl6tk000jerkkywg6zmgf",
+      "stagingAthleteId": "cmsldl6ta000ierkk70gj34sb",
+      "name": "Wisdom Maxwell",
+      "email": "chidiebubemaxwell13@gmail.com",
+      "ultraAthleteId": "UBA-000005",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4ubqpk00n7utkkw9ixwj49 (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7iw005berkkr8f6re4x",
+      "stagingAthleteId": "cmsldl7iq005aerkk4nwmhd7a",
+      "name": "Biola Moses",
+      "email": "mosesbiola17@gmail.com",
+      "ultraAthleteId": "UBA-000048",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "IDENTITY_AMBIGUOUS_DUPLICATE_APPLICATIONS",
+      "note": "2 Application rows (SUBMITTED) for this email — human must pick which to link",
+      "prodMatchCount": 2
+    },
+    {
+      "stagingPlayerId": "cmsldl73f002berkkjxh5t2sl",
+      "stagingAthleteId": "cmsldl739002aerkkfqik67xt",
+      "name": "Bakare Mubarak abiodun",
+      "email": "bakaremubarakalabi@gmail.com",
+      "ultraAthleteId": "UBA-000021",
+      "draftGroup": "SECONDARY_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4rvjew00elutkkvr8c48j8 (schema predates ultraAthleteId column)",
+      "prodMatchCount": 2
+    },
+    {
+      "stagingPlayerId": "cmsldl78u003jerkki544x65q",
+      "stagingAthleteId": "cmsldl78o003ierkkbgvufb2b",
+      "name": "OPEMIPOSI OLUWAGBAMI",
+      "email": "opemiposinathaniel@gmail.com",
+      "ultraAthleteId": "UBA-000032",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr7pzt8i00s4utkk4egwejwf (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7if0057erkk72jm8j4b",
+      "stagingAthleteId": "cmsldl7i90056erkkk6xrsl8v",
+      "name": "Solomon Obalusi",
+      "email": "julianaobalusi@gmail.com",
+      "ultraAthleteId": "UBA-000047",
+      "draftGroup": "SECONDARY_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmro0yi6u007dfekk6b94qfy7, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7np0066erkked6wug90",
+      "stagingAthleteId": "cmsldl7ng0065erkkm1kraz5t",
+      "name": "Onyeka Ogbolu",
+      "email": "trumpxp9000@gmail.com",
+      "ultraAthleteId": "UBA-000055",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmrp8wo2x00ajfekk10vtu3hj, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7cu004berkktmd4wwu0",
+      "stagingAthleteId": "cmsldl7cj004aerkkz4d3l1v2",
+      "name": "Godwin Ojinnaka",
+      "email": "godwinojinnaka5@gmail.com",
+      "ultraAthleteId": "UBA-000039",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4qyud900beutkk67velkgk (schema predates ultraAthleteId column)",
+      "prodMatchCount": 3
+    },
+    {
+      "stagingPlayerId": "cmsldl72z0027erkkv7ea9klk",
+      "stagingAthleteId": "cmsldl72r0026erkkse25m5s8",
+      "name": "Adam Oladipupo",
+      "email": "oladipupoadam7@gmail.com",
+      "ultraAthleteId": "UBA-000020",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4s2vac00fbutkk7xfhukym (schema predates ultraAthleteId column)",
+      "prodMatchCount": 4
+    },
+    {
+      "stagingPlayerId": "cmsldl6zi001jerkkgjowqgt2",
+      "stagingAthleteId": "cmsldl6zb001ierkkyhn2vopn",
+      "name": "Ojajuni Oluwatobi",
+      "email": "ojajunioluwatobi15@gmail.com",
+      "ultraAthleteId": "UBA-000014",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4turuy00kputkkkzksz7t2 (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7mb005yerkkc2s4l1l6",
+      "stagingAthleteId": "cmsldl7m3005xerkkwsdse513",
+      "name": "Bakare Oreoluwa Olohitare",
+      "email": "oreoluwabakare23@gmail.com",
+      "ultraAthleteId": "UBA-000053",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmroto3dk009ufekknezo6bus, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl77a0037erkkg9oxyypx",
+      "stagingAthleteId": "cmsldl7740036erkkise5ernk",
+      "name": "AFOLABI PECULIAR",
+      "email": "peculiarafolabi4@gmail.com",
+      "ultraAthleteId": "UBA-000029",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4q5yzy0083utkk67te1fvs (schema predates ultraAthleteId column)",
+      "prodMatchCount": 2
+    },
+    {
+      "stagingPlayerId": "cmsldl73u002ferkk9atvhh6h",
+      "stagingAthleteId": "cmsldl73p002eerkkum3bba24",
+      "name": "Nwoke Saviour chimeremeze",
+      "email": "nwokesaviour39@gmail.com",
+      "ultraAthleteId": "UBA-000022",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_SEASON_ZERO_REGISTRATION",
+      "note": "single APPROVED Application cmr0mi3x70005z7kkvxijvka2",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl6z0001ferkk8erxuoaw",
+      "stagingAthleteId": "cmsldl6yq001eerkki0rmzgjj",
+      "name": "Offiong Sharon",
+      "email": "offiongsharon88@gmail.com",
+      "ultraAthleteId": "UBA-000013",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4tw9g400l1utkkrxqodg5j (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl6xp0017erkkg470xy48",
+      "stagingAthleteId": "cmsldl6xi0016erkkqoxa2tuv",
+      "name": "Aminat Shoboye",
+      "email": "aminatadeola35@gmail.com",
+      "ultraAthleteId": "UBA-000011",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4u53l000lrutkkmuh90d3k (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl6ux000rerkkylrb2nq7",
+      "stagingAthleteId": "cmsldl6up000qerkkur1yfiaf",
+      "name": "Tobi Stephen",
+      "email": "tobiegunjobi57@gmail.com",
+      "ultraAthleteId": "UBA-000007",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4uaxvg00mzutkkyrs4mzr3 (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl76s0033erkkigk3dl8c",
+      "stagingAthleteId": "cmsldl76m0032erkkyejw9hxx",
+      "name": "Odeyemi Sunday Collins",
+      "email": "odeyemicollins7533@gmail.com",
+      "ultraAthleteId": "UBA-000028",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4qn6dl009jutkkrab4kb3m (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl707001nerkkj3t2dzht",
+      "stagingAthleteId": "cmsldl6zx001merkk56pyrv9a",
+      "name": "Okechukwu Sylvia Chilezie",
+      "email": "ifunayasylvia831@gmail.com",
+      "ultraAthleteId": "UBA-000015",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4tmbld00jjutkkaw4xany6 (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7hh004zerkkab4qzeq1",
+      "stagingAthleteId": "cmsldl7h9004yerkkyvjl5w9a",
+      "name": "Bamidele Taiwo",
+      "email": "bamideletaiwo587@gmail.com",
+      "ultraAthleteId": "UBA-000045",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmrnvjoq1006xfekk1qugbmcn, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl6wb000zerkkcoc2g4es",
+      "stagingAthleteId": "cmsldl6w1000yerkk42yp23vj",
+      "name": "Mary Veronica",
+      "email": "maryveronica56e@gmail.com",
+      "ultraAthleteId": "UBA-000009",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4u7y9p00mbutkk3nbmtgnq (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl6re0007erkkg8ytvv8p",
+      "stagingAthleteId": "cmsldl6r30006erkkxpzz3y6m",
+      "name": "benjamin chibuzor",
+      "email": "benjaminchibuzor2007@gmail.com",
+      "ultraAthleteId": "UBA-000002",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4uj4zl00ouutkkhnsugswx (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7hz0053erkkwsia3k1c",
+      "stagingAthleteId": "cmsldl7hs0052erkkcoy8sv41",
+      "name": "Udechukwu chidera",
+      "email": "udechukwuchidera6@gmail.com",
+      "ultraAthleteId": "UBA-000046",
+      "draftGroup": "SECONDARY_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmro0e3y00078fekkbryo8j07, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7g7004rerkkbobzxoqa",
+      "stagingAthleteId": "cmsldl7fx004qerkkus35k5ed",
+      "name": "Okafor chidinma daniella",
+      "email": "daniellachidinma928@gmail.com",
+      "ultraAthleteId": "UBA-000043",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4rkjse00d6utkkfoys0wh1 (schema predates ultraAthleteId column)",
+      "prodMatchCount": 2
+    },
+    {
+      "stagingPlayerId": "cmsldl7p0006eerkk62ieecp7",
+      "stagingAthleteId": "cmsldl7oq006derkkddkq799s",
+      "name": "sanni george",
+      "email": "geoflashsanni@gmail.com",
+      "ultraAthleteId": "UBA-000057",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmrsaw97y00bzfekklnbbert0, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl79b003nerkkyf6wg35x",
+      "stagingAthleteId": "cmsldl794003merkkd6mwvjh6",
+      "name": "Nalan godswill",
+      "email": "nalangidswill25@gmail.com",
+      "ultraAthleteId": "UBA-000033",
+      "draftGroup": "SECONDARY_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr8c75ms00ttutkkkpypn5dy (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl74r002nerkk5xwchqg6",
+      "stagingAthleteId": "cmsldl74l002merkkvlp2u9m8",
+      "name": "Adebola kolade",
+      "email": "koladeadebola39@gmail.com",
+      "ultraAthleteId": "UBA-000024",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4rl9rf00deutkk3zgbhu2w (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl76b002zerkkoo858eu2",
+      "stagingAthleteId": "cmsldl765002yerkkfzyzyj2r",
+      "name": "Ohamara miracle",
+      "email": "ebukaohamara@gmail.com",
+      "ultraAthleteId": "UBA-000027",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4qsyb000a3utkkz96v4ukc (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl7c20047erkkca0mvn0f",
+      "stagingAthleteId": "cmsldl7bt0046erkkdkvo1gld",
+      "name": "Samuel olutosoye",
+      "email": "olutosoyesamuel@gmail.com",
+      "ultraAthleteId": "UBA-000038",
+      "draftGroup": "MAIN_DRAFT",
+      "classification": "PRESENT_NEEDS_APPLICATION_APPROVAL",
+      "note": "single Application cmri8f9ey000afekk7d9zzivb, status=SUBMITTED — needs approval to match the Season Zero selection",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingPlayerId": "cmsldl72f0023erkk7vvf9vts",
+      "stagingAthleteId": "cmsldl7290022erkkt94ivh4m",
+      "name": "Peter yahaya",
+      "email": "yahayapeter089@gmail.com",
+      "ultraAthleteId": "UBA-000019",
+      "draftGroup": "SECONDARY_DRAFT",
+      "classification": "PRESENT_NEEDS_ULTRA_ID",
+      "note": "existing prod Player cmr4saxsv00gjutkk41ij798y (schema predates ultraAthleteId column)",
+      "prodMatchCount": 1
+    }
+  ],
+  "coaches": [
+    {
+      "stagingStaffId": "cmsm71p1e000kt3kk2advm509",
+      "name": "Afunku Adeyinka",
+      "email": "skafunku23@gmail.com",
+      "ultraStaffId": "UBS-000008",
+      "division": "MEN",
+      "recordOrigin": "APPLICATION",
+      "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID",
+      "note": "existing prod Staff cmsm34n7w00046jkkm8brqy39 (schema predates ultraStaffId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingStaffId": "cmsm71ozf000bt3kkzs0k1uwx",
+      "name": "Bilqis Adekoya",
+      "email": "abot2forreal2003@gmail.com",
+      "ultraStaffId": "UBS-000005",
+      "division": "WOMEN",
+      "recordOrigin": "APPLICATION",
+      "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID",
+      "note": "existing prod Staff cmr1tyxgt002gutkkor5xxxuh (schema predates ultraStaffId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingStaffId": "cmsm71p05000et3kkbdnahjav",
+      "name": "Christopher Ndifon Ekpe",
+      "email": "cekpe73@gmail.com",
+      "ultraStaffId": "UBS-000006",
+      "division": "MEN",
+      "recordOrigin": "APPLICATION",
+      "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID",
+      "note": "existing prod Staff cmrh7mw160006c9kkuii9i0dk (schema predates ultraStaffId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingStaffId": "cmsm71p0v000ht3kk3gs23763",
+      "name": "Coach David Robinson",
+      "email": "davidrobinson2618@gmail.com",
+      "ultraStaffId": "UBS-000007",
+      "division": "MEN",
+      "recordOrigin": "APPLICATION",
+      "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID",
+      "note": "existing prod Staff cmrh7meov0003c9kknsj5pq1r (schema predates ultraStaffId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingStaffId": "cmsm6pkm20004rikkjnxr5zin",
+      "name": "Imomoh Kewwe Blessing",
+      "email": "imomohblessing@gmail.com",
+      "ultraStaffId": "UBS-000001",
+      "division": null,
+      "recordOrigin": "ADMIN_OFFLINE_INTAKE",
+      "classification": "MISSING_FROM_PRODUCTION",
+      "note": "offline intake — no Application expected",
+      "prodMatchCount": 0
+    },
+    {
+      "stagingStaffId": "cmsm71oxx0005t3kkunrdn9r8",
+      "name": "Mcspencer Akpan",
+      "email": "mcspencerakpan@gmail.com",
+      "ultraStaffId": "UBS-000003",
+      "division": "MEN",
+      "recordOrigin": "APPLICATION",
+      "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID",
+      "note": "existing prod Staff cmr0m6h8h0000z7kkfov56yoa (schema predates ultraStaffId column)",
+      "prodMatchCount": 2
+    },
+    {
+      "stagingStaffId": "cmsm71p1t000nt3kk2tmwp3fp",
+      "name": "Udeaja Chioma Priscilla",
+      "email": "mygodreigns14@gmail.com",
+      "ultraStaffId": "UBS-000009",
+      "division": "WOMEN",
+      "recordOrigin": "APPLICATION",
+      "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID",
+      "note": "existing prod Staff cmsm34grj00016jkkthefvewo (schema predates ultraStaffId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingStaffId": "cmsm71oyn0008t3kk1cqkn9la",
+      "name": "adetokunbo olaosebikan Ijomah",
+      "email": "tjtoksy@gmail.com",
+      "ultraStaffId": "UBS-000004",
+      "division": "WOMEN",
+      "recordOrigin": "APPLICATION",
+      "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID",
+      "note": "existing prod Staff cmr0nqyoz0001utkkchz8uj8p (schema predates ultraStaffId column)",
+      "prodMatchCount": 1
+    },
+    {
+      "stagingStaffId": "cmsm71owp0002t3kkx9fbax48",
+      "name": "olusegun imah",
+      "email": "sportnations365@gmail.com",
+      "ultraStaffId": "UBS-000002",
+      "division": "MEN",
+      "recordOrigin": "APPLICATION",
+      "classification": "PRESENT_NEEDS_ULTRA_STAFF_ID",
+      "note": "existing prod Staff cmqurqfhh0001h3kkc6gfa79i (schema predates ultraStaffId column)",
+      "prodMatchCount": 2
+    }
+  ]
+}

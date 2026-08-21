@@ -1,0 +1,10 @@
+stagingStaffId,name,email,ultraStaffId,division,recordOrigin,classification,note,prodMatchCount
+"cmsm71p1e000kt3kk2advm509","Afunku Adeyinka","skafunku23@gmail.com","UBS-000008","MEN","APPLICATION","PRESENT_NEEDS_ULTRA_STAFF_ID","existing prod Staff cmsm34n7w00046jkkm8brqy39 (schema predates ultraStaffId column)","1"
+"cmsm71ozf000bt3kkzs0k1uwx","Bilqis Adekoya","abot2forreal2003@gmail.com","UBS-000005","WOMEN","APPLICATION","PRESENT_NEEDS_ULTRA_STAFF_ID","existing prod Staff cmr1tyxgt002gutkkor5xxxuh (schema predates ultraStaffId column)","1"
+"cmsm71p05000et3kkbdnahjav","Christopher Ndifon Ekpe","cekpe73@gmail.com","UBS-000006","MEN","APPLICATION","PRESENT_NEEDS_ULTRA_STAFF_ID","existing prod Staff cmrh7mw160006c9kkuii9i0dk (schema predates ultraStaffId column)","1"
+"cmsm71p0v000ht3kk3gs23763","Coach David Robinson","davidrobinson2618@gmail.com","UBS-000007","MEN","APPLICATION","PRESENT_NEEDS_ULTRA_STAFF_ID","existing prod Staff cmrh7meov0003c9kknsj5pq1r (schema predates ultraStaffId column)","1"
+"cmsm6pkm20004rikkjnxr5zin","Imomoh Kewwe Blessing","imomohblessing@gmail.com","UBS-000001","","ADMIN_OFFLINE_INTAKE","MISSING_FROM_PRODUCTION","offline intake — no Application expected","0"
+"cmsm71oxx0005t3kkunrdn9r8","Mcspencer Akpan","mcspencerakpan@gmail.com","UBS-000003","MEN","APPLICATION","PRESENT_NEEDS_ULTRA_STAFF_ID","existing prod Staff cmr0m6h8h0000z7kkfov56yoa (schema predates ultraStaffId column)","2"
+"cmsm71p1t000nt3kk2tmwp3fp","Udeaja Chioma Priscilla","mygodreigns14@gmail.com","UBS-000009","WOMEN","APPLICATION","PRESENT_NEEDS_ULTRA_STAFF_ID","existing prod Staff cmsm34grj00016jkkthefvewo (schema predates ultraStaffId column)","1"
+"cmsm71oyn0008t3kk1cqkn9la","adetokunbo olaosebikan Ijomah","tjtoksy@gmail.com","UBS-000004","WOMEN","APPLICATION","PRESENT_NEEDS_ULTRA_STAFF_ID","existing prod Staff cmr0nqyoz0001utkkchz8uj8p (schema predates ultraStaffId column)","1"
+"cmsm71owp0002t3kkx9fbax48","olusegun imah","sportnations365@gmail.com","UBS-000002","MEN","APPLICATION","PRESENT_NEEDS_ULTRA_STAFF_ID","existing prod Staff cmqurqfhh0001h3kkc6gfa79i (schema predates ultraStaffId column)","2"

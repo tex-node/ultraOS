@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import {
   addFixtureOfficial,
@@ -7,6 +8,7 @@ import {
   removeFixtureOfficial,
 } from "../actions";
 import { requireSession } from "@/lib/authorization";
+import { formatLagosDateTime } from "@/lib/format-datetime";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
@@ -15,8 +17,10 @@ export default async function FixturePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireSession();
   const { id } = await params;
+  const rawSession = await auth();
+  if (!rawSession?.user) redirect(`/login?callbackUrl=/fixtures/${id}`);
+  const session = await requireSession();
   const canManage = hasPermission(session.user.roles, "fixture:manage");
   const fixture = await prisma.fixture.findUnique({
     where: { id },
@@ -46,7 +50,7 @@ export default async function FixturePage({
             <p className="text-zinc-500">VS</p>
             <div><p className="text-2xl font-semibold">{fixture.awaySeasonClub.club.name}</p><p className="text-xs text-zinc-500">Away SeasonClub</p></div>
           </div>
-          <p className="mt-8 text-zinc-400">{fixture.scheduledAt.toLocaleString()} · {fixture.venue.name}</p>
+          <p className="mt-8 text-zinc-400">{formatLagosDateTime(fixture.scheduledAt)} · {fixture.venue.name}</p>
           <p className="mt-2">{fixture.status}{fixture.game ? ` · Game ${fixture.game.status}` : ""}</p>
           {canManage ? (
             <div className="mt-6 flex justify-center gap-2">

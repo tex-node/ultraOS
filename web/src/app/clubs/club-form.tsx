@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import type { ClubStatus } from "@/generated/prisma/enums";
+import type { ClubBrandingStatus, ClubStatus } from "@/generated/prisma/enums";
 import type { ClubFormState } from "@/lib/club-validation";
 
 type ClubAction = (
@@ -17,8 +17,14 @@ type ClubFormProps = {
     name: string;
     shortName: string;
     logoUrl: string | null;
-    primaryColor: string;
-    secondaryColor: string;
+    primaryColor: string | null;
+    secondaryColor: string | null;
+    brandingStatus: ClubBrandingStatus;
+    motto: string | null;
+    publicBio: string | null;
+    officialSlogan: string | null;
+    crowdChant: string | null;
+    identityKeywords: string[];
     foundedYear: number | null;
     status: ClubStatus;
     websiteUrl: string | null;
@@ -65,6 +71,16 @@ export function ClubForm({ action, sports, club, submitLabel }: ClubFormProps) {
           </select>
         </label>
         <label className="text-sm font-medium text-zinc-300">
+          Branding readiness
+          <select className={inputClass} name="brandingStatus" defaultValue={club?.brandingStatus ?? "BRANDING_INCOMPLETE"}>
+            <option value="IDENTITY_READY">Identity ready</option>
+            <option value="BRANDING_INCOMPLETE">Branding incomplete</option>
+            <option value="READY">Ready</option>
+          </select>
+          <p className="mt-1 text-xs text-zinc-500">Use READY only when colours, logo, and public-safe branding have been verified.</p>
+          <FieldError errors={state.fieldErrors?.brandingStatus} />
+        </label>
+        <label className="text-sm font-medium text-zinc-300">
           Club name
           <input className={inputClass} name="name" defaultValue={club?.name} required />
           <FieldError errors={state.fieldErrors?.name} />
@@ -85,10 +101,10 @@ export function ClubForm({ action, sports, club, submitLabel }: ClubFormProps) {
           <input
             className={inputClass}
             name="primaryColor"
-            type="color"
-            defaultValue={club?.primaryColor ?? "#16F2B3"}
-            required
+            placeholder="#16F2B3"
+            defaultValue={club?.primaryColor ?? ""}
           />
+          <p className="mt-1 text-xs text-zinc-500">Optional. Leave blank until official colours are approved.</p>
           <FieldError errors={state.fieldErrors?.primaryColor} />
         </label>
         <label className="text-sm font-medium text-zinc-300">
@@ -96,10 +112,10 @@ export function ClubForm({ action, sports, club, submitLabel }: ClubFormProps) {
           <input
             className={inputClass}
             name="secondaryColor"
-            type="color"
-            defaultValue={club?.secondaryColor ?? "#071713"}
-            required
+            placeholder="#071713"
+            defaultValue={club?.secondaryColor ?? ""}
           />
+          <p className="mt-1 text-xs text-zinc-500">Optional. Leave blank until official colours are approved.</p>
           <FieldError errors={state.fieldErrors?.secondaryColor} />
         </label>
         <label className="text-sm font-medium text-zinc-300">
@@ -118,6 +134,59 @@ export function ClubForm({ action, sports, club, submitLabel }: ClubFormProps) {
           Logo URL
           <input className={inputClass} name="logoUrl" type="url" defaultValue={club?.logoUrl ?? ""} />
           <FieldError errors={state.fieldErrors?.logoUrl} />
+        </label>
+        <label className="text-sm font-medium text-zinc-300 md:col-span-2">
+          Motto
+          <input
+            className={inputClass}
+            name="motto"
+            defaultValue={club?.motto ?? ""}
+            placeholder="Optional legacy/public motto. Do not use the league line here."
+          />
+          <FieldError errors={state.fieldErrors?.motto} />
+        </label>
+        <label className="text-sm font-medium text-zinc-300 md:col-span-2">
+          Official slogan
+          <input
+            className={inputClass}
+            name="officialSlogan"
+            defaultValue={club?.officialSlogan ?? ""}
+            placeholder="Exact official club slogan, e.g. RISE ABOVE."
+          />
+          <p className="mt-1 text-xs text-zinc-500">Preserve punctuation and wording exactly as approved.</p>
+          <FieldError errors={state.fieldErrors?.officialSlogan} />
+        </label>
+        <label className="text-sm font-medium text-zinc-300 md:col-span-2">
+          Crowd chant
+          <input
+            className={inputClass}
+            name="crowdChant"
+            defaultValue={club?.crowdChant ?? ""}
+            placeholder="Exact official crowd response, e.g. TO THE TOP!"
+          />
+          <FieldError errors={state.fieldErrors?.crowdChant} />
+        </label>
+        <label className="text-sm font-medium text-zinc-300 md:col-span-2">
+          Identity keywords
+          <input
+            className={inputClass}
+            name="identityKeywords"
+            defaultValue={club?.identityKeywords.join(" / ") ?? ""}
+            placeholder="Ambition / dominance / elevation"
+          />
+          <p className="mt-1 text-xs text-zinc-500">Separate keywords with commas, slashes, pipes, or bullets.</p>
+          <FieldError errors={state.fieldErrors?.identityKeywords} />
+        </label>
+        <label className="text-sm font-medium text-zinc-300 md:col-span-2">
+          Public biography
+          <textarea
+            className={inputClass}
+            name="publicBio"
+            defaultValue={club?.publicBio ?? ""}
+            placeholder="Optional public club profile. Do not include private operational notes."
+            rows={5}
+          />
+          <FieldError errors={state.fieldErrors?.publicBio} />
         </label>
         <label className="text-sm font-medium text-zinc-300 md:col-span-2">
           Website URL

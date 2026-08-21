@@ -1,0 +1,196 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { OperationsShell } from "@/app/components/operations-shell";
+import { cancelImport, confirmImport, updateImportRowResolution } from "@/app/imports/actions";
+import {
+  ImportResolutionAction,
+  ImportRowStatus,
+  ImportStatus,
+} from "@/generated/prisma/enums";
+import { hasPermission } from "@/lib/permissions";
+import { prisma } from "@/lib/prisma";
+
+export default async function ImportJobPage({ params }: { params: Promise<{ importJobId: string }> }) {
+  const session = await auth();
+  const { importJobId } = await params;
+  if (!session?.user) redirect(`/login?callbackUrl=/imports/${importJobId}`);
+  if (!hasPermission(session.user.roles, "data:import")) {
+    return (
+      <OperationsShell user={session.user}>
+        <main className="mx-auto max-w-3xl px-6 py-16">
+          <h1 className="text-3xl font-semibold">Access required</h1>
+          <p className="mt-3 text-sm text-zinc-400">Your account cannot access data imports.</p>
+        </main>
+      </OperationsShell>
+    );
+  }
+
+  const job = await prisma.importJob.findUnique({
+    include: {
+      rows: { orderBy: { rowNumber: "asc" } },
+      uploadedBy: { select: { email: true, name: true } },
+    },
+    where: { id: importJobId },
+  });
+  if (!job) notFound();
+
+  const unresolvedErrors = job.rows.filter(
+    (row) =>
+      row.status === ImportRowStatus.ERROR &&
+      row.resolutionAction !== ImportResolutionAction.SKIP &&
+      row.resolutionAction !== ImportResolutionAction.REJECT,
+  ).length;
+  const terminalStatuses: ImportStatus[] = [
+    ImportStatus.COMPLETED,
+    ImportStatus.PARTIALLY_COMPLETED,
+    ImportStatus.FAILED,
+    ImportStatus.CANCELLED,
+    ImportStatus.PROCESSING,
+  ];
+  const canConfirm =
+    unresolvedErrors === 0 &&
+    !terminalStatuses.includes(job.status);
+
+  return (
+    <OperationsShell user={session.user}>
+      <main className="mx-auto max-w-7xl px-6 py-10">
+        <Link className="text-sm text-emerald-400 hover:text-emerald-300" href="/imports">
+          Back to imports
+        </Link>
+        <div className="mt-8 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[.2em] text-emerald-400">{job.type} import</p>
+            <h1 className="mt-2 text-3xl font-semibold">{job.fileName}</h1>
+            <p className="mt-2 text-sm text-zinc-400">
+              Uploaded by {job.uploadedBy.name} ({job.uploadedBy.email}) on {job.createdAt.toLocaleString()}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link className="rounded-xl border border-white/10 px-4 py-3 text-sm text-zinc-200" href={`/imports/${job.id}/report`}>
+              Download report
+            </Link>
+            <form action={cancelImport}>
+              <input name="importJobId" type="hidden" value={job.id} />
+              <button className="rounded-xl border border-white/10 px-4 py-3 text-sm text-zinc-300">Cancel</button>
+            </form>
+            <form action={confirmImport}>
+              <input name="importJobId" type="hidden" value={job.id} />
+              <button
+                className="rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={!canConfirm}
+              >
+                Confirm import
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <section className="mt-8 grid gap-4 md:grid-cols-6">
+          <Metric label="Total" value={job.totalRows} />
+          <Metric label="Valid" value={job.validRows} />
+          <Metric label="Warnings" value={job.warningRows} />
+          <Metric label="Errors" value={job.errorRows} />
+          <Metric label="Imported" value={job.importedRows} />
+          <Metric label="Failed" value={job.failedRows} />
+        </section>
+        {unresolvedErrors > 0 ? (
+          <p className="mt-4 rounded-xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-200">
+            {unresolvedErrors} error row{unresolvedErrors === 1 ? "" : "s"} must be skipped,
+            rejected, or resolved before confirmation.
+          </p>
+        ) : null}
+
+        <section className="mt-8 grid gap-4">
+          {job.rows.map((row) => (
+            <article className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5" key={row.id}>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-wider text-zinc-300">
+                      Row {row.rowNumber}
+                    </span>
+                    <span className={statusClass(row.status)}>{row.status.replaceAll("_", " ")}</span>
+                    {row.resolutionAction ? (
+                      <span className="text-xs text-zinc-500">Action: {row.resolutionAction}</span>
+                    ) : null}
+                  </div>
+                  <p className="mt-3 text-sm text-zinc-400">
+                    Match: {row.matchedEntityType ?? "none"} {row.matchedEntityId ?? ""}
+                  </p>
+                  {row.importedEntityId ? (
+                    <p className="mt-1 text-sm text-emerald-300">
+                      Imported {row.importedEntityType}: {row.importedEntityId}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <JsonCard title="Normalized data" value={row.normalizedData} />
+                <JsonCard title="Warnings" value={row.warnings} />
+                <JsonCard title="Errors" value={row.errors} />
+              </div>
+              <form action={updateImportRowResolution} className="mt-4 grid gap-3 rounded-xl border border-white/[.06] bg-black/20 p-4 md:grid-cols-[1fr_1fr_2fr_auto]">
+                <input name="rowId" type="hidden" value={row.id} />
+                <select
+                  className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm"
+                  defaultValue={row.resolutionAction ?? ""}
+                  name="resolutionAction"
+                  required
+                >
+                  <option value="">Select action</option>
+                  {Object.values(ImportResolutionAction).map((action) => (
+                    <option key={action} value={action}>{action.replaceAll("_", " ")}</option>
+                  ))}
+                </select>
+                <input
+                  className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm"
+                  defaultValue={row.matchedEntityId ?? ""}
+                  name="matchedEntityId"
+                  placeholder="Matched entity ID when linking"
+                />
+                <input
+                  className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm"
+                  name="resolutionNote"
+                  placeholder="Resolution note"
+                />
+                <button className="rounded-xl border border-white/10 px-4 py-3 text-sm font-semibold text-zinc-200 hover:border-emerald-400">
+                  Save resolution
+                </button>
+              </form>
+            </article>
+          ))}
+        </section>
+      </main>
+    </OperationsShell>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+      <p className="text-xs uppercase tracking-[.18em] text-zinc-500">{label}</p>
+      <p className="mt-3 text-3xl font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function JsonCard({ title, value }: { title: string; value: unknown }) {
+  return (
+    <div className="rounded-xl border border-white/[.06] bg-black/20 p-3">
+      <p className="text-xs uppercase tracking-[.18em] text-zinc-500">{title}</p>
+      <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words text-xs text-zinc-300">
+        {JSON.stringify(value ?? null, null, 2)}
+      </pre>
+    </div>
+  );
+}
+
+function statusClass(status: ImportRowStatus) {
+  if (status === ImportRowStatus.ERROR || status === ImportRowStatus.FAILED) {
+    return "text-xs text-rose-300";
+  }
+  if (status === ImportRowStatus.WARNING) return "text-xs text-amber-300";
+  if (status === ImportRowStatus.IMPORTED) return "text-xs text-emerald-300";
+  return "text-xs text-zinc-400";
+}

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { requireSession } from "@/lib/authorization";
 import { calculateStandings } from "@/lib/standings";
@@ -8,6 +10,8 @@ const MINIMUM_ROSTER_SIZE = 5;
 const FIXTURE_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 export default async function DashboardPage() {
+  const rawSession = await auth();
+  if (!rawSession?.user) redirect("/login?callbackUrl=/dashboard");
   const session = await requireSession();
   const activeSeason = await prisma.season.findFirst({
     where: { status: "ACTIVE" },

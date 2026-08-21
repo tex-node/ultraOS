@@ -1,10 +1,14 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { archiveClub, withdrawSeasonClub } from "@/app/clubs/actions";
+import { uploadClubLogo } from "@/app/media/actions";
+import { auth } from "@/auth";
 import { requireSession } from "@/lib/authorization";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+
+const FALLBACK_PRIMARY_COLOR = "#16F2B3";
 
 export default async function ClubDetailPage({
   params,
@@ -13,9 +17,12 @@ export default async function ClubDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
+  const { id } = await params;
+  const rawSession = await auth();
+  if (!rawSession?.user) redirect(`/login?callbackUrl=/clubs/${id}`);
   const session = await requireSession();
   const canManage = hasPermission(session.user.roles, "club:manage");
-  const { id } = await params;
+  const canUploadMedia = hasPermission(session.user.roles, "media:upload");
   const query = await searchParams;
   const club = await prisma.club.findUnique({
     where: { id },
@@ -50,6 +57,8 @@ export default async function ClubDetailPage({
     notFound();
   }
 
+  const displayPrimaryColor = club.primaryColor ?? FALLBACK_PRIMARY_COLOR;
+
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-6xl px-6 py-10">
@@ -59,22 +68,26 @@ export default async function ClubDetailPage({
         <section
           className="relative mt-6 overflow-hidden rounded-2xl border p-6"
           style={{
-            borderColor: `${club.primaryColor}35`,
-            background: `linear-gradient(135deg, ${club.primaryColor}12, #0b100e 45%)`,
+            borderColor: `${displayPrimaryColor}35`,
+            background: `linear-gradient(135deg, ${displayPrimaryColor}12, #0b100e 45%)`,
           }}
         >
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div className="flex items-center gap-4">
-              <div
-                className="grid h-20 w-20 place-items-center rounded-2xl border text-lg font-black"
-                style={{
-                  color: club.primaryColor,
-                  borderColor: `${club.primaryColor}55`,
-                  background: `${club.primaryColor}15`,
-                }}
-              >
-                {club.shortName}
-              </div>
+              {club.logoUrl ? (
+                <img alt={`${club.name} logo`} className="h-20 w-20 rounded-2xl border object-contain p-2" src={club.logoUrl} style={{ borderColor: `${displayPrimaryColor}55`, background: `${displayPrimaryColor}15` }} />
+              ) : (
+                <div
+                  className="grid h-20 w-20 place-items-center rounded-2xl border text-lg font-black"
+                  style={{
+                    color: displayPrimaryColor,
+                    borderColor: `${displayPrimaryColor}55`,
+                    background: `${displayPrimaryColor}15`,
+                  }}
+                >
+                  {club.shortName}
+                </div>
+              )}
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-emerald-400">
                   Permanent club identity
@@ -84,6 +97,9 @@ export default async function ClubDetailPage({
                   {club.sport.name} · {club.status}
                   {club.foundedYear ? ` · Founded ${club.foundedYear}` : ""}
                 </p>
+                {club.officialSlogan ? <p className="mt-3 text-xl font-semibold" style={{ color: displayPrimaryColor }}>{club.officialSlogan}</p> : null}
+                {club.crowdChant ? <p className="mt-1 text-sm text-zinc-300">Crowd chant: <b>{club.crowdChant}</b></p> : null}
+                {club.identityKeywords.length ? <p className="mt-1 text-sm text-zinc-400">Identity: {club.identityKeywords.join(" / ")}</p> : null}
               </div>
             </div>
             {canManage ? (
@@ -146,6 +162,18 @@ export default async function ClubDetailPage({
           </p>
         ) : null}
 
+        {canUploadMedia ? (
+          <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-6">
+            <h2 className="text-lg font-semibold">Club logo</h2>
+            <p className="mt-1 text-sm text-zinc-400">Upload a JPG, PNG, or WebP logo. The media service validates image content before storage and updates the permanent Club identity.</p>
+            <form action={uploadClubLogo.bind(null, club.id)} className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]" encType="multipart/form-data">
+              <input accept="image/jpeg,image/png,image/webp" className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" name="file" required type="file" />
+              <input className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" name="altText" placeholder="Alt text, e.g. club logo" />
+              <button className="rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950">Upload logo</button>
+            </form>
+          </section>
+        ) : null}
+
         <section className="mt-8">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">
@@ -171,6 +199,12 @@ export default async function ClubDetailPage({
                   </div>
                   {canManage ? (
                     <div className="flex gap-2">
+                      <Link
+                        className="rounded-lg border border-white/10 px-3 py-2 text-xs hover:border-white/20"
+                        href={`/season-clubs/${registration.id}/roster`}
+                      >
+                        View roster
+                      </Link>
                       <Link
                         className="rounded-lg border border-white/10 px-3 py-2 text-xs hover:border-white/20"
                         href={`/season-clubs/${registration.id}/edit`}
