@@ -3650,3 +3650,69 @@ STAGE_5_5C: NOT_STARTED
   status/drift reviewed), then post-migration validation, then an approved
   all-female event/form target for the seed. Do not apply any migration or create
   any event/form without explicit approval.
+
+## 2026-09-12 - Staging migration applied and DB-backed registration conformance
+
+**Objective**
+
+- Apply the five approved R1/R2 migrations to staging and run DB-backed
+  registration verification, without touching production.
+
+**Completed**
+
+- Fresh verified staging backup:
+  `/var/backups/ultraleagueos-staging/event_registration_premigration_20260912T171050Z.dump`
+  (839874 bytes, SHA-256
+  `612cc5df0cd9f16cefe58d9cf7ea25a6bf1dde3335881b07f7ccf461778a8693`, 1253 TOC
+  entries).
+- `prisma migrate deploy` (privileged `ultraos`, target `ultraos_staging`)
+  applied `20260912120000`, `20260912120100`, `20260912130000`,
+  `20260912130100`, `20260912140000`; `migrate status` = "Database schema is up
+  to date!". The residual rolled-back Stage 4a row did not block.
+- Post-migration DB checks: 5 registration tables; `Event.slug` nullable text;
+  `RegistrationSubmissionStatus` with `DRAFT` before `PENDING`; RLS
+  enabled+forced (1 policy each); runtime-role CRUD grants; row counts unchanged
+  (Organization=1, Event=1, Athlete=219, Player=219).
+- Added a DB-backed adapter contract test
+  (`src/lib/registration/adapters/db-contract.test.ts`, gated by
+  `REGISTRATION_HOST_DB=1`) that creates and cleans up a disposable
+  organization/event/form. `REGISTRATION_HOST_DB=1 npm test`: **496/496 pass, 0
+  fail, 0 skipped**; residue 0.
+- **Two DB-only defects found by that test and fixed in `service.ts`:** (1) the
+  nested participant create passed `athleteId`, which is invalid on the checked
+  create variant (every real submission would have failed); (2) the nested
+  `organization: { connect }` path failed the tenant RLS `WITH CHECK`. Replaced
+  with explicit unchecked creates (explicit `organizationId` + `submissionId`) and
+  separate membership creates.
+
+**Decisions**
+
+- Prisma nested relation connects are avoided on RLS-protected tenant tables;
+  participants/memberships are written with explicit `organizationId`.
+- Cross-team duplicate detection counts only ACTIVE registrations (`DRAFT`,
+  `WITHDRAWN`, `REJECTED` do not block resubmission) — locked as a regression
+  requirement (commit `6528609`).
+
+**Verification**
+
+- `prisma validate`, `prisma generate`, `tsc --noEmit` PASS; lint 0 errors / 6
+  pre-existing warnings; standard `npm test` 496 with 2 skipped (DB-gated);
+  `REGISTRATION_HOST_DB=1 npm test` 496/496 PASS; production build PASS.
+- Staging residue after the DB contract: 0 disposable orgs; counts unchanged.
+
+**Known issues**
+
+- Registration seed **not run** — no approved all-female event/form target exists
+  (staging's only event is the basketball Season Zero launch).
+- Public/admin **route integration not done**; the staging web service runs an
+  older release that does not contain the R2 routes.
+- Route end-to-end HTTP verification therefore still pending a staging deploy.
+- Residual rolled-back `20260823070000_phase1_stage4a_row_level_security` row
+  remains in `_prisma_migrations` but is non-blocking.
+- Production remains untouched and unmigrated.
+
+**Next step**
+
+- Approve an all-female event/form target; run the seed (dry-run then apply);
+  complete end-to-end staging verification; only then switch public/admin routes
+  to `getRegistrationHost()` and retire the in-memory adapter to test-only use.
