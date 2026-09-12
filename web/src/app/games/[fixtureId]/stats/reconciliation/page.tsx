@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { requirePermissionOrRedirect } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import {
   reconcileLine,
   reconcilePlayers,
@@ -37,14 +37,15 @@ export default async function ReconciliationPage({
   const session = await requirePermissionOrRedirect("result:confirm", `/games/${fixtureId}/stats/reconciliation`);
   const query = await searchParams;
 
-  const fixture = await prisma.fixture.findUnique({
+  if (!session.user.organizationId) notFound();
+  const fixture = await withOrganizationContext(session.user.organizationId, (tx) => tx.fixture.findUnique({
     where: { id: fixtureId },
     include: {
       homeSeasonClub: { include: { club: true, players: { include: { athlete: true } } } },
       awaySeasonClub: { include: { club: true, players: { include: { athlete: true } } } },
       game: { include: { playerStats: true, teamStats: true } },
     },
-  });
+  }));
   if (!fixture) notFound();
   const game = fixture.game;
   if (!game) {

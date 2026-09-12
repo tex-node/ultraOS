@@ -3,9 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { DraftEventOperatingMode, DraftSelectionGroup, DraftTier } from "@/generated/prisma/enums";
-import { requireSession } from "@/lib/authorization";
+import { MissingOrganizationContextError, requireSession } from "@/lib/authorization";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import {
   confirmSecondaryDraftPickAction,
   correctSecondaryDraftPickAction,
@@ -26,21 +26,50 @@ export default async function DraftRoom({ params }: { params: Promise<{ id: stri
   const rawSession = await auth();
   if (!rawSession?.user) redirect(`/login?callbackUrl=/drafts/${id}`);
   const session = await requireSession();
+  if (!session.user.organizationId) {
+    throw new MissingOrganizationContextError();
+  }
   const canManageDraft = hasPermission(session.user.roles, "draft:manage");
-  const draft = await prisma.draft.findUnique({
-    include: {
-      division: true,
-      draftEvent: true,
-      picks: {
-        include: {
-          player: { include: { athlete: true } },
-          seasonClub: { include: { club: true } },
+  const { draft, pool, teams } = await withOrganizationContext(session.user.organizationId, async (tx) => {
+    const draft = await tx.draft.findUnique({
+      include: {
+        division: true,
+        draftEvent: true,
+        picks: {
+          include: {
+            player: { include: { athlete: true } },
+            seasonClub: { include: { club: true } },
+          },
+          orderBy: { pickNumber: "asc" },
         },
-        orderBy: { pickNumber: "asc" },
+        season: true,
       },
-      season: true,
-    },
-    where: { id },
+      where: { id },
+    });
+    if (!draft) return { draft: null, pool: [], teams: [] };
+
+    const poolGroup =
+      draft.tier === DraftTier.MAIN ? DraftSelectionGroup.MAIN_DRAFT : DraftSelectionGroup.SECONDARY_DRAFT;
+
+    const [pool, teams] = await Promise.all([
+      tx.player.findMany({
+        include: { athlete: true },
+        orderBy: { athlete: { lastName: "asc" } },
+        where: {
+          draftPicks: { none: { draftId: draft.id } },
+          draftSelectionGroup: poolGroup,
+          seasonClubId: null,
+          seasonId: draft.seasonId,
+          status: { in: ["DRAFT_ELIGIBLE", "UNDRAFTED"] },
+        },
+      }),
+      tx.seasonClub.findMany({
+        include: { club: true, _count: { select: { players: true } } },
+        orderBy: { club: { name: "asc" } },
+        where: { divisionId: draft.divisionId, seasonId: draft.seasonId, status: "ACTIVE" },
+      }),
+    ]);
+    return { draft, pool, teams };
   });
   if (!draft) notFound();
 
@@ -50,25 +79,6 @@ export default async function DraftRoom({ params }: { params: Promise<{ id: stri
 
   const poolGroup =
     draft.tier === DraftTier.MAIN ? DraftSelectionGroup.MAIN_DRAFT : DraftSelectionGroup.SECONDARY_DRAFT;
-
-  const [pool, teams] = await Promise.all([
-    prisma.player.findMany({
-      include: { athlete: true },
-      orderBy: { athlete: { lastName: "asc" } },
-      where: {
-        draftPicks: { none: { draftId: draft.id } },
-        draftSelectionGroup: poolGroup,
-        seasonClubId: null,
-        seasonId: draft.seasonId,
-        status: { in: ["DRAFT_ELIGIBLE", "UNDRAFTED"] },
-      },
-    }),
-    prisma.seasonClub.findMany({
-      include: { club: true, _count: { select: { players: true } } },
-      orderBy: { club: { name: "asc" } },
-      where: { divisionId: draft.divisionId, seasonId: draft.seasonId, status: "ACTIVE" },
-    }),
-  ]);
 
   return (
     <OperationsShell user={session.user}>

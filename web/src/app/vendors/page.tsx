@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { createVendor } from "./actions";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function VendorsPage() {
-  const session = await requirePermission("vendor:manage");
-  const vendors = await prisma.vendor.findMany({
+  const { session, organizationId } = await requirePermissionWithOrganization("vendor:manage");
+  const vendors = await withOrganizationContext(organizationId, (tx) => tx.vendor.findMany({
     include: {
       _count: { select: { products: true } },
       products: {
@@ -16,7 +16,7 @@ export default async function VendorsPage() {
       },
     },
     orderBy: { name: "asc" },
-  });
+  }));
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">

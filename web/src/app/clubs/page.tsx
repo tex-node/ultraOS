@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { auth } from "@/auth";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/authorization";
+import { MissingOrganizationContextError, requireSession } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const FALLBACK_PRIMARY_COLOR = "#16F2B3";
 const FALLBACK_SECONDARY_COLOR = "#071713";
@@ -13,8 +13,11 @@ export default async function ClubsPage() {
   const rawSession = await auth();
   if (!rawSession?.user) redirect("/login?callbackUrl=/clubs");
   const session = await requireSession();
+  if (!session.user.organizationId) {
+    throw new MissingOrganizationContextError();
+  }
   const canManage = hasPermission(session.user.roles, "club:manage");
-  const clubs = await prisma.club.findMany({
+  const clubs = await withOrganizationContext(session.user.organizationId, (tx) => tx.club.findMany({
     include: {
       sport: { select: { name: true } },
       fanClub: { select: { _count: { select: { memberships: true } } } },
@@ -30,7 +33,7 @@ export default async function ClubsPage() {
       },
     },
     orderBy: { name: "asc" },
-  });
+  }));
 
   return (
     <OperationsShell user={session.user}>

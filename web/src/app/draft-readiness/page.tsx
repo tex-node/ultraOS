@@ -2,8 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { draftPersonnelReadinessReport } from "@/lib/draft-personnel-readiness";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 function badgeClass(status: string) {
   if (["READY", "PASS", "CONFIGURED"].includes(status)) return "text-emerald-300";
@@ -27,8 +28,8 @@ function Stat({ label, value, target }: { label: string; value: number | string;
 export default async function DraftReadinessPage() {
   const rawSession = await auth();
   if (!rawSession?.user) redirect("/login?callbackUrl=/draft-readiness");
-  const session = await requirePermission("draft-event:read");
-  const report = await draftPersonnelReadinessReport();
+  const { session, organizationId } = await requirePermissionWithOrganization("draft-event:read");
+  const report = await withOrganizationContext(organizationId, (tx) => draftPersonnelReadinessReport(tx));
 
   return (
     <OperationsShell user={session.user}>

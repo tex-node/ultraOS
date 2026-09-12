@@ -1,3 +1,4 @@
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { competitiveFixtureScope } from "@/lib/competitive-scope";
 import type { GameDataCapability } from "@/lib/game-data-capability";
@@ -8,6 +9,17 @@ import type { GameCore, PlayerLine, TeamSideStats } from "./types";
 // and reshapes it into the plain GameCore shape every other analytics module consumes. Keeping
 // the DB fetch here (not in a React page) is what lets the website, broadcast API, and future
 // social-graphic renderer all call the exact same analytics functions on the exact same data.
+//
+// Phase 1 Stage 5.2C: every exported function here now takes an optional `db` parameter
+// (Prisma.TransactionClient | typeof prisma, defaulting to the bare client) - the same shim
+// pattern used elsewhere in this codebase (e.g. draftSquadCapacityConfig,
+// draftReadinessForPlayer) to convert an authenticated caller without breaking every existing
+// public/share caller in one pass. The authenticated broadcast dashboards
+// (src/app/broadcast/*) now pass their own withOrganizationContext-scoped tx explicitly; every
+// public/share/api caller (public/stats/*, public/share/*, api/share/*, api/v1/seasons/...)
+// keeps using the default bare client - those are genuinely public reads, classified DEFER_5.2D
+// in the Stage 5.2C documentation, not converted here.
+type Db = Prisma.TransactionClient | typeof prisma;
 
 const gameInclude = {
   fixture: {
@@ -29,12 +41,12 @@ const gameInclude = {
 
 type RawGame = NonNullable<Awaited<ReturnType<typeof fetchRawGame>>>;
 
-async function fetchRawGame(gameId: string) {
-  return prisma.game.findUnique({ where: { id: gameId }, include: gameInclude });
+async function fetchRawGame(db: Db, gameId: string) {
+  return db.game.findUnique({ where: { id: gameId }, include: gameInclude });
 }
 
-async function fetchRawGameByFixture(fixtureId: string) {
-  return prisma.game.findUnique({ where: { fixtureId }, include: gameInclude });
+async function fetchRawGameByFixture(db: Db, fixtureId: string) {
+  return db.game.findUnique({ where: { fixtureId }, include: gameInclude });
 }
 
 // TeamStat itself has no shooting/rebound split columns (only PlayerStat does) — team-level
@@ -150,20 +162,20 @@ function toGameCore(game: RawGame): GameCore {
   };
 }
 
-export async function loadGameCoreByFixture(fixtureId: string): Promise<GameCore | null> {
-  const raw = await fetchRawGameByFixture(fixtureId);
+export async function loadGameCoreByFixture(fixtureId: string, db: Db = prisma): Promise<GameCore | null> {
+  const raw = await fetchRawGameByFixture(db, fixtureId);
   if (!raw || raw.status !== "FINAL") return null;
   return toGameCore(raw);
 }
 
-export async function loadGameCore(gameId: string): Promise<GameCore | null> {
-  const raw = await fetchRawGame(gameId);
+export async function loadGameCore(gameId: string, db: Db = prisma): Promise<GameCore | null> {
+  const raw = await fetchRawGame(db, gameId);
   if (!raw || raw.status !== "FINAL") return null;
   return toGameCore(raw);
 }
 
-export async function loadSeasonGameCores(seasonId: string): Promise<GameCore[]> {
-  const games = await prisma.game.findMany({
+export async function loadSeasonGameCores(seasonId: string, db: Db = prisma): Promise<GameCore[]> {
+  const games = await db.game.findMany({
     where: { status: "FINAL", fixture: { seasonId, ...competitiveFixtureScope() } },
     include: gameInclude,
   });
@@ -173,8 +185,8 @@ export async function loadSeasonGameCores(seasonId: string): Promise<GameCore[]>
 // Season-wide per-player totals for leaderboards. PlayerStat doesn't carry seasonId directly,
 // so this aggregates in application code from the (small, Season-Zero-scale) row set rather
 // than attempting a cross-relation Prisma groupBy.
-export async function loadSeasonPlayerTotals(seasonId: string) {
-  const stats = await prisma.playerStat.findMany({
+export async function loadSeasonPlayerTotals(seasonId: string, db: Db = prisma) {
+  const stats = await db.playerStat.findMany({
     where: { didNotPlay: false, game: { status: "FINAL", fixture: { seasonId, ...competitiveFixtureScope() } } },
     include: { player: { include: { athlete: true, seasonClub: { include: { club: true } } } } },
   });
@@ -235,8 +247,8 @@ export type PlayerBestGame = {
 // `efficiency` when the source provided it, otherwise the same PTS+REB+AST+STL+BLK-misses-TO
 // proxy), never just "most points," so a big scoring night with poor efficiency doesn't
 // automatically outrank a genuinely complete performance.
-export async function loadPlayerBestGame(playerId: string): Promise<PlayerBestGame | null> {
-  const stats = await prisma.playerStat.findMany({
+export async function loadPlayerBestGame(playerId: string, db: Db = prisma): Promise<PlayerBestGame | null> {
+  const stats = await db.playerStat.findMany({
     where: { playerId, didNotPlay: false, game: { status: "FINAL", fixture: competitiveFixtureScope() } },
     include: {
       game: {
@@ -277,8 +289,8 @@ export async function loadPlayerBestGame(playerId: string): Promise<PlayerBestGa
 // Full per-game history for a player, for the Player Game Log — complements loadPlayerBestGame
 // (single overall-best game) by exposing every game so a caller can select the best game in a
 // specific category (see selectBestGameByCategory in player-game-log.ts).
-export async function loadPlayerGameLog(playerId: string): Promise<PlayerGameLogRow[]> {
-  const stats = await prisma.playerStat.findMany({
+export async function loadPlayerGameLog(playerId: string, db: Db = prisma): Promise<PlayerGameLogRow[]> {
+  const stats = await db.playerStat.findMany({
     where: { playerId, game: { status: "FINAL", fixture: competitiveFixtureScope() } },
     include: {
       game: {

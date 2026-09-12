@@ -2,22 +2,26 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { validateMediaConfiguration } from "@/lib/media-storage";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function MediaPage() {
   const rawSession = await auth();
   if (!rawSession?.user) redirect("/login?callbackUrl=/media");
-  const session = await requirePermission("media:read");
-  const [assets, counts] = await Promise.all([
-    prisma.mediaAsset.findMany({
-      include: { uploadedBy: { select: { email: true, name: true } }, usages: { where: { active: true }, take: 3 } },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    }),
-    prisma.mediaAsset.groupBy({ by: ["purpose", "status"], _count: { _all: true } }),
-  ]);
+  const { session, organizationId } = await requirePermissionWithOrganization("media:read");
+  const { assets, counts } = await withOrganizationContext(organizationId, async (tx) => {
+    const [assets, counts] = await Promise.all([
+      tx.mediaAsset.findMany({
+        where: { organizationId },
+        include: { uploadedBy: { select: { email: true, name: true } }, usages: { where: { active: true }, take: 3 } },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      }),
+      tx.mediaAsset.groupBy({ by: ["purpose", "status"], where: { organizationId }, _count: { _all: true } }),
+    ]);
+    return { assets, counts };
+  });
   const config = validateMediaConfiguration();
 
   return (

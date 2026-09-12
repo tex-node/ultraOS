@@ -4,10 +4,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AnnouncementStatus, AnnouncementVisibility, WellWishStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
 import { currentLagosYearMonth } from "@/lib/announcements";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const createSchema = z.object({
   playerId: z.string().min(1),
@@ -17,14 +17,14 @@ const createSchema = z.object({
 });
 
 export async function createAnnouncement(formData: FormData) {
-  const session = await requirePermission("announcement:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("announcement:manage");
   const input = createSchema.parse(formDataToRecord(formData));
   if (input.visibility === "CLUB_FAN_ZONE" && !input.visibilityClubId) {
     throw new Error("A club must be selected for club-scoped visibility.");
   }
   const { year } = currentLagosYearMonth();
-  const player = await prisma.player.findUniqueOrThrow({ where: { id: input.playerId } });
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
+    const player = await tx.player.findUniqueOrThrow({ where: { id: input.playerId } });
     const announcement = await tx.announcement.create({
       data: {
         playerId: player.id,
@@ -55,13 +55,13 @@ const updateSchema = z.object({
 });
 
 export async function updateAnnouncement(formData: FormData) {
-  const session = await requirePermission("announcement:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("announcement:manage");
   const input = updateSchema.parse(formDataToRecord(formData));
   if (input.visibility === "CLUB_FAN_ZONE" && !input.visibilityClubId) {
     throw new Error("A club must be selected for club-scoped visibility.");
   }
-  const existing = await prisma.announcement.findUniqueOrThrow({ where: { id: input.announcementId } });
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
+    const existing = await tx.announcement.findUniqueOrThrow({ where: { id: input.announcementId } });
     const updated = await tx.announcement.update({
       where: { id: input.announcementId },
       data: {
@@ -96,10 +96,10 @@ const moderateSchema = z.object({
 });
 
 export async function moderateWellWish(formData: FormData) {
-  const session = await requirePermission("well-wish:moderate");
+  const { session, organizationId } = await requirePermissionWithOrganization("well-wish:moderate");
   const input = moderateSchema.parse(formDataToRecord(formData));
   if (input.decision === "PENDING") throw new Error("Invalid moderation decision.");
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const wellWish = await tx.wellWish.update({
       where: { id: input.wellWishId },
       data: { status: input.decision, moderatedById: session.user.id, moderatedAt: new Date() },

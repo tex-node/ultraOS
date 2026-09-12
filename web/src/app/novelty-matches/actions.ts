@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
 import { remainingClockSeconds } from "@/lib/game-clock";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 function assertGameIsMutable(status: string, matchStatus: string) {
   if (status === "FINAL" || matchStatus === "FINAL" || matchStatus === "CANCELLED") {
@@ -26,14 +26,22 @@ const createSchema = z.object({
 export type NoveltyMatchState = { error?: string; fieldErrors?: Record<string, string[] | undefined> };
 
 export async function createNoveltyMatch(_s: NoveltyMatchState, formData: FormData): Promise<NoveltyMatchState> {
-  const session = await requirePermission("fixture:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("fixture:manage");
   const parsed = createSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
   if (parsed.data.homeTeamId === parsed.data.awayTeamId) return { error: "Home and away teams must be different." };
 
-  const match = await prisma.$transaction(async (tx) => {
+  const match = await withOrganizationContext(organizationId, async (tx) => {
+    const [homeTeam, awayTeam] = await Promise.all([
+      tx.noveltyTeam.findUnique({ where: { id: parsed.data.homeTeamId }, select: { id: true } }),
+      tx.noveltyTeam.findUnique({ where: { id: parsed.data.awayTeamId }, select: { id: true } }),
+    ]);
+    if (!homeTeam || !awayTeam) throw new Error("INVALID_NOVELTY_TEAM");
+    if (parsed.data.eventId && !await tx.event.findUnique({ where: { id: parsed.data.eventId }, select: { id: true } })) throw new Error("INVALID_EVENT");
+    if (parsed.data.venueId && !await tx.venue.findUnique({ where: { id: parsed.data.venueId }, select: { id: true } })) throw new Error("INVALID_VENUE");
     const created = await tx.noveltyMatch.create({
       data: {
+        organizationId,
         awayTeamId: parsed.data.awayTeamId,
         eventId: parsed.data.eventId || null,
         homeTeamId: parsed.data.homeTeamId,
@@ -48,6 +56,7 @@ export async function createNoveltyMatch(_s: NoveltyMatchState, formData: FormDa
       entityId: created.id,
       entityType: "NoveltyMatch",
       userId: session.user.id,
+      organizationId,
     });
     return created;
   });
@@ -56,13 +65,13 @@ export async function createNoveltyMatch(_s: NoveltyMatchState, formData: FormDa
 }
 
 export async function startNoveltyGame(matchId: string) {
-  await requirePermission("game:operate");
-  await prisma.$transaction(async (tx) => {
+  const { organizationId } = await requirePermissionWithOrganization("game:operate");
+  await withOrganizationContext(organizationId, async (tx) => {
     const match = await tx.noveltyMatch.findUniqueOrThrow({ where: { id: matchId }, select: { status: true } });
     if (match.status === "CANCELLED" || match.status === "FINAL") throw new Error("INVALID_MATCH");
     await tx.noveltyGame.upsert({
       where: { matchId },
-      create: { clockStartedAt: new Date(), matchId, startedAt: new Date(), status: "LIVE" },
+      create: { clockStartedAt: new Date(), matchId, organizationId, startedAt: new Date(), status: "LIVE" },
       update: { clockStartedAt: new Date(), startedAt: new Date(), status: "LIVE" },
     });
     await tx.noveltyMatch.update({ where: { id: matchId }, data: { status: "LIVE" } });
@@ -71,28 +80,34 @@ export async function startNoveltyGame(matchId: string) {
 }
 
 export async function pauseNoveltyGame(gameId: string, matchId: string) {
-  await requirePermission("game:operate");
-  const game = await prisma.noveltyGame.findUniqueOrThrow({ where: { id: gameId }, include: { match: { select: { status: true } } } });
-  assertGameIsMutable(game.status, game.match.status);
-  if (game.status !== "LIVE") throw new Error("GAME_NOT_LIVE");
-  await prisma.noveltyGame.update({ where: { id: gameId }, data: { clockSecondsRemaining: remainingClockSeconds(game), clockStartedAt: null, status: "PAUSED" } });
+  const { organizationId } = await requirePermissionWithOrganization("game:operate");
+  await withOrganizationContext(organizationId, async (tx) => {
+    const game = await tx.noveltyGame.findUniqueOrThrow({ where: { id: gameId }, include: { match: { select: { status: true } } } });
+    assertGameIsMutable(game.status, game.match.status);
+    if (game.status !== "LIVE") throw new Error("GAME_NOT_LIVE");
+    await tx.noveltyGame.update({ where: { id: gameId }, data: { clockSecondsRemaining: remainingClockSeconds(game), clockStartedAt: null, status: "PAUSED" } });
+  });
   revalidatePath(`/novelty-matches/${matchId}/live`);
 }
 
 export async function resumeNoveltyGame(gameId: string, matchId: string) {
-  await requirePermission("game:operate");
-  const game = await prisma.noveltyGame.findUniqueOrThrow({ where: { id: gameId }, include: { match: { select: { status: true } } } });
-  assertGameIsMutable(game.status, game.match.status);
-  if (game.status !== "PAUSED") throw new Error("GAME_NOT_PAUSED");
-  await prisma.noveltyGame.update({ where: { id: gameId }, data: { clockStartedAt: new Date(), status: "LIVE" } });
+  const { organizationId } = await requirePermissionWithOrganization("game:operate");
+  await withOrganizationContext(organizationId, async (tx) => {
+    const game = await tx.noveltyGame.findUniqueOrThrow({ where: { id: gameId }, include: { match: { select: { status: true } } } });
+    assertGameIsMutable(game.status, game.match.status);
+    if (game.status !== "PAUSED") throw new Error("GAME_NOT_PAUSED");
+    await tx.noveltyGame.update({ where: { id: gameId }, data: { clockStartedAt: new Date(), status: "LIVE" } });
+  });
   revalidatePath(`/novelty-matches/${matchId}/live`);
 }
 
 export async function advanceNoveltyPeriod(gameId: string, matchId: string) {
-  await requirePermission("game:operate");
-  const game = await prisma.noveltyGame.findUniqueOrThrow({ where: { id: gameId }, include: { match: { select: { status: true } } } });
-  assertGameIsMutable(game.status, game.match.status);
-  await prisma.noveltyGame.update({ where: { id: gameId }, data: { clockSecondsRemaining: 600, clockStartedAt: null, currentPeriod: { increment: 1 }, status: "PAUSED" } });
+  const { organizationId } = await requirePermissionWithOrganization("game:operate");
+  await withOrganizationContext(organizationId, async (tx) => {
+    const game = await tx.noveltyGame.findUniqueOrThrow({ where: { id: gameId }, include: { match: { select: { status: true } } } });
+    assertGameIsMutable(game.status, game.match.status);
+    await tx.noveltyGame.update({ where: { id: gameId }, data: { clockSecondsRemaining: 600, clockStartedAt: null, currentPeriod: { increment: 1 }, status: "PAUSED" } });
+  });
   revalidatePath(`/novelty-matches/${matchId}/live`);
 }
 
@@ -104,10 +119,10 @@ const scoreSchema = z.object({
 });
 
 export async function recordNoveltyScore(gameId: string, matchId: string, formData: FormData) {
-  const session = await requirePermission("game:operate");
+  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
   const input = scoreSchema.parse(Object.fromEntries(formData.entries()));
 
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const game = await tx.noveltyGame.findUniqueOrThrow({ where: { id: gameId }, include: { match: true } });
     assertGameIsMutable(game.status, game.match.status);
     if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
@@ -128,6 +143,7 @@ export async function recordNoveltyScore(gameId: string, matchId: string, formDa
         description: input.description || `${actualPoints > 0 ? "+" : ""}${actualPoints} points`,
         eventType: "SCORE",
         gameId,
+        organizationId,
         period: game.currentPeriod,
         playerId: player?.id,
         points: actualPoints,
@@ -138,7 +154,7 @@ export async function recordNoveltyScore(gameId: string, matchId: string, formDa
     if (player && actualPoints !== 0) {
       const existing = await tx.noveltyPlayerStat.findUnique({ where: { gameId_playerId: { gameId, playerId: player.id } } });
       await tx.noveltyPlayerStat.upsert({
-        create: { gameId, playerId: player.id, points: Math.max(0, actualPoints), teamId: input.teamId },
+      create: { gameId, organizationId, playerId: player.id, points: Math.max(0, actualPoints), teamId: input.teamId },
         update: { points: Math.max(0, (existing?.points ?? 0) + actualPoints) },
         where: { gameId_playerId: { gameId, playerId: player.id } },
       });
@@ -149,6 +165,7 @@ export async function recordNoveltyScore(gameId: string, matchId: string, formDa
       entityId: gameId,
       entityType: "NoveltyGame",
       userId: session.user.id,
+      organizationId,
     });
   });
 
@@ -167,10 +184,10 @@ const statEventSchema = z.object({
 });
 
 export async function recordNoveltyStatEvent(gameId: string, matchId: string, formData: FormData) {
-  await requirePermission("game:operate");
+  const { organizationId } = await requirePermissionWithOrganization("game:operate");
   const input = statEventSchema.parse(Object.fromEntries(formData.entries()));
 
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const game = await tx.noveltyGame.findUniqueOrThrow({ where: { id: gameId }, include: { match: true } });
     assertGameIsMutable(game.status, game.match.status);
     if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
@@ -197,13 +214,14 @@ export async function recordNoveltyStatEvent(gameId: string, matchId: string, fo
         foulType: input.eventType === "FOUL" ? input.foulType || undefined : undefined,
         fouledPlayerId: input.eventType === "FOUL" ? fouledPlayerId : undefined,
         gameId,
+        organizationId,
         period: game.currentPeriod,
         playerId: player.id,
         teamId: input.teamId,
       },
     });
     await tx.noveltyPlayerStat.upsert({
-      create: { gameId, playerId: player.id, teamId: input.teamId, [field]: 1 },
+      create: { gameId, organizationId, playerId: player.id, teamId: input.teamId, [field]: 1 },
       update: { [field]: { increment: 1 } },
       where: { gameId_playerId: { gameId, playerId: player.id } },
     });
@@ -213,16 +231,14 @@ export async function recordNoveltyStatEvent(gameId: string, matchId: string, fo
 }
 
 export async function finalizeNoveltyGame(gameId: string, matchId: string) {
-  const session = await requirePermission("result:confirm");
-  const current = await prisma.noveltyGame.findUniqueOrThrow({ where: { id: gameId }, include: { match: true } });
-  assertGameIsMutable(current.status, current.match.status);
-  if (current.match.homeScore === current.match.awayScore) {
-    redirect(`/novelty-matches/${matchId}/live?error=tied`);
-  }
+  const { session, organizationId } = await requirePermissionWithOrganization("result:confirm");
 
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const game = await tx.noveltyGame.findUniqueOrThrow({ where: { id: gameId }, include: { match: true } });
     assertGameIsMutable(game.status, game.match.status);
+    if (game.match.homeScore === game.match.awayScore) {
+      redirect(`/novelty-matches/${matchId}/live?error=tied`);
+    }
     const winnerTeamId = game.match.homeScore > game.match.awayScore ? game.match.homeTeamId : game.match.awayTeamId;
 
     await tx.noveltyMatch.update({ where: { id: matchId }, data: { status: "FINAL", winnerTeamId } });
@@ -233,6 +249,7 @@ export async function finalizeNoveltyGame(gameId: string, matchId: string) {
       entityId: gameId,
       entityType: "NoveltyGame",
       userId: session.user.id,
+      organizationId,
     });
   });
 

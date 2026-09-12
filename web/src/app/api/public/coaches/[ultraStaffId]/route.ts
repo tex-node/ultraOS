@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export async function GET(_: Request, { params }: { params: Promise<{ ultraStaffId: string }> }) {
   const { ultraStaffId } = await params;
-  const staff = await prisma.staff.findUnique({
-    where: { ultraStaffId },
-    include: {
-      headCoachAssignments: { include: { club: true, division: true, season: true } },
-      assistantCoachAssignments: { include: { club: true, division: true, season: true } },
-    },
-  });
+  const organization = await resolveDefaultPublicOrganization();
+  const staff = await withOrganizationContext(organization.id, (tx) =>
+    tx.staff.findUnique({
+      where: { ultraStaffId },
+      include: {
+        headCoachAssignments: { include: { club: true, division: true, season: true } },
+        assistantCoachAssignments: { include: { club: true, division: true, season: true } },
+      },
+    }),
+  );
   if (!staff) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({
     ultraStaffId: staff.ultraStaffId,

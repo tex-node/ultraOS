@@ -10,6 +10,7 @@
 // dozen-plus independent data sources V2 composes without an unwieldy parameter list. This
 // mirrors the same "one Prisma-touching composition point" convention game-analytics.ts already
 // established for historical analytics.
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getGameAnalyticsCapability, type GameAnalyticsCapability } from "@/lib/game-data-capability";
 import { periodLabel } from "@/lib/game-rules";
@@ -30,6 +31,13 @@ import { buildLivePresentationModel } from "@/lib/live-presentation-model";
 import type { ScoringPoint } from "@/lib/live-game-pulse";
 
 const STAT_SOURCE = "ULTRA_NATIVE_LIVE_STATISTICIAN" as const;
+
+// Phase 1 Stage 5.2C: both exported functions below now take an optional `db` parameter
+// (defaulting to the bare client), the same shim pattern game-analytics.ts uses - most of this
+// file's callers are genuinely public/display routes (/live, api/v1/live, the scorebug/clock
+// overlays), classified DEFER_5.2D; the authenticated broadcast-operator callers now pass their
+// own withOrganizationContext-scoped tx explicitly.
+type Db = Prisma.TransactionClient | typeof prisma;
 
 export type LiveLeaderCategory = "POINTS" | "REBOUNDS" | "ASSISTS" | "STEALS" | "BLOCKS" | "FOUR_POINTERS" | "EFFICIENCY";
 
@@ -96,19 +104,19 @@ function computeLeaders(players: DerivedPlayerStats[]): LiveLeader[] {
   return leaders;
 }
 
-export async function buildLiveGameSnapshotV2(gameId: string): Promise<LiveGameSnapshotV2> {
-  const game = await prisma.game.findUniqueOrThrow({
+export async function buildLiveGameSnapshotV2(gameId: string, db: Db = prisma): Promise<LiveGameSnapshotV2> {
+  const game = await db.game.findUniqueOrThrow({
     where: { id: gameId },
     include: { fixture: { include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } } } }, ruleSnapshot: true },
   });
 
   const [statisticianEvents, latestEvents, starters, substitutionRows, scoringChronologyRows] = await Promise.all([
-    prisma.gameEvent.findMany({
+    db.gameEvent.findMany({
       where: { gameId, source: STAT_SOURCE, status: "ACTIVE" },
       orderBy: { sequenceNumber: "asc" },
       select: { eventType: true, status: true, seasonClubId: true, playerId: true, points: true, basePointValue: true, isUltraTime: true },
     }) as Promise<DerivableEvent[]>,
-    prisma.gameEvent.findMany({
+    db.gameEvent.findMany({
       where: { gameId, status: "ACTIVE" },
       orderBy: [{ sequenceNumber: "desc" }, { createdAt: "desc" }],
       take: 15,
@@ -119,8 +127,8 @@ export async function buildLiveGameSnapshotV2(gameId: string): Promise<LiveGameS
         player: { select: { athlete: { select: { firstName: true, lastName: true } } } },
       },
     }),
-    prisma.gameStarter.findMany({ where: { gameId }, select: { seasonClubId: true, playerId: true } }),
-    prisma.gameEvent.findMany({
+    db.gameStarter.findMany({ where: { gameId }, select: { seasonClubId: true, playerId: true } }),
+    db.gameEvent.findMany({
       where: { gameId, eventType: "SUBSTITUTION", status: "ACTIVE" },
       orderBy: { sequenceNumber: "asc" },
       select: { seasonClubId: true, playerId: true, substitutedOutPlayerId: true, sequenceNumber: true, period: true, clockSeconds: true },
@@ -129,7 +137,7 @@ export async function buildLiveGameSnapshotV2(gameId: string): Promise<LiveGameS
     // Filtered at the query level on `made: true` + both running-score fields present, so a
     // missed shot or a non-scoring event (rebound, foul, substitution) is never mistaken for a
     // scoring point.
-    prisma.gameEvent.findMany({
+    db.gameEvent.findMany({
       where: { gameId, status: "ACTIVE", made: true, homeScoreAfter: { not: null }, awayScoreAfter: { not: null } },
       orderBy: { sequenceNumber: "asc" },
       select: { sequenceNumber: true, period: true, clockSeconds: true, homeScoreAfter: true, awayScoreAfter: true, seasonClubId: true, basePointValue: true, multiplier: true, isUltraTime: true },
@@ -244,11 +252,11 @@ export async function buildLiveGameSnapshotV2(gameId: string): Promise<LiveGameS
 // pipeline), and hands both to the pure buildLivePresentationModel() adapter. This is the one
 // call public/broadcast/commentator pages need - none of them touches Prisma or Snapshot V2
 // directly themselves.
-export async function buildLivePresentationModelForGame(gameId: string) {
-  const game = await prisma.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
+export async function buildLivePresentationModelForGame(gameId: string, db: Db = prisma) {
+  const game = await db.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
   const [snapshot, seasonGames] = await Promise.all([
-    buildLiveGameSnapshotV2(gameId),
-    loadSeasonGameCores(game.fixture.seasonId),
+    buildLiveGameSnapshotV2(gameId, db),
+    loadSeasonGameCores(game.fixture.seasonId, db),
   ]);
   const officialPlayerRecords = buildPlayerSingleGameRecords(seasonGames);
   return buildLivePresentationModel(snapshot, officialPlayerRecords);

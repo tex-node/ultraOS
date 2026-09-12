@@ -5,22 +5,30 @@ import { OperationsShell } from "@/app/components/operations-shell";
 import { resolveDuplicateGroup } from "../actions";
 import { duplicateGroup, duplicateResolutionActions } from "@/lib/data-quality";
 import { draftCohortAnalysis } from "@/lib/draft-cohort";
-import { hasPermission } from "@/lib/permissions";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function DuplicateGroupPage({ params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = await params;
   const session = await auth();
   if (!session?.user) redirect(`/login?callbackUrl=/data-quality/duplicates/${groupId}`);
-  if (!hasPermission(session.user.roles, "data:readiness")) {
+  let authorizedSession;
+  let organizationId: string;
+  try {
+    ({ session: authorizedSession, organizationId } = await requirePermissionWithOrganization("data:readiness"));
+  } catch {
     return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
   }
-  const [group, cohortAnalysis] = await Promise.all([duplicateGroup(groupId), draftCohortAnalysis()]);
+  const [group, cohortAnalysis] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+    duplicateGroup(groupId, tx, organizationId),
+    draftCohortAnalysis(tx, organizationId),
+  ]));
   if (!group) notFound();
   const cohortRowsByApplicationId = new Map(cohortAnalysis.rows.map((row) => [row.matchedApplicationId ?? row.applicationId, row]));
   const selectedRows = group.applications.map((application) => cohortRowsByApplicationId.get(application.applicationId)).filter(isDefined);
   const availableActions = duplicateResolutionActions.filter((action) => action !== "EXCLUDE_FROM_INTERNALIZATION");
   return (
-    <OperationsShell user={session.user}>
+    <OperationsShell user={authorizedSession.user}>
       <main className="mx-auto max-w-6xl px-6 py-10">
         <Link className="text-sm text-emerald-400" href="/data-quality/duplicates">Back to duplicate groups</Link>
         <h1 className="mt-4 text-3xl font-semibold">Duplicate Group</h1>

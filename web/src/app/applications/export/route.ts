@@ -16,10 +16,13 @@ export async function GET(request: Request) {
   if (!hasPermission(session.user.roles, "application:review")) {
     return new Response("Application review permission required.", { status: 403 });
   }
+  if (!session.user.organizationId) {
+    return new Response("No active organization for this account.", { status: 403 });
+  }
 
   const url = new URL(request.url);
   const types = parseExportableTypes(url.searchParams.get("types"));
-  const applications = await getApplicationData(types);
+  const applications = await getApplicationData(session.user.organizationId, types);
   const { columns, rows } = applicationExportRows(applications);
 
   const workbook = new ExcelJS.Workbook();

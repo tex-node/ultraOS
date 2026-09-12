@@ -288,14 +288,17 @@ export const applicationConfigs: Record<ApplicationType, ApplicationConfig> = {
   },
 };
 
+// Phase 1 Stage 5.2B-1: `slug` is the role segment under an org-scoped apply route
+// (/apply/[organizationSlug]/[slug]) - it was a full href before organizations existed as a
+// concept in the URL.
 export const applicationCards = [
-  { href: "/apply/player", type: ApplicationType.PLAYER, label: "Apply as Player" },
-  { href: "/apply/coach", type: ApplicationType.COACH, label: "Apply as Coach" },
-  { href: "/apply/scout", type: ApplicationType.SCOUT, label: "Apply as Scout" },
-  { href: "/apply/official", type: ApplicationType.OFFICIAL, label: "Apply as Official" },
-  { href: "/apply/media", type: ApplicationType.MEDIA, label: "Apply as Media" },
-  { href: "/apply/vendor", type: ApplicationType.VENDOR, label: "Apply as Vendor" },
-  { href: "/apply/volunteer", type: ApplicationType.VOLUNTEER, label: "Apply as Volunteer" },
+  { slug: "player", type: ApplicationType.PLAYER, label: "Apply as Player" },
+  { slug: "coach", type: ApplicationType.COACH, label: "Apply as Coach" },
+  { slug: "scout", type: ApplicationType.SCOUT, label: "Apply as Scout" },
+  { slug: "official", type: ApplicationType.OFFICIAL, label: "Apply as Official" },
+  { slug: "media", type: ApplicationType.MEDIA, label: "Apply as Media" },
+  { slug: "vendor", type: ApplicationType.VENDOR, label: "Apply as Vendor" },
+  { slug: "volunteer", type: ApplicationType.VOLUNTEER, label: "Apply as Volunteer" },
 ];
 
 export const applySlugToType: Record<string, ApplicationType> = {

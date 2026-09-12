@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import {
   confirmReservationPayment,
@@ -12,10 +11,10 @@ import {
   setEventStatus,
 } from "../actions";
 import { EventStatus } from "@/generated/prisma/enums";
-import { requirePermission } from "@/lib/authorization";
+import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { formatLagosDateTime } from "@/lib/format-datetime";
 import { formatNaira } from "@/lib/money";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function EventDetailPage({
   params,
@@ -23,44 +22,46 @@ export default async function EventDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const rawSession = await auth();
-  if (!rawSession?.user) redirect(`/login?callbackUrl=/events/${id}`);
-  const session = await requirePermission("event:manage");
-  const event = await prisma.event.findUnique({
-    where: { id },
-    include: {
-      venue: { include: { sections: { orderBy: { name: "asc" } } } },
-      season: true,
-      seatZones: {
-        include: {
-          venueSection: true,
-          fanClub: { include: { club: true } },
+  const session = await requirePermissionOrRedirect("event:manage", `/events/${id}`);
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const organizationId = session.user.organizationId;
+  const [event, fanClubs] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+    tx.event.findUnique({
+      where: { id },
+      include: {
+        venue: { include: { sections: { orderBy: { name: "asc" } } } },
+        season: true,
+        seatZones: {
+          include: {
+            venueSection: true,
+            fanClub: { include: { club: true } },
+          },
+          orderBy: { priceKobo: "desc" },
         },
-        orderBy: { priceKobo: "desc" },
-      },
-      accreditations: { orderBy: { createdAt: "desc" } },
-      reservations: {
-        include: {
-          seatZone: true,
-          ticket: true,
-          user: { select: { name: true, email: true } },
+        accreditations: { orderBy: { createdAt: "desc" } },
+        reservations: {
+          include: {
+            seatZone: true,
+            ticket: true,
+            user: { select: { name: true, email: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 30,
         },
-        orderBy: { createdAt: "desc" },
-        take: 30,
+        orders: {
+          include: { items: true },
+          orderBy: { createdAt: "desc" },
+          take: 20,
+        },
+        sponsorCampaigns: { orderBy: { sponsorName: "asc" } },
       },
-      orders: {
-        include: { items: true },
-        orderBy: { createdAt: "desc" },
-        take: 20,
-      },
-      sponsorCampaigns: { orderBy: { sponsorName: "asc" } },
-    },
-  });
+    }),
+    tx.fanClub.findMany({
+      include: { club: true },
+      orderBy: { club: { name: "asc" } },
+    }),
+  ]));
   if (!event) notFound();
-  const fanClubs = await prisma.fanClub.findMany({
-    include: { club: true },
-    orderBy: { club: { name: "asc" } },
-  });
 
   return (
     <OperationsShell user={session.user}>

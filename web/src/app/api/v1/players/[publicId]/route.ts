@@ -3,6 +3,7 @@ import { withPublicApiV1 } from "@/lib/api-v1/respond";
 import { apiError } from "@/lib/api-v1/errors";
 import { resolvePlayerByPublicId } from "@/lib/api-v1/identifiers";
 import type { PlayerSummaryV1 } from "@/lib/api-v1/contracts";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,7 +14,8 @@ export const revalidate = 0;
 export async function GET(request: Request, { params }: { params: Promise<{ publicId: string }> }) {
   return withPublicApiV1(request, async () => {
     const { publicId } = await params;
-    const resolved = await resolvePlayerByPublicId(publicId);
+    const organization = await resolveDefaultPublicOrganization();
+    const resolved = await withOrganizationContext(organization.id, (tx) => resolvePlayerByPublicId(publicId, undefined, tx));
     if (!resolved) return apiError("PLAYER_NOT_FOUND", "No player found for this Ultra Athlete ID.");
     const { athlete, player } = resolved;
 

@@ -19,7 +19,7 @@ import { requirePermissionOrRedirect } from "@/lib/authorization";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { isUltraTime, periodLabel } from "@/lib/game-rules";
 import { verifyTeamMinutes, formatMinutes, type SubstitutionWithClock } from "@/lib/lineup-stints";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -42,14 +42,15 @@ export default async function StatisticianConsole({
   const session = await requirePermissionOrRedirect("game:record-stats", `/games/${fixtureId}/stats`);
   const query = await searchParams;
 
-  const fixture = await prisma.fixture.findUnique({
+  if (!session.user.organizationId) notFound();
+  const fixture = await withOrganizationContext(session.user.organizationId, (tx) => tx.fixture.findUnique({
     where: { id: fixtureId },
     include: {
       homeSeasonClub: { include: { club: true, players: { include: { athlete: true } } } },
       awaySeasonClub: { include: { club: true, players: { include: { athlete: true } } } },
       game: true,
     },
-  });
+  }));
   if (!fixture) notFound();
   const game = fixture.game;
   if (!game) {
@@ -70,24 +71,24 @@ export default async function StatisticianConsole({
   const lineup = await getGameLineup(game.id);
   const startersConfirmed = { home: (lineup.get(fixture.homeSeasonClubId)?.size ?? 0) > 0, away: (lineup.get(fixture.awaySeasonClubId)?.size ?? 0) > 0 };
   const bothStartersConfirmed = startersConfirmed.home && startersConfirmed.away;
-  const events = await prisma.gameEvent.findMany({
+  const events = await withOrganizationContext(session.user.organizationId, (tx) => tx.gameEvent.findMany({
     where: { gameId: game.id, source: "ULTRA_NATIVE_LIVE_STATISTICIAN" },
     orderBy: { createdAt: "desc" },
     take: 20,
     include: { player: { include: { athlete: true } }, substitutedOutPlayer: { include: { athlete: true } } },
-  });
+  }));
   const isMutable = game.status === "LIVE" || game.status === "PAUSED";
   const isFinal = game.status === "FINAL";
   const correctedAfterFinal = isFinal ? await hasPostFinalCorrections(game.id) : false;
 
-  const [starterRows, substitutionRows] = await Promise.all([
-    prisma.gameStarter.findMany({ where: { gameId: game.id }, select: { seasonClubId: true, playerId: true } }),
-    prisma.gameEvent.findMany({
+  const [starterRows, substitutionRows] = await withOrganizationContext(session.user.organizationId, (tx) => Promise.all([
+    tx.gameStarter.findMany({ where: { gameId: game.id }, select: { seasonClubId: true, playerId: true } }),
+    tx.gameEvent.findMany({
       where: { gameId: game.id, eventType: "SUBSTITUTION", status: "ACTIVE" },
       orderBy: { sequenceNumber: "asc" },
       select: { seasonClubId: true, playerId: true, substitutedOutPlayerId: true, sequenceNumber: true, period: true, clockSeconds: true },
     }),
-  ]);
+  ]));
   const substitutionsWithClock: SubstitutionWithClock[] = substitutionRows
     .filter((s): s is typeof s & { seasonClubId: string; playerId: string; substitutedOutPlayerId: string; sequenceNumber: number } =>
       Boolean(s.seasonClubId && s.playerId && s.substitutedOutPlayerId && s.sequenceNumber !== null))

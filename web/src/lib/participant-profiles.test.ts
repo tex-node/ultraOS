@@ -19,9 +19,13 @@ async function readiness() {
 }
 
 test("public ID formatter is stable and zero padded", () => {
-  assert.equal(formatPublicId("ATHLETE", 1), "UBA-000001");
-  assert.equal(formatPublicId("ATHLETE", BigInt(42)), "UBA-000042");
-  assert.equal(formatPublicId("STAFF", 7), "UBS-000007");
+  assert.equal(formatPublicId("UBA", "ATHLETE", 1), "UBA-000001");
+  assert.equal(formatPublicId("UBA", "ATHLETE", BigInt(42)), "UBA-000042");
+  assert.equal(formatPublicId("UBS", "STAFF", 7), "UBS-000007");
+});
+
+test("public ID formatter uses the given organization's own prefix, not a hardcoded one", () => {
+  assert.equal(formatPublicId("XYZ", "ATHLETE", 1), "XYZ-000001");
 });
 
 test("profile completeness classifies missing permanent profile fields", async () => {

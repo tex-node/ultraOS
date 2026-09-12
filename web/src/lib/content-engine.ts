@@ -1,3 +1,4 @@
+import type { Prisma } from "@/generated/prisma/client";
 import type { ContentType } from "@/generated/prisma/enums";
 import { formatNaira } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
@@ -22,6 +23,8 @@ export type ContentPayload = {
   variables: Record<string, string>;
   graphicData: GraphicData;
 };
+
+type Db = Prisma.TransactionClient | typeof prisma;
 
 function ordinal(value: number) {
   const remainder100 = value % 100;
@@ -51,8 +54,8 @@ function clubVariables(prefix: string, club: {
   };
 }
 
-export async function generateClubBrandPayload(sourceId: string) {
-  const club = await prisma.club.findUniqueOrThrow({
+export async function generateClubBrandPayload(sourceId: string, db: Db = prisma) {
+  const club = await db.club.findUniqueOrThrow({
     where: { id: sourceId },
     include: { seasonClubs: { include: { division: true, season: true }, orderBy: { createdAt: "desc" }, take: 1 } },
   });
@@ -82,8 +85,8 @@ export async function generateClubBrandPayload(sourceId: string) {
   };
 }
 
-export async function generateCoachPresentationPayload(draftCoachPoolEntryId: string) {
-  const entry = await prisma.draftCoachPoolEntry.findUniqueOrThrow({
+export async function generateCoachPresentationPayload(draftCoachPoolEntryId: string, db: Db = prisma) {
+  const entry = await db.draftCoachPoolEntry.findUniqueOrThrow({
     where: { id: draftCoachPoolEntryId },
     include: { staff: true, division: true },
   });
@@ -130,10 +133,11 @@ function common(
 export async function generateContentPayload(
   type: ContentType,
   sourceId: string,
+  db: Db = prisma,
 ): Promise<ContentPayload> {
   switch (type) {
     case "DRAFT_ANNOUNCEMENT": {
-      const pick = await prisma.draftPick.findUniqueOrThrow({
+      const pick = await db.draftPick.findUniqueOrThrow({
         where: { id: sourceId },
         include: {
           draft: { include: { season: true } },
@@ -172,7 +176,7 @@ export async function generateContentPayload(
       });
     }
     case "FIXTURE_ANNOUNCEMENT": {
-      const fixture = await prisma.fixture.findUniqueOrThrow({
+      const fixture = await db.fixture.findUniqueOrThrow({
         where: { id: sourceId },
         include: {
           season: true,
@@ -220,7 +224,7 @@ export async function generateContentPayload(
     }
     case "RESULT_ANNOUNCEMENT":
     case "MVP_ANNOUNCEMENT": {
-      const fixture = await prisma.fixture.findUniqueOrThrow({
+      const fixture = await db.fixture.findUniqueOrThrow({
         where: { id: sourceId },
         include: {
           season: true,
@@ -304,7 +308,7 @@ export async function generateContentPayload(
       });
     }
     case "STANDINGS_UPDATE": {
-      const season = await prisma.season.findUniqueOrThrow({
+      const season = await db.season.findUniqueOrThrow({
         where: { id: sourceId },
         include: {
           standings: {
@@ -362,7 +366,7 @@ export async function generateContentPayload(
       });
     }
     case "SPONSOR_REPORT": {
-      const campaign = await prisma.sponsorCampaign.findUniqueOrThrow({
+      const campaign = await db.sponsorCampaign.findUniqueOrThrow({
         where: { id: sourceId },
         include: { event: true, product: true, promoCodes: true },
       });
@@ -397,7 +401,7 @@ export async function generateContentPayload(
       });
     }
     case "FAN_CLUB_REPORT": {
-      const fanClub = await prisma.fanClub.findUniqueOrThrow({
+      const fanClub = await db.fanClub.findUniqueOrThrow({
         where: { id: sourceId },
         include: {
           club: { include: { sport: true } },

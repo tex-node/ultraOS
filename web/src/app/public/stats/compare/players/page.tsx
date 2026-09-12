@@ -1,10 +1,11 @@
 import Link from "next/link";
+import type { Prisma } from "@/generated/prisma/client";
 import { loadSeasonPlayerTotals } from "@/lib/analytics/game-analytics";
 import { computeLeaguePlayerDna, PLAYER_DNA_DIMENSION_LABEL, type PlayerDnaDimensionKey } from "@/lib/analytics/player-dna";
 import { comparePlayers, type PlayerComparisonResult, type PlayerIdentity } from "@/lib/analytics/player-comparison";
 import { MatchupCardView } from "@/components/analytics/cards/MatchupCardView";
 import { buildPlayerMatchupCard } from "@/lib/analytics/cards/game-cards";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,7 +14,8 @@ const DNA_KEYS: PlayerDnaDimensionKey[] = ["SCORING", "SHOOTING", "PLAYMAKING", 
 
 export default async function ComparePlayers({ searchParams }: { searchParams: Promise<{ a?: string; b?: string }> }) {
   const { a, b } = await searchParams;
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" } });
+  const organization = await resolveDefaultPublicOrganization();
+  const season = await withOrganizationContext(organization.id, (tx) => tx.season.findFirst({ where: { status: "ACTIVE" } }));
   if (!season) {
     return (
       <main className="mx-auto max-w-5xl px-6 py-12">
@@ -23,7 +25,7 @@ export default async function ComparePlayers({ searchParams }: { searchParams: P
     );
   }
 
-  const totals = await loadSeasonPlayerTotals(season.id);
+  const totals = await withOrganizationContext(organization.id, (tx) => loadSeasonPlayerTotals(season.id, tx));
   const options = [...totals].sort((x, y) => x.name.localeCompare(y.name));
 
   let result: PlayerComparisonResult | null = null;
@@ -31,7 +33,7 @@ export default async function ComparePlayers({ searchParams }: { searchParams: P
     const totalsA = totals.find((t) => t.playerId === a);
     const totalsB = totals.find((t) => t.playerId === b);
     if (totalsA && totalsB) {
-      const [identityA, identityB] = await Promise.all([loadIdentity(a), loadIdentity(b)]);
+      const [identityA, identityB] = await withOrganizationContext(organization.id, (tx) => Promise.all([loadIdentity(a, tx), loadIdentity(b, tx)]));
       if (identityA && identityB) {
         const dnaByPlayer = computeLeaguePlayerDna(totals);
         result = comparePlayers(identityA, identityB, totalsA, totalsB, dnaByPlayer.get(a) ?? null, dnaByPlayer.get(b) ?? null);
@@ -64,8 +66,8 @@ export default async function ComparePlayers({ searchParams }: { searchParams: P
   );
 }
 
-async function loadIdentity(playerId: string): Promise<PlayerIdentity | null> {
-  const player = await prisma.player.findUnique({
+async function loadIdentity(playerId: string, db: Prisma.TransactionClient): Promise<PlayerIdentity | null> {
+  const player = await db.player.findUnique({
     where: { id: playerId },
     select: { athlete: { select: { firstName: true, lastName: true, ultraAthleteId: true } }, seasonClub: { select: { club: { select: { name: true, shortName: true } } } } },
   });

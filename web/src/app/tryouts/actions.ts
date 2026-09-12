@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { DraftSelectionGroup } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const groupValues = new Set<string>(Object.values(DraftSelectionGroup));
 
@@ -31,13 +31,13 @@ function optionalScore(value: FormDataEntryValue | null) {
 }
 
 export async function updatePlayerTryout(playerId: string, formData: FormData) {
-  const session = await requirePermission("draft:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("draft:manage");
   const draftSelectionGroup = parseGroup(formData.get("draftSelectionGroup"));
   const tryoutNumber = optionalText(formData.get("tryoutNumber"));
   const selectionNotes = optionalText(formData.get("selectionNotes"));
   const tryoutScore = optionalScore(formData.get("tryoutScore"));
 
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const player = await tx.player.update({
       data: {
         draftSelectionGroup,
@@ -51,6 +51,7 @@ export async function updatePlayerTryout(playerId: string, formData: FormData) {
       where: { id: playerId },
     });
     await writeAuditLog(tx, {
+      organizationId,
       action: "PLAYER_TRYOUT_SELECTION_UPDATED",
       details: { draftSelectionGroup, playerId, selectionNotes, tryoutNumber, tryoutScore },
       entityId: player.id,
@@ -64,7 +65,7 @@ export async function updatePlayerTryout(playerId: string, formData: FormData) {
 }
 
 export async function bulkUpdateTryoutGroup(formData: FormData) {
-  const session = await requirePermission("draft:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("draft:manage");
   const draftSelectionGroup = parseGroup(formData.get("draftSelectionGroup"));
   const playerIds = formData
     .getAll("playerId")
@@ -75,8 +76,14 @@ export async function bulkUpdateTryoutGroup(formData: FormData) {
     throw new Error("Select at least one player.");
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.player.updateMany({
+  await withOrganizationContext(organizationId, async (tx) => {
+    // Phase 1 Stage 5.2B-3: updateMany's WHERE (id IN (...)) is not itself org-filtered, but
+    // RLS applies to every row this scoped tx touches - a foreign-org playerId in the list is
+    // invisible to this UPDATE and is silently excluded from the affected rows, never touched.
+    // No partial cross-org write is possible; the audit log below still records every id that
+    // was requested, not just the ones RLS actually let through, since the request itself is
+    // what's being audited.
+    const updated = await tx.player.updateMany({
       data: {
         draftSelectionGroup,
         selectedAt: new Date(),
@@ -86,8 +93,9 @@ export async function bulkUpdateTryoutGroup(formData: FormData) {
       where: { id: { in: playerIds } },
     });
     await writeAuditLog(tx, {
+      organizationId,
       action: "PLAYER_TRYOUT_SELECTION_BULK_UPDATED",
-      details: { count: playerIds.length, draftSelectionGroup, playerIds, selectionNotes },
+      details: { count: playerIds.length, updatedCount: updated.count, draftSelectionGroup, playerIds, selectionNotes },
       entityId: draftSelectionGroup,
       entityType: "Player",
       userId: session.user.id,

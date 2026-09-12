@@ -2,18 +2,18 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function DraftSquadsPage({ params }: { params: Promise<{ draftEventId: string }> }) {
   const { draftEventId } = await params;
   const rawSession = await auth();
   if (!rawSession?.user) redirect(`/login?callbackUrl=/draft-events/${draftEventId}/squads`);
-  const session = await requirePermission("draft-event:read");
-  const event = await prisma.draftEvent.findUnique({
+  const { session, organizationId } = await requirePermissionWithOrganization("draft-event:read");
+  const event = await withOrganizationContext(organizationId, (tx) => tx.draftEvent.findUnique({
     where: { id: draftEventId },
     include: { squads: { include: { division: true, _count: { select: { members: true } } }, orderBy: [{ division: { name: "asc" } }, { sequence: "asc" }] } },
-  });
+  }));
   if (!event) notFound();
   return (
     <OperationsShell user={session.user}>

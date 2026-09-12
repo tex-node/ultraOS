@@ -3,25 +3,29 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { addSquadMember, removeSquadMember } from "@/app/draft-events/actions";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function DraftSquadPage({ params }: { params: Promise<{ draftEventId: string; squadId: string }> }) {
   const { draftEventId, squadId } = await params;
   const rawSession = await auth();
   if (!rawSession?.user) redirect(`/login?callbackUrl=/draft-events/${draftEventId}/squads/${squadId}`);
-  const session = await requirePermission("draft-squad:manage");
-  const squad = await prisma.draftSquad.findUnique({
-    where: { id: squadId },
-    include: { division: true, draftEvent: true, members: { include: { player: { include: { athlete: true } } }, orderBy: { sequence: "asc" } } },
+  const { session, organizationId } = await requirePermissionWithOrganization("draft-squad:manage");
+  const { squad, players } = await withOrganizationContext(organizationId, async (tx) => {
+    const squad = await tx.draftSquad.findUnique({
+      where: { id: squadId },
+      include: { division: true, draftEvent: true, members: { include: { player: { include: { athlete: true } } }, orderBy: { sequence: "asc" } } },
+    });
+    if (!squad || squad.draftEventId !== draftEventId) return { squad: null, players: [] };
+    const alreadyInEvent = await tx.draftSquadMember.findMany({ where: { draftSquad: { draftEventId } }, select: { playerId: true } });
+    const players = await tx.player.findMany({
+      where: { seasonId: squad.seasonId, seasonClubId: null, id: { notIn: alreadyInEvent.map((member) => member.playerId) } },
+      include: { athlete: true },
+      orderBy: { athlete: { lastName: "asc" } },
+    });
+    return { squad, players };
   });
-  if (!squad || squad.draftEventId !== draftEventId) notFound();
-  const alreadyInEvent = await prisma.draftSquadMember.findMany({ where: { draftSquad: { draftEventId } }, select: { playerId: true } });
-  const players = await prisma.player.findMany({
-    where: { seasonId: squad.seasonId, seasonClubId: null, id: { notIn: alreadyInEvent.map((member) => member.playerId) } },
-    include: { athlete: true },
-    orderBy: { athlete: { lastName: "asc" } },
-  });
+  if (!squad) notFound();
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">

@@ -8,6 +8,7 @@ import {
   CoachSeasonZeroSelectionStatus,
   DraftSelectionGroup,
   PlayerStatus,
+  PublicResourceLocatorType,
   RecordOrigin,
   StaffRole,
   UserRole,
@@ -16,7 +17,10 @@ import type { Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { approvedPlayerDuplicateGroups, duplicateResolutionSummary } from "@/lib/data-quality";
 import { prisma } from "@/lib/prisma";
+import { upsertPublicResourceLocator } from "@/lib/public-locators";
 import { ensureAthletePublicId, ensureStaffPublicId } from "@/lib/public-ids";
+import { withOrganizationContext } from "@/lib/tenant-context";
+import { upsertRoleAssignment } from "@/lib/user-roles";
 
 type JsonObject = Record<string, unknown>;
 
@@ -25,6 +29,12 @@ export type InternalizationOptions = {
   actorUserId?: string;
   allowProductionWrite?: boolean;
   scope?: string;
+  // Narrow selectors for safely operating against exactly one application or one organization.
+  // organizationId is mandatory so application selection never probes a tenant-owned Application
+  // row through the temporary Neon fallback. Application.organizationId remains authoritative for
+  // the provisioning transaction itself.
+  applicationId?: string;
+  organizationId?: string;
 };
 
 export type InternalizationReport = {
@@ -154,15 +164,17 @@ function isProfileOnlyApplication(type: ApplicationType) {
   return type === ApplicationType.VENDOR || type === ApplicationType.MEDIA;
 }
 
-async function grantRole(tx: Prisma.TransactionClient, userId: string, role: UserRole, grantedById?: string) {
-  await tx.userRoleAssignment.upsert({
-    where: { userId_role: { userId, role } },
-    update: { revokedAt: null, grantedById, grantedAt: new Date() },
-    create: { userId, role, grantedById },
-  });
+// Phase 1 Stage 5.2B-1: organizationId is always the Application's own organizationId, passed
+// down from internalizeApprovedApplications() - never re-resolved from an admin's or the
+// applicant's current session. A User's role grant into a given league is a fact about that
+// specific application, not about who happens to be running this batch or which league the
+// applicant's browser session currently belongs to (a person may legitimately belong to one
+// league and apply to another later - see PHASE1_STAGE5_2A_TENANCY_SCAN.md).
+async function grantRole(tx: Prisma.TransactionClient, organizationId: string, userId: string, role: UserRole, grantedById?: string) {
+  await upsertRoleAssignment(tx, { userId, role, organizationId, grantedById });
 }
 
-async function ensureUser(tx: Prisma.TransactionClient, data: JsonObject, applicationUserId: string | null) {
+async function ensureUser(tx: Prisma.TransactionClient, organizationId: string, data: JsonObject, applicationUserId: string | null) {
   const email = normalizeEmail(data.email);
   if (applicationUserId) {
     return { user: await tx.user.findUniqueOrThrow({ where: { id: applicationUserId } }), created: false };
@@ -178,7 +190,7 @@ async function ensureUser(tx: Prisma.TransactionClient, data: JsonObject, applic
       passwordHash: await hash(randomUUID(), 12),
       role: UserRole.FAN,
       recordOrigin: RecordOrigin.APPLICATION,
-      roles: { create: { role: UserRole.FAN } },
+      roles: { create: { role: UserRole.FAN, organizationId } },
     },
   });
   return { user, created: true };
@@ -188,16 +200,42 @@ export async function internalizeApprovedApplications(options: InternalizationOp
   if (options.apply && process.env.NODE_ENV === "production" && !options.allowProductionWrite && process.env.CONFIRM_PARTICIPANT_INTERNALIZE !== "YES") {
     throw new Error("Refusing production participant internalization without CONFIRM_PARTICIPANT_INTERNALIZE=YES.");
   }
+  if (!options.organizationId) {
+    throw new Error("organizationId is required for participant internalization; refusing an unscoped application scan.");
+  }
+  const organization = await prisma.organization.findUnique({ where: { id: options.organizationId }, select: { id: true } });
+  if (!organization) {
+    throw new Error(`Organization "${options.organizationId}" not found.`);
+  }
 
-  const allApplications = await prisma.application.findMany({
-    where: { status: ApplicationStatus.APPROVED },
-    orderBy: { createdAt: "asc" },
-  });
+  const resolvedOrganizationId = options.organizationId;
+  const candidateApplications = await withOrganizationContext(resolvedOrganizationId, (tx) =>
+    tx.application.findMany({
+      where: {
+        status: ApplicationStatus.APPROVED,
+        ...(options.applicationId ? { id: options.applicationId } : {}),
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+  );
+
+  if (options.applicationId && options.organizationId) {
+    // Both given: any result is already guaranteed same-org by construction (queried inside
+    // that org's own context above), so this is a defensive check against a future logic
+    // error in this function, not the primary enforcement - the primary enforcement is RLS.
+    for (const application of candidateApplications) {
+      if (application.organizationId !== options.organizationId) {
+        throw new Error(`Application "${application.id}" does not belong to organization "${options.organizationId}".`);
+      }
+    }
+  }
+
+  const usingNarrowSelector = Boolean(options.applicationId || options.organizationId);
   const applications = options.scope === "season-zero-draft-cohort"
-    ? allApplications.filter((application) => application.type === ApplicationType.PLAYER && isSelectedDraftCohort(dataObject(application.submittedData)))
+    ? candidateApplications.filter((application) => application.type === ApplicationType.PLAYER && isSelectedDraftCohort(dataObject(application.submittedData)))
     : options.scope === "season-zero-approved-coaches"
-      ? allApplications.filter((application) => application.type === ApplicationType.COACH && application.coachSeasonZeroSelectionStatus === CoachSeasonZeroSelectionStatus.SEASON_ZERO_SELECTED)
-      : allApplications;
+      ? candidateApplications.filter((application) => application.type === ApplicationType.COACH && application.coachSeasonZeroSelectionStatus === CoachSeasonZeroSelectionStatus.SEASON_ZERO_SELECTED)
+      : candidateApplications;
   const report: InternalizationReport = {
     dryRun: !options.apply,
     applicationsScanned: applications.length,
@@ -249,7 +287,7 @@ export async function internalizeApprovedApplications(options: InternalizationOp
       return report;
     }
   }
-  if (!options.scope) {
+  if (!options.scope && !usingNarrowSelector) {
     const duplicateSummary = await duplicateResolutionSummary();
     if (duplicateSummary.unresolved > 0) {
       report.ambiguousRecords = duplicateSummary.unresolved;
@@ -300,15 +338,15 @@ export async function internalizeApprovedApplications(options: InternalizationOp
         continue;
       }
 
-      await prisma.$transaction(async (tx) => {
-        const { user, created } = await ensureUser(tx, data, application.applicantUserId);
+      await withOrganizationContext(application.organizationId, async (tx) => {
+        const { user, created } = await ensureUser(tx, application.organizationId, data, application.applicantUserId);
         if (created) report.usersCreated += 1;
         else report.usersLinked += 1;
-        await grantRole(tx, user.id, UserRole.FAN, options.actorUserId);
+        await grantRole(tx, application.organizationId, user.id, UserRole.FAN, options.actorUserId);
 
         const appRole = roleForApplication(application.type);
         if (appRole) {
-          await grantRole(tx, user.id, appRole, options.actorUserId);
+          await grantRole(tx, application.organizationId, user.id, appRole, options.actorUserId);
           report.rolesGranted += 1;
         }
 
@@ -337,6 +375,7 @@ export async function internalizeApprovedApplications(options: InternalizationOp
               })
             : await tx.athlete.create({
                 data: {
+                  organizationId: application.organizationId,
                   userId: user.id,
                   firstName: name.firstName,
                   lastName: name.lastName,
@@ -352,8 +391,14 @@ export async function internalizeApprovedApplications(options: InternalizationOp
               });
           if (existingAthlete) report.athletesLinked += 1;
           else report.athletesCreated += 1;
+          await upsertPublicResourceLocator(tx, {
+            resourceType: PublicResourceLocatorType.ATHLETE,
+            publicKey: athlete.id,
+            organizationId: application.organizationId,
+            resourceId: athlete.id,
+          });
           if (!athlete.ultraAthleteId) report.publicIdsAssigned += 1;
-          await ensureAthletePublicId(tx, athlete.id);
+          await ensureAthletePublicId(tx, application.organizationId, athlete.id);
           athleteId = athlete.id;
           const season = await tx.season.findFirst({ where: { status: { in: ["ACTIVE", "DRAFT"] } }, orderBy: { startDate: "desc" } });
           if (season) {
@@ -371,6 +416,7 @@ export async function internalizeApprovedApplications(options: InternalizationOp
                 status: PlayerStatus.DRAFT_ELIGIBLE,
               },
               create: {
+                organizationId: application.organizationId,
                 athleteId: athlete.id,
                 seasonId: season.id,
                 position: text(data, "position", "TBD"),
@@ -398,12 +444,12 @@ export async function internalizeApprovedApplications(options: InternalizationOp
                 data: { userId: user.id, name: splitName(data).fullName, email: email || undefined, phone: normalizePhone(data.phone) || null, role: staffRoleForApplication(application.type) },
               })
             : await tx.staff.create({
-                data: { userId: user.id, name: splitName(data).fullName, email: email || null, phone: normalizePhone(data.phone) || null, role: staffRoleForApplication(application.type), recordOrigin: RecordOrigin.APPLICATION },
+                data: { organizationId: application.organizationId, userId: user.id, name: splitName(data).fullName, email: email || null, phone: normalizePhone(data.phone) || null, role: staffRoleForApplication(application.type), recordOrigin: RecordOrigin.APPLICATION },
               });
           if (existingStaff) report.staffLinked += 1;
           else report.staffCreated += 1;
           if (!staff.ultraStaffId) report.publicIdsAssigned += 1;
-          await ensureStaffPublicId(tx, staff.id);
+          await ensureStaffPublicId(tx, application.organizationId, staff.id);
           staffId = staff.id;
           provisioningStatus = ApplicationProvisioningStatus.PROFILE_PROVISIONED;
         }
@@ -422,6 +468,7 @@ export async function internalizeApprovedApplications(options: InternalizationOp
         });
         if (options.actorUserId) {
           await writeAuditLog(tx, {
+            organizationId: application.organizationId,
             userId: options.actorUserId,
             action: "APPLICATION_INTERNALIZED",
             entityType: "Application",

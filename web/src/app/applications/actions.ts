@@ -8,6 +8,7 @@ import {
   AthleteGender,
   DraftSelectionGroup,
   PlayerStatus,
+  PublicResourceLocatorType,
   StaffRole,
   UserRole,
 } from "@/generated/prisma/enums";
@@ -19,11 +20,13 @@ import {
   parseExportableTypes,
 } from "@/app/applications/application-data";
 import { writeAuditLog } from "@/lib/audit";
-import { requirePermission } from "@/lib/authorization";
+import { upsertRoleAssignment } from "@/lib/user-roles";
+import { assertSameOrganization, requirePermissionWithOrganization } from "@/lib/authorization";
 import { roleForApplication, staffRoleForApplication } from "@/lib/participant-internalization";
-import { prisma } from "@/lib/prisma";
+import { upsertPublicResourceLocator } from "@/lib/public-locators";
 import { ensureAthletePublicId, ensureStaffPublicId } from "@/lib/public-ids";
 import { sendSmtpMail } from "@/lib/smtp";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 type SubmittedData = Record<string, unknown>;
 
@@ -91,27 +94,26 @@ function parseDraftSelectionGroup(value: FormDataEntryValue | null) {
 
 async function grantRole(
   tx: Prisma.TransactionClient,
+  organizationId: string,
   userId: string,
   role: UserRole,
   grantedById: string,
 ) {
-  await tx.userRoleAssignment.upsert({
-    where: { userId_role: { userId, role } },
-    update: { revokedAt: null, grantedById, grantedAt: new Date() },
-    create: { userId, role, grantedById },
-  });
+  await upsertRoleAssignment(tx, { userId, role, organizationId, grantedById });
 }
 
 async function provisionApprovedApplication(
   tx: Prisma.TransactionClient,
   application: {
     id: string;
+    organizationId: string;
     type: ApplicationType;
     applicantUserId: string | null;
     submittedData: Prisma.JsonValue;
   },
   reviewerId: string,
 ) {
+  const organizationId = application.organizationId;
   if (!application.applicantUserId) {
     throw new Error("Application must be attached to a user before approval.");
   }
@@ -154,9 +156,15 @@ async function provisionApprovedApplication(
         },
       })
       : await tx.athlete.create({
-        data: athleteData,
+        data: { ...athleteData, organizationId },
       });
-    const ultraAthleteId = await ensureAthletePublicId(tx, athlete.id);
+    await upsertPublicResourceLocator(tx, {
+      resourceType: PublicResourceLocatorType.ATHLETE,
+      publicKey: athlete.id,
+      organizationId,
+      resourceId: athlete.id,
+    });
+    const ultraAthleteId = await ensureAthletePublicId(tx, organizationId, athlete.id);
     const season = await tx.season.findFirst({
       where: { status: { in: ["ACTIVE", "DRAFT"] } },
       orderBy: { startDate: "desc" },
@@ -172,6 +180,7 @@ async function provisionApprovedApplication(
           status: PlayerStatus.DRAFT_ELIGIBLE,
         },
         create: {
+          organizationId,
           athleteId: athlete.id,
           seasonId: season.id,
           position: text(data, "position", "TBD"),
@@ -202,8 +211,8 @@ async function provisionApprovedApplication(
         },
       });
     }
-    await grantRole(tx, userId, UserRole.PLAYER, reviewerId);
-    await writeAuditLog(tx, { userId: reviewerId, action: "PUBLIC_ID_ASSIGNED", entityType: "Athlete", entityId: athlete.id, details: { ultraAthleteId } });
+    await grantRole(tx, organizationId, userId, UserRole.PLAYER, reviewerId);
+    await writeAuditLog(tx, { organizationId, userId: reviewerId, action: "PUBLIC_ID_ASSIGNED", entityType: "Athlete", entityId: athlete.id, details: { ultraAthleteId } });
     return;
   }
 
@@ -218,6 +227,7 @@ async function provisionApprovedApplication(
         email: text(data, "email") || null,
       },
       create: {
+        organizationId,
         userId,
         name: applicationName(data),
         role,
@@ -225,7 +235,7 @@ async function provisionApprovedApplication(
         email: text(data, "email") || null,
       },
     });
-    const ultraStaffId = await ensureStaffPublicId(tx, staff.id);
+    const ultraStaffId = await ensureStaffPublicId(tx, organizationId, staff.id);
     await tx.application.update({
       where: { id: application.id },
       data: {
@@ -235,8 +245,8 @@ async function provisionApprovedApplication(
         provisioningStatus: "PROFILE_PROVISIONED",
       },
     });
-    await grantRole(tx, userId, roleForApplication(application.type) ?? UserRole.FAN, reviewerId);
-    await writeAuditLog(tx, { userId: reviewerId, action: "PUBLIC_ID_ASSIGNED", entityType: "Staff", entityId: staff.id, details: { ultraStaffId } });
+    await grantRole(tx, organizationId, userId, roleForApplication(application.type) ?? UserRole.FAN, reviewerId);
+    await writeAuditLog(tx, { organizationId, userId: reviewerId, action: "PUBLIC_ID_ASSIGNED", entityType: "Staff", entityId: staff.id, details: { ultraStaffId } });
     return;
   }
 
@@ -261,10 +271,10 @@ async function provisionApprovedApplication(
       });
     } else {
       await tx.vendor.create({
-        data: vendorData,
+        data: { ...vendorData, organizationId },
       });
     }
-    await grantRole(tx, userId, UserRole.VENDOR, reviewerId);
+    await grantRole(tx, organizationId, userId, UserRole.VENDOR, reviewerId);
     return;
   }
 
@@ -279,6 +289,7 @@ async function provisionApprovedApplication(
         isActive: true,
       },
       create: {
+        organizationId,
         userId,
         organization: text(data, "organization", "Independent"),
         roleTitle: text(data, "mediaRole", "Media"),
@@ -286,7 +297,7 @@ async function provisionApprovedApplication(
         socialLinks: text(data, "socialLinks") || null,
       },
     });
-    await grantRole(tx, userId, UserRole.MEDIA, reviewerId);
+    await grantRole(tx, organizationId, userId, UserRole.MEDIA, reviewerId);
     return;
   }
 
@@ -300,6 +311,7 @@ async function provisionApprovedApplication(
         isActive: true,
       },
       create: {
+        organizationId,
         userId,
         areaOfInterest: text(data, "areaOfInterest", "Operations"),
         availability: text(data, "availability", "TBD"),
@@ -315,6 +327,7 @@ async function provisionApprovedApplication(
         email: text(data, "email") || null,
       },
       create: {
+        organizationId,
         userId,
         name: applicationName(data),
         role: StaffRole.VOLUNTEER,
@@ -322,12 +335,12 @@ async function provisionApprovedApplication(
         email: text(data, "email") || null,
       },
     });
-    await grantRole(tx, userId, UserRole.VOLUNTEER, reviewerId);
+    await grantRole(tx, organizationId, userId, UserRole.VOLUNTEER, reviewerId);
   }
 }
 
 export async function updateApplicationStatus(formData: FormData) {
-  const session = await requirePermission("application:review");
+  const { session, organizationId } = await requirePermissionWithOrganization("application:review");
   const applicationId = formData.get("applicationId");
   const status = formData.get("status");
   const notesValue = formData.get("notes");
@@ -348,7 +361,20 @@ export async function updateApplicationStatus(formData: FormData) {
     : null;
   const nextStatus = status as ApplicationStatus;
 
-  await prisma.$transaction(async (tx) => {
+  // Phase 1: an admin can only see/act on an application through their own authorized org
+  // context - RLS makes a cross-org application invisible to this lookup, and
+  // assertSameOrganization turns that into a clear error rather than a silent not-found.
+  // Once the application is confirmed to be in-scope, every write below runs inside its OWN
+  // organizationId (application.organizationId), not the admin's session org - the two happen
+  // to be identical here only because the lookup above already proved it, but the resulting
+  // participant records must always derive their org from the Application itself, per this
+  // project's provisioning-provenance rule.
+  const existing = await withOrganizationContext(organizationId, (tx) =>
+    tx.application.findUnique({ where: { id: applicationId }, select: { id: true, organizationId: true } }),
+  );
+  assertSameOrganization(existing, organizationId, "Application");
+
+  await withOrganizationContext(existing.organizationId, async (tx) => {
     const application = await tx.application.update({
       data: {
         status: nextStatus,
@@ -357,7 +383,7 @@ export async function updateApplicationStatus(formData: FormData) {
         reviewedAt: new Date(),
       },
       where: { id: applicationId },
-      select: { id: true, type: true, status: true, applicantUserId: true, submittedData: true },
+      select: { id: true, organizationId: true, type: true, status: true, applicantUserId: true, submittedData: true },
     });
 
     if (nextStatus === ApplicationStatus.APPROVED) {
@@ -395,6 +421,7 @@ export async function updateApplicationStatus(formData: FormData) {
     }
 
     await writeAuditLog(tx, {
+      organizationId: application.organizationId,
       userId: session.user.id,
       action: "APPLICATION_STATUS_UPDATED",
       entityType: "Application",
@@ -422,7 +449,7 @@ export async function sendBulkApplicationEmail(
   _previousState: BulkEmailState,
   formData: FormData,
 ): Promise<BulkEmailState> {
-  const session = await requirePermission("application:review");
+  const { session, organizationId } = await requirePermissionWithOrganization("application:review");
   const types = parseExportableTypes(value(formData, "types"));
   const status = parseEmailStatusFilter(value(formData, "status"));
   const subject = value(formData, "subject").trim();
@@ -448,7 +475,7 @@ export async function sendBulkApplicationEmail(
     };
   }
 
-  const applications = await getApplicationData(types, status);
+  const applications = await getApplicationData(organizationId, types, status);
   const recipients = applicationRecipients(applications);
   if (recipients.length === 0) {
     return { error: "No valid recipient emails found for the selected audience and status." };
@@ -484,8 +511,9 @@ export async function sendBulkApplicationEmail(
     }
   }
 
-  await prisma.$transaction((tx) =>
+  await withOrganizationContext(organizationId, (tx) =>
     writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "APPLICATION_BULK_EMAIL_SENT",
       entityType: "Application",

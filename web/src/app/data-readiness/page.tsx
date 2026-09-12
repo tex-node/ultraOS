@@ -4,26 +4,45 @@ import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { ApplicationStatus } from "@/generated/prisma/enums";
 import { auditRealData } from "@/lib/data-hygiene";
-import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { AuthorizationError, MissingOrganizationContextError, requirePlatformPermission } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
+// Phase 1 Stage 5.2C: every count/aggregate below now runs inside the acting admin's own scoped
+// transaction - previously entirely unscoped, so an Org B admin's readiness dashboard would have
+// included every organization's applications/athletes/staff/draft-squad-membership counts.
+// auditRealData() (the demo/rehearsal-data audit) is deliberately NOT converted here - it is the
+// same already-named, platform-wide diagnostic tool Stage 5.2B-2 classified as a low-urgency
+// exception, continued unchanged (it audits data ACROSS the whole platform for cleanup purposes
+// by design, not per-tenant business reporting).
 export default async function DataReadinessPage() {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/data-readiness");
-  if (!hasPermission(session.user.roles, "data:readiness")) return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
-  const [audit, totalApplications, approvedApplications, internalizedApplications, athletes, missingAthleteIds, missingPhotos, playersInSquads, duplicateSquadMemberships, coaches, staffMissingIds] = await Promise.all([
+  try {
+    await requirePlatformPermission("data:readiness");
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
+    }
+    throw error;
+  }
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const organizationId = session.user.organizationId;
+  const [audit, counts] = await Promise.all([
     auditRealData(),
-    prisma.application.count(),
-    prisma.application.count({ where: { status: ApplicationStatus.APPROVED } }),
-    prisma.application.count({ where: { status: ApplicationStatus.APPROVED, provisionedAt: { not: null } } }),
-    prisma.athlete.count(),
-    prisma.athlete.count({ where: { ultraAthleteId: null } }),
-    prisma.athlete.count({ where: { photoUrl: null } }),
-    prisma.draftSquadMember.count(),
-    prisma.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*) FROM (SELECT "playerId" FROM "DraftSquadMember" GROUP BY "playerId" HAVING COUNT(*) > 1) d`,
-    prisma.staff.count({ where: { role: { in: ["HEAD_COACH", "ASSISTANT_COACH"] } } }),
-    prisma.staff.count({ where: { ultraStaffId: null } }),
+    withOrganizationContext(organizationId, (tx) => Promise.all([
+      tx.application.count(),
+      tx.application.count({ where: { status: ApplicationStatus.APPROVED } }),
+      tx.application.count({ where: { status: ApplicationStatus.APPROVED, provisionedAt: { not: null } } }),
+      tx.athlete.count(),
+      tx.athlete.count({ where: { ultraAthleteId: null } }),
+      tx.athlete.count({ where: { photoUrl: null } }),
+      tx.draftSquadMember.count(),
+      tx.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*) FROM (SELECT "playerId" FROM "DraftSquadMember" GROUP BY "playerId" HAVING COUNT(*) > 1) d`,
+      tx.staff.count({ where: { role: { in: ["HEAD_COACH", "ASSISTANT_COACH"] } } }),
+      tx.staff.count({ where: { ultraStaffId: null } }),
+    ])),
   ]);
+  const [totalApplications, approvedApplications, internalizedApplications, athletes, missingAthleteIds, missingPhotos, playersInSquads, duplicateSquadMemberships, coaches, staffMissingIds] = counts;
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">

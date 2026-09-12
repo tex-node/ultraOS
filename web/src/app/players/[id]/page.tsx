@@ -8,8 +8,13 @@ import { deleteAthlete, removePlayerRegistration } from "../actions";
 import { requireSession } from "@/lib/authorization";
 import { athleteCareerStats, athleteCompleteness } from "@/lib/participant-profiles";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
+// Phase 1 Stage 5.5B: previously read the Athlete (and every award/document/media/training/
+// registration record) via the bare, unscoped client - an Org B authenticated user could view
+// Org A's athlete profile in full. ultraAthleteId is deliberately GLOBAL-unique (Stage 5.4A), so
+// scoping this lookup to the caller's own organization can only exclude ids that were never
+// theirs to see.
 export default async function AthletePage({
   params,
   searchParams,
@@ -24,26 +29,30 @@ export default async function AthletePage({
   const query = await searchParams;
   const canManage = hasPermission(session.user.roles, "player:manage");
   const canUploadMedia = hasPermission(session.user.roles, "media:upload");
-  const athlete = await prisma.athlete.findFirst({
-    where: id.startsWith("UBA-") ? { ultraAthleteId: id } : { id },
-    include: {
-      awards: { orderBy: { awardedAt: "desc" } },
-      documents: canManage ? { orderBy: { createdAt: "desc" }, take: 10 } : false,
-      media: { orderBy: { createdAt: "desc" }, take: canManage ? 20 : 6 },
-      trainingRecords: { include: { trainingSession: true }, orderBy: { createdAt: "desc" }, take: canManage ? 20 : 5 },
-      registrations: {
-        orderBy: { season: { startDate: "desc" } },
-        include: {
-          draftSquadMembers: { include: { draftSquad: true } },
-          season: { include: { competition: { select: { name: true } } } },
-          seasonClub: { include: { club: true, division: true } },
-          _count: { select: { draftPicks: true, gameEvents: true, playerStats: true } },
+  if (!session.user.organizationId) return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Organization context required</h1></main></OperationsShell>;
+  const { athlete, career } = await withOrganizationContext(session.user.organizationId, async (tx) => {
+    const athlete = await tx.athlete.findFirst({
+      where: id.startsWith("UBA-") ? { ultraAthleteId: id } : { id },
+      include: {
+        awards: { orderBy: { awardedAt: "desc" } },
+        documents: canManage ? { orderBy: { createdAt: "desc" }, take: 10 } : false,
+        media: { orderBy: { createdAt: "desc" }, take: canManage ? 20 : 6 },
+        trainingRecords: { include: { trainingSession: true }, orderBy: { createdAt: "desc" }, take: canManage ? 20 : 5 },
+        registrations: {
+          orderBy: { season: { startDate: "desc" } },
+          include: {
+            draftSquadMembers: { include: { draftSquad: true } },
+            season: { include: { competition: { select: { name: true } } } },
+            seasonClub: { include: { club: true, division: true } },
+            _count: { select: { draftPicks: true, gameEvents: true, playerStats: true } },
+          },
         },
       },
-    },
+    });
+    const career = athlete ? await athleteCareerStats(athlete.id, tx) : null;
+    return { athlete, career };
   });
-  if (!athlete) notFound();
-  const career = await athleteCareerStats(athlete.id);
+  if (!athlete || !career) notFound();
   const completeness = athleteCompleteness(athlete);
   const current = athlete.registrations[0];
 

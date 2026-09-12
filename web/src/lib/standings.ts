@@ -34,7 +34,15 @@ export function compareStandings(
     b.pointsFor-a.pointsFor || a.name.localeCompare(b.name);
 }
 
-export async function recalculateStandings(tx: Prisma.TransactionClient, seasonId: string) {
+// Phase 1 Stage 5.2C: organizationId is now an explicit required parameter, stamped on the
+// upsert's create branch. Previously omitted entirely - a genuine gap, since Prisma's
+// dbgenerated() default for a brand-new Standing row (created here the first time a season's
+// results are finalized) resolves to the Stage 3a Neon Ultra default, not necessarily the
+// calling organization. Under RLS this would have surfaced as a hard "new row violates row-level
+// security policy" failure for a second organization's first standings recalculation (the same
+// failure mode PublicIdCounter hit in Stage 5.2B-1/5.4A), not a silent cross-tenant write - but
+// it is still a defect, fixed the same way every other stage's upsert.create gap has been.
+export async function recalculateStandings(tx: Prisma.TransactionClient, organizationId: string, seasonId: string) {
   const [teams, fixtures] = await Promise.all([
     tx.seasonClub.findMany({ where: { seasonId }, select: { id: true } }),
     tx.fixture.findMany({
@@ -51,7 +59,7 @@ export async function recalculateStandings(tx: Prisma.TransactionClient, seasonI
   const rows = calculateStandings(teams.map((team) => team.id), fixtures);
   await Promise.all([...rows.entries()].map(([seasonClubId, row]) => tx.standing.upsert({
     where: { seasonClubId },
-    create: { seasonId, seasonClubId, ...row },
+    create: { organizationId, seasonId, seasonClubId, ...row },
     update: row,
   })));
 }

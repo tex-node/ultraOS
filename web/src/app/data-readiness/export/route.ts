@@ -1,10 +1,12 @@
-import { auth } from "@/auth";
 import { auditRealData } from "@/lib/data-hygiene";
-import { hasPermission } from "@/lib/permissions";
+import { requirePlatformPermission } from "@/lib/authorization";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user || !hasPermission(session.user.roles, "data:readiness")) return new Response("Forbidden", { status: 403 });
+  try {
+    await requirePlatformPermission("data:readiness");
+  } catch {
+    return new Response("Forbidden", { status: 403 });
+  }
   const audit = await auditRealData();
   const rows = [["section", "metric", "value"]];
   for (const [section, metrics] of Object.entries(audit)) {

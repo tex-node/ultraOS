@@ -9,7 +9,8 @@ import {
   ImportStatus,
 } from "@/generated/prisma/enums";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { MissingOrganizationContextError } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function ImportJobPage({ params }: { params: Promise<{ importJobId: string }> }) {
   const session = await auth();
@@ -25,14 +26,17 @@ export default async function ImportJobPage({ params }: { params: Promise<{ impo
       </OperationsShell>
     );
   }
+  if (!session.user.organizationId) {
+    throw new MissingOrganizationContextError();
+  }
 
-  const job = await prisma.importJob.findUnique({
+  const job = await withOrganizationContext(session.user.organizationId, (tx) => tx.importJob.findUnique({
     include: {
       rows: { orderBy: { rowNumber: "asc" } },
       uploadedBy: { select: { email: true, name: true } },
     },
     where: { id: importJobId },
-  });
+  }));
   if (!job) notFound();
 
   const unresolvedErrors = job.rows.filter(

@@ -10,12 +10,15 @@ import {
   ImportStatus,
   ImportType,
   PlayerStatus,
+  PublicResourceLocatorType,
   SeasonClubStatus,
   StaffRole,
   UserRole,
 } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
-import { prisma } from "@/lib/prisma";
+import { upsertPublicResourceLocator } from "@/lib/public-locators";
+import { withOrganizationContext } from "@/lib/tenant-context";
+import { upsertRoleAssignment } from "@/lib/user-roles";
 
 export const MAX_IMPORT_FILE_BYTES = Number(process.env.IMPORT_MAX_FILE_BYTES ?? 1_000_000);
 
@@ -211,12 +214,12 @@ function rowStatus(errors: string[], warnings: string[]) {
   return ImportRowStatus.VALID;
 }
 
-async function seasonAndDivision(seasonName: string, divisionName: string) {
-  const season = await prisma.season.findFirst({
+async function seasonAndDivision(tx: Prisma.TransactionClient, seasonName: string, divisionName: string) {
+  const season = await tx.season.findFirst({
     where: { name: { equals: seasonName, mode: "insensitive" } },
     select: { id: true, name: true, competitionId: true, competition: { select: { sportId: true } } },
   });
-  const division = await prisma.division.findFirst({
+  const division = await tx.division.findFirst({
     where: { name: { equals: divisionName, mode: "insensitive" } },
     select: { id: true, name: true, competitionId: true },
   });
@@ -224,7 +227,7 @@ async function seasonAndDivision(seasonName: string, divisionName: string) {
   return { compatible, division, season };
 }
 
-export async function analyzePlayerRow(rawData: Record<string, string>, rowNumber: number): Promise<AnalyzedImportRow> {
+export async function analyzePlayerRow(tx: Prisma.TransactionClient, rawData: Record<string, string>, rowNumber: number): Promise<AnalyzedImportRow> {
   const errors: string[] = [];
   const warnings: string[] = [];
   const normalized = {
@@ -266,7 +269,7 @@ export async function analyzePlayerRow(rawData: Record<string, string>, rowNumbe
   if (normalized.weightKg != null && (normalized.weightKg < 35 || normalized.weightKg > 180)) warnings.push("weightKg is outside expected range.");
   if (normalized.tryoutScore != null && (normalized.tryoutScore < 0 || normalized.tryoutScore > 100)) errors.push("tryoutScore must be between 0 and 100.");
 
-  const scope = normalized.season && normalized.division ? await seasonAndDivision(normalized.season, normalized.division) : null;
+  const scope = normalized.season && normalized.division ? await seasonAndDivision(tx, normalized.season, normalized.division) : null;
   if (!scope?.season) errors.push("season was not found.");
   if (!scope?.division) errors.push("division was not found.");
   if (scope && !scope.compatible) errors.push("season and division are not in the same competition.");
@@ -275,14 +278,18 @@ export async function analyzePlayerRow(rawData: Record<string, string>, rowNumbe
   let matchedEntityId: string | undefined;
   let resolutionAction: ImportResolutionAction | undefined = ImportResolutionAction.CREATE;
   if (normalized.email) {
-    const user = await prisma.user.findUnique({ where: { email: normalized.email }, select: { id: true } });
+    // User is global (not tenant-scoped), so this lookup can legitimately find a person who is
+    // e.g. already a Neon Ultra fan applying to Org B - matching participant-internalization.ts's
+    // established "User stays global, membership is per-org" model. What matters is that the
+    // Athlete/Player records below are scoped, not this identity lookup itself.
+    const user = await tx.user.findUnique({ where: { email: normalized.email }, select: { id: true } });
     if (user) {
       matchedEntityType = "User";
       matchedEntityId = user.id;
       resolutionAction = ImportResolutionAction.LINK_EXISTING;
-      const athlete = await prisma.athlete.findUnique({ where: { userId: user.id }, select: { id: true } });
+      const athlete = await tx.athlete.findUnique({ where: { userId: user.id }, select: { id: true } });
       if (athlete && scope?.season) {
-        const player = await prisma.player.findUnique({
+        const player = await tx.player.findUnique({
           where: { athleteId_seasonId: { athleteId: athlete.id, seasonId: scope.season.id } },
           select: { id: true },
         });
@@ -301,7 +308,7 @@ export async function analyzePlayerRow(rawData: Record<string, string>, rowNumbe
   }
 
   if (!matchedEntityId && normalized.firstName && normalized.lastName && dateOfBirth) {
-    const candidates = await prisma.athlete.findMany({
+    const candidates = await tx.athlete.findMany({
       where: {
         dateOfBirth,
         firstName: { equals: normalized.firstName, mode: "insensitive" },
@@ -322,7 +329,7 @@ export async function analyzePlayerRow(rawData: Record<string, string>, rowNumbe
   }
 
   if (scope?.season && normalized.tryoutNumber) {
-    const duplicateTryout = await prisma.player.findFirst({
+    const duplicateTryout = await tx.player.findFirst({
       where: { seasonId: scope.season.id, tryoutNumber: normalized.tryoutNumber },
       select: { id: true },
     });
@@ -344,7 +351,7 @@ export async function analyzePlayerRow(rawData: Record<string, string>, rowNumbe
   };
 }
 
-export async function analyzeCoachRow(rawData: Record<string, string>, rowNumber: number): Promise<AnalyzedImportRow> {
+export async function analyzeCoachRow(tx: Prisma.TransactionClient, rawData: Record<string, string>, rowNumber: number): Promise<AnalyzedImportRow> {
   const errors: string[] = [];
   const warnings: string[] = [];
   const normalized = {
@@ -368,12 +375,12 @@ export async function analyzeCoachRow(rawData: Record<string, string>, rowNumber
   let matchedEntityType: string | undefined;
   let matchedEntityId: string | undefined;
   let resolutionAction: ImportResolutionAction | undefined = ImportResolutionAction.CREATE;
-  const user = normalized.email ? await prisma.user.findUnique({ where: { email: normalized.email }, select: { id: true } }) : null;
+  const user = normalized.email ? await tx.user.findUnique({ where: { email: normalized.email }, select: { id: true } }) : null;
   if (user) {
     matchedEntityType = "User";
     matchedEntityId = user.id;
     resolutionAction = ImportResolutionAction.LINK_EXISTING;
-    const staff = await prisma.staff.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const staff = await tx.staff.findUnique({ where: { userId: user.id }, select: { id: true } });
     if (staff) {
       matchedEntityType = "Staff";
       matchedEntityId = staff.id;
@@ -381,7 +388,7 @@ export async function analyzeCoachRow(rawData: Record<string, string>, rowNumber
       warnings.push("Existing Staff profile found.");
     }
   } else if (normalized.email) {
-    const staff = await prisma.staff.findFirst({ where: { email: normalized.email }, select: { id: true } });
+    const staff = await tx.staff.findFirst({ where: { email: normalized.email }, select: { id: true } });
     if (staff) {
       matchedEntityType = "Staff";
       matchedEntityId = staff.id;
@@ -392,7 +399,7 @@ export async function analyzeCoachRow(rawData: Record<string, string>, rowNumber
 
   let seasonClubId: string | undefined;
   if (normalized.assignmentRole !== "UNASSIGNED" && normalized.seasonClub) {
-    const seasonClub = await prisma.seasonClub.findFirst({
+    const seasonClub = await tx.seasonClub.findFirst({
       where: {
         club: { name: { equals: normalized.seasonClub, mode: "insensitive" } },
         season: normalized.season ? { name: { equals: normalized.season, mode: "insensitive" } } : undefined,
@@ -402,7 +409,7 @@ export async function analyzeCoachRow(rawData: Record<string, string>, rowNumber
     if (!seasonClub) {
       errors.push("SeasonClub assignment was not found.");
     } else if (matchedEntityType === "Staff" && matchedEntityId) {
-      const conflict = await prisma.seasonClub.findFirst({
+      const conflict = await tx.seasonClub.findFirst({
         where: {
           id: { not: seasonClub.id },
           OR: [{ headCoachId: matchedEntityId }, { assistantCoachId: matchedEntityId }],
@@ -431,7 +438,7 @@ export async function analyzeCoachRow(rawData: Record<string, string>, rowNumber
   };
 }
 
-export async function analyzeClubRow(rawData: Record<string, string>, rowNumber: number): Promise<AnalyzedImportRow> {
+export async function analyzeClubRow(tx: Prisma.TransactionClient, rawData: Record<string, string>, rowNumber: number): Promise<AnalyzedImportRow> {
   const errors: string[] = [];
   const warnings: string[] = [];
   const normalized = {
@@ -452,10 +459,11 @@ export async function analyzeClubRow(rawData: Record<string, string>, rowNumber:
   if (normalized.foundedYear != null && (normalized.foundedYear < 1800 || normalized.foundedYear > new Date().getFullYear())) errors.push("foundedYear is invalid.");
   if (!enumValue(ClubStatus, normalized.status)) errors.push("status is invalid.");
 
-  const sport = await prisma.sport.findFirst({ where: { slug: "basketball" }, select: { id: true } });
+  // Sport is global (not tenant-scoped), read fine through tx regardless of active org context.
+  const sport = await tx.sport.findFirst({ where: { slug: "basketball" }, select: { id: true } });
   if (!sport) errors.push("Basketball sport record was not found.");
   const existing = sport
-    ? await prisma.club.findFirst({
+    ? await tx.club.findFirst({
         where: {
           sportId: sport.id,
           OR: [
@@ -477,7 +485,7 @@ export async function analyzeClubRow(rawData: Record<string, string>, rowNumber:
     warnings.push("Existing permanent Club identity found.");
   }
 
-  const scope = normalized.season && normalized.division ? await seasonAndDivision(normalized.season, normalized.division) : null;
+  const scope = normalized.season && normalized.division ? await seasonAndDivision(tx, normalized.season, normalized.division) : null;
   if (normalized.season || normalized.division) {
     if (!scope?.season) errors.push("season was not found.");
     if (!scope?.division) errors.push("division was not found.");
@@ -497,13 +505,13 @@ export async function analyzeClubRow(rawData: Record<string, string>, rowNumber:
   };
 }
 
-export async function analyzeImportRows(type: ImportType, rows: Record<string, string>[]) {
+export async function analyzeImportRows(tx: Prisma.TransactionClient, type: ImportType, rows: Record<string, string>[]) {
   const analyzed: AnalyzedImportRow[] = [];
   for (const [index, row] of rows.entries()) {
     const rowNumber = index + 2;
-    if (type === ImportType.PLAYER) analyzed.push(await analyzePlayerRow(row, rowNumber));
-    if (type === ImportType.COACH) analyzed.push(await analyzeCoachRow(row, rowNumber));
-    if (type === ImportType.CLUB) analyzed.push(await analyzeClubRow(row, rowNumber));
+    if (type === ImportType.PLAYER) analyzed.push(await analyzePlayerRow(tx, row, rowNumber));
+    if (type === ImportType.COACH) analyzed.push(await analyzeCoachRow(tx, row, rowNumber));
+    if (type === ImportType.CLUB) analyzed.push(await analyzeClubRow(tx, row, rowNumber));
   }
   return analyzed;
 }
@@ -528,23 +536,32 @@ export async function createImportJobFromCsv(params: {
   text: string;
   type: ImportType;
   userId: string;
+  organizationId: string;
 }) {
   const parsed = parseCsv(params.text);
   validateHeaders(params.type, parsed.headers);
-  const analyzedRows = await analyzeImportRows(params.type, parsed.rows);
-  const summary = summarizeAnalyzedRows(analyzedRows);
-  const status = importStatusFromRows(analyzedRows);
 
-  return prisma.$transaction(async (tx) => {
+  return withOrganizationContext(params.organizationId, async (tx) => {
+    // Analysis (matching/duplicate-detection) runs inside the same scoped transaction as the
+    // job/row creation below, not before it - every Club/Season/SeasonClub/Athlete/Staff lookup
+    // a row's analysis performs is therefore already invisible to any other organization's data,
+    // so a CSV imported for Org B can never match an identically-named Club that belongs to
+    // Org A.
+    const analyzedRows = await analyzeImportRows(tx, params.type, parsed.rows);
+    const summary = summarizeAnalyzedRows(analyzedRows);
+    const status = importStatusFromRows(analyzedRows);
+
     const job = await tx.importJob.create({
       data: {
         ...summary,
+        organizationId: params.organizationId,
         fileName: params.fileName,
         status,
         type: params.type,
         uploadedById: params.userId,
         rows: {
           create: analyzedRows.map((row) => ({
+            organizationId: params.organizationId,
             errors: row.errors as Prisma.InputJsonValue,
             matchedEntityId: row.matchedEntityId,
             matchedEntityType: row.matchedEntityType,
@@ -560,6 +577,7 @@ export async function createImportJobFromCsv(params: {
       },
     });
     await writeAuditLog(tx, {
+      organizationId: params.organizationId,
       action: "IMPORT_PARSED",
       details: { fileName: params.fileName, importJobId: job.id, summary, type: params.type },
       entityId: job.id,
@@ -570,20 +588,12 @@ export async function createImportJobFromCsv(params: {
   });
 }
 
-async function ensureFanRole(tx: Prisma.TransactionClient, userId: string, grantedById: string) {
-  await tx.userRoleAssignment.upsert({
-    where: { userId_role: { userId, role: UserRole.FAN } },
-    update: { revokedAt: null },
-    create: { grantedById, role: UserRole.FAN, userId },
-  });
+async function ensureFanRole(tx: Prisma.TransactionClient, organizationId: string, userId: string, grantedById: string) {
+  await upsertRoleAssignment(tx, { userId, role: UserRole.FAN, organizationId, grantedById });
 }
 
-async function ensureRole(tx: Prisma.TransactionClient, userId: string, role: UserRole, grantedById: string) {
-  await tx.userRoleAssignment.upsert({
-    where: { userId_role: { userId, role } },
-    update: { grantedAt: new Date(), grantedById, revokedAt: null },
-    create: { grantedById, role, userId },
-  });
+async function ensureRole(tx: Prisma.TransactionClient, organizationId: string, userId: string, role: UserRole, grantedById: string) {
+  await upsertRoleAssignment(tx, { userId, role, organizationId, grantedById });
 }
 
 function rowMessage(row: { errors: unknown; warnings: unknown }) {
@@ -592,11 +602,11 @@ function rowMessage(row: { errors: unknown; warnings: unknown }) {
   return errors || warnings || "OK";
 }
 
-export async function importReportRows(importJobId: string) {
-  const rows = await prisma.importRow.findMany({
+export async function importReportRows(organizationId: string, importJobId: string) {
+  const rows = await withOrganizationContext(organizationId, (tx) => tx.importRow.findMany({
     orderBy: { rowNumber: "asc" },
     where: { importJobId },
-  });
+  }));
   return [
     ["rowNumber", "status", "action", "entityType", "entityId", "message", "warnings", "errors"],
     ...rows.map((row) => [
@@ -628,7 +638,7 @@ function numberField(data: Record<string, unknown>, key: string, fallback: numbe
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-async function processPlayerRow(tx: Prisma.TransactionClient, row: { id: string; matchedEntityId: string | null; matchedEntityType: string | null; normalizedData: Prisma.JsonValue | null; resolutionAction: ImportResolutionAction | null }, userId: string) {
+async function processPlayerRow(tx: Prisma.TransactionClient, organizationId: string, row: { id: string; matchedEntityId: string | null; matchedEntityType: string | null; normalizedData: Prisma.JsonValue | null; resolutionAction: ImportResolutionAction | null }, userId: string) {
   const data = normalizedData(row);
   const action = row.resolutionAction ?? ImportResolutionAction.CREATE;
   if (action === ImportResolutionAction.SKIP || action === ImportResolutionAction.REJECT) {
@@ -652,7 +662,7 @@ async function processPlayerRow(tx: Prisma.TransactionClient, row: { id: string;
       select: { id: true },
     });
     linkedUserId = user.id;
-    await ensureFanRole(tx, user.id, userId);
+    await ensureFanRole(tx, organizationId, user.id, userId);
   }
   if (!athleteId && linkedUserId) {
     const existing = await tx.athlete.findUnique({ where: { userId: linkedUserId }, select: { id: true } });
@@ -661,6 +671,7 @@ async function processPlayerRow(tx: Prisma.TransactionClient, row: { id: string;
   if (!athleteId) {
     const athlete = await tx.athlete.create({
       data: {
+        organizationId,
         dateOfBirth: parseDate(stringField(data, "dateOfBirth")) ?? new Date("2000-01-01T00:00:00Z"),
         dominantHand: stringField(data, "dominantHand") || "RIGHT",
         email: email || null,
@@ -674,6 +685,12 @@ async function processPlayerRow(tx: Prisma.TransactionClient, row: { id: string;
       select: { id: true },
     });
     athleteId = athlete.id;
+    await upsertPublicResourceLocator(tx, {
+      resourceType: PublicResourceLocatorType.ATHLETE,
+      publicKey: athlete.id,
+      organizationId,
+      resourceId: athlete.id,
+    });
   }
 
   const seasonId = stringField(data, "seasonId");
@@ -690,6 +707,7 @@ async function processPlayerRow(tx: Prisma.TransactionClient, row: { id: string;
       weightKg: numberField(data, "weightKg", 75),
     },
     create: {
+      organizationId,
       athleteId,
       draftSelectionGroup: stringField(data, "draftSelectionGroup") as DraftSelectionGroup,
       heightCm: numberField(data, "heightCm", 180),
@@ -704,12 +722,13 @@ async function processPlayerRow(tx: Prisma.TransactionClient, row: { id: string;
     select: { id: true },
   });
   if (linkedUserId && stringField(data, "applicationStatus") === ApplicationStatus.APPROVED) {
-    await ensureRole(tx, linkedUserId, UserRole.PLAYER, userId);
+    await ensureRole(tx, organizationId, linkedUserId, UserRole.PLAYER, userId);
     await tx.application.upsert({
       where: { id: `import-player-${player.id}` },
       update: { applicantUserId: linkedUserId, status: ApplicationStatus.APPROVED },
       create: {
         id: `import-player-${player.id}`,
+        organizationId,
         applicantUserId: linkedUserId,
         reviewedAt: new Date(),
         reviewedById: userId,
@@ -722,7 +741,7 @@ async function processPlayerRow(tx: Prisma.TransactionClient, row: { id: string;
   return { entityId: player.id, entityType: "Player", status: ImportRowStatus.IMPORTED };
 }
 
-async function processCoachRow(tx: Prisma.TransactionClient, row: { matchedEntityId: string | null; matchedEntityType: string | null; normalizedData: Prisma.JsonValue | null; resolutionAction: ImportResolutionAction | null }, userId: string) {
+async function processCoachRow(tx: Prisma.TransactionClient, organizationId: string, row: { matchedEntityId: string | null; matchedEntityType: string | null; normalizedData: Prisma.JsonValue | null; resolutionAction: ImportResolutionAction | null }, userId: string) {
   const data = normalizedData(row);
   const action = row.resolutionAction ?? ImportResolutionAction.CREATE;
   if (action === ImportResolutionAction.SKIP || action === ImportResolutionAction.REJECT) {
@@ -735,12 +754,12 @@ async function processCoachRow(tx: Prisma.TransactionClient, row: { matchedEntit
     create: { email, isActive: true, name: stringField(data, "fullName"), role: UserRole.FAN },
     select: { id: true },
   });
-  await ensureFanRole(tx, user.id, userId);
-  if (stringField(data, "applicationStatus") === ApplicationStatus.APPROVED) await ensureRole(tx, user.id, UserRole.COACH, userId);
+  await ensureFanRole(tx, organizationId, user.id, userId);
+  if (stringField(data, "applicationStatus") === ApplicationStatus.APPROVED) await ensureRole(tx, organizationId, user.id, UserRole.COACH, userId);
   const staff = await tx.staff.upsert({
     where: { userId: user.id },
     update: { email, name: stringField(data, "fullName"), phone: stringField(data, "phone") || null, role: StaffRole.HEAD_COACH },
-    create: { email, name: stringField(data, "fullName"), phone: stringField(data, "phone") || null, role: StaffRole.HEAD_COACH, userId: user.id },
+    create: { organizationId, email, name: stringField(data, "fullName"), phone: stringField(data, "phone") || null, role: StaffRole.HEAD_COACH, userId: user.id },
     select: { id: true },
   });
   const assignmentRole = stringField(data, "assignmentRole");
@@ -754,7 +773,7 @@ async function processCoachRow(tx: Prisma.TransactionClient, row: { matchedEntit
   return { entityId: staff.id, entityType: "Staff", status: ImportRowStatus.IMPORTED };
 }
 
-async function processClubRow(tx: Prisma.TransactionClient, row: { matchedEntityId: string | null; matchedEntityType: string | null; normalizedData: Prisma.JsonValue | null; resolutionAction: ImportResolutionAction | null }) {
+async function processClubRow(tx: Prisma.TransactionClient, organizationId: string, row: { matchedEntityId: string | null; matchedEntityType: string | null; normalizedData: Prisma.JsonValue | null; resolutionAction: ImportResolutionAction | null }) {
   const data = normalizedData(row);
   const action = row.resolutionAction ?? ImportResolutionAction.CREATE;
   if (action === ImportResolutionAction.SKIP || action === ImportResolutionAction.REJECT) {
@@ -777,6 +796,7 @@ async function processClubRow(tx: Prisma.TransactionClient, row: { matchedEntity
       })
     : await tx.club.create({
         data: {
+          organizationId,
           foundedYear: numberField(data, "foundedYear", 0) || null,
           logoUrl: stringField(data, "logoUrl") || null,
           name: stringField(data, "clubName"),
@@ -788,30 +808,40 @@ async function processClubRow(tx: Prisma.TransactionClient, row: { matchedEntity
           websiteUrl: stringField(data, "website") || null,
         },
         select: { id: true },
-      });
+  });
   const seasonId = stringField(data, "seasonId");
+  await upsertPublicResourceLocator(tx, {
+    resourceType: PublicResourceLocatorType.CLUB,
+    publicKey: club.id,
+    organizationId,
+    resourceId: club.id,
+  });
   const divisionId = stringField(data, "divisionId");
   if (seasonId && divisionId) {
     const seasonClub = await tx.seasonClub.upsert({
       where: { seasonId_clubId_divisionId: { clubId: club.id, divisionId, seasonId } },
       update: {},
-      create: { clubId: club.id, divisionId, seasonId, status: SeasonClubStatus.ACTIVE },
+      create: { organizationId, clubId: club.id, divisionId, seasonId, status: SeasonClubStatus.ACTIVE },
       select: { id: true },
     });
     await tx.standing.upsert({
       where: { seasonClubId: seasonClub.id },
       update: {},
-      create: { seasonClubId: seasonClub.id, seasonId },
+      create: { organizationId, seasonClubId: seasonClub.id, seasonId },
     });
   }
   return { entityId: club.id, entityType: "Club", status: ImportRowStatus.IMPORTED };
 }
 
-export async function confirmImportJob(importJobId: string, userId: string) {
-  const job = await prisma.importJob.findUnique({
+export async function confirmImportJob(organizationId: string, importJobId: string, userId: string) {
+  // The lookup, every per-row transaction, and the final completion update all run inside this
+  // same organization's context - a client-supplied importJobId belonging to a different
+  // organization is invisible here (RLS), so "Import job not found" is the same clean result a
+  // genuinely missing id gets, not a distinguishable signal.
+  const job = await withOrganizationContext(organizationId, (tx) => tx.importJob.findUnique({
     include: { rows: { orderBy: { rowNumber: "asc" } } },
     where: { id: importJobId },
-  });
+  }));
   if (!job) throw new Error("Import job not found.");
   const nonBlockingResolutionActions: ImportResolutionAction[] = [
     ImportResolutionAction.SKIP,
@@ -824,18 +854,18 @@ export async function confirmImportJob(importJobId: string, userId: string) {
   );
   if (unresolvedErrors.length > 0) throw new Error("Unresolved error rows must be skipped, rejected, or resolved before confirmation.");
 
-  await prisma.importJob.update({ where: { id: importJobId }, data: { startedAt: new Date(), status: ImportStatus.PROCESSING } });
+  await withOrganizationContext(organizationId, (tx) => tx.importJob.update({ where: { id: importJobId }, data: { startedAt: new Date(), status: ImportStatus.PROCESSING } }));
   let importedRows = 0;
   let skippedRows = 0;
   let failedRows = 0;
 
   for (const row of job.rows) {
     try {
-      await prisma.$transaction(async (tx) => {
+      await withOrganizationContext(organizationId, async (tx) => {
         let result: { entityId: string | null; entityType: string | null; status: ImportRowStatus };
-        if (job.type === ImportType.PLAYER) result = await processPlayerRow(tx, row, userId);
-        else if (job.type === ImportType.COACH) result = await processCoachRow(tx, row, userId);
-        else result = await processClubRow(tx, row);
+        if (job.type === ImportType.PLAYER) result = await processPlayerRow(tx, organizationId, row, userId);
+        else if (job.type === ImportType.COACH) result = await processCoachRow(tx, organizationId, row, userId);
+        else result = await processClubRow(tx, organizationId, row);
         if (result.status === ImportRowStatus.IMPORTED) importedRows += 1;
         if (result.status === ImportRowStatus.SKIPPED) skippedRows += 1;
         if (result.status === ImportRowStatus.FAILED) failedRows += 1;
@@ -844,6 +874,7 @@ export async function confirmImportJob(importJobId: string, userId: string) {
           where: { id: row.id },
         });
         await writeAuditLog(tx, {
+          organizationId,
           action: "IMPORT_ROW_PROCESSED",
           details: { importJobId, rowNumber: row.rowNumber, status: result.status, type: job.type },
           entityId: row.id,
@@ -853,20 +884,21 @@ export async function confirmImportJob(importJobId: string, userId: string) {
       });
     } catch (error) {
       failedRows += 1;
-      await prisma.importRow.update({
+      await withOrganizationContext(organizationId, (tx) => tx.importRow.update({
         data: { errors: [error instanceof Error ? error.message : "Import row failed."], status: ImportRowStatus.FAILED },
         where: { id: row.id },
-      });
+      }));
     }
   }
 
   const finalStatus = failedRows === 0 ? ImportStatus.COMPLETED : importedRows > 0 || skippedRows > 0 ? ImportStatus.PARTIALLY_COMPLETED : ImportStatus.FAILED;
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     await tx.importJob.update({
       data: { completedAt: new Date(), failedRows, importedRows, skippedRows, status: finalStatus },
       where: { id: importJobId },
     });
     await writeAuditLog(tx, {
+      organizationId,
       action: "IMPORT_COMPLETED",
       details: { failedRows, importJobId, importedRows, skippedRows, status: finalStatus, type: job.type },
       entityId: importJobId,

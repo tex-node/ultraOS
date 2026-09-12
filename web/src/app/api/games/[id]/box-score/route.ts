@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { hasUltraStatDerivation, type GameDataCapability } from "@/lib/game-data-capability";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -65,19 +65,22 @@ function playerLine(stat: {
 // never guessed for an imported box-score-only game.
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const game = await prisma.game.findUnique({
-    where: { id },
-    include: {
-      fixture: {
-        include: {
-          homeSeasonClub: { include: { club: true } },
-          awaySeasonClub: { include: { club: true } },
+  const organization = await resolveDefaultPublicOrganization();
+  const game = await withOrganizationContext(organization.id, (tx) =>
+    tx.game.findUnique({
+      where: { id },
+      include: {
+        fixture: {
+          include: {
+            homeSeasonClub: { include: { club: true } },
+            awaySeasonClub: { include: { club: true } },
+          },
         },
+        teamStats: true,
+        playerStats: { include: { player: { include: { athlete: true } } } },
       },
-      teamStats: true,
-      playerStats: { include: { player: { include: { athlete: true } } } },
-    },
-  });
+    }),
+  );
   if (!game) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   const capability = game.dataCapability as GameDataCapability;

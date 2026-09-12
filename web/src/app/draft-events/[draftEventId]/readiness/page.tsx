@@ -2,15 +2,16 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { draftEventReadiness } from "@/lib/draft-events";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function DraftReadinessPage({ params }: { params: Promise<{ draftEventId: string }> }) {
   const { draftEventId } = await params;
   const rawSession = await auth();
   if (!rawSession?.user) redirect(`/login?callbackUrl=/draft-events/${draftEventId}/readiness`);
-  const session = await requirePermission("draft-event:read");
-  const items = await draftEventReadiness(draftEventId);
+  const { session, organizationId } = await requirePermissionWithOrganization("draft-event:read");
+  const items = await withOrganizationContext(organizationId, (tx) => draftEventReadiness(tx, draftEventId));
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-5xl px-6 py-10">

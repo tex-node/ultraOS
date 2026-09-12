@@ -8,7 +8,7 @@ import { buildSeasonStoryCards, type SeasonStoryCard } from "@/lib/analytics/sea
 import { computeLeagueTeamDna, TEAM_DNA_DIMENSION_LABEL, topTeamByDimension } from "@/lib/analytics/team-dna";
 import { AnalyticsCard } from "@/components/analytics/cards/AnalyticsCard";
 import { buildCategoryLeaderCard } from "@/lib/analytics/cards/leaderboard-cards";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -46,7 +46,8 @@ function pick(cards: LeaguePulseCard[], keys: string[]): LeaguePulseCard[] {
 }
 
 export default async function SeasonStats() {
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" } });
+  const organization = await resolveDefaultPublicOrganization();
+  const season = await withOrganizationContext(organization.id, (tx) => tx.season.findFirst({ where: { status: "ACTIVE" } }));
   if (!season) {
     return (
       <main className="mx-auto max-w-6xl px-6 py-12">
@@ -56,10 +57,12 @@ export default async function SeasonStats() {
     );
   }
 
-  const [games, players] = await Promise.all([
-    loadSeasonGameCores(season.id),
-    loadSeasonPlayerTotals(season.id),
-  ]);
+  const [games, players] = await withOrganizationContext(organization.id, (tx) =>
+    Promise.all([
+      loadSeasonGameCores(season.id, tx),
+      loadSeasonPlayerTotals(season.id, tx),
+    ]),
+  );
 
   if (games.length === 0) {
     return (

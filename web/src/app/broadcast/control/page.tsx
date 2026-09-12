@@ -6,7 +6,8 @@ import { productionPresentationFixtureWhere } from "@/lib/presentation-scope";
 import { buildLivePresentationModelForGame } from "@/lib/live-game-snapshot-v2";
 import { buildGraphicSuggestions } from "@/lib/broadcast-suggestions";
 import { setPreviewAction, clearPreviewAction, takeAction, clearProgramAction } from "./actions";
-import { prisma } from "@/lib/prisma";
+import { MissingOrganizationContextError } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,21 +23,25 @@ export const revalidate = 0;
 export default async function BroadcastControl({ searchParams }: { searchParams: Promise<{ rehearsal?: string }> }) {
   const { rehearsal: rehearsalFixtureId } = await searchParams;
   const session = await requirePermissionOrRedirect("broadcast:operate", "/broadcast/control");
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const organizationId = session.user.organizationId;
 
-  const state = await getBroadcastPresentationState();
-
-  const fixtures = rehearsalFixtureId
-    ? await prisma.fixture.findMany({
-        where: { id: rehearsalFixtureId, recordOrigin: "REHEARSAL", game: { status: { in: ["LIVE", "PAUSED"] } } },
-        include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
-      })
-    : await prisma.fixture.findMany({
-        where: { game: { status: { in: ["LIVE", "PAUSED"] } }, ...productionPresentationFixtureWhere() },
-        include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
-      });
+  const { games, state } = await withOrganizationContext(organizationId, async (tx) => {
+    const state = await getBroadcastPresentationState(organizationId, tx);
+    const fixtures = rehearsalFixtureId
+      ? await tx.fixture.findMany({
+          where: { id: rehearsalFixtureId, recordOrigin: "REHEARSAL", game: { status: { in: ["LIVE", "PAUSED"] } } },
+          include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
+        })
+      : await tx.fixture.findMany({
+          where: { game: { status: { in: ["LIVE", "PAUSED"] } }, ...productionPresentationFixtureWhere() },
+          include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
+        });
+    const games = await Promise.all(fixtures.map(async (f) => ({ fixture: f, model: await buildLivePresentationModelForGame(f.game!.id, tx) })));
+    return { fixtures, games, state };
+  });
 
   const rehearsalMode = Boolean(rehearsalFixtureId);
-  const games = await Promise.all(fixtures.map(async (f) => ({ fixture: f, model: await buildLivePresentationModelForGame(f.game!.id) })));
 
   return (
     <OperationsShell user={session.user}>

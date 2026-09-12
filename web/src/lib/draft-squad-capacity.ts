@@ -1,5 +1,8 @@
+import type { Prisma } from "@/generated/prisma/client";
 import { DraftEventStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
+
+type Db = Prisma.TransactionClient | typeof prisma;
 
 export type DraftSquadGender = "men" | "women";
 
@@ -34,9 +37,16 @@ function numericSetting(value: unknown, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : fallback;
 }
 
-export async function draftSquadCapacityConfig(seasonId?: string | null): Promise<DraftSquadCapacityConfig> {
+// Phase 1 Stage 5.2B-3: `db` is passed in explicitly (the caller's scoped tx where one exists)
+// so this read at least runs inside the acting organization's RLS context - the SystemSetting.key
+// lookup mechanism itself (a bare key match, no organizationId in the where clause) stays global
+// for now, same as game-day-checkin.ts's SystemSetting reads since Stage 5.2A - that's explicitly
+// Stage 5.4's job, not this one's. Defaults to the bare client so the two pre-existing unscoped
+// callers (draft-cohort/page.tsx, scripts/tryout-metadata-import.ts) keep compiling and behaving
+// exactly as before, unconverted.
+export async function draftSquadCapacityConfig(db: Db = prisma, seasonId?: string | null): Promise<DraftSquadCapacityConfig> {
   const keys = Object.values(draftSquadCapacitySettingKeys);
-  const settings = await prisma.systemSetting.findMany({
+  const settings = await db.systemSetting.findMany({
     where: { key: { in: keys }, OR: [{ seasonId: seasonId ?? undefined }, { seasonId: null }] },
     orderBy: { seasonId: "desc" },
     select: { key: true, value: true },

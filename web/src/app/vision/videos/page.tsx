@@ -1,7 +1,7 @@
-import { requirePermissionOrRedirect } from "@/lib/authorization";
+import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { getVisionDashboardData, listCourtSpecifications } from "@/lib/vision/vision-loader";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import { createDraftCourtSpecAction, updateDraftCourtSpecAction, markCourtSpecOfficialAction, setAttackingDirectionAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -14,10 +14,12 @@ export const revalidate = 0;
 // and stays null until an operator who actually knows the real value enters it.
 export default async function VisionVideos() {
   const session = await requirePermissionOrRedirect("vision:manage", "/vision/videos");
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const organizationId = session.user.organizationId;
   const [{ videos }, courtSpecs, venues] = await Promise.all([
-    getVisionDashboardData(),
-    listCourtSpecifications(),
-    prisma.venue.findMany({ orderBy: { name: "asc" } }),
+    getVisionDashboardData(organizationId),
+    listCourtSpecifications(organizationId),
+    withOrganizationContext(organizationId, (tx) => tx.venue.findMany({ orderBy: { name: "asc" } })),
   ]);
 
   return (

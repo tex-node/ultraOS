@@ -4,22 +4,33 @@ import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { approvedPlayerDuplicateGroups, duplicateIdentityReport } from "@/lib/data-quality";
 import { draftCohortAnalysis } from "@/lib/draft-cohort";
-import { hasPermission } from "@/lib/permissions";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function DuplicateReviewPage({ searchParams }: { searchParams: Promise<{ filter?: string; scope?: string }> }) {
   const { filter, scope } = await searchParams;
   const draftCohortOnly = filter === "draft-cohort" || scope === "draft-cohort";
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/data-quality/duplicates");
-  if (!hasPermission(session.user.roles, "data:readiness")) return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
-  const [report, approvedPlayerGroups, cohortAnalysis] = await Promise.all([duplicateIdentityReport(), approvedPlayerDuplicateGroups(), draftCohortAnalysis()]);
+  let authorizedSession;
+  let organizationId: string;
+  try {
+    ({ session: authorizedSession, organizationId } = await requirePermissionWithOrganization("data:readiness"));
+  } catch {
+    return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
+  }
+  const report = await duplicateIdentityReport();
+  const [approvedPlayerGroups, cohortAnalysis] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+    approvedPlayerDuplicateGroups(tx, organizationId),
+    draftCohortAnalysis(tx, organizationId),
+  ]));
   const cohortApplicationIds = new Set(cohortAnalysis.rows.map((row) => row.matchedApplicationId ?? row.applicationId).filter(Boolean));
   const cohortRowsByApplicationId = new Map(cohortAnalysis.rows.map((row) => [row.matchedApplicationId ?? row.applicationId, row]));
   const visibleGroups = draftCohortOnly
     ? approvedPlayerGroups.filter((group) => group.applications.some((application) => cohortApplicationIds.has(application.applicationId)))
     : [...approvedPlayerGroups].sort((left, right) => Number(right.applications.some((application) => cohortApplicationIds.has(application.applicationId))) - Number(left.applications.some((application) => cohortApplicationIds.has(application.applicationId))));
   return (
-    <OperationsShell user={session.user}>
+    <OperationsShell user={authorizedSession.user}>
       <main className="mx-auto max-w-6xl px-6 py-10">
         <h1 className="text-3xl font-semibold">Duplicate Identity Review</h1>
         <p className="mt-2 text-sm text-zinc-400">Read-only duplicate candidates. Ambiguous identities are not merged automatically; permanent Ultra IDs must be preserved or retired through alias records after review.</p>

@@ -4,7 +4,7 @@ import { GraphicRefresher } from "../../graphic-refresher";
 import { TransparentBody } from "../../transparent-body";
 import { buildLivePresentationModelForGame } from "@/lib/live-game-snapshot-v2";
 import { isProductionPresentationFixture } from "@/lib/presentation-scope";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -21,15 +21,20 @@ export const revalidate = 0;
 // through the model instead of duplicating the computation a second time.
 export default async function Scorebug({ params }: { params: Promise<{ gameId: string }> }) {
   const { gameId } = await params;
-  const game = await prisma.game.findUnique({
-    where: { id: gameId },
-    include: { fixture: { include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } } } } },
+  const organization = await resolveDefaultPublicOrganization();
+  const loaded = await withOrganizationContext(organization.id, async (tx) => {
+    const game = await tx.game.findUnique({
+      where: { id: gameId },
+      include: { fixture: { include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } } } } },
+    });
+    // G.19 Part III/VII: a browser-source URL could be a stale rehearsal link or a guessed id -
+    // this unauthenticated route must refuse to render anything but a real production fixture.
+    if (!game || !isProductionPresentationFixture(game.fixture)) return null;
+    const model = await buildLivePresentationModelForGame(gameId, tx);
+    return { game, model };
   });
-  // G.19 Part III/VII: a browser-source URL could be a stale rehearsal link or a guessed id -
-  // this unauthenticated route must refuse to render anything but a real production fixture.
-  if (!game || !isProductionPresentationFixture(game.fixture)) notFound();
-
-  const model = await buildLivePresentationModelForGame(gameId);
+  if (!loaded) notFound();
+  const { game, model } = loaded;
   const shotClockRunning = model.shotClock.running;
 
   return (

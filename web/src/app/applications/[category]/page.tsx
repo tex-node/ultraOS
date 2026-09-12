@@ -10,8 +10,8 @@ import {
 import { isExportableApplicationType } from "@/app/applications/application-data";
 import { summarizeApplications } from "@/app/applications/application-summary";
 import { ApplicationStatus, ApplicationType, DraftSelectionGroup } from "@/generated/prisma/enums";
-import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 type ApplicationCategoryPageProps = {
   params: Promise<{ category: string }>;
@@ -43,7 +43,11 @@ export default async function ApplicationCategoryPage({ params }: ApplicationCat
     redirect(`/login?callbackUrl=/applications/${category}`);
   }
 
-  if (!hasPermission(session.user.roles, "application:review")) {
+  let authorizedSession;
+  let organizationId: string;
+  try {
+    ({ session: authorizedSession, organizationId } = await requirePermissionWithOrganization("application:review"));
+  } catch {
     return (
       <OperationsShell user={session.user}>
         <main className="mx-auto max-w-3xl px-6 py-16">
@@ -65,18 +69,18 @@ export default async function ApplicationCategoryPage({ params }: ApplicationCat
   }
 
   const route = applicationReviewRoutes.find((item) => item.type === type);
-  const applications = await prisma.application.findMany({
+  const applications = await withOrganizationContext(organizationId, (tx) => tx.application.findMany({
     where: { type },
     include: {
       applicantUser: { select: { name: true, email: true } },
       reviewedBy: { select: { name: true, email: true } },
     },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-  });
+  }));
   const summary = summarizeApplications(applications);
 
   return (
-    <OperationsShell user={session.user}>
+    <OperationsShell user={authorizedSession.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">
         <Link className="text-sm text-emerald-400 hover:text-emerald-300" href="/applications">
           Back to applications

@@ -10,7 +10,7 @@ import {
 import { requireSession } from "@/lib/authorization";
 import { formatLagosDateTime } from "@/lib/format-datetime";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function FixturePage({
   params,
@@ -22,7 +22,8 @@ export default async function FixturePage({
   if (!rawSession?.user) redirect(`/login?callbackUrl=/fixtures/${id}`);
   const session = await requireSession();
   const canManage = hasPermission(session.user.roles, "fixture:manage");
-  const fixture = await prisma.fixture.findUnique({
+  if (!session.user.organizationId) redirect(`/login?callbackUrl=/fixtures/${id}`);
+  const fixture = await withOrganizationContext(session.user.organizationId, (tx) => tx.fixture.findUnique({
     where: { id },
     include: {
       homeSeasonClub: { include: { club: true } },
@@ -34,7 +35,7 @@ export default async function FixturePage({
       game: true,
       officials: { orderBy: [{ role: "asc" }, { name: "asc" }] },
     },
-  });
+  }));
   if (!fixture) notFound();
 
   return (

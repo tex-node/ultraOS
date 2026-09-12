@@ -3,9 +3,14 @@ import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { StaffRole } from "@/generated/prisma/enums";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import { assignSeasonClubCoach, clearSeasonClubCoach } from "../actions";
 
+// Phase 1 Stage 5.5B: this page previously read every organization's SeasonClubs and coaching
+// staff via the bare, unscoped client - an Org B "staff:manage" holder saw (and could act on,
+// via the also-unscoped actions this page's forms called) every organization's coach roster.
+// Scoped to the acting admin's own organization, matching this stage's established
+// auth()+hasPermission()+withOrganizationContext pattern.
 export default async function CoachAssignmentsPage() {
   const session = await auth();
   if (!session?.user) {
@@ -23,8 +28,17 @@ export default async function CoachAssignmentsPage() {
       </OperationsShell>
     );
   }
-  const [seasonClubs, coaches] = await Promise.all([
-    prisma.seasonClub.findMany({
+  if (!session.user.organizationId) {
+    return (
+      <OperationsShell user={session.user}>
+        <main className="mx-auto max-w-3xl px-6 py-16">
+          <h1 className="text-3xl font-semibold">Organization context required</h1>
+        </main>
+      </OperationsShell>
+    );
+  }
+  const [seasonClubs, coaches] = await withOrganizationContext(session.user.organizationId, (tx) => Promise.all([
+    tx.seasonClub.findMany({
       include: {
         assistantCoach: true,
         club: true,
@@ -34,11 +48,11 @@ export default async function CoachAssignmentsPage() {
       },
       orderBy: [{ season: { startDate: "desc" } }, { division: { name: "asc" } }, { club: { name: "asc" } }],
     }),
-    prisma.staff.findMany({
+    tx.staff.findMany({
       orderBy: { name: "asc" },
       where: { role: { in: [StaffRole.HEAD_COACH, StaffRole.ASSISTANT_COACH] } },
     }),
-  ]);
+  ]));
 
   return (
     <OperationsShell user={session.user}>

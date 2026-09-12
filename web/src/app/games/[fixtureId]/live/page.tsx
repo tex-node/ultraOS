@@ -25,7 +25,7 @@ import { GameClock } from "../../game-clock";
 import { requirePermissionOrRedirect } from "@/lib/authorization";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { FINAL_PERIOD, isUltraTime, periodLabel, remainingShotClockSeconds, ULTRA_RULES } from "@/lib/game-rules";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -34,7 +34,8 @@ export default async function Live({ params, searchParams }: { params: Promise<{
   const { fixtureId } = await params;
   const session = await requirePermissionOrRedirect("game:operate", `/games/${fixtureId}/live`);
   const query = await searchParams;
-  const fixture = await prisma.fixture.findUnique({
+  if (!session.user.organizationId) notFound();
+  const fixture = await withOrganizationContext(session.user.organizationId, (tx) => tx.fixture.findUnique({
     where: { id: fixtureId },
     include: {
       homeSeasonClub: { include: { club: true, players: { include: { athlete: true } } } },
@@ -50,7 +51,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
       },
       venue: true,
     },
-  });
+  }));
   if (!fixture) notFound();
   const game = fixture.game;
   const remainingSeconds = game ? remainingClockSeconds(game) : ULTRA_RULES.halfSeconds;
@@ -59,9 +60,9 @@ export default async function Live({ params, searchParams }: { params: Promise<{
   const shotClockRemaining = game ? remainingShotClockSeconds(game) : 20;
   const substitutionCheckDue = Boolean(game && game.currentPeriod >= FINAL_PERIOD && game.status !== "FINAL");
   const confirmations = substitutionCheckDue
-    ? await prisma.auditLog.findMany({
+    ? await withOrganizationContext(session.user.organizationId, (tx) => tx.auditLog.findMany({
         where: { action: "MANDATORY_SUBSTITUTION_CONFIRMED", entityType: "Game", entityId: game!.id },
-      })
+      }))
     : [];
   const incidents = game ? await getGameIncidents(game.id) : [];
   // Statistics verification (G.15) is a distinct signal from official game-result finality -

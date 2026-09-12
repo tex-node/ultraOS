@@ -5,17 +5,16 @@ import { OperationsShell } from "@/app/components/operations-shell";
 import { createOperatorMessage } from "@/app/operations/actions";
 import { OpsHealthStatus, OpsSeverity } from "@/generated/prisma/enums";
 import { operationsSnapshot, type OpsSignal } from "@/lib/operations";
-import { hasPermission } from "@/lib/permissions";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function OperationsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/operations");
-  if (!hasPermission(session.user.roles, "operations:view")) {
-    return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
-  }
-  const snapshot = await operationsSnapshot();
+  const { session: authorizedSession, organizationId } = await requirePermissionWithOrganization("operations:view");
+  const snapshot = await withOrganizationContext(organizationId, (tx) => operationsSnapshot(tx));
   return (
-    <OperationsShell user={session.user}>
+    <OperationsShell user={authorizedSession.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

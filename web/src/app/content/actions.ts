@@ -7,14 +7,14 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { ContentType } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import {
   escapeHtml,
   generateContentPayload,
   renderTemplate,
 } from "@/lib/content-engine";
 import { formDataToRecord } from "@/lib/club-validation";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const generateSchema = z.object({
   type: z.enum(ContentType),
@@ -30,64 +30,52 @@ function slugify(value: string) {
 }
 
 export async function generateContentAsset(formData: FormData) {
-  const session = await requirePermission("content:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("content:manage");
   const input = generateSchema.parse(formDataToRecord(formData));
-  const payload = await generateContentPayload(input.type, input.sourceId);
-  const template =
-    (payload.competitionId
-      ? await prisma.contentTemplate.findFirst({
-          where: {
-            type: input.type,
-            isActive: true,
-            competitionId: payload.competitionId,
-          },
-          orderBy: { version: "desc" },
-        })
-      : null) ??
-    (await prisma.contentTemplate.findFirst({
-      where: {
-        type: input.type,
-        isActive: true,
-        competitionId: null,
-      },
-      orderBy: { version: "desc" },
-    }));
-  if (!template) throw new Error("CONTENT_TEMPLATE_NOT_FOUND");
+  const { payload, template, job } = await withOrganizationContext(organizationId, async (tx) => {
+    const payload = await generateContentPayload(input.type, input.sourceId, tx);
+    const template =
+      (payload.competitionId
+        ? await tx.contentTemplate.findFirst({
+            where: { organizationId, type: input.type, isActive: true, competitionId: payload.competitionId },
+            orderBy: { version: "desc" },
+          })
+        : null) ??
+      (await tx.contentTemplate.findFirst({
+        where: { organizationId, type: input.type, isActive: true, competitionId: null },
+        orderBy: { version: "desc" },
+      }));
+    if (!template) throw new Error("CONTENT_TEMPLATE_NOT_FOUND");
 
-  const job = await prisma.contentJob.create({
-    data: {
-      templateId: template.id,
-      requestedById: session.user.id,
-      type: input.type,
-      sourceType: payload.sourceType,
-      sourceId: input.sourceId,
-      status: "PROCESSING",
-      startedAt: new Date(),
-    },
+    const job = await tx.contentJob.create({
+      data: {
+        organizationId,
+        templateId: template.id,
+        requestedById: session.user.id,
+        type: input.type,
+        sourceType: payload.sourceType,
+        sourceId: input.sourceId,
+        status: "PROCESSING",
+        startedAt: new Date(),
+      },
+    });
+    return { payload, template, job };
   });
   let assetSlug: string;
   try {
-    const textContent = renderTemplate(
-      template.textTemplate,
-      payload.variables,
-    );
-    const htmlContent = renderTemplate(
-      template.htmlTemplate,
-      payload.variables,
-      escapeHtml,
-    );
-    const slug = `${slugify(payload.graphicData.title)}-${randomUUID().slice(0, 8)}`;
-    const asset = await prisma.$transaction(async (tx) => {
+    assetSlug = await withOrganizationContext(organizationId, async (tx) => {
+      const textContent = renderTemplate(template.textTemplate, payload.variables);
+      const htmlContent = renderTemplate(template.htmlTemplate, payload.variables, escapeHtml);
+      const slug = `${slugify(payload.graphicData.title)}-${randomUUID().slice(0, 8)}`;
       const created = await tx.contentAsset.create({
         data: {
+          organizationId,
           jobId: job.id,
           slug,
           title: payload.graphicData.title,
           textContent,
           htmlContent,
-          graphicData: JSON.parse(
-            JSON.stringify(payload.graphicData),
-          ) as Prisma.InputJsonObject,
+          graphicData: JSON.parse(JSON.stringify(payload.graphicData)) as Prisma.InputJsonObject,
         },
       });
       await tx.contentJob.update({
@@ -95,30 +83,24 @@ export async function generateContentAsset(formData: FormData) {
         data: { status: "COMPLETED", completedAt: new Date() },
       });
       await writeAuditLog(tx, {
+        organizationId,
         userId: session.user.id,
         action: "CONTENT_ASSET_GENERATED",
         entityType: "ContentAsset",
         entityId: created.id,
-        details: {
-          type: input.type,
-          sourceType: payload.sourceType,
-          sourceId: input.sourceId,
-          slug,
-        },
+        details: { type: input.type, sourceType: payload.sourceType, sourceId: input.sourceId, slug },
       });
-      return created;
+      return created.slug;
     });
-    assetSlug = asset.slug;
   } catch (error) {
-    await prisma.contentJob.update({
+    await withOrganizationContext(organizationId, (tx) => tx.contentJob.update({
       where: { id: job.id },
       data: {
         status: "FAILED",
-        errorMessage:
-          error instanceof Error ? error.message.slice(0, 500) : "Generation failed",
+        errorMessage: error instanceof Error ? error.message.slice(0, 500) : "Generation failed",
         completedAt: new Date(),
       },
-    });
+    }));
     throw error;
   }
   revalidatePath("/content");
@@ -135,14 +117,15 @@ export async function updateContentTemplate(
   templateId: string,
   formData: FormData,
 ) {
-  const session = await requirePermission("content:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("content:manage");
   const input = templateSchema.parse(formDataToRecord(formData));
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     await tx.contentTemplate.update({
       where: { id: templateId },
       data: input,
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "CONTENT_TEMPLATE_UPDATED",
       entityType: "ContentTemplate",

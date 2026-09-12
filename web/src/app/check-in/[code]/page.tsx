@@ -5,19 +5,27 @@ import {
   checkInTicket,
   collectOrder,
 } from "../actions";
-import { requirePermission } from "@/lib/authorization";
+import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { formatNaira } from "@/lib/money";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function CheckInRecordPage({
   params,
 }: {
   params: Promise<{ code: string }>;
 }) {
-  const session = await requirePermission("check-in:operate");
   const { code } = await params;
-  const [ticket, accreditation, order] = await Promise.all([
-    prisma.ticket.findUnique({
+  const session = await requirePermissionOrRedirect("check-in:operate", `/check-in/${code}`);
+  // Phase 1 Stage 5.2B-4: this read used to run on the bare, unscoped prisma client - an
+  // operator authenticated under Org B could scan a code and see Org A's fan name, event,
+  // price, and payment status in full, even though the actual check-in action below was
+  // already correctly org-scoped and would have denied the mutation. Wrapping the read in the
+  // same org context makes a foreign-org code return null (RLS), matching the "not found"
+  // behavior the mutation already had - closing the read-side information-disclosure gap
+  // section 44 warns about.
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const [ticket, accreditation, order] = await withOrganizationContext(session.user.organizationId, (tx) => Promise.all([
+    tx.ticket.findUnique({
       where: { code },
       include: {
         reservation: {
@@ -26,14 +34,14 @@ export default async function CheckInRecordPage({
         checkIns: { orderBy: { checkedInAt: "desc" } },
       },
     }),
-    prisma.accreditation.findUnique({
+    tx.accreditation.findUnique({
       where: { code },
       include: {
         event: true,
         checkIns: { orderBy: { checkedInAt: "desc" } },
       },
     }),
-    prisma.order.findUnique({
+    tx.order.findUnique({
       where: { collectionCode: code },
       include: {
         event: true,
@@ -41,7 +49,7 @@ export default async function CheckInRecordPage({
         checkIns: { orderBy: { checkedInAt: "desc" } },
       },
     }),
-  ]);
+  ]));
   if (!ticket && !accreditation && !order) notFound();
 
   return (

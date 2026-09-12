@@ -14,7 +14,8 @@ import { buildGameRecords, buildPlayerSeasonRecords, buildPlayerSingleGameRecord
 import { selectTopPerformers } from "@/lib/analytics/player-analytics";
 import { rankWhyTheyWon } from "@/lib/analytics/why-they-won";
 import type { GameCore } from "@/lib/analytics/types";
-import { prisma } from "@/lib/prisma";
+import { MissingOrganizationContextError } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -33,11 +34,13 @@ const CATEGORY_LEADERS: { key: Parameters<typeof buildPlayerLeaderboard>[1]; lab
 export default async function BroadcastGraphics({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/broadcast/graphics");
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const organizationId = session.user.organizationId;
 
   const { tab: rawTab } = await searchParams;
   const tab: Tab = TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "players";
 
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" } });
+  const season = await withOrganizationContext(organizationId, (tx) => tx.season.findFirst({ where: { status: "ACTIVE" } }));
   if (!season) {
     return (
       <OperationsShell user={session.user}>
@@ -48,11 +51,11 @@ export default async function BroadcastGraphics({ searchParams }: { searchParams
 
   // One shared season load — every tab below derives from these same in-memory calculations,
   // never a per-card independent Prisma query (see performance note in the operator guide).
-  const [games, playerTotals, seasonClubs] = await Promise.all([
-    loadSeasonGameCores(season.id),
-    loadSeasonPlayerTotals(season.id),
-    prisma.seasonClub.findMany({ where: { seasonId: season.id }, select: { id: true, clubId: true, club: { select: { name: true } } } }),
-  ]);
+  const [games, playerTotals, seasonClubs] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+    loadSeasonGameCores(season.id, tx),
+    loadSeasonPlayerTotals(season.id, tx),
+    tx.seasonClub.findMany({ where: { seasonId: season.id }, select: { id: true, clubId: true, club: { select: { name: true } } } }),
+  ]));
   const clubIdBySeasonClubId = new Map(seasonClubs.map((sc) => [sc.id, sc.clubId]));
   const teamTotalsByClub = computeSeasonTeamTotals(games);
   const teamTotals = [...teamTotalsByClub.values()];

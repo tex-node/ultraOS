@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requirePermissionOrRedirect } from "@/lib/authorization";
+import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { getVisionDashboardData } from "@/lib/vision/vision-loader";
 
@@ -11,7 +11,8 @@ export const revalidate = 0;
 // counts only.
 export default async function VisionDashboard() {
   const session = await requirePermissionOrRedirect("vision:manage", "/vision");
-  const { videos, reviewPending, matchesPending } = await getVisionDashboardData();
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const { videos, reviewPending, matchesPending } = await getVisionDashboardData(session.user.organizationId);
 
   return (
     <OperationsShell user={session.user}>

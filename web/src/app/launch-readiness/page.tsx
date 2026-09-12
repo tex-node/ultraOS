@@ -5,8 +5,8 @@ import { OperationsShell } from "@/app/components/operations-shell";
 import { createLaunchReadinessCheck, updateLaunchReadinessCheckStatus } from "@/app/operations/actions";
 import { LaunchBlockerPriority, OpsHealthStatus, OpsItemStatus } from "@/generated/prisma/enums";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
 import { seasonZeroReadinessReport } from "@/lib/season-zero-readiness";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function LaunchReadinessPage() {
   const session = await auth();
@@ -14,10 +14,13 @@ export default async function LaunchReadinessPage() {
   if (!hasPermission(session.user.roles, "operations:view")) {
     return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
   }
-  const [report, checks] = await Promise.all([
-    seasonZeroReadinessReport(),
-    prisma.launchReadinessCheck.findMany({ orderBy: [{ priority: "asc" }, { createdAt: "desc" }], take: 50 }),
-  ]);
+  if (!session.user.organizationId) {
+    return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Organization context required</h1></main></OperationsShell>;
+  }
+  const [report, checks] = await withOrganizationContext(session.user.organizationId, (tx) => Promise.all([
+    seasonZeroReadinessReport(tx),
+    tx.launchReadinessCheck.findMany({ orderBy: [{ priority: "asc" }, { createdAt: "desc" }], take: 50 }),
+  ]));
   const seasonId = report.configuration.season?.id ?? "";
   const eventOps = report.eventReadiness && "seatZones" in report.eventReadiness ? report.eventReadiness : null;
 

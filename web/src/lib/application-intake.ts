@@ -1,13 +1,17 @@
 import { ApplicationType } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const SETTING_KEY = "application-intake:closed-types";
 
 type IntakeSetting = { types: ApplicationType[]; updatedAt: string; updatedBy: string; reason?: string };
 
-export async function getClosedApplicationTypes(): Promise<ApplicationType[]> {
-  const setting = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEY } });
+// Phase 1 Stage 5.2B-1: wrapped in real org context (the request-scoping gate), same treatment
+// as game-day-checkin.ts's SystemSetting-backed lookups in 5.2A - the `key` itself is still
+// globally unique, which is Stage 5.4's job to fix, not conflated here.
+export async function getClosedApplicationTypes(organizationId: string): Promise<ApplicationType[]> {
+  const setting = await withOrganizationContext(organizationId, (tx) => tx.systemSetting.findUnique({ where: { key: SETTING_KEY } }));
   if (!setting) return [];
   const value = setting.value as IntakeSetting;
   return value.types ?? [];

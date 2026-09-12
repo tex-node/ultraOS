@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { CreateNoveltyMatchForm } from "@/app/novelty-matches/create-form";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,14 +12,14 @@ export const revalidate = 0;
 export default async function NoveltyMatchesPage() {
   const rawSession = await auth();
   if (!rawSession?.user) redirect("/login?callbackUrl=/novelty-matches");
-  const session = await requirePermission("fixture:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("fixture:manage");
 
-  const [matches, teams, events, venues] = await Promise.all([
-    prisma.noveltyMatch.findMany({ include: { homeTeam: true, awayTeam: true, game: true }, orderBy: { scheduledAt: "asc" } }),
-    prisma.noveltyTeam.findMany({ orderBy: { name: "asc" } }),
-    prisma.event.findMany({ orderBy: { date: "desc" }, select: { id: true, name: true } }),
-    prisma.venue.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-  ]);
+  const [matches, teams, events, venues] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+    tx.noveltyMatch.findMany({ include: { homeTeam: true, awayTeam: true, game: true }, orderBy: { scheduledAt: "asc" } }),
+    tx.noveltyTeam.findMany({ orderBy: { name: "asc" } }),
+    tx.event.findMany({ orderBy: { date: "desc" }, select: { id: true, name: true } }),
+    tx.venue.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ]));
 
   return (
     <OperationsShell user={session.user}>

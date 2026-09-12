@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getBroadcastPresentationState } from "@/lib/broadcast-presentation-state";
 import { graphicRoute } from "@/lib/broadcast-graphics";
 import { isProductionPresentationFixture } from "@/lib/presentation-scope";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 
@@ -15,12 +15,13 @@ export const dynamic = "force-dynamic";
 // reports empty rather than leaking it - the same allow-list isolation every other public
 // surface uses.
 export async function GET() {
-  const state = await getBroadcastPresentationState();
+  const organization = await resolveDefaultPublicOrganization();
+  const state = await withOrganizationContext(organization.id, (tx) => getBroadcastPresentationState(organization.id, tx));
   if (!state.program) {
     return NextResponse.json({ program: null, version: state.updatedAt });
   }
 
-  const game = await prisma.game.findUnique({ where: { id: state.program.gameId }, include: { fixture: true } });
+  const game = await withOrganizationContext(organization.id, (tx) => tx.game.findUnique({ where: { id: state.program!.gameId }, include: { fixture: true } }));
   if (!game || !isProductionPresentationFixture(game.fixture)) {
     return NextResponse.json({ program: null, version: state.updatedAt });
   }

@@ -2,9 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { requireSession } from "@/lib/authorization";
+import { MissingOrganizationContextError, requireSession } from "@/lib/authorization";
 import { calculateStandings } from "@/lib/standings";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const MINIMUM_ROSTER_SIZE = 5;
 const FIXTURE_WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -13,74 +13,123 @@ export default async function DashboardPage() {
   const rawSession = await auth();
   if (!rawSession?.user) redirect("/login?callbackUrl=/dashboard");
   const session = await requireSession();
-  const activeSeason = await prisma.season.findFirst({
-    where: { status: "ACTIVE" },
-    orderBy: { startDate: "desc" },
-  });
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const organizationId = session.user.organizationId;
 
-  const [
+  const {
+    activeSeason,
     liveGames,
     awaitingFinalization,
     activeTeams,
     upcomingFixtures,
     recentAudits,
-  ] = await Promise.all([
-    prisma.game.findMany({
-      where: { status: "LIVE" },
-      include: {
-        fixture: {
-          include: {
-            homeSeasonClub: { include: { club: true } },
-            awaySeasonClub: { include: { club: true } },
+    standingFailures,
+  } = await withOrganizationContext(organizationId, async (tx) => {
+    const activeSeason = await tx.season.findFirst({
+      where: { status: "ACTIVE" },
+      orderBy: { startDate: "desc" },
+    });
+
+    const [liveGames, awaitingFinalization, activeTeams, upcomingFixtures, recentAudits] = await Promise.all([
+      tx.game.findMany({
+        where: { status: "LIVE" },
+        include: {
+          fixture: {
+            include: {
+              homeSeasonClub: { include: { club: true } },
+              awaySeasonClub: { include: { club: true } },
+            },
           },
         },
-      },
-      orderBy: { updatedAt: "desc" },
-    }),
-    prisma.game.findMany({
-      where: { status: "PAUSED", fixture: { status: "LIVE" } },
-      include: {
-        fixture: {
-          include: {
-            homeSeasonClub: { include: { club: true } },
-            awaySeasonClub: { include: { club: true } },
+        orderBy: { updatedAt: "desc" },
+      }),
+      tx.game.findMany({
+        where: { status: "PAUSED", fixture: { status: "LIVE" } },
+        include: {
+          fixture: {
+            include: {
+              homeSeasonClub: { include: { club: true } },
+              awaySeasonClub: { include: { club: true } },
+            },
           },
         },
-      },
-    }),
-    prisma.seasonClub.findMany({
-      where: {
-        status: "ACTIVE",
-        ...(activeSeason ? { seasonId: activeSeason.id } : {}),
-      },
-      include: {
-        club: true,
-        division: true,
-        _count: { select: { players: true } },
-      },
-      orderBy: { club: { name: "asc" } },
-    }),
-    prisma.fixture.findMany({
-      where: {
-        status: "SCHEDULED",
-        scheduledAt: { gte: new Date() },
-        ...(activeSeason ? { seasonId: activeSeason.id } : {}),
-      },
-      include: {
-        venue: true,
-        officials: true,
-        homeSeasonClub: { include: { club: true } },
-        awaySeasonClub: { include: { club: true } },
-      },
-      orderBy: { scheduledAt: "asc" },
-      take: 100,
-    }),
-    prisma.auditLog.findMany({
-      include: { user: { select: { name: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 8,
-    }),
-  ]);
+      }),
+      tx.seasonClub.findMany({
+        where: {
+          status: "ACTIVE",
+          ...(activeSeason ? { seasonId: activeSeason.id } : {}),
+        },
+        include: {
+          club: true,
+          division: true,
+          _count: { select: { players: true } },
+        },
+        orderBy: { club: { name: "asc" } },
+      }),
+      tx.fixture.findMany({
+        where: {
+          status: "SCHEDULED",
+          scheduledAt: { gte: new Date() },
+          ...(activeSeason ? { seasonId: activeSeason.id } : {}),
+        },
+        include: {
+          venue: true,
+          officials: true,
+          homeSeasonClub: { include: { club: true } },
+          awaySeasonClub: { include: { club: true } },
+        },
+        orderBy: { scheduledAt: "asc" },
+        take: 100,
+      }),
+      tx.auditLog.findMany({
+        where: { organizationId },
+        include: { user: { select: { name: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 8,
+      }),
+    ]);
+
+    let standingFailures = 0;
+    if (activeSeason) {
+      const [teams, finalFixtures, storedRows] = await Promise.all([
+        tx.seasonClub.findMany({
+          where: { seasonId: activeSeason.id },
+          select: { id: true },
+        }),
+        tx.fixture.findMany({
+          where: { seasonId: activeSeason.id, status: "FINAL" },
+          select: {
+            homeSeasonClubId: true,
+            awaySeasonClubId: true,
+            homeScore: true,
+            awayScore: true,
+            winnerSeasonClubId: true,
+          },
+        }),
+        tx.standing.findMany({ where: { seasonId: activeSeason.id } }),
+      ]);
+      const expected = calculateStandings(
+        teams.map((team) => team.id),
+        finalFixtures,
+      );
+      const stored = new Map(storedRows.map((row) => [row.seasonClubId, row]));
+      standingFailures = [...expected].filter(([teamId, row]) => {
+        const actual = stored.get(teamId);
+        return (
+          !actual ||
+          actual.played !== row.played ||
+          actual.won !== row.won ||
+          actual.lost !== row.lost ||
+          actual.pointsFor !== row.pointsFor ||
+          actual.pointsAgainst !== row.pointsAgainst ||
+          actual.pointDifference !== row.pointDifference ||
+          actual.leaguePoints !== row.leaguePoints
+        );
+      }).length;
+    }
+
+    return { activeSeason, liveGames, awaitingFinalization, activeTeams, upcomingFixtures, recentAudits, standingFailures };
+  });
 
   const missingRosters = activeTeams.filter(
     (team) => team._count.players < MINIMUM_ROSTER_SIZE,
@@ -106,45 +155,6 @@ export default async function DashboardPage() {
   const fixtureConflicts = upcomingFixtures.filter((fixture) =>
     conflictIds.has(fixture.id),
   );
-
-  let standingFailures = 0;
-  if (activeSeason) {
-    const [teams, finalFixtures, storedRows] = await Promise.all([
-      prisma.seasonClub.findMany({
-        where: { seasonId: activeSeason.id },
-        select: { id: true },
-      }),
-      prisma.fixture.findMany({
-        where: { seasonId: activeSeason.id, status: "FINAL" },
-        select: {
-          homeSeasonClubId: true,
-          awaySeasonClubId: true,
-          homeScore: true,
-          awayScore: true,
-          winnerSeasonClubId: true,
-        },
-      }),
-      prisma.standing.findMany({ where: { seasonId: activeSeason.id } }),
-    ]);
-    const expected = calculateStandings(
-      teams.map((team) => team.id),
-      finalFixtures,
-    );
-    const stored = new Map(storedRows.map((row) => [row.seasonClubId, row]));
-    standingFailures = [...expected].filter(([teamId, row]) => {
-      const actual = stored.get(teamId);
-      return (
-        !actual ||
-        actual.played !== row.played ||
-        actual.won !== row.won ||
-        actual.lost !== row.lost ||
-        actual.pointsFor !== row.pointsFor ||
-        actual.pointsAgainst !== row.pointsAgainst ||
-        actual.pointDifference !== row.pointDifference ||
-        actual.leaguePoints !== row.leaguePoints
-      );
-    }).length;
-  }
 
   const cards = [
     ["Live games", liveGames.length, "text-emerald-300"],

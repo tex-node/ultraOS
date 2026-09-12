@@ -6,19 +6,19 @@ import {
   createVendorProduct,
   setVendorInventory,
 } from "../actions";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formatNaira } from "@/lib/money";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function VendorDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requirePermission("vendor:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("vendor:manage");
   const { id } = await params;
-  const [vendor, events, campaigns] = await Promise.all([
-    prisma.vendor.findUnique({
+  const [vendor, events, campaigns] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+    tx.vendor.findUnique({
       where: { id },
       include: {
         products: {
@@ -30,11 +30,11 @@ export default async function VendorDetailPage({
         },
       },
     }),
-    prisma.event.findMany({
+    tx.event.findMany({
       where: { status: { not: "CANCELLED" } },
       orderBy: { startTime: "desc" },
     }),
-    prisma.sponsorCampaign.findMany({
+    tx.sponsorCampaign.findMany({
       where: {
         OR: [
           { productId: null },
@@ -43,7 +43,7 @@ export default async function VendorDetailPage({
       },
       orderBy: { sponsorName: "asc" },
     }),
-  ]);
+  ]));
   if (!vendor) notFound();
   return (
     <OperationsShell user={session.user}>

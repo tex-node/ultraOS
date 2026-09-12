@@ -1,20 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function ContentAssetPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const session = await requirePermission("content:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("content:manage");
   const { slug } = await params;
-  const asset = await prisma.contentAsset.findUnique({
-    where: { slug },
-    include: { job: { include: { template: true, requestedBy: true } } },
-  });
+  const asset = await withOrganizationContext(organizationId, (tx) =>
+    tx.contentAsset.findUnique({
+      where: { slug },
+      include: { job: { include: { template: true, requestedBy: true } } },
+    }),
+  );
   if (!asset) notFound();
   const formats = ["text", "html", "json", "png", "pdf"];
   return (

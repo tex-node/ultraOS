@@ -3,8 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { DraftSelectionGroup } from "@/generated/prisma/enums";
+import { MissingOrganizationContextError } from "@/lib/authorization";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import { bulkUpdateTryoutGroup, updatePlayerTryout } from "../actions";
 
 const groups = Object.values(DraftSelectionGroup);
@@ -54,8 +55,11 @@ export default async function TryoutGroupPage({ params }: { params: Promise<{ gr
   }
   const group = groupFromSlug(groupParam);
   if (!group) notFound();
+  if (!session.user.organizationId) {
+    throw new MissingOrganizationContextError();
+  }
 
-  const players = await prisma.player.findMany({
+  const players = await withOrganizationContext(session.user.organizationId, (tx) => tx.player.findMany({
     include: {
       athlete: true,
       season: true,
@@ -63,7 +67,7 @@ export default async function TryoutGroupPage({ params }: { params: Promise<{ gr
     },
     orderBy: [{ tryoutScore: "desc" }, { athlete: { lastName: "asc" } }],
     where: { draftSelectionGroup: group },
-  });
+  }));
 
   return (
     <OperationsShell user={session.user}>

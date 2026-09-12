@@ -5,9 +5,11 @@ import {
   DraftSelectionGroup,
   MediaAssetPurpose,
 } from "@/generated/prisma/enums";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 type JsonObject = Record<string, unknown>;
+type ReadinessDb = Prisma.TransactionClient | typeof prisma;
 
 function dataObject(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonObject) : {};
@@ -30,7 +32,8 @@ function hasMeasurementData(data: JsonObject) {
   return Boolean(text(data, ["heightFeet", "height", "heightInFeet", "heightCm"]) && text(data, ["wingspanFeet", "wingspan"]));
 }
 
-export async function draftPersonnelReadinessReport() {
+export async function draftPersonnelReadinessReport(db: ReadinessDb) {
+  const prisma = db;
   const season = await prisma.season.findFirst({
     where: { name: "Season Zero 2026" },
     include: {

@@ -2,7 +2,7 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { chooseSupportedClub, skipSupportedClub } from "@/app/signup/support-club/actions";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 const CLUB_DISPLAY_IMAGE: Record<string, string> = {
   Apex: "/club-fan-display/apex.png",
@@ -15,15 +15,27 @@ const CLUB_DISPLAY_IMAGE: Record<string, string> = {
   Vortex: "/club-fan-display/vortex.png",
 };
 
+// Phase 1 Stage 5.5B: self-service `/signup` (unlike `/apply/[organizationSlug]`, Stage 5.2B-1)
+// never resolves or stamps an organization for the new FAN's role grant - it stays a deliberate
+// platform-level (organizationId: null) UserRoleAssignment, per the doc comment on
+// UserRoleAssignment.organizationId. session.user.organizationId is therefore null here for
+// every self-registered fan, so it cannot be used as trusted provenance for this page. This is a
+// slug-less, no-natural-tenant-anchor route exactly matching Stage 5.2D's Pattern D reasoning
+// (see resolveDefaultPublicOrganization()'s doc comment) - reused here rather than inventing a
+// new mechanism. Fully resolving self-signup's own org acquisition (an org-slug signup route,
+// analogous to Stage 5.2B-1's /apply restructure) remains a separate, not-yet-scoped decision -
+// named here, not silently solved.
 export default async function SupportClubPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string }> }) {
   const { callbackUrl } = await searchParams;
   const session = await auth();
   if (!session?.user) redirect(`/login?callbackUrl=${encodeURIComponent(`/signup/support-club${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""}`)}`);
 
-  const existingMembership = await prisma.fanMembership.findFirst({ where: { userId: session.user.id } });
+  const organization = await resolveDefaultPublicOrganization();
+  const { existingMembership, fanClubs } = await withOrganizationContext(organization.id, async (tx) => ({
+    existingMembership: await tx.fanMembership.findFirst({ where: { userId: session.user.id } }),
+    fanClubs: await tx.fanClub.findMany({ include: { club: true }, orderBy: { club: { name: "asc" } } }),
+  }));
   if (existingMembership) redirect(callbackUrl || "/public/events");
-
-  const fanClubs = await prisma.fanClub.findMany({ include: { club: true }, orderBy: { club: { name: "asc" } } });
 
   return (
     <main className="min-h-screen bg-[#050807] px-6 py-12 text-white">

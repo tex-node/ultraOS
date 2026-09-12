@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { MissingOrganizationContextError } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function ImportsPage() {
   const session = await auth();
@@ -18,12 +19,15 @@ export default async function ImportsPage() {
       </OperationsShell>
     );
   }
+  if (!session.user.organizationId) {
+    throw new MissingOrganizationContextError();
+  }
 
-  const jobs = await prisma.importJob.findMany({
+  const jobs = await withOrganizationContext(session.user.organizationId, (tx) => tx.importJob.findMany({
     include: { uploadedBy: { select: { email: true, name: true } } },
     orderBy: { createdAt: "desc" },
     take: 100,
-  });
+  }));
 
   return (
     <OperationsShell user={session.user}>

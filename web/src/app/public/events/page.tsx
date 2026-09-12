@@ -1,20 +1,23 @@
 import Link from "next/link";
 import { formatLagosDateTime } from "@/lib/format-datetime";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function PublicEventsPage() {
-  const events = await prisma.event.findMany({
-    where: { status: { in: ["PUBLISHED", "IN_PROGRESS"] } },
-    include: {
-      venue: true,
-      seatZones: true,
-      _count: { select: { reservations: true } },
-    },
-    orderBy: { startTime: "asc" },
-  });
+  const organization = await resolveDefaultPublicOrganization();
+  const events = await withOrganizationContext(organization.id, (tx) =>
+    tx.event.findMany({
+      where: { status: { in: ["PUBLISHED", "IN_PROGRESS"] } },
+      include: {
+        venue: true,
+        seatZones: true,
+        _count: { select: { reservations: true } },
+      },
+      orderBy: { startTime: "asc" },
+    }),
+  );
   return (
     <main className="mx-auto max-w-7xl px-6 py-12">
       <p className="text-xs uppercase tracking-[.24em] text-emerald-400">Matchday access</p>

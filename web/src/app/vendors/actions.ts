@@ -5,10 +5,10 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { ProductCategory } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
 import { nairaToKobo } from "@/lib/money";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const vendorSchema = z.object({
   name: z.string().trim().min(2).max(100),
@@ -18,11 +18,12 @@ const vendorSchema = z.object({
 });
 
 export async function createVendor(formData: FormData) {
-  const session = await requirePermission("vendor:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("vendor:manage");
   const input = vendorSchema.parse(formDataToRecord(formData));
-  const vendor = await prisma.$transaction(async (tx) => {
+  const vendor = await withOrganizationContext(organizationId, async (tx) => {
     const created = await tx.vendor.create({
       data: {
+        organizationId,
         name: input.name,
         contactName: input.contactName || null,
         email: input.email || null,
@@ -30,6 +31,7 @@ export async function createVendor(formData: FormData) {
       },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "VENDOR_CREATED",
       entityType: "Vendor",
@@ -55,11 +57,16 @@ export async function createVendorProduct(
   vendorId: string,
   formData: FormData,
 ) {
-  const session = await requirePermission("vendor:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("vendor:manage");
   const input = productSchema.parse(formDataToRecord(formData));
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
+    // vendorId arrives as a route param, not a scoped lookup result - a foreign-org vendorId is
+    // invisible to RLS here and throws not-found, never reaching the create below. The composite
+    // FK on VendorProduct.vendorId is the database-level backstop behind this same guard.
+    await tx.vendor.findUniqueOrThrow({ where: { id: vendorId }, select: { id: true } });
     const product = await tx.vendorProduct.create({
       data: {
+        organizationId,
         vendorId,
         name: input.name,
         description: input.description || null,
@@ -70,6 +77,7 @@ export async function createVendorProduct(
       },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "VENDOR_PRODUCT_CREATED",
       entityType: "VendorProduct",
@@ -95,26 +103,29 @@ export async function setVendorInventory(
   vendorId: string,
   formData: FormData,
 ) {
-  const session = await requirePermission("vendor:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("vendor:manage");
   const input = inventorySchema.parse(formDataToRecord(formData));
-  const product = await prisma.vendorProduct.findFirstOrThrow({
-    where: { id: input.productId, vendorId },
-  });
-  const currentInventory = await prisma.vendorInventory.findUnique({
-    where: {
-      eventId_productId: {
-        eventId: input.eventId,
-        productId: input.productId,
+  await withOrganizationContext(organizationId, async (tx) => {
+    const product = await tx.vendorProduct.findFirstOrThrow({
+      where: { id: input.productId, vendorId },
+    });
+    // eventId is client-submitted (a <select> value) - a foreign-org eventId is invisible to
+    // RLS here and throws not-found, never reaching the upsert below.
+    await tx.event.findUniqueOrThrow({ where: { id: input.eventId }, select: { id: true } });
+    const currentInventory = await tx.vendorInventory.findUnique({
+      where: {
+        eventId_productId: {
+          eventId: input.eventId,
+          productId: input.productId,
+        },
       },
-    },
-  });
-  if (
-    currentInventory &&
-    input.stock < currentInventory.reserved + currentInventory.sold
-  ) {
-    throw new Error("STOCK_BELOW_COMMITTED_QUANTITY");
-  }
-  await prisma.$transaction(async (tx) => {
+    });
+    if (
+      currentInventory &&
+      input.stock < currentInventory.reserved + currentInventory.sold
+    ) {
+      throw new Error("STOCK_BELOW_COMMITTED_QUANTITY");
+    }
     const inventory = await tx.vendorInventory.upsert({
       where: {
         eventId_productId: {
@@ -122,10 +133,11 @@ export async function setVendorInventory(
           productId: input.productId,
         },
       },
-      create: input,
+      create: { ...input, organizationId },
       update: { stock: input.stock },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "VENDOR_INVENTORY_SET",
       entityType: "VendorInventory",
@@ -151,16 +163,22 @@ export async function createSponsorCampaign(
   vendorId: string,
   formData: FormData,
 ) {
-  const session = await requirePermission("vendor:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("vendor:manage");
   const input = campaignSchema.parse(formDataToRecord(formData));
-  if (input.productId) {
-    await prisma.vendorProduct.findFirstOrThrow({
-      where: { id: input.productId, vendorId },
-    });
-  }
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
+    if (input.productId) {
+      await tx.vendorProduct.findFirstOrThrow({
+        where: { id: input.productId, vendorId },
+      });
+    }
+    // eventId (optional, "all events" otherwise) is client-submitted - a foreign-org eventId is
+    // invisible to RLS here and throws not-found, never reaching the create below.
+    if (input.eventId) {
+      await tx.event.findUniqueOrThrow({ where: { id: input.eventId }, select: { id: true } });
+    }
     const campaign = await tx.sponsorCampaign.create({
       data: {
+        organizationId,
         name: input.name,
         sponsorName: input.sponsorName,
         eventId: input.eventId || null,
@@ -168,6 +186,7 @@ export async function createSponsorCampaign(
       },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "SPONSOR_CAMPAIGN_CREATED",
       entityType: "SponsorCampaign",
@@ -191,23 +210,33 @@ const promoSchema = z.object({
 });
 
 export async function createPromoCode(vendorId: string, formData: FormData) {
-  const session = await requirePermission("vendor:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("vendor:manage");
   const input = promoSchema.parse(formDataToRecord(formData));
-  if (input.campaignId) {
-    const campaign = await prisma.sponsorCampaign.findFirst({
-      where: {
-        id: input.campaignId,
-        OR: [
-          { productId: null },
-          { product: { vendorId } },
-        ],
-      },
-    });
-    if (!campaign) throw new Error("INVALID_CAMPAIGN");
-  }
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
+    if (input.campaignId) {
+      const campaign = await tx.sponsorCampaign.findFirst({
+        where: {
+          id: input.campaignId,
+          OR: [
+            { productId: null },
+            { product: { vendorId } },
+          ],
+        },
+      });
+      if (!campaign) throw new Error("INVALID_CAMPAIGN");
+    }
+    if (input.eventId) {
+      await tx.event.findUniqueOrThrow({ where: { id: input.eventId }, select: { id: true } });
+    }
+    // PromoCode.code is a bare GLOBAL @unique (platform-wide, not organizationId-composite) -
+    // this create can collide with another organization's identically-named code (e.g. both
+    // orgs wanting "VIP"). This is a real, known limitation - see the Stage 5.2B-4 doc's stop
+    // condition section. Not silently worked around here: a global-uniqueness violation surfaces
+    // as Prisma's ordinary P2002 error, which the caller must handle as "code already in use"
+    // (true today whether the conflict is same-org or, once a second org exists, cross-org).
     const promo = await tx.promoCode.create({
       data: {
+        organizationId,
         code: input.code,
         eventId: input.eventId || null,
         sponsorCampaignId: input.campaignId || null,
@@ -216,6 +245,7 @@ export async function createPromoCode(vendorId: string, formData: FormData) {
       },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "PROMO_CODE_CREATED",
       entityType: "PromoCode",

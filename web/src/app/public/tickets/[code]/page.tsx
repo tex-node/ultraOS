@@ -1,8 +1,14 @@
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { createWalletOrder } from "../actions";
+import { PublicTokenLocatorType } from "@/generated/prisma/enums";
 import { formatNaira } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
+import {
+  locatorMatchesResource,
+  resolvePublicTokenLocator,
+} from "@/lib/public-locators";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function TicketPage({
   params,
@@ -10,27 +16,35 @@ export default async function TicketPage({
   params: Promise<{ code: string }>;
 }) {
   const { code } = await params;
-  const ticket = await prisma.ticket.findUnique({
-    where: { code },
-    include: {
-      reservation: {
-        include: {
-          event: {
-            include: {
-              inventories: {
-                where: { product: { isActive: true } },
-                include: { product: { include: { vendor: true } } },
-                orderBy: { product: { name: "asc" } },
+  const locator = await resolvePublicTokenLocator(
+    prisma,
+    PublicTokenLocatorType.TICKET,
+    code,
+  );
+  if (!locator) notFound();
+  const ticket = await withOrganizationContext(locator.organizationId, (tx) =>
+    tx.ticket.findUnique({
+      where: { id: locator.resourceId },
+      include: {
+        reservation: {
+          include: {
+            event: {
+              include: {
+                inventories: {
+                  where: { product: { isActive: true } },
+                  include: { product: { include: { vendor: true } } },
+                  orderBy: { product: { name: "asc" } },
+                },
               },
             },
+            seatZone: true,
+            order: true,
           },
-          seatZone: true,
-          order: true,
         },
       },
-    },
-  });
-  if (!ticket) notFound();
+    }),
+  );
+  if (!ticket || !locatorMatchesResource(locator, ticket) || ticket.code !== code) notFound();
   if (ticket.reservation.order) {
     const order = ticket.reservation.order;
     return (

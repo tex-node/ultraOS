@@ -1,7 +1,13 @@
 import Image from "next/image";
 import { notFound } from "next/navigation";
+import { PublicTokenLocatorType } from "@/generated/prisma/enums";
 import { formatNaira } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
+import {
+  locatorMatchesResource,
+  resolvePublicTokenLocator,
+} from "@/lib/public-locators";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function PublicOrderPage({
   params,
@@ -9,15 +15,23 @@ export default async function PublicOrderPage({
   params: Promise<{ code: string }>;
 }) {
   const { code } = await params;
-  const order = await prisma.order.findUnique({
-    where: { collectionCode: code },
-    include: {
-      event: true,
-      reservation: { include: { ticket: true, seatZone: true } },
-      items: { include: { product: { include: { vendor: true } } } },
-    },
-  });
-  if (!order) notFound();
+  const locator = await resolvePublicTokenLocator(
+    prisma,
+    PublicTokenLocatorType.ORDER,
+    code,
+  );
+  if (!locator) notFound();
+  const order = await withOrganizationContext(locator.organizationId, (tx) =>
+    tx.order.findUnique({
+      where: { id: locator.resourceId },
+      include: {
+        event: true,
+        reservation: { include: { ticket: true, seatZone: true } },
+        items: { include: { product: { include: { vendor: true } } } },
+      },
+    }),
+  );
+  if (!order || !locatorMatchesResource(locator, order) || order.collectionCode !== code) notFound();
   return (
     <main className="mx-auto max-w-2xl px-6 py-12">
       <section className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-8">

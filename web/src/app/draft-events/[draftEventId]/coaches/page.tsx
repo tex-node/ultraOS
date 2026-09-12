@@ -4,20 +4,24 @@ import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { addCoachPoolEntry } from "@/app/draft-events/actions";
 import { StaffRole } from "@/generated/prisma/enums";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function DraftCoachPoolPage({ params }: { params: Promise<{ draftEventId: string }> }) {
   const { draftEventId } = await params;
   const rawSession = await auth();
   if (!rawSession?.user) redirect(`/login?callbackUrl=/draft-events/${draftEventId}/coaches`);
-  const session = await requirePermission("draft-coach-pool:manage");
-  const event = await prisma.draftEvent.findUnique({ where: { id: draftEventId }, include: { season: true, coachPoolEntries: { include: { staff: true, division: true }, orderBy: [{ division: { name: "asc" } }, { sequence: "asc" }] } } });
+  const { session, organizationId } = await requirePermissionWithOrganization("draft-coach-pool:manage");
+  const { event, divisions, coaches } = await withOrganizationContext(organizationId, async (tx) => {
+    const event = await tx.draftEvent.findUnique({ where: { id: draftEventId }, include: { season: true, coachPoolEntries: { include: { staff: true, division: true }, orderBy: [{ division: { name: "asc" } }, { sequence: "asc" }] } } });
+    if (!event) return { event: null, divisions: [], coaches: [] };
+    const [divisions, coaches] = await Promise.all([
+      tx.division.findMany({ where: { competitionId: event.season.competitionId }, orderBy: { name: "asc" } }),
+      tx.staff.findMany({ where: { role: { in: [StaffRole.HEAD_COACH, StaffRole.ASSISTANT_COACH] }, user: { roles: { some: { role: "COACH", revokedAt: null } } } }, orderBy: { name: "asc" } }),
+    ]);
+    return { event, divisions, coaches };
+  });
   if (!event) notFound();
-  const [divisions, coaches] = await Promise.all([
-    prisma.division.findMany({ where: { competitionId: event.season.competitionId }, orderBy: { name: "asc" } }),
-    prisma.staff.findMany({ where: { role: { in: [StaffRole.HEAD_COACH, StaffRole.ASSISTANT_COACH] }, user: { roles: { some: { role: "COACH", revokedAt: null } } } }, orderBy: { name: "asc" } }),
-  ]);
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">

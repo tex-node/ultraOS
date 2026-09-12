@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { publicSecondaryDraftState } from "@/lib/draft-events";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 import { AutoRefresh } from "./auto-refresh";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,8 @@ export default async function SecondaryDraftDisplayPage({
 }) {
   const { id } = await params;
   const { token } = await searchParams;
-  const state = await publicSecondaryDraftState(id, token);
+  const organization = await resolveDefaultPublicOrganization();
+  const state = await withOrganizationContext(organization.id, (tx) => publicSecondaryDraftState(id, token, tx));
   if (!state) notFound();
   const revealedPicks = state.picks.filter((pick) => pick.status === "REVEALED" || pick.status === "CONFIRMED");
   const latest = state.picks.at(-1);

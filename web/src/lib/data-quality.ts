@@ -1,4 +1,8 @@
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
+
+type Db = Prisma.TransactionClient | typeof prisma;
 
 const resolutionPrefix = "duplicate-resolution:";
 
@@ -109,17 +113,27 @@ export async function duplicateIdentityReport() {
   };
 }
 
-export async function approvedPlayerDuplicateGroups(): Promise<ApprovedPlayerDuplicateGroup[]> {
-  const applications = await prisma.application.findMany({
-    where: { type: "PLAYER", status: "APPROVED" },
+export async function approvedPlayerDuplicateGroups(
+  db: Db = prisma,
+  organizationId?: string,
+): Promise<ApprovedPlayerDuplicateGroup[]> {
+  const applications = await db.application.findMany({
+    where: {
+      type: "PLAYER",
+      status: "APPROVED",
+      ...(organizationId ? { organizationId } : {}),
+    },
     include: {
       applicantUser: { select: { id: true, email: true, name: true } },
     },
     orderBy: { createdAt: "asc" },
   });
   const emails = applications.map((application) => normalize(application.applicantUser?.email)).filter(Boolean);
-  const athletes = await prisma.athlete.findMany({
-    where: { email: { in: [...new Set(emails)] } },
+  const athletes = await db.athlete.findMany({
+    where: {
+      email: { in: [...new Set(emails)] },
+      ...(organizationId ? { organizationId } : {}),
+    },
     include: { registrations: { select: { id: true }, take: 1 } },
   });
   const athleteByEmail = new Map(athletes.map((athlete) => [normalize(athlete.email), athlete]));
@@ -130,8 +144,11 @@ export async function approvedPlayerDuplicateGroups(): Promise<ApprovedPlayerDup
     if (!key) continue;
     grouped.set(key, [...(grouped.get(key) ?? []), application]);
   }
-  const resolutions = await prisma.systemSetting.findMany({
-    where: { key: { startsWith: resolutionPrefix } },
+  const resolutions = await db.systemSetting.findMany({
+    where: {
+      key: { startsWith: resolutionPrefix },
+      ...(organizationId ? { organizationId } : {}),
+    },
     select: { key: true, value: true },
   });
   const resolutionByGroupId = new Map(resolutions.map((resolution) => [resolution.key.replace(resolutionPrefix, ""), resolution.value]));
@@ -171,8 +188,8 @@ export async function approvedPlayerDuplicateGroups(): Promise<ApprovedPlayerDup
     });
 }
 
-export async function duplicateGroup(groupId: string) {
-  const groups = await approvedPlayerDuplicateGroups();
+export async function duplicateGroup(groupId: string, db: Db = prisma, organizationId?: string) {
+  const groups = await approvedPlayerDuplicateGroups(db, organizationId);
   return groups.find((group) => group.id === groupId) ?? null;
 }
 
@@ -192,6 +209,7 @@ export async function saveDuplicateResolution(input: {
   primaryApplicationId?: string;
   secondaryApplicationIds: string[];
   actorUserId: string;
+  organizationId: string;
 }) {
   if (!duplicateResolutionActions.includes(input.action)) {
     throw new Error("Invalid duplicate resolution action.");
@@ -199,28 +217,29 @@ export async function saveDuplicateResolution(input: {
   if (!input.reason.trim()) {
     throw new Error("Resolution reason is required.");
   }
-  const group = await duplicateGroup(input.groupId);
-  if (!group) throw new Error("Duplicate group not found.");
-  const before = await prisma.systemSetting.findUnique({ where: { key: `${resolutionPrefix}${input.groupId}` } });
-  const value = {
-    action: input.action,
-    reason: input.reason.trim(),
-    primaryApplicationId: input.primaryApplicationId || null,
-    secondaryApplicationIds: input.secondaryApplicationIds,
-    resolvedById: input.actorUserId,
-    resolvedAt: new Date().toISOString(),
-    before: before?.value ?? null,
-    applicationIds: group.applications.map((application) => application.applicationId),
-  };
-  await prisma.$transaction(async (tx) => {
+  return withOrganizationContext(input.organizationId, async (tx) => {
+    const group = await duplicateGroup(input.groupId, tx, input.organizationId);
+    if (!group) throw new Error("Duplicate group not found.");
+    const before = await tx.systemSetting.findUnique({ where: { key: `${resolutionPrefix}${input.groupId}` } });
+    const value = {
+      action: input.action,
+      reason: input.reason.trim(),
+      primaryApplicationId: input.primaryApplicationId || null,
+      secondaryApplicationIds: input.secondaryApplicationIds,
+      resolvedById: input.actorUserId,
+      resolvedAt: new Date().toISOString(),
+      before: before?.value ?? null,
+      applicationIds: group.applications.map((application) => application.applicationId),
+    };
     await tx.systemSetting.upsert({
       where: { key: `${resolutionPrefix}${input.groupId}` },
       update: { value, description: "Approved player duplicate identity resolution", category: "data-quality" },
-      create: { key: `${resolutionPrefix}${input.groupId}`, value, description: "Approved player duplicate identity resolution", category: "data-quality" },
+      create: { key: `${resolutionPrefix}${input.groupId}`, value, organizationId: input.organizationId, description: "Approved player duplicate identity resolution", category: "data-quality" },
     });
     await tx.auditLog.create({
       data: {
         userId: input.actorUserId,
+        organizationId: input.organizationId,
         action: "DUPLICATE_IDENTITY_RESOLVED",
         entityType: "DuplicateIdentityGroup",
         entityId: input.groupId,

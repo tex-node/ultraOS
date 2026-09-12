@@ -6,6 +6,8 @@ import { z } from "zod";
 import { UserRole } from "@/generated/prisma/enums";
 import { primaryRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { upsertRoleAssignment } from "@/lib/user-roles";
+import { resolveActiveOrganizationId } from "@/lib/tenant-context";
 
 const credentialsSchema = z.object({
   email: z.string().email().transform((value) => value.toLowerCase()),
@@ -35,6 +37,7 @@ async function getSessionUser(email: string) {
     image: user.image,
     role: primaryRole(roles.length > 0 ? roles : [user.role]),
     roles: roles.length > 0 ? roles : [user.role, UserRole.FAN],
+    organizationId: await resolveActiveOrganizationId(user.id),
   };
 }
 
@@ -65,10 +68,16 @@ async function upsertGoogleUser(user: { email?: string | null; name?: string | n
     select: { id: true },
   });
 
-  await prisma.userRoleAssignment.upsert({
-    where: { userId_role: { userId: createdOrUpdated.id, role: UserRole.FAN } },
-    update: { revokedAt: null },
-    create: { userId: createdOrUpdated.id, role: UserRole.FAN },
+  // Phase 1 Stage 5.1: every new sign-up becomes a Neon Ultra-scoped FAN, not a platform-level
+  // one - there is exactly one organization today, and this is the org-resolution mechanism's
+  // only source of truth (see resolveActiveOrganizationId). A genuinely platform-level grant
+  // (organizationId: null) is reserved for accounts explicitly provisioned as cross-org
+  // operators, never the default for an ordinary sign-up.
+  const organization = await prisma.organization.findUnique({ where: { slug: "neon-ultra" } });
+  await upsertRoleAssignment(prisma, {
+    userId: createdOrUpdated.id,
+    role: UserRole.FAN,
+    organizationId: organization?.id ?? null,
   });
 
   return getSessionUser(email);
@@ -127,6 +136,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.id = sessionUser.id;
           token.role = sessionUser.role;
           token.roles = sessionUser.roles;
+          token.organizationId = sessionUser.organizationId;
         }
         return token;
       }
@@ -135,6 +145,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id;
         token.role = user.role;
         token.roles = user.roles;
+        token.organizationId = user.organizationId;
       }
       return token;
     },
@@ -151,6 +162,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               Object.values(UserRole).includes(role as UserRole),
             )
           : [token.role as UserRole];
+        session.user.organizationId = typeof token.organizationId === "string" ? token.organizationId : null;
       }
       return session;
     },

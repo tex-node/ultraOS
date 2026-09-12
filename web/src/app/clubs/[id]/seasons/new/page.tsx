@@ -3,46 +3,55 @@ import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { createSeasonClub } from "@/app/clubs/actions";
 import { SeasonClubForm } from "@/app/clubs/season-club-form";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function NewSeasonClubPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requirePermission("club:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("club:manage");
   const { id } = await params;
-  const club = await prisma.club.findUnique({
-    where: { id },
-    select: { id: true, name: true, sportId: true },
+
+  const { club, seasons, divisions, staff } = await withOrganizationContext(organizationId, async (tx) => {
+    const club = await tx.club.findUnique({
+      where: { id },
+      select: { id: true, name: true, sportId: true },
+    });
+
+    if (!club) {
+      return { club: null, seasons: [], divisions: [], staff: [] };
+    }
+
+    const [seasons, divisions, staff] = await Promise.all([
+      tx.season.findMany({
+        where: { competition: { sportId: club.sportId } },
+        orderBy: { startDate: "desc" },
+        select: {
+          id: true,
+          name: true,
+          competitionId: true,
+          competition: { select: { name: true } },
+        },
+      }),
+      tx.division.findMany({
+        where: { competition: { sportId: club.sportId }, isActive: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, competitionId: true },
+      }),
+      tx.staff.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, role: true },
+      }),
+    ]);
+
+    return { club, seasons, divisions, staff };
   });
 
   if (!club) {
     notFound();
   }
-
-  const [seasons, divisions, staff] = await Promise.all([
-    prisma.season.findMany({
-      where: { competition: { sportId: club.sportId } },
-      orderBy: { startDate: "desc" },
-      select: {
-        id: true,
-        name: true,
-        competitionId: true,
-        competition: { select: { name: true } },
-      },
-    }),
-    prisma.division.findMany({
-      where: { competition: { sportId: club.sportId }, isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, competitionId: true },
-    }),
-    prisma.staff.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, role: true },
-    }),
-  ]);
 
   return (
     <OperationsShell user={session.user}>

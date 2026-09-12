@@ -56,9 +56,9 @@ export async function preflightReport() {
     };
   }
 
-  const configuration = await requiredConfigurationReport();
+  const configuration = await requiredConfigurationReport(prisma);
   const seasonId = configuration.season?.id;
-  const demos = await demoDataCounts();
+  const demos = await demoDataCounts(prisma);
   const migrationRows = await prisma
     .$queryRawUnsafe<{ count: bigint }[]>(`SELECT COUNT(*) FROM "_prisma_migrations" WHERE "finished_at" IS NULL OR "rolled_back_at" IS NOT NULL`)
     .catch(() => [{ count: BigInt(0) }]);
@@ -71,7 +71,7 @@ export async function preflightReport() {
     missingRequiredEnvironment: Object.entries(env)
       .filter(([, present]) => !present)
       .map(([key]) => key),
-    existingRealDataRecordCounts: await realDataCounts(seasonId),
+      existingRealDataRecordCounts: await realDataCounts(seasonId, prisma),
     databaseMigrationStatus: {
       reachable: dbReachable,
       unresolvedMigrationRows: Number(migrationRows[0]?.count ?? 0),

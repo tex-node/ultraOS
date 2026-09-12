@@ -1,39 +1,42 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { saveEventDebrief, saveVendorReview, saveVolunteerReview } from "@/app/events/[id]/debrief/actions";
-import { requirePermission } from "@/lib/authorization";
+import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { formatLagosDate } from "@/lib/format-datetime";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function EventDebriefPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = await params;
-  const rawSession = await auth();
-  if (!rawSession?.user) redirect(`/login?callbackUrl=/events/${eventId}/debrief`);
-  const session = await requirePermission("event:manage");
+  const session = await requirePermissionOrRedirect("event:manage", `/events/${eventId}/debrief`);
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const organizationId = session.user.organizationId;
 
-  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true, name: true, date: true } });
+  const [event, debrief, vendors, vendorReviews, volunteers, volunteerReviews, gateCheckIns] = await withOrganizationContext(organizationId, async (tx) => {
+    const eventRow = await tx.event.findUnique({ where: { id: eventId }, select: { id: true, name: true, date: true } });
+    if (!eventRow) return [null, null, [], [], [], [], [{ count: BigInt(0) }]] as const;
+    return Promise.all([
+      Promise.resolve(eventRow),
+      tx.eventDebrief.findUnique({ where: { eventId } }),
+      tx.vendor.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
+      tx.eventVendorReview.findMany({ where: { eventId } }),
+      tx.user.findMany({ where: { roles: { some: { role: "VOLUNTEER", revokedAt: null } } }, orderBy: { name: "asc" } }),
+      tx.eventVolunteerReview.findMany({ where: { eventId } }),
+      tx.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*) as count FROM "CheckIn" ci
+        WHERE ci."organizationId" = ${organizationId}
+          AND ci.type = 'VENUE_ENTRY'
+          AND (
+            ci."ticketId" IN (SELECT t.id FROM "Ticket" t JOIN "SeatReservation" sr ON sr.id = t."reservationId" WHERE sr."eventId" = ${eventId})
+            OR ci."accreditationId" IN (SELECT a.id FROM "Accreditation" a WHERE a."eventId" = ${eventId})
+          )
+      `,
+    ]);
+  });
   if (!event) notFound();
-
-  const [debrief, vendors, vendorReviews, volunteers, volunteerReviews, gateCheckIns] = await Promise.all([
-    prisma.eventDebrief.findUnique({ where: { eventId } }),
-    prisma.vendor.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
-    prisma.eventVendorReview.findMany({ where: { eventId } }),
-    prisma.user.findMany({ where: { roles: { some: { role: "VOLUNTEER", revokedAt: null } } }, orderBy: { name: "asc" } }),
-    prisma.eventVolunteerReview.findMany({ where: { eventId } }),
-    prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(*) as count FROM "CheckIn" ci
-      WHERE ci.type = 'VENUE_ENTRY'
-        AND (
-          ci."ticketId" IN (SELECT t.id FROM "Ticket" t JOIN "SeatReservation" sr ON sr.id = t."reservationId" WHERE sr."eventId" = ${eventId})
-          OR ci."accreditationId" IN (SELECT a.id FROM "Accreditation" a WHERE a."eventId" = ${eventId})
-        )
-    `,
-  ]);
 
   const vendorReviewByVendor = new Map(vendorReviews.map((r) => [r.vendorId, r]));
   const volunteerReviewByVolunteer = new Map(volunteerReviews.map((r) => [r.volunteerId, r]));

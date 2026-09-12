@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { buildLiveGameSnapshot } from "@/lib/live-game-snapshot";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { remainingShotClockSeconds } from "@/lib/game-rules";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,24 +14,30 @@ export const revalidate = 0;
 // /api/games/[id]/box-score (full team/player lines) - fetch both if a consumer needs everything.
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const game = await prisma.game.findUnique({
-    where: { id },
-    include: { fixture: true },
+  const organization = await resolveDefaultPublicOrganization();
+  const loaded = await withOrganizationContext(organization.id, async (tx) => {
+    const game = await tx.game.findUnique({
+      where: { id },
+      include: { fixture: true },
+    });
+    if (!game) return null;
+    const [statisticianEvents, recentEvents] = await Promise.all([
+      tx.gameEvent.findMany({
+        where: { gameId: game.id, source: "ULTRA_NATIVE_LIVE_STATISTICIAN" },
+        select: { seasonClubId: true, points: true, status: true },
+      }),
+      tx.gameEvent.findMany({
+        where: { gameId: game.id, status: "ACTIVE" },
+        orderBy: [{ sequenceNumber: "desc" }, { createdAt: "desc" }],
+        take: 15,
+        select: { id: true, eventType: true, description: true, period: true, clockSeconds: true, sequenceNumber: true, source: true, status: true },
+      }),
+    ]);
+    return { game, statisticianEvents, recentEvents };
   });
+  const game = loaded?.game;
   if (!game) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-
-  const [statisticianEvents, recentEvents] = await Promise.all([
-    prisma.gameEvent.findMany({
-      where: { gameId: game.id, source: "ULTRA_NATIVE_LIVE_STATISTICIAN" },
-      select: { seasonClubId: true, points: true, status: true },
-    }),
-    prisma.gameEvent.findMany({
-      where: { gameId: game.id, status: "ACTIVE" },
-      orderBy: [{ sequenceNumber: "desc" }, { createdAt: "desc" }],
-      take: 15,
-      select: { id: true, eventType: true, description: true, period: true, clockSeconds: true, sequenceNumber: true, source: true, status: true },
-    }),
-  ]);
+  const { statisticianEvents, recentEvents } = loaded;
 
   const snapshot = buildLiveGameSnapshot({
     gameId: game.id,

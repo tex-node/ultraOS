@@ -1,4 +1,4 @@
-import { requirePermissionOrRedirect } from "@/lib/authorization";
+import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { listFailureCases } from "@/lib/vision/vision-loader";
 
@@ -12,7 +12,8 @@ export const revalidate = 0;
 // starts tagging failures on real data.
 export default async function VisionFailures() {
   const session = await requirePermissionOrRedirect("vision:manage", "/vision/failures");
-  const { observations, matches } = await listFailureCases();
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const { observations, matches } = await listFailureCases(session.user.organizationId);
 
   return (
     <OperationsShell user={session.user}>

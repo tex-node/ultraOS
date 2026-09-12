@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermission, requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export async function findCheckInCode(formData: FormData) {
   await requirePermission("check-in:operate");
@@ -14,8 +14,8 @@ export async function findCheckInCode(formData: FormData) {
 }
 
 export async function checkInTicket(ticketId: string, code: string) {
-  const session = await requirePermission("check-in:operate");
-  await prisma.$transaction(async (tx) => {
+  const { session, organizationId } = await requirePermissionWithOrganization("check-in:operate");
+  await withOrganizationContext(organizationId, async (tx) => {
     const ticket = await tx.ticket.findUniqueOrThrow({
       where: { id: ticketId },
       include: { reservation: true },
@@ -34,12 +34,14 @@ export async function checkInTicket(ticketId: string, code: string) {
     });
     await tx.checkIn.create({
       data: {
+        organizationId,
         type: "VENUE_ENTRY",
         ticketId,
         checkedInById: session.user.id,
       },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "FAN_CHECKED_IN",
       entityType: "Ticket",
@@ -54,8 +56,8 @@ export async function checkInAccreditation(
   accreditationId: string,
   code: string,
 ) {
-  const session = await requirePermission("check-in:operate");
-  await prisma.$transaction(async (tx) => {
+  const { session, organizationId } = await requirePermissionWithOrganization("check-in:operate");
+  await withOrganizationContext(organizationId, async (tx) => {
     const accreditation = await tx.accreditation.findUniqueOrThrow({
       where: { id: accreditationId },
     });
@@ -68,12 +70,14 @@ export async function checkInAccreditation(
     if (existing) throw new Error("ALREADY_CHECKED_IN");
     await tx.checkIn.create({
       data: {
+        organizationId,
         type: "ACCREDITATION",
         accreditationId,
         checkedInById: session.user.id,
       },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "ACCREDITATION_CHECKED_IN",
       entityType: "Accreditation",
@@ -85,8 +89,8 @@ export async function checkInAccreditation(
 }
 
 export async function collectOrder(orderId: string, code: string) {
-  const session = await requirePermission("check-in:operate");
-  await prisma.$transaction(async (tx) => {
+  const { session, organizationId } = await requirePermissionWithOrganization("check-in:operate");
+  await withOrganizationContext(organizationId, async (tx) => {
     const order = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
     if (order.paymentStatus !== "PAID" || order.status !== "READY") {
       throw new Error("ORDER_NOT_COLLECTIBLE");
@@ -97,12 +101,14 @@ export async function collectOrder(orderId: string, code: string) {
     });
     await tx.checkIn.create({
       data: {
+        organizationId,
         type: "ORDER_COLLECTION",
         orderId,
         checkedInById: session.user.id,
       },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "ORDER_COLLECTED",
       entityType: "Order",

@@ -10,7 +10,7 @@ import {
   updateAdminOfflineIntakePlayerProfile,
   type PlayerProfile,
 } from "@/lib/admin-offline-intake";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 
 function value(formData: FormData, key: string) {
   const field = formData.get(key);
@@ -24,7 +24,7 @@ export type OfflineIntakeFormState = {
 };
 
 export async function submitOfflineIntake(_state: OfflineIntakeFormState, formData: FormData): Promise<OfflineIntakeFormState> {
-  const session = await requirePermission("staff:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
   const participantType = value(formData, "participantType") as ApplicationType;
   if (!Object.values(ApplicationType).includes(participantType)) {
     return { error: "Select a valid participant type." };
@@ -48,7 +48,7 @@ export async function submitOfflineIntake(_state: OfflineIntakeFormState, formDa
         }
       : undefined;
 
-  const result = await createAdminOfflineIntake({
+  const result = await createAdminOfflineIntake(organizationId, {
     coachSeasonZeroDivision: Object.values(CoachSeasonZeroDivision).includes(divisionInput as CoachSeasonZeroDivision)
       ? (divisionInput as CoachSeasonZeroDivision)
       : undefined,
@@ -76,22 +76,23 @@ export async function submitOfflineIntake(_state: OfflineIntakeFormState, formDa
 }
 
 export async function provisionOfflineIntakeAction(intakeId: string) {
-  const session = await requirePermission("staff:manage");
-  await provisionAdminOfflineIntake(intakeId, session.user.id);
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
+  await provisionAdminOfflineIntake(organizationId, intakeId, session.user.id);
   revalidatePath("/participants/offline-intake");
   revalidatePath("/coaches/assignments");
 }
 
 export async function updateOfflineIntakeContactAction(intakeId: string, formData: FormData) {
-  const session = await requirePermission("staff:manage");
-  await updateAdminOfflineIntakeContact(intakeId, { email: value(formData, "email") || undefined, phone: value(formData, "phone") || undefined }, session.user.id);
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
+  await updateAdminOfflineIntakeContact(organizationId, intakeId, { email: value(formData, "email") || undefined, phone: value(formData, "phone") || undefined }, session.user.id);
   revalidatePath("/participants/offline-intake");
 }
 
 export async function updateOfflineIntakePlayerProfileAction(intakeId: string, formData: FormData) {
-  const session = await requirePermission("staff:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
   const genderInput = value(formData, "gender");
   await updateAdminOfflineIntakePlayerProfile(
+    organizationId,
     intakeId,
     {
       gender: Object.values(AthleteGender).includes(genderInput as AthleteGender) ? (genderInput as AthleteGender) : undefined,
@@ -107,10 +108,10 @@ export async function updateOfflineIntakePlayerProfileAction(intakeId: string, f
 }
 
 export async function provisionPlayerOfflineIntakeAction(intakeId: string, formData: FormData) {
-  const session = await requirePermission("staff:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
   const seasonId = value(formData, "seasonId");
   if (!seasonId) throw new Error("A season must be selected to provision a player.");
-  await provisionPlayerOfflineIntake(intakeId, seasonId, session.user.id);
+  await provisionPlayerOfflineIntake(organizationId, intakeId, seasonId, session.user.id);
   revalidatePath("/participants/offline-intake");
   revalidatePath("/players");
   revalidatePath("/drafts");

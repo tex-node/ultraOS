@@ -11,18 +11,18 @@ import {
   startNoveltyGame,
 } from "../../actions";
 import { GameClock } from "@/app/games/game-clock";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { remainingClockSeconds } from "@/lib/game-clock";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function NoveltyLive({ params, searchParams }: { params: Promise<{ matchId: string }>; searchParams: Promise<{ error?: string }> }) {
-  const session = await requirePermission("game:operate");
+  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
   const { matchId } = await params;
   const query = await searchParams;
-  const match = await prisma.noveltyMatch.findUnique({
+  const [match, players] = await withOrganizationContext(organizationId, (tx) => Promise.all([tx.noveltyMatch.findUnique({
     where: { id: matchId },
     include: {
       homeTeam: true,
@@ -37,15 +37,13 @@ export default async function NoveltyLive({ params, searchParams }: { params: Pr
         },
       },
     },
-  });
-  if (!match) notFound();
-  const game = match.game;
-
-  const players = await prisma.player.findMany({
-    where: { seasonClubId: { not: null } },
+  }), tx.player.findMany({
+    where: { organizationId, seasonClubId: { not: null } },
     include: { athlete: true, seasonClub: { include: { club: true } } },
     orderBy: { athlete: { firstName: "asc" } },
-  });
+  })]));
+  if (!match) notFound();
+  const game = match.game;
 
   return (
     <OperationsShell user={session.user}>

@@ -5,7 +5,7 @@ import { buildLivePresentationModelForGame } from "@/lib/live-game-snapshot-v2";
 import { formatLagosTime } from "@/lib/format-datetime";
 import { productionPresentationFixtureWhere } from "@/lib/presentation-scope";
 import { computeSnapshotHealth } from "@/lib/system-health";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,13 +13,15 @@ export const revalidate = 0;
 const EMPTY_STANDING = { leaguePoints: 0, lost: 0, played: 0, pointDifference: 0, pointsFor: 0, won: 0 };
 
 export default async function PublicLive() {
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } });
-  const fixtures = season
-    ? await prisma.fixture.findMany({
+  const organization = await resolveDefaultPublicOrganization();
+  const { season, fixtures } = await withOrganizationContext(organization.id, async (tx) => {
+    const activeSeason = await tx.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } });
+    const seasonFixtures = activeSeason
+      ? await tx.fixture.findMany({
         // G.19 Part III: a REHEARSAL (or any non-PRODUCTION) fixture must never surface here,
         // in any of the three states below - the G.18 rehearsal found this query had no such
         // filter at all.
-        where: { seasonId: season.id, status: { not: "CANCELLED" }, ...productionPresentationFixtureWhere() },
+        where: { seasonId: activeSeason.id, status: { not: "CANCELLED" }, ...productionPresentationFixtureWhere() },
         orderBy: { scheduledAt: "asc" },
         include: {
           homeSeasonClub: { include: { club: true } },
@@ -27,7 +29,9 @@ export default async function PublicLive() {
           game: true,
         },
       })
-    : [];
+      : [];
+    return { season: activeSeason, fixtures: seasonFixtures };
+  });
 
   const live = fixtures.filter((f) => f.game && (f.game.status === "LIVE" || f.game.status === "PAUSED"));
   const results = fixtures.filter((f) => f.status === "FINAL");
@@ -37,10 +41,10 @@ export default async function PublicLive() {
   // most useful real content instead - next fixture, latest result, standings entry point.
   if (live.length === 0) {
     const seasonClubs = season
-      ? await prisma.seasonClub.findMany({
+      ? await withOrganizationContext(organization.id, (tx) => tx.seasonClub.findMany({
           where: { seasonId: season.id, status: "ACTIVE" },
           include: { club: true, division: true, standing: true },
-        })
+        }))
       : [];
     const standingRows = seasonClubs
       .map((sc) => ({ club: sc.club, division: sc.division.name, ...(sc.standing ?? EMPTY_STANDING) }))
@@ -111,18 +115,18 @@ export default async function PublicLive() {
   // assuming exactly one"). Every model comes from the same buildLivePresentationModelForGame()
   // composition every other surface (broadcast, commentator) will also call - never a page-
   // local recalculation.
-  const models = await Promise.all(live.map((f) => buildLivePresentationModelForGame(f.game!.id)));
+  const models = await withOrganizationContext(organization.id, (tx) => Promise.all(live.map((f) => buildLivePresentationModelForGame(f.game!.id, tx))));
   // G.21 Part III carryover: the freshness model from G.20's system-health.ts, reused verbatim
   // (never a second monitoring truth) to give the public page its own honest staleness signal -
   // the gap G.20 disclosed and deferred. Never replaces the last-known score; only adds a small
   // "LIVE DATA DELAYED" indicator alongside it when the event ledger hasn't advanced while the
   // clock is running.
   const nowMs = new Date().getTime();
-  const freshness = await Promise.all(live.map(async (f) => {
-    const lastActiveEvent = await prisma.gameEvent.findFirst({ where: { gameId: f.game!.id, status: "ACTIVE" }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
-    const model = models[live.indexOf(f)];
-    return computeSnapshotHealth({ gameStatus: model.status, clockRunning: model.clock.running, lastEventAt: lastActiveEvent?.createdAt ?? null, nowMs });
-  }));
+  const freshness = await withOrganizationContext(organization.id, (tx) => Promise.all(live.map(async (f) => {
+      const lastActiveEvent = await tx.gameEvent.findFirst({ where: { gameId: f.game!.id, status: "ACTIVE" }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
+      const model = models[live.indexOf(f)];
+      return computeSnapshotHealth({ gameStatus: model.status, clockRunning: model.clock.running, lastEventAt: lastActiveEvent?.createdAt ?? null, nowMs });
+    })));
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">

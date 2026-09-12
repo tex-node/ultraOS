@@ -3,28 +3,34 @@ import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { ApplicationProvisioningStatus, ApplicationStatus } from "@/generated/prisma/enums";
 import { internalizeApprovedApplications } from "@/lib/participant-internalization";
-import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function ApplicationInternalizationPage() {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/applications/internalization");
-  if (!hasPermission(session.user.roles, "application:review")) {
+  let authorizedSession;
+  let organizationId: string;
+  try {
+    ({ session: authorizedSession, organizationId } = await requirePermissionWithOrganization("application:review"));
+  } catch {
     return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
   }
   const [total, approved, provisioned, missingUser, playerMissingAthlete, playerMissingPlayer, coachMissingStaff, dryRun] = await Promise.all([
-    prisma.application.count(),
-    prisma.application.count({ where: { status: ApplicationStatus.APPROVED } }),
-    prisma.application.count({ where: { status: ApplicationStatus.APPROVED, provisioningStatus: { not: ApplicationProvisioningStatus.APPROVED_ONLY } } }),
-    prisma.application.count({ where: { status: ApplicationStatus.APPROVED, applicantUserId: null } }),
-    prisma.application.count({ where: { status: ApplicationStatus.APPROVED, type: "PLAYER", provisionedAthleteId: null } }),
-    prisma.application.count({ where: { status: ApplicationStatus.APPROVED, type: "PLAYER", provisionedPlayerId: null } }),
-    prisma.application.count({ where: { status: ApplicationStatus.APPROVED, type: "COACH", provisionedStaffId: null } }),
-    internalizeApprovedApplications({ apply: false }),
+    ...await withOrganizationContext(organizationId, (tx) => Promise.all([
+      tx.application.count(),
+      tx.application.count({ where: { status: ApplicationStatus.APPROVED } }),
+      tx.application.count({ where: { status: ApplicationStatus.APPROVED, provisioningStatus: { not: ApplicationProvisioningStatus.APPROVED_ONLY } } }),
+      tx.application.count({ where: { status: ApplicationStatus.APPROVED, applicantUserId: null } }),
+      tx.application.count({ where: { status: ApplicationStatus.APPROVED, type: "PLAYER", provisionedAthleteId: null } }),
+      tx.application.count({ where: { status: ApplicationStatus.APPROVED, type: "PLAYER", provisionedPlayerId: null } }),
+      tx.application.count({ where: { status: ApplicationStatus.APPROVED, type: "COACH", provisionedStaffId: null } }),
+    ])),
+    await internalizeApprovedApplications({ apply: false, organizationId }),
   ]);
 
   return (
-    <OperationsShell user={session.user}>
+    <OperationsShell user={authorizedSession.user}>
       <main className="mx-auto max-w-6xl px-6 py-10">
         <h1 className="text-3xl font-semibold">Application Internalization</h1>
         <p className="mt-2 text-sm text-zinc-400">Dry-run planning for converting approved applications into permanent participant profiles.</p>

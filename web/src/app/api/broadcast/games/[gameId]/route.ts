@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { buildLivePresentationModelForGame } from "@/lib/live-game-snapshot-v2";
 import { isProductionPresentationFixture } from "@/lib/presentation-scope";
 import { effectiveRuleSnapshot } from "@/lib/ultra-scoring-engine";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,16 +16,22 @@ export const revalidate = 0;
 // LivePresentationModel every other surface uses, and refuses to serve a non-PRODUCTION fixture.
 export async function GET(_request: Request, { params }: { params: Promise<{ gameId: string }> }) {
   const { gameId } = await params;
-  const game = await prisma.game.findUnique({
-    where: { id: gameId },
-    include: {
-      fixture: { include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } } } },
-      ruleSnapshot: true,
-    },
+  const organization = await resolveDefaultPublicOrganization();
+  const loaded = await withOrganizationContext(organization.id, async (tx) => {
+    const game = await tx.game.findUnique({
+      where: { id: gameId },
+      include: {
+        fixture: { include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } } } },
+        ruleSnapshot: true,
+      },
+    });
+    if (!game || !isProductionPresentationFixture(game.fixture)) return null;
+    const model = await buildLivePresentationModelForGame(gameId, tx);
+    return { game, model };
   });
-  if (!game || !isProductionPresentationFixture(game.fixture)) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (!loaded) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  const { game, model } = loaded;
 
-  const model = await buildLivePresentationModelForGame(gameId);
   const rules = effectiveRuleSnapshot(game.ruleSnapshot);
 
   return NextResponse.json({

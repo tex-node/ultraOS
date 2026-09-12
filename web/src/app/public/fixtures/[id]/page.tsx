@@ -11,8 +11,14 @@ import type { GameCore, PlayerLine, TopPerformer, WhyTheyWonFactor } from "@/lib
 import { rankWhyTheyWon } from "@/lib/analytics/why-they-won";
 import { buildMatchupIntelligence, type MatchupFactor } from "@/lib/analytics/matchup-intelligence";
 import { GAME_ANALYTICS_CAPABILITY_PROVENANCE_LABEL, getGameAnalyticsCapability, hasEventLedger, hasUltraStatDerivation } from "@/lib/game-data-capability";
+import { PublicResourceLocatorType } from "@/generated/prisma/enums";
 import { formatLagosDateTime } from "@/lib/format-datetime";
 import { prisma } from "@/lib/prisma";
+import {
+  locatorMatchesResource,
+  resolvePublicResourceLocator,
+} from "@/lib/public-locators";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import { AnalyticsCard } from "@/components/analytics/cards/AnalyticsCard";
 import { buildWhyTheyWonCard } from "@/lib/analytics/cards/game-cards";
 import { buildGameStarCard } from "@/lib/analytics/cards/player-cards";
@@ -22,23 +28,32 @@ export const revalidate = 0;
 
 export default async function Match({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const fixture = await prisma.fixture.findUnique({
-    where: { id },
-    include: {
-      homeSeasonClub: { include: { club: true } },
-      awaySeasonClub: { include: { club: true } },
-      venue: true,
-      division: true,
-    },
-  });
-  if (!fixture) notFound();
+  const locator = await resolvePublicResourceLocator(
+    prisma,
+    PublicResourceLocatorType.FIXTURE,
+    id,
+  );
+  if (!locator) notFound();
+  const fixture = await withOrganizationContext(locator.organizationId, (tx) =>
+    tx.fixture.findUnique({
+      where: { id: locator.resourceId },
+      include: {
+        homeSeasonClub: { include: { club: true } },
+        awaySeasonClub: { include: { club: true } },
+        venue: true,
+        division: true,
+      },
+    }),
+  );
+  if (!fixture || !locatorMatchesResource(locator, fixture)) notFound();
+  const organizationId = locator.organizationId;
 
   if (fixture.status !== "FINAL") {
-    return <PreGameOrLive fixture={fixture} />;
+    return <PreGameOrLive fixture={fixture} organizationId={organizationId} />;
   }
 
-  const game = await loadGameCoreByFixture(id);
-  if (!game) return <PreGameOrLive fixture={fixture} />;
+  const game = await withOrganizationContext(organizationId, (tx) => loadGameCoreByFixture(id, tx));
+  if (!game) return <PreGameOrLive fixture={fixture} organizationId={organizationId} />;
 
   const storyTags = classifyGameStory(game);
   const headlineTag = GAME_STORY_PRIORITY.find((t) => storyTags.includes(t));
@@ -115,10 +130,12 @@ export default async function Match({ params }: { params: Promise<{ id: string }
 
 async function PreGameOrLive({
   fixture,
+  organizationId,
 }: {
+  organizationId: string;
   fixture: { id: string; status: string; homeScore: number; awayScore: number; scheduledAt: Date; venue: { name: string }; homeSeasonClub: { club: { name: string } }; awaySeasonClub: { club: { name: string } } };
 }) {
-  const game = await prisma.game.findUnique({ where: { fixtureId: fixture.id }, select: { id: true } });
+  const game = await withOrganizationContext(organizationId, (tx) => tx.game.findUnique({ where: { fixtureId: fixture.id }, select: { id: true } }));
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">
       <section className="rounded-3xl border border-white/[.08] bg-[#0b100e] p-8 text-center">

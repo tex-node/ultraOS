@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { requirePermissionOrRedirect } from "@/lib/authorization";
+import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { getFixtureVisionWorkspaceData } from "@/lib/vision/vision-loader";
 import { evaluateTask } from "@/lib/vision/vision-evaluation";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import { createAnchorAction, acceptAnchorAction, reviewObservationAction, reviewEventMatchAction, queueAnalysisRunAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -17,12 +17,14 @@ export default async function FixtureVisionWorkspace({ params, searchParams }: {
   const { fixtureId } = await params;
   const { video: videoParam } = await searchParams;
   const session = await requirePermissionOrRedirect("vision:manage", `/vision/games/${fixtureId}`);
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const organizationId = session.user.organizationId;
 
-  const fixture = await prisma.fixture.findUniqueOrThrow({
+  const fixture = await withOrganizationContext(organizationId, (tx) => tx.fixture.findUniqueOrThrow({
     where: { id: fixtureId },
     include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } } },
-  });
-  const data = await getFixtureVisionWorkspaceData(fixtureId, videoParam ?? null);
+  }));
+  const data = await getFixtureVisionWorkspaceData(organizationId, fixtureId, videoParam ?? null);
   const { videos, selected, canonicalEvents, observations, eventMatches, reviewObservations, reviewMatches } = data;
 
   // Coverage + evaluation over the "matched to a confirmed event" definition (Part XXXI).

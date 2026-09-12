@@ -4,6 +4,7 @@ import { apiError } from "@/lib/api-v1/errors";
 import { loadPublicGame } from "@/lib/api-v1/game-loader";
 import { resolvePlayerNames } from "@/lib/api-v1/identifiers";
 import type { EventV1 } from "@/lib/api-v1/contracts";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -38,7 +39,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
     };
 
     const activeEvents = model.latestEvents.filter((e) => e.status === "ACTIVE");
-    const names = await resolvePlayerNames([...new Set(activeEvents.map((e) => e.playerId).filter((id): id is string => id !== null))]);
+    const organization = await resolveDefaultPublicOrganization();
+    const names = await withOrganizationContext(organization.id, (tx) => resolvePlayerNames([...new Set(activeEvents.map((e) => e.playerId).filter((id): id is string => id !== null))], tx));
 
     const events: EventV1[] = activeEvents
       .map((e) => ({

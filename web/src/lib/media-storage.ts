@@ -9,15 +9,25 @@ import {
   MediaAssetStatus,
   MediaStorageProvider,
   MediaVisibility,
+  PublicResourceLocatorType,
 } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
-import { prisma } from "@/lib/prisma";
+import { assertSameOrganization } from "@/lib/authorization";
+import { upsertPublicResourceLocator } from "@/lib/public-locators";
 
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const profileMaxBytes = 15 * 1024 * 1024;
 const logoMaxBytes = 10 * 1024 * 1024;
 
+// Phase 1 Stage 5.2A: this shared domain never decides which tenant is active - every function
+// below takes `tx` (a transaction already opened by the caller's own withOrganizationContext())
+// and `organizationId` explicitly, and stamps organizationId onto every row it creates. It never
+// imports session/auth logic itself and never accepts an organizationId from form/request input -
+// the caller (a server action that already resolved it from the authenticated session) is the
+// only trusted source.
 export type MediaUploadInput = {
+  tx: Prisma.TransactionClient;
+  organizationId: string;
   file: File;
   purpose: MediaAssetPurpose;
   visibility?: MediaVisibility;
@@ -161,13 +171,15 @@ function variantsForPurpose(purpose: MediaAssetPurpose) {
 }
 
 export async function uploadMediaAsset(input: MediaUploadInput) {
+  const { tx, organizationId } = input;
   const provider = configuredProvider();
   const validated = await validateImageFile(input.file, input.purpose);
   const key = safeObjectKey({ purpose: input.purpose, uploadedById: input.uploadedById, mimeType: validated.mimeType });
   const storedPublicUrl = await storeObject(provider, key, validated.bytes, validated.mimeType);
 
-  const asset = await prisma.mediaAsset.create({
+  const asset = await tx.mediaAsset.create({
     data: {
+      organizationId,
       byteSize: input.file.size,
       checksumSha256: validated.checksumSha256,
       height: validated.height,
@@ -186,14 +198,21 @@ export async function uploadMediaAsset(input: MediaUploadInput) {
       width: validated.width,
     },
   });
+  await upsertPublicResourceLocator(tx, {
+    resourceType: PublicResourceLocatorType.MEDIA_ASSET,
+    publicKey: asset.id,
+    organizationId,
+    resourceId: asset.id,
+  });
 
   for (const variant of variantsForPurpose(input.purpose)) {
     const buffer = await variantBuffer(validated.bytes, input.purpose, variant);
     const metadata = await sharp(buffer).metadata();
     const variantKey = safeObjectKey({ purpose: input.purpose, uploadedById: input.uploadedById, mimeType: validated.mimeType, variant });
     const variantPublicUrl = await storeObject(provider, variantKey, buffer, validated.mimeType);
-    await prisma.mediaAssetVariant.create({
+    await tx.mediaAssetVariant.create({
       data: {
+        organizationId,
         assetId: asset.id,
         byteSize: buffer.length,
         checksumSha256: crypto.createHash("sha256").update(buffer).digest("hex"),
@@ -208,70 +227,82 @@ export async function uploadMediaAsset(input: MediaUploadInput) {
     });
   }
 
-  await prisma.auditLog.create({
-    data: {
-      action: "MEDIA_ASSET_UPLOADED",
-      entityId: asset.id,
-      entityType: "MediaAsset",
-      userId: input.uploadedById,
-      details: { purpose: input.purpose, provider, visibility: input.visibility ?? MediaVisibility.PRIVATE },
-    },
+  await writeAuditLog(tx, {
+    organizationId,
+    action: "MEDIA_ASSET_UPLOADED",
+    entityId: asset.id,
+    entityType: "MediaAsset",
+    userId: input.uploadedById,
+    details: { purpose: input.purpose, provider, visibility: input.visibility ?? MediaVisibility.PRIVATE },
   });
 
   return asset;
 }
 
-export async function assignPrimaryMediaAsset(target: MediaAssignmentTarget, assetId: string, userId: string) {
-  return prisma.$transaction(async (tx) => {
-    const asset = await tx.mediaAsset.findUniqueOrThrow({ where: { id: assetId } });
-    await tx.mediaAssetUsage.updateMany({
-      where: { entityType: target.entityType, entityId: target.entityId, purpose: target.purpose, isPrimary: true, active: true },
-      data: { active: false },
-    });
-    const usage = await tx.mediaAssetUsage.create({
-      data: {
-        assetId,
-        assignedById: userId,
-        entityId: target.entityId,
-        entityType: target.entityType,
-        isPrimary: true,
-        purpose: target.purpose,
-      },
-    });
-    const publicUrl = asset.publicUrl ?? `/media/assets/${asset.id}/file`;
-    if (target.entityType === "Club" && (target.purpose === MediaAssetPurpose.CLUB_LOGO || target.purpose === MediaAssetPurpose.CLUB_SECONDARY_LOGO)) {
-      await tx.club.update({ where: { id: target.entityId }, data: { logoUrl: publicUrl } });
-    }
-    if (target.entityType === "Athlete" && target.purpose === MediaAssetPurpose.PLAYER_PROFILE_PHOTO) {
-      await tx.athlete.update({ where: { id: target.entityId }, data: { photoUrl: publicUrl } });
-    }
-    if (target.entityType === "Staff" && (target.purpose === MediaAssetPurpose.COACH_PROFILE_PHOTO || target.purpose === MediaAssetPurpose.STAFF_PROFILE_PHOTO)) {
-      await tx.staff.update({ where: { id: target.entityId }, data: { photoUrl: publicUrl } });
-    }
-    await writeAuditLog(tx, {
-      action: "MEDIA_ASSET_PRIMARY_ASSIGNED",
-      entityId: assetId,
-      entityType: "MediaAsset",
-      userId,
-      details: target satisfies Prisma.InputJsonObject,
-    });
-    return usage;
+export async function assignPrimaryMediaAsset(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  target: MediaAssignmentTarget,
+  assetId: string,
+  userId: string,
+) {
+  const asset = await tx.mediaAsset.findUnique({ where: { id: assetId } });
+  assertSameOrganization(asset, organizationId, "Media asset");
+  await tx.mediaAssetUsage.updateMany({
+    where: { entityType: target.entityType, entityId: target.entityId, purpose: target.purpose, isPrimary: true, active: true },
+    data: { active: false },
   });
+  const usage = await tx.mediaAssetUsage.create({
+    data: {
+      organizationId,
+      assetId,
+      assignedById: userId,
+      entityId: target.entityId,
+      entityType: target.entityType,
+      isPrimary: true,
+      purpose: target.purpose,
+    },
+  });
+  const publicUrl = asset.publicUrl ?? `/media/assets/${asset.id}/file`;
+  if (target.entityType === "Club" && (target.purpose === MediaAssetPurpose.CLUB_LOGO || target.purpose === MediaAssetPurpose.CLUB_SECONDARY_LOGO)) {
+    const club = await tx.club.findUnique({ where: { id: target.entityId } });
+    assertSameOrganization(club, organizationId, "Club");
+    await tx.club.update({ where: { id: target.entityId }, data: { logoUrl: publicUrl } });
+  }
+  if (target.entityType === "Athlete" && target.purpose === MediaAssetPurpose.PLAYER_PROFILE_PHOTO) {
+    const athlete = await tx.athlete.findUnique({ where: { id: target.entityId } });
+    assertSameOrganization(athlete, organizationId, "Athlete");
+    await tx.athlete.update({ where: { id: target.entityId }, data: { photoUrl: publicUrl } });
+  }
+  if (target.entityType === "Staff" && (target.purpose === MediaAssetPurpose.COACH_PROFILE_PHOTO || target.purpose === MediaAssetPurpose.STAFF_PROFILE_PHOTO)) {
+    const staff = await tx.staff.findUnique({ where: { id: target.entityId } });
+    assertSameOrganization(staff, organizationId, "Staff");
+    await tx.staff.update({ where: { id: target.entityId }, data: { photoUrl: publicUrl } });
+  }
+  await writeAuditLog(tx, {
+    organizationId,
+    action: "MEDIA_ASSET_PRIMARY_ASSIGNED",
+    entityId: assetId,
+    entityType: "MediaAsset",
+    userId,
+    details: target satisfies Prisma.InputJsonObject,
+  });
+  return usage;
 }
 
-export async function approveMediaAsset(assetId: string, userId: string) {
-  await prisma.$transaction(async (tx) => {
-    await tx.mediaAsset.update({ where: { id: assetId }, data: { status: MediaAssetStatus.READY } });
-    await writeAuditLog(tx, { action: "MEDIA_ASSET_APPROVED", entityId: assetId, entityType: "MediaAsset", userId });
-  });
+export async function approveMediaAsset(tx: Prisma.TransactionClient, organizationId: string, assetId: string, userId: string) {
+  const asset = await tx.mediaAsset.findUnique({ where: { id: assetId } });
+  assertSameOrganization(asset, organizationId, "Media asset");
+  await tx.mediaAsset.update({ where: { id: assetId }, data: { status: MediaAssetStatus.READY } });
+  await writeAuditLog(tx, { organizationId, action: "MEDIA_ASSET_APPROVED", entityId: assetId, entityType: "MediaAsset", userId });
 }
 
-export async function archiveMediaAsset(assetId: string, userId: string) {
-  await prisma.$transaction(async (tx) => {
-    await tx.mediaAsset.update({ where: { id: assetId }, data: { status: MediaAssetStatus.ARCHIVED } });
-    await tx.mediaAssetUsage.updateMany({ where: { assetId }, data: { active: false } });
-    await writeAuditLog(tx, { action: "MEDIA_ASSET_ARCHIVED", entityId: assetId, entityType: "MediaAsset", userId });
-  });
+export async function archiveMediaAsset(tx: Prisma.TransactionClient, organizationId: string, assetId: string, userId: string) {
+  const asset = await tx.mediaAsset.findUnique({ where: { id: assetId } });
+  assertSameOrganization(asset, organizationId, "Media asset");
+  await tx.mediaAsset.update({ where: { id: assetId }, data: { status: MediaAssetStatus.ARCHIVED } });
+  await tx.mediaAssetUsage.updateMany({ where: { assetId }, data: { active: false } });
+  await writeAuditLog(tx, { organizationId, action: "MEDIA_ASSET_ARCHIVED", entityId: assetId, entityType: "MediaAsset", userId });
 }
 
 export async function readLocalMediaObject(objectKey: string) {

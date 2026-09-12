@@ -8,15 +8,31 @@ import { classifyGameStory } from "@/lib/analytics/game-story";
 import { rankWhyTheyWon } from "@/lib/analytics/why-they-won";
 import { getGameAnalyticsCapability } from "@/lib/game-data-capability";
 import { toSocialCopy, type CardFormat } from "@/lib/analytics/cards/types";
+import { PublicResourceLocatorType } from "@/generated/prisma/enums";
+import { prisma } from "@/lib/prisma";
+import { resolvePublicResourceLocator } from "@/lib/public-locators";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const FORMAT_MAP: Record<string, CardFormat> = { square: "SOCIAL_SQUARE", portrait: "SOCIAL_PORTRAIT", broadcast: "BROADCAST_16_9" };
 
+async function loadSharedGame(fixtureId: string) {
+  const locator = await resolvePublicResourceLocator(
+    prisma,
+    PublicResourceLocatorType.FIXTURE,
+    fixtureId,
+  );
+  if (!locator) return null;
+  return withOrganizationContext(locator.organizationId, (tx) =>
+    loadGameCoreByFixture(locator.resourceId, tx),
+  );
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
-  const game = await loadGameCoreByFixture(id);
+  const game = await loadSharedGame(id);
   if (!game) return { title: "Game Card — Ultra Basketball" };
   const title = `${game.home.shortName} ${game.home.score} – ${game.away.score} ${game.away.shortName} | Ultra Basketball`;
   const description = `Season Zero final score — official box score data, Ultra Basketball.`;
@@ -33,7 +49,7 @@ export default async function ShareGameCard({ params, searchParams }: { params: 
   const { format } = await searchParams;
   const cardFormat = FORMAT_MAP[format ?? ""] ?? "SOCIAL_SQUARE";
 
-  const game = await loadGameCoreByFixture(id);
+  const game = await loadSharedGame(id);
   if (!game || game.status !== "FINAL") notFound();
 
   const tags = classifyGameStory(game);

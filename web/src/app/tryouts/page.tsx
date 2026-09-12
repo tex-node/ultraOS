@@ -3,8 +3,9 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { DraftSelectionGroup } from "@/generated/prisma/enums";
+import { MissingOrganizationContextError } from "@/lib/authorization";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const groups = [
   DraftSelectionGroup.PENDING_SELECTION,
@@ -38,10 +39,13 @@ export default async function TryoutsPage() {
       </OperationsShell>
     );
   }
-  const counts = await prisma.player.groupBy({
+  if (!session.user.organizationId) {
+    throw new MissingOrganizationContextError();
+  }
+  const counts = await withOrganizationContext(session.user.organizationId, (tx) => tx.player.groupBy({
     by: ["draftSelectionGroup"],
     _count: { _all: true },
-  });
+  }));
   const countByGroup = new Map(counts.map((item) => [item.draftSelectionGroup, item._count._all]));
 
   return (

@@ -28,10 +28,15 @@ import { classifyGameStory } from "@/lib/analytics/game-story";
 import { rankWhyTheyWon } from "@/lib/analytics/why-they-won";
 import { selectTopPerformers } from "@/lib/analytics/player-analytics";
 import { getGameAnalyticsCapability } from "@/lib/game-data-capability";
-import { prisma } from "@/lib/prisma";
+import { MissingOrganizationContextError } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
+import type { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+type Db = Prisma.TransactionClient | typeof prisma;
 
 const FORMAT_MAP: Record<string, CardFormat> = { web: "WEB", square: "SOCIAL_SQUARE", portrait: "SOCIAL_PORTRAIT", broadcast: "BROADCAST_16_9" };
 const FORMATS: { key: string; label: string }[] = [
@@ -46,14 +51,17 @@ type Query = { subject?: string; id?: string; key?: string; category?: string; c
 export default async function GraphicsPreview({ searchParams }: { searchParams: Promise<Query> }) {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/broadcast/graphics");
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const organizationId = session.user.organizationId;
 
   const q = await searchParams;
   const format = FORMAT_MAP[q.format ?? ""] ?? "WEB";
 
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" } });
-  if (!season) notFound();
-
-  const built = await buildPreviewCard(q, season.id);
+  const built = await withOrganizationContext(organizationId, async (tx) => {
+    const season = await tx.season.findFirst({ where: { status: "ACTIVE" } });
+    if (!season) return null;
+    return buildPreviewCard(q, season.id, tx);
+  });
   if (!built) notFound();
 
   return (
@@ -98,14 +106,14 @@ function cleanQuery(q: Query): Record<string, string> {
 
 type Built = { card: CardBase; render: (format: CardFormat) => React.ReactNode; shareUrl: string | null };
 
-async function buildPreviewCard(q: Query, seasonId: string): Promise<Built | null> {
+async function buildPreviewCard(q: Query, seasonId: string, db: Db): Promise<Built | null> {
   const capability = "BOX_SCORE_ONLY" as const;
 
   if (q.subject === "player" && q.id) {
-    const totals = await loadSeasonPlayerTotals(seasonId);
+    const totals = await loadSeasonPlayerTotals(seasonId, db);
     const target = totals.find((t) => t.playerId === q.id);
     if (!target) return null;
-    const athlete = await prisma.athlete.findUnique({ where: { id: target.athleteId }, select: { photoUrl: true } });
+    const athlete = await db.athlete.findUnique({ where: { id: target.athleteId }, select: { photoUrl: true } });
     const photoUrl = athlete?.photoUrl ?? null;
 
     if (q.card === "spotlight") {
@@ -121,13 +129,13 @@ async function buildPreviewCard(q: Query, seasonId: string): Promise<Built | nul
       return { card, render: (f) => <AnalyticsCard card={card} format={f} />, shareUrl: null };
     }
     if (q.card === "bestgame") {
-      const best = await loadPlayerBestGame(target.playerId);
+      const best = await loadPlayerBestGame(target.playerId, db);
       if (!best) return null;
       const card = buildPlayerBestGameCard(best, target.name, target.seasonClubShortName, photoUrl, capability);
       return { card, render: (f) => <AnalyticsCard card={card} format={f} />, shareUrl: null };
     }
     if (q.card === "milestone") {
-      const games = await loadSeasonGameCores(seasonId);
+      const games = await loadSeasonGameCores(seasonId, db);
       const [m] = buildPlayerMilestonesForPlayer(games, target.playerId);
       if (!m) return null;
       const card = buildPlayerMilestoneCard(m, capability);
@@ -146,11 +154,11 @@ async function buildPreviewCard(q: Query, seasonId: string): Promise<Built | nul
   }
 
   if (q.subject === "team" && q.id) {
-    const games = await loadSeasonGameCores(seasonId);
+    const games = await loadSeasonGameCores(seasonId, db);
     const totalsByTeam = computeSeasonTeamTotals(games);
     const target = totalsByTeam.get(q.id);
     if (!target) return null;
-    const seasonClub = await prisma.seasonClub.findUnique({ where: { id: q.id }, select: { clubId: true, club: { select: { logoUrl: true } } } });
+    const seasonClub = await db.seasonClub.findUnique({ where: { id: q.id }, select: { clubId: true, club: { select: { logoUrl: true } } } });
     const logoUrl = seasonClub?.club.logoUrl ?? null;
 
     if (q.card === "profile") {
@@ -181,7 +189,7 @@ async function buildPreviewCard(q: Query, seasonId: string): Promise<Built | nul
   }
 
   if (q.subject === "game" && q.id) {
-    const game = await loadGameCoreByFixture(q.id);
+    const game = await loadGameCoreByFixture(q.id, db);
     if (!game || game.status !== "FINAL") return null;
     const cap = getGameAnalyticsCapability(game.dataCapability);
 
@@ -209,7 +217,7 @@ async function buildPreviewCard(q: Query, seasonId: string): Promise<Built | nul
   }
 
   if (q.subject === "leader" && q.category) {
-    const totals = await loadSeasonPlayerTotals(seasonId);
+    const totals = await loadSeasonPlayerTotals(seasonId, db);
     const entries = buildPlayerLeaderboard(totals, q.category as Parameters<typeof buildPlayerLeaderboard>[1]);
     const entry: LeaderboardEntry | undefined = entries[0];
     if (!entry) return null;
@@ -218,8 +226,8 @@ async function buildPreviewCard(q: Query, seasonId: string): Promise<Built | nul
   }
 
   if (q.subject === "record" && q.key) {
-    const games = await loadSeasonGameCores(seasonId);
-    const players = await loadSeasonPlayerTotals(seasonId);
+    const games = await loadSeasonGameCores(seasonId, db);
+    const players = await loadSeasonPlayerTotals(seasonId, db);
     const decodedKey = decodeURIComponent(q.key);
     const all = [...buildPlayerSingleGameRecords(games), ...buildPlayerSeasonRecords(players), ...buildTeamRecords(games), ...buildGameRecords(games)];
     const record = all.find((r) => r.key === decodedKey);
@@ -229,11 +237,11 @@ async function buildPreviewCard(q: Query, seasonId: string): Promise<Built | nul
   }
 
   if (q.subject === "matchup-player" && q.a && q.b) {
-    const totals = await loadSeasonPlayerTotals(seasonId);
+    const totals = await loadSeasonPlayerTotals(seasonId, db);
     const totalsA = totals.find((t) => t.playerId === q.a);
     const totalsB = totals.find((t) => t.playerId === q.b);
     if (!totalsA || !totalsB) return null;
-    const [identityA, identityB] = await Promise.all([loadPlayerIdentity(q.a), loadPlayerIdentity(q.b)]);
+    const [identityA, identityB] = await Promise.all([loadPlayerIdentity(q.a, db), loadPlayerIdentity(q.b, db)]);
     if (!identityA || !identityB) return null;
     const dnaByPlayer = computeLeaguePlayerDna(totals);
     const result = comparePlayers(identityA, identityB, totalsA, totalsB, dnaByPlayer.get(q.a) ?? null, dnaByPlayer.get(q.b) ?? null);
@@ -243,7 +251,7 @@ async function buildPreviewCard(q: Query, seasonId: string): Promise<Built | nul
   }
 
   if (q.subject === "matchup-team" && q.a && q.b) {
-    const games = await loadSeasonGameCores(seasonId);
+    const games = await loadSeasonGameCores(seasonId, db);
     const totalsByTeam = computeSeasonTeamTotals(games);
     const totalsA = totalsByTeam.get(q.a);
     const totalsB = totalsByTeam.get(q.b);
@@ -258,8 +266,8 @@ async function buildPreviewCard(q: Query, seasonId: string): Promise<Built | nul
   return null;
 }
 
-async function loadPlayerIdentity(playerId: string): Promise<PlayerIdentity | null> {
-  const player = await prisma.player.findUnique({
+async function loadPlayerIdentity(playerId: string, db: Db): Promise<PlayerIdentity | null> {
+  const player = await db.player.findUnique({
     where: { id: playerId },
     select: { athlete: { select: { firstName: true, lastName: true, ultraAthleteId: true } }, seasonClub: { select: { club: { select: { name: true, shortName: true } } } } },
   });

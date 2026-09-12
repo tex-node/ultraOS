@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 type Row = {
   id: string;
@@ -34,15 +34,18 @@ function sortRows(rows: Row[]) {
 }
 
 export default async function Standings() {
-  const season = await prisma.season.findFirst({
-    where: { status: "ACTIVE" },
-    include: {
-      seasonClubs: {
-        where: { status: "ACTIVE" },
-        include: { club: true, division: true, standing: true },
+  const organization = await resolveDefaultPublicOrganization();
+  const season = await withOrganizationContext(organization.id, (tx) =>
+    tx.season.findFirst({
+      where: { status: "ACTIVE" },
+      include: {
+        seasonClubs: {
+          where: { status: "ACTIVE" },
+          include: { club: true, division: true, standing: true },
+        },
       },
-    },
-  });
+    }),
+  );
 
   // Every ACTIVE club shows up here even before its Standing row exists (no games played yet),
   // defaulting to 0s instead of the club silently disappearing from the table.

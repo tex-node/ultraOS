@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { registerGameVideoFromExistingAsset } from "@/lib/vision/vision-loader";
 import type { VideoSourceType } from "@/generated/prisma/enums";
 
@@ -11,7 +11,7 @@ import type { VideoSourceType } from "@/generated/prisma/enums";
 // new upload path against) - deliberately deferred, documented in GAME_VIDEO_REGISTRY.md rather
 // than built shallow just to check a box.
 export async function registerGameVideoAction(fixtureId: string, formData: FormData) {
-  const session = await requirePermission("vision:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("vision:manage");
   const mediaAssetId = String(formData.get("mediaAssetId") ?? "").trim();
   const sourceType = String(formData.get("sourceType") ?? "FULL_GAME") as VideoSourceType;
   const cameraLabel = String(formData.get("cameraLabel") ?? "").trim() || null;
@@ -19,7 +19,7 @@ export async function registerGameVideoAction(fixtureId: string, formData: FormD
 
   const gameId = String(formData.get("gameId") ?? "").trim() || null;
 
-  await registerGameVideoFromExistingAsset({
+  await registerGameVideoFromExistingAsset(organizationId, {
     fixtureId, gameId, mediaAssetId, sourceType, cameraLabel, recordingStartedAt: null, registeredById: session.user.id,
   });
   revalidatePath(`/games/${fixtureId}/video`);

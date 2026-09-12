@@ -6,8 +6,8 @@ import { OperationsShell } from "@/app/components/operations-shell";
 import { ApplicationStatus } from "@/generated/prisma/enums";
 import { cohortApplicationReviewActions, cohortRowResolutionActions, draftCohortAnalysis } from "@/lib/draft-cohort";
 import { draftSquadCapacityConfig, targetSizeForGender } from "@/lib/draft-squad-capacity";
-import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const filters = ["All", "Safe", "Duplicate Blocked", "Ambiguous", "Unmatched", "Pending Approval", "Admin Intake Required", "Excluded", "Ready", "Provisioned"] as const;
 
@@ -15,15 +15,19 @@ export default async function DraftCohortPage({ searchParams }: { searchParams: 
   const { filter = "All" } = await searchParams;
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/draft-cohort");
-  if (!hasPermission(session.user.roles, "application:review")) {
+  let authorizedSession;
+  let organizationId: string;
+  try {
+    ({ session: authorizedSession, organizationId } = await requirePermissionWithOrganization("application:review"));
+  } catch {
     return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
   }
 
-  const [applications, config, analysis] = await Promise.all([
-    prisma.application.findMany({ select: { id: true, type: true, status: true } }),
-    draftSquadCapacityConfig(),
-    draftCohortAnalysis(),
-  ]);
+  const [applications, config, analysis] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+    tx.application.findMany({ select: { id: true, type: true, status: true } }),
+    draftSquadCapacityConfig(tx),
+    draftCohortAnalysis(tx, organizationId),
+  ]));
   const rows = analysis.rows;
   const visibleRows = filterRows(rows, filter);
   const menTarget = targetSizeForGender(config, "men");
@@ -37,10 +41,10 @@ export default async function DraftCohortPage({ searchParams }: { searchParams: 
   const rejectedSelected = rows.filter((row) => row.applicationStatus === ApplicationStatus.REJECTED && row.matchType !== "EXCLUDED").length;
   const rejectedRows = rows.filter((row) => row.applicationStatus === ApplicationStatus.REJECTED && row.matchType !== "EXCLUDED");
   const rejectedApplications = rejectedRows.length
-    ? await prisma.application.findMany({
+    ? await withOrganizationContext(organizationId, (tx) => tx.application.findMany({
       where: { id: { in: rejectedRows.map((row) => row.matchedApplicationId ?? row.applicationId).filter(Boolean) } },
       select: { id: true, notes: true, submittedData: true, createdAt: true, updatedAt: true },
-    })
+    }))
     : [];
   const rejectedApplicationById = new Map(rejectedApplications.map((application) => [application.id, application]));
   const applicationStatusCounts = Object.values(ApplicationStatus).map((status) => ({
@@ -49,7 +53,7 @@ export default async function DraftCohortPage({ searchParams }: { searchParams: 
   }));
 
   return (
-    <OperationsShell user={session.user}>
+    <OperationsShell user={authorizedSession.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

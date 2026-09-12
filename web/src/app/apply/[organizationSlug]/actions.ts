@@ -6,8 +6,8 @@ import { ApplicationType } from "@/generated/prisma/enums";
 import { applicationConfigs } from "@/app/apply/application-config";
 import { getClosedApplicationTypes } from "@/lib/application-intake";
 import { formDataToRecord } from "@/lib/club-validation";
-import { prisma } from "@/lib/prisma";
 import { uploadProfilePhoto } from "@/lib/r2";
+import { resolveActiveOrganizationBySlug, withOrganizationContext } from "@/lib/tenant-context";
 
 export type ApplicationFormState = {
   success?: boolean;
@@ -88,10 +88,20 @@ function zUrl(value: string) {
   }
 }
 
+// Phase 1 Stage 5.2B-1: organizationSlug is the FIRST bound argument, applied via
+// `submitApplication.bind(null, organizationSlug)` in the page component (see
+// apply/[organizationSlug]/[role]/page.tsx) - Next.js encrypts bound server-action arguments, so
+// the client cannot tamper with which organization this submission targets. The organization is
+// re-resolved and re-validated (ACTIVE status) here, at the point of the actual write, not just
+// trusted from an earlier render - matching the target flow: ORG SLUG -> SERVER RESOLVES ->
+// VALIDATE ACTIVE -> withOrganizationContext -> CREATE APPLICATION.
 export async function submitApplication(
+  organizationSlug: string,
   _previousState: ApplicationFormState,
   formData: FormData,
 ): Promise<ApplicationFormState> {
+  const organization = await resolveActiveOrganizationBySlug(organizationSlug);
+
   const typeValue = formData.get("type");
   if (
     typeof typeValue !== "string" ||
@@ -101,7 +111,7 @@ export async function submitApplication(
   }
 
   const type = typeValue as ApplicationType;
-  const closedTypes = await getClosedApplicationTypes();
+  const closedTypes = await getClosedApplicationTypes(organization.id);
   if (closedTypes.includes(type)) {
     return { error: `${type} applications are temporarily closed. Please check back later.` };
   }
@@ -119,7 +129,7 @@ export async function submitApplication(
   try {
     const profilePhoto = formData.get("profilePhoto");
     if (profilePhoto instanceof File && profilePhoto.size > 0) {
-      data.profilePhoto = await uploadProfilePhoto(profilePhoto, session.user.id);
+      data.profilePhoto = await uploadProfilePhoto(profilePhoto, session.user.id, organization.id);
     }
   } catch (error) {
     return {
@@ -130,14 +140,17 @@ export async function submitApplication(
   }
 
   const submittedData = JSON.parse(JSON.stringify(data)) as Prisma.InputJsonObject;
-  const application = await prisma.application.create({
-    data: {
-      applicantUserId: session.user.id,
-      type,
-      submittedData,
-    },
-    select: { id: true },
-  });
+  const application = await withOrganizationContext(organization.id, (tx) =>
+    tx.application.create({
+      data: {
+        organizationId: organization.id,
+        applicantUserId: session.user.id,
+        type,
+        submittedData,
+      },
+      select: { id: true },
+    }),
+  );
 
   return { success: true, applicationId: application.id };
 }

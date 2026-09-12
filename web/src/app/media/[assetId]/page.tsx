@@ -4,22 +4,22 @@ import { auth } from "@/auth";
 import { approveAsset, archiveAsset, assignPrimaryAsset } from "@/app/media/actions";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { MediaAssetPurpose } from "@/generated/prisma/enums";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function MediaDetailPage({ params }: { params: Promise<{ assetId: string }> }) {
   const { assetId } = await params;
   const rawSession = await auth();
   if (!rawSession?.user) redirect(`/login?callbackUrl=/media/${assetId}`);
-  const session = await requirePermission("media:read");
-  const asset = await prisma.mediaAsset.findUnique({
-    where: { id: assetId },
+  const { session, organizationId } = await requirePermissionWithOrganization("media:read");
+  const asset = await withOrganizationContext(organizationId, (tx) => tx.mediaAsset.findUnique({
+    where: { id: assetId, organizationId },
     include: {
       uploadedBy: { select: { email: true, name: true } },
       usages: { orderBy: { assignedAt: "desc" } },
       variants: { orderBy: { name: "asc" } },
     },
-  });
+  }));
   if (!asset) notFound();
   const previewUrl = asset.publicUrl ?? `/media/assets/${asset.id}/file`;
 

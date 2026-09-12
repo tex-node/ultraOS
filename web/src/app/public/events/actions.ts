@@ -2,11 +2,19 @@
 
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
+import {
+  PublicResourceLocatorType,
+  PublicTokenLocatorType,
+} from "@/generated/prisma/enums";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { formDataToRecord } from "@/lib/club-validation";
 import { prisma } from "@/lib/prisma";
+import {
+  resolvePublicResourceLocator,
+  upsertPublicTokenLocator,
+} from "@/lib/public-locators";
 
 const reservationSchema = z.object({
   seatZoneId: z.string().min(1),
@@ -20,8 +28,22 @@ export async function reserveZone(eventId: string, formData: FormData) {
   const session = await auth();
   const input = reservationSchema.parse(formDataToRecord(formData));
   const now = new Date();
+
+  const eventLookup = await resolvePublicResourceLocator(
+    prisma,
+    PublicResourceLocatorType.EVENT,
+    eventId,
+  );
+  if (!eventLookup) throw new Error("EVENT_NOT_FOUND");
+
+  // This write path needs Serializable isolation for its optimistic-concurrency capacity claim
+  // below (pre-existing behavior, unchanged) - withOrganizationContext() doesn't expose an
+  // isolation-level option, so its exact two-line mechanism (open the transaction, set the
+  // transaction-local org config before anything else runs) is inlined here rather than
+  // changing that shared helper's signature for this one caller.
   const reservation = await prisma.$transaction(
     async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.current_org_id', ${eventLookup.organizationId}, true)`;
       const zone = await tx.seatZone.findFirstOrThrow({
         where: { id: input.seatZoneId, eventId, isActive: true },
         include: { event: true },
@@ -69,8 +91,9 @@ export async function reserveZone(eventId: string, formData: FormData) {
         zone.priceKobo - Math.floor((zone.priceKobo * discountBps) / 10000),
       );
       const totalKobo = unitPriceKobo * input.quantity;
-      return tx.seatReservation.create({
+      const reservation = await tx.seatReservation.create({
         data: {
+          organizationId: eventLookup.organizationId,
           eventId,
           seatZoneId: zone.id,
           userId: session?.user?.id ?? null,
@@ -83,6 +106,10 @@ export async function reserveZone(eventId: string, formData: FormData) {
           totalKobo,
           paymentStatus: totalKobo === 0 ? "PAID" : "UNPAID",
           paidAt: totalKobo === 0 ? now : null,
+          // organizationId is deliberately omitted here - Ticket.reservation is now a composite
+          // FK keyed on (organizationId, reservationId), so Prisma derives this nested Ticket's
+          // organizationId from the parent SeatReservation.create's own organizationId above,
+          // the same way it already derives reservationId from the nesting itself.
           ticket: {
             create: {
               userId: session?.user?.id ?? null,
@@ -92,6 +119,15 @@ export async function reserveZone(eventId: string, formData: FormData) {
         },
         include: { ticket: true },
       });
+      if (reservation.ticket) {
+        await upsertPublicTokenLocator(tx, {
+          tokenType: PublicTokenLocatorType.TICKET,
+          rawToken: reservation.ticket.code,
+          organizationId: eventLookup.organizationId,
+          resourceId: reservation.ticket.id,
+        });
+      }
+      return reservation;
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );

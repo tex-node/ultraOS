@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 const FALLBACK_PRIMARY_COLOR = "#16F2B3";
 
 export default async function Clubs() {
-  const clubs = await prisma.club.findMany({
+  // Phase 1 Stage 5.2D, Pattern D: this page carries no organization slug - explicit Neon Ultra
+  // resolution, not the unset-RLS fallback. See resolveDefaultPublicOrganization()'s doc comment.
+  const organization = await resolveDefaultPublicOrganization();
+  const clubs = await withOrganizationContext(organization.id, (tx) => tx.club.findMany({
     where: { status: "ACTIVE" },
     include: {
       sport: true,
@@ -18,7 +21,7 @@ export default async function Clubs() {
       },
     },
     orderBy: { name: "asc" },
-  });
+  }));
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-12">

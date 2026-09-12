@@ -6,7 +6,7 @@ import { computePlayerArchetype, PLAYER_ARCHETYPE_LABEL, type PlayerArchetype } 
 import { computeLeaguePlayerDna } from "@/lib/analytics/player-dna";
 import { playerSampleQualification, SAMPLE_CONFIDENCE_LABEL } from "@/lib/analytics/qualification";
 import type { QualificationState } from "@/lib/analytics/types";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -26,7 +26,8 @@ type SearchParams = { q?: string; club?: string; minGames?: string; archetype?: 
 
 export default async function PlayerDiscovery({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" } });
+  const organization = await resolveDefaultPublicOrganization();
+  const season = await withOrganizationContext(organization.id, (tx) => tx.season.findFirst({ where: { status: "ACTIVE" } }));
   if (!season) {
     return (
       <main className="mx-auto max-w-6xl px-6 py-12">
@@ -36,7 +37,7 @@ export default async function PlayerDiscovery({ searchParams }: { searchParams: 
     );
   }
 
-  const totals = await loadSeasonPlayerTotals(season.id);
+  const totals = await withOrganizationContext(organization.id, (tx) => loadSeasonPlayerTotals(season.id, tx));
   const dnaByPlayer = computeLeaguePlayerDna(totals);
   const clubs = [...new Set(totals.map((t) => t.seasonClubShortName))].sort();
 

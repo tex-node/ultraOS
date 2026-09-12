@@ -19,7 +19,8 @@ import type { GameCore } from "@/lib/analytics/types";
 import { buildLivePresentationModelForGame } from "@/lib/live-game-snapshot-v2";
 import { productionPresentationFixtureWhere } from "@/lib/presentation-scope";
 import { CommentatorCommandCenter } from "../commentator-command-center";
-import { prisma } from "@/lib/prisma";
+import { MissingOrganizationContextError } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -27,8 +28,10 @@ export const revalidate = 0;
 export default async function BroadcastStats() {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/broadcast/stats");
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const organizationId = session.user.organizationId;
 
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" } });
+  const season = await withOrganizationContext(organizationId, (tx) => tx.season.findFirst({ where: { status: "ACTIVE" } }));
   if (!season) {
     return (
       <OperationsShell user={session.user}>
@@ -37,26 +40,29 @@ export default async function BroadcastStats() {
     );
   }
 
-  const [games, playerTotals, seasonClubs] = await Promise.all([
-    loadSeasonGameCores(season.id),
-    loadSeasonPlayerTotals(season.id),
-    prisma.seasonClub.findMany({ where: { seasonId: season.id }, select: { id: true, clubId: true } }),
-  ]);
+  const { games, playerTotals, seasonClubs, liveFixtures, liveModels } = await withOrganizationContext(organizationId, async (tx) => {
+    const [games, playerTotals, seasonClubs] = await Promise.all([
+      loadSeasonGameCores(season.id, tx),
+      loadSeasonPlayerTotals(season.id, tx),
+      tx.seasonClub.findMany({ where: { seasonId: season.id }, select: { id: true, clubId: true } }),
+    ]);
+
+    // G.18: any currently live/paused game(s), rendered as a Commentator Command Center at the
+    // top of the page - reuses buildLivePresentationModelForGame(), the exact same composition
+    // the public Game Center calls, so the commentator never sees a different version of the game.
+    const liveFixtures = await tx.fixture.findMany({
+      // G.19 Part III: this query had no isolation from a REHEARSAL (or any non-PRODUCTION)
+      // fixture at all - the exact gap the G.18 rehearsal disclosed for `/live`, present here too.
+      where: { seasonId: season.id, game: { status: { in: ["LIVE", "PAUSED"] } }, ...productionPresentationFixtureWhere() },
+      include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
+    });
+    const liveModels = await Promise.all(liveFixtures.map((f) => buildLivePresentationModelForGame(f.game!.id, tx)));
+    return { games, playerTotals, seasonClubs, liveFixtures, liveModels };
+  });
   const clubIdBySeasonClubId = new Map(seasonClubs.map((sc) => [sc.id, sc.clubId]));
   const teamTotalsByClub = computeSeasonTeamTotals(games);
   const teamTotals = [...teamTotalsByClub.values()];
   const dnaByTeam = computeLeagueTeamDna(games);
-
-  // G.18: any currently live/paused game(s), rendered as a Commentator Command Center at the
-  // top of the page - reuses buildLivePresentationModelForGame(), the exact same composition
-  // the public Game Center calls, so the commentator never sees a different version of the game.
-  const liveFixtures = await prisma.fixture.findMany({
-    // G.19 Part III: this query had no isolation from a REHEARSAL (or any non-PRODUCTION)
-    // fixture at all - the exact gap the G.18 rehearsal disclosed for `/live`, present here too.
-    where: { seasonId: season.id, game: { status: { in: ["LIVE", "PAUSED"] } }, ...productionPresentationFixtureWhere() },
-    include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
-  });
-  const liveModels = await Promise.all(liveFixtures.map((f) => buildLivePresentationModelForGame(f.game!.id)));
 
   const pulse = buildLeaguePulse(games);
   const topScorers = buildPlayerLeaderboard(playerTotals, "PPG").slice(0, 5);

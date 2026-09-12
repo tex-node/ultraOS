@@ -15,22 +15,29 @@ import { AnalyticsCard } from "@/components/analytics/cards/AnalyticsCard";
 import { buildPlayerDnaCard } from "@/lib/analytics/cards/player-cards";
 import { buildPlayerMilestoneCard } from "@/lib/analytics/cards/leaderboard-cards";
 import { SAMPLE_CONFIDENCE_LABEL } from "@/lib/analytics/qualification";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function Player({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const a = await prisma.athlete.findUnique({
-    where: { id },
-    select: {
-      id: true, firstName: true, lastName: true, gender: true, dateOfBirth: true,
-      dominantHand: true, photoUrl: true, nationality: true, awards: true,
-      registrations: {
-        include: { season: true, seasonClub: { include: { club: true, division: true } }, playerStats: true },
-        orderBy: { season: { startDate: "desc" } },
+  // Phase 1 Stage 5.2D: this legacy public route is the Neon Ultra public site. Resolve that
+  // organization explicitly, then read the athlete and registrations inside tenant context. A
+  // valid athlete id from another organization remains indistinguishable from a missing id.
+  const organization = await resolveDefaultPublicOrganization();
+  const a = await withOrganizationContext(organization.id, (tx) =>
+    tx.athlete.findUnique({
+      where: { id },
+      select: {
+        id: true, organizationId: true, firstName: true, lastName: true, gender: true, dateOfBirth: true,
+        dominantHand: true, photoUrl: true, nationality: true, awards: true,
+        registrations: {
+          include: { season: true, seasonClub: { include: { club: true, division: true } }, playerStats: true },
+          orderBy: { season: { startDate: "desc" } },
+        },
       },
-    },
-  });
+    }),
+  );
   if (!a) notFound();
+  const organizationId = a.organizationId;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">
@@ -53,10 +60,10 @@ export default async function Player({ params }: { params: Promise<{ id: string 
             <article key={p.id} className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
               <h3 className="font-semibold">{p.season.name} · {p.seasonClub?.club.name ?? "Unassigned"}</h3>
               <p className="mt-2 text-sm text-zinc-400">{p.position} · {p.status} · {stats.points} PTS · {stats.rebounds} REB · {stats.assists} AST</p>
-              <BestGameSection playerId={p.id} />
-              <PlayerDnaSection seasonId={p.seasonId} playerId={p.id} photoUrl={a.photoUrl} />
-              <MilestonesSection seasonId={p.seasonId} playerId={p.id} />
-              <GameLogSection playerId={p.id} />
+              <BestGameSection organizationId={organizationId} playerId={p.id} />
+              <PlayerDnaSection organizationId={organizationId} seasonId={p.seasonId} playerId={p.id} photoUrl={a.photoUrl} />
+              <MilestonesSection organizationId={organizationId} seasonId={p.seasonId} playerId={p.id} />
+              <GameLogSection organizationId={organizationId} playerId={p.id} />
             </article>
           );
         })}
@@ -65,8 +72,8 @@ export default async function Player({ params }: { params: Promise<{ id: string 
   );
 }
 
-async function BestGameSection({ playerId }: { playerId: string }) {
-  const best = await loadPlayerBestGame(playerId);
+async function BestGameSection({ organizationId, playerId }: { organizationId: string; playerId: string }) {
+  const best = await withOrganizationContext(organizationId, (tx) => loadPlayerBestGame(playerId, tx));
   if (!best) return null;
   const fgPct = formatPercent(percent(best.fieldGoalsMade, best.fieldGoalsAttempted));
   return (
@@ -82,8 +89,8 @@ async function BestGameSection({ playerId }: { playerId: string }) {
   );
 }
 
-async function PlayerDnaSection({ seasonId, playerId, photoUrl }: { seasonId: string; playerId: string; photoUrl: string | null }) {
-  const totals = await loadSeasonPlayerTotals(seasonId);
+async function PlayerDnaSection({ organizationId, seasonId, playerId, photoUrl }: { organizationId: string; seasonId: string; playerId: string; photoUrl: string | null }) {
+  const totals = await withOrganizationContext(organizationId, (tx) => loadSeasonPlayerTotals(seasonId, tx));
   const dnaByPlayer = computeLeaguePlayerDna(totals);
   const dna = dnaByPlayer.get(playerId);
   if (!dna) return null;
@@ -212,8 +219,8 @@ function DevelopmentContextSection({ dna }: { dna: PlayerDna }) {
   );
 }
 
-async function MilestonesSection({ seasonId, playerId }: { seasonId: string; playerId: string }) {
-  const games = await loadSeasonGameCores(seasonId);
+async function MilestonesSection({ organizationId, seasonId, playerId }: { organizationId: string; seasonId: string; playerId: string }) {
+  const games = await withOrganizationContext(organizationId, (tx) => loadSeasonGameCores(seasonId, tx));
   const milestones = buildPlayerMilestonesForPlayer(games, playerId);
   if (milestones.length === 0) return null;
   return (
@@ -236,8 +243,8 @@ const BEST_GAME_CATEGORIES: { id: BestGameCategory; label: string }[] = [
   { id: "BEST_PLAYMAKING", label: "Best Playmaking Game" },
 ];
 
-async function GameLogSection({ playerId }: { playerId: string }) {
-  const log = await loadPlayerGameLog(playerId);
+async function GameLogSection({ organizationId, playerId }: { organizationId: string; playerId: string }) {
+  const log = await withOrganizationContext(organizationId, (tx) => loadPlayerGameLog(playerId, tx));
   const active = log.filter((r) => !r.didNotPlay);
   if (log.length === 0) return null;
 

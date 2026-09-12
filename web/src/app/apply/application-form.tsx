@@ -1,17 +1,21 @@
 "use client";
 
 import { useActionState } from "react";
-import { submitApplication, type ApplicationFormState } from "@/app/apply/actions";
+import type { ApplicationFormState } from "@/app/apply/[organizationSlug]/actions";
 import type { ApplicationConfig } from "@/app/apply/application-config";
 
 type ApplicationFormProps = {
   config: ApplicationConfig;
+  // Phase 1 Stage 5.2B-1: the action is passed in already bound to the server-resolved
+  // organizationSlug (via Next.js's encrypted server-action arg binding, not a plain hidden
+  // form field) - this component never resolves or trusts an organization itself.
+  action: (state: ApplicationFormState, formData: FormData) => Promise<ApplicationFormState>;
 };
 
 const initialState: ApplicationFormState = {};
 
-export function ApplicationForm({ config }: ApplicationFormProps) {
-  const [state, action, pending] = useActionState(submitApplication, initialState);
+export function ApplicationForm({ config, action: boundAction }: ApplicationFormProps) {
+  const [state, action, pending] = useActionState(boundAction, initialState);
 
   if (state.success) {
     return (

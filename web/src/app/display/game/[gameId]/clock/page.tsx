@@ -3,7 +3,7 @@ import { GameClock } from "@/app/games/game-clock";
 import { GraphicRefresher } from "@/app/broadcast/game/graphic-refresher";
 import { buildLivePresentationModelForGame } from "@/lib/live-game-snapshot-v2";
 import { isProductionPresentationFixture } from "@/lib/presentation-scope";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,13 +13,18 @@ export const revalidate = 0;
 // rather than recomputed here.
 export default async function VenueClockDisplay({ params }: { params: Promise<{ gameId: string }> }) {
   const { gameId } = await params;
-  const game = await prisma.game.findUnique({
-    where: { id: gameId },
-    include: { fixture: { include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } } } } },
+  const organization = await resolveDefaultPublicOrganization();
+  const loaded = await withOrganizationContext(organization.id, async (tx) => {
+    const game = await tx.game.findUnique({
+      where: { id: gameId },
+      include: { fixture: { include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } } } } },
+    });
+    if (!game || !isProductionPresentationFixture(game.fixture)) return null;
+    const model = await buildLivePresentationModelForGame(gameId, tx);
+    return { game, model };
   });
-  if (!game || !isProductionPresentationFixture(game.fixture)) notFound();
-
-  const model = await buildLivePresentationModelForGame(gameId);
+  if (!loaded) notFound();
+  const { game, model } = loaded;
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-black text-white">

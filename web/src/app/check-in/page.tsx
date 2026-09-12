@@ -1,9 +1,9 @@
 import { OperationsShell } from "@/app/components/operations-shell";
 import { findCheckInCode } from "./actions";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionOrRedirect } from "@/lib/authorization";
 
 export default async function CheckInPage() {
-  const session = await requirePermission("check-in:operate");
+  const session = await requirePermissionOrRedirect("check-in:operate", "/check-in");
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-xl px-6 py-16">

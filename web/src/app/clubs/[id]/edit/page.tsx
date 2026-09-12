@@ -3,18 +3,19 @@ import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { updateClub } from "@/app/clubs/actions";
 import { ClubForm } from "@/app/clubs/club-form";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function EditClubPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requirePermission("club:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("club:manage");
   const { id } = await params;
   const [club, sports] = await Promise.all([
-    prisma.club.findUnique({ where: { id } }),
+    withOrganizationContext(organizationId, (tx) => tx.club.findUnique({ where: { id } })),
     prisma.sport.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },

@@ -1,5 +1,5 @@
 import { ApplicationStatus, ApplicationType } from "@/generated/prisma/enums";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const exportableApplicationTypes = [
   ApplicationType.PLAYER,
@@ -56,20 +56,23 @@ export function parseEmailStatusFilter(value: string | null) {
 }
 
 export async function getApplicationData(
+  organizationId: string,
   types: ExportableApplicationType[],
   status?: EmailStatusFilter | null,
 ) {
-  return prisma.application.findMany({
-    where: {
-      type: { in: types },
-      ...(status ? { status } : {}),
-    },
-    include: {
-      applicantUser: { select: { name: true, email: true } },
-      reviewedBy: { select: { name: true, email: true } },
-    },
-    orderBy: [{ type: "asc" }, { createdAt: "desc" }],
-  });
+  return withOrganizationContext(organizationId, (tx) =>
+    tx.application.findMany({
+      where: {
+        type: { in: types },
+        ...(status ? { status } : {}),
+      },
+      include: {
+        applicantUser: { select: { name: true, email: true } },
+        reviewedBy: { select: { name: true, email: true } },
+      },
+      orderBy: [{ type: "asc" }, { createdAt: "desc" }],
+    }),
+  );
 }
 
 function submittedRecord(data: unknown) {

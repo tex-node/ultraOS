@@ -6,7 +6,7 @@ import { buildRecordCard } from "@/lib/analytics/cards/leaderboard-cards";
 import { loadSeasonGameCores, loadSeasonPlayerTotals } from "@/lib/analytics/game-analytics";
 import { buildGameRecords, buildPlayerSeasonRecords, buildPlayerSingleGameRecords, buildTeamRecords, type RecordEntry } from "@/lib/analytics/records";
 import { toSocialCopy, type CardFormat } from "@/lib/analytics/cards/types";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,10 +14,13 @@ export const revalidate = 0;
 const FORMAT_MAP: Record<string, CardFormat> = { square: "SOCIAL_SQUARE", portrait: "SOCIAL_PORTRAIT", broadcast: "BROADCAST_16_9" };
 
 async function findRecord(key: string): Promise<RecordEntry | null> {
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" } });
+  const organization = await resolveDefaultPublicOrganization();
+  const season = await withOrganizationContext(organization.id, (tx) => tx.season.findFirst({ where: { status: "ACTIVE" } }));
   if (!season) return null;
   const decodedKey = decodeURIComponent(key);
-  const [games, players] = await Promise.all([loadSeasonGameCores(season.id), loadSeasonPlayerTotals(season.id)]);
+  const [games, players] = await withOrganizationContext(organization.id, (tx) =>
+    Promise.all([loadSeasonGameCores(season.id, tx), loadSeasonPlayerTotals(season.id, tx)]),
+  );
   const allRecords = [
     ...buildPlayerSingleGameRecords(games),
     ...buildPlayerSeasonRecords(players),

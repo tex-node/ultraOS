@@ -1,3 +1,4 @@
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 const LAGOS_TIME_ZONE = "Africa/Lagos";
@@ -29,8 +30,8 @@ export type CelebrantRow = {
   } | null;
 };
 
-export async function getCelebrantsForMonth(seasonId: string, year: number, month: number): Promise<CelebrantRow[]> {
-  const players = await prisma.player.findMany({
+export async function getCelebrantsForMonth(seasonId: string, year: number, month: number, db: Db = prisma): Promise<CelebrantRow[]> {
+  const players = await db.player.findMany({
     where: { seasonId, seasonClubId: { not: null } },
     include: {
       athlete: true,
@@ -62,9 +63,11 @@ export async function getCelebrantsForMonth(seasonId: string, year: number, mont
     .sort((a, b) => a.birthDay - b.birthDay);
 }
 
-export async function getViewerClubMemberships(userId: string | undefined): Promise<Set<string>> {
+type Db = Prisma.TransactionClient | typeof prisma;
+
+export async function getViewerClubMemberships(userId: string | undefined, db: Db = prisma): Promise<Set<string>> {
   if (!userId) return new Set();
-  const memberships = await prisma.fanMembership.findMany({
+  const memberships = await db.fanMembership.findMany({
     where: { userId },
     select: { fanClub: { select: { clubId: true } } },
   });

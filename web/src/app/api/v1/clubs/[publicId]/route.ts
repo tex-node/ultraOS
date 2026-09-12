@@ -3,7 +3,7 @@ import { withPublicApiV1 } from "@/lib/api-v1/respond";
 import { apiError } from "@/lib/api-v1/errors";
 import { resolveClubByPublicId } from "@/lib/api-v1/identifiers";
 import type { ClubSummaryV1 } from "@/lib/api-v1/contracts";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,14 +13,20 @@ export const revalidate = 0;
 export async function GET(request: Request, { params }: { params: Promise<{ publicId: string }> }) {
   return withPublicApiV1(request, async () => {
     const { publicId } = await params;
-    const club = await resolveClubByPublicId(publicId);
-    if (!club) return apiError("CLUB_NOT_FOUND", "No club found for this id.");
+    const organization = await resolveDefaultPublicOrganization();
+    const loaded = await withOrganizationContext(organization.id, async (tx) => {
+      const club = await resolveClubByPublicId(publicId, tx);
+      if (!club) return null;
 
-    const activeSeasonClub = await prisma.seasonClub.findFirst({
-      where: { clubId: club.id, status: "ACTIVE" },
-      include: { division: true, standing: true },
-      orderBy: { season: { startDate: "desc" } },
+      const activeSeasonClub = await tx.seasonClub.findFirst({
+        where: { clubId: club.id, status: "ACTIVE" },
+        include: { division: true, standing: true },
+        orderBy: { season: { startDate: "desc" } },
+      });
+      return { club, activeSeasonClub };
     });
+    if (!loaded) return apiError("CLUB_NOT_FOUND", "No club found for this id.");
+    const { club, activeSeasonClub } = loaded;
 
     const summary: ClubSummaryV1 = {
       publicId, name: club.name, shortName: club.shortName, logoUrl: club.logoUrl,

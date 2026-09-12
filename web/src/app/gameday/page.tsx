@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { startGame } from "@/app/games/actions";
-import { requirePermissionOrRedirect } from "@/lib/authorization";
+import { requirePermissionOrRedirect, MissingOrganizationContextError } from "@/lib/authorization";
 import { getCheckInStatuses } from "@/lib/game-day-checkin";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { periodLabel } from "@/lib/game-rules";
 import { formatLagosTime } from "@/lib/format-datetime";
 import { buildSystemHealth } from "@/lib/system-health-loader";
 import type { HealthStatus } from "@/lib/system-health";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,11 +22,13 @@ export default async function GameDayControlCenter() {
   // baseline) instead of a clean login redirect - the exact G.15/G.16 pattern already fixed for
   // /games/[fixtureId]/live and /stats. Same fix, applied here now that it was found.
   const session = await requirePermissionOrRedirect("game:operate", "/gameday");
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
   const now = new Date();
 
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } });
-  const fixtures = season
-    ? await prisma.fixture.findMany({
+  const { fixtures, incidentEntries, event, seasonClubs } = await withOrganizationContext(session.user.organizationId, async (tx) => {
+    const season = await tx.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } });
+    const fixtures = season
+    ? await tx.fixture.findMany({
         where: { seasonId: season.id, status: { not: "CANCELLED" } },
         orderBy: { scheduledAt: "asc" },
         include: {
@@ -37,6 +39,16 @@ export default async function GameDayControlCenter() {
         },
       })
     : [];
+    const gameIds = fixtures.map((f) => f.game?.id).filter((id): id is string => Boolean(id));
+    const incidentEntries = gameIds.length
+      ? await tx.auditLog.findMany({ where: { entityType: "GameIncident", entityId: { in: gameIds } }, orderBy: { createdAt: "desc" } })
+      : [];
+    const event = await tx.event.findFirst({ where: { status: { in: ["PUBLISHED", "IN_PROGRESS"] } }, orderBy: { startTime: "asc" } });
+    const seasonClubs = season
+      ? await tx.seasonClub.findMany({ where: { seasonId: season.id, status: "ACTIVE" }, include: { club: true, headCoach: true, players: true }, orderBy: { club: { name: "asc" } } })
+      : [];
+    return { season, fixtures, incidentEntries, event, seasonClubs };
+  });
 
   const live = fixtures.filter((f) => f.game && (f.game.status === "LIVE" || f.game.status === "PAUSED"));
   const finalFixtures = fixtures.filter((f) => f.status === "FINAL");
@@ -61,10 +73,6 @@ export default async function GameDayControlCenter() {
     }
   }
 
-  const gameIds = fixtures.map((f) => f.game?.id).filter((id): id is string => Boolean(id));
-  const incidentEntries = gameIds.length
-    ? await prisma.auditLog.findMany({ where: { entityType: "GameIncident", entityId: { in: gameIds } }, orderBy: { createdAt: "desc" } })
-    : [];
   const resolvedIncidentIds = new Set(
     incidentEntries
       .filter((e) => e.action === "GAME_INCIDENT_RESOLVED")
@@ -82,17 +90,9 @@ export default async function GameDayControlCenter() {
   // G.20 Part XII: reuses buildSystemHealth() unchanged - never a second monitoring truth. The
   // live fixture (if any) is passed explicitly so this reflects the same game the "Live now"
   // panel below shows, not a separately-discovered one.
-  const health = await buildSystemHealth(live[0]?.game?.id);
+  const health = await buildSystemHealth(session.user.organizationId, live[0]?.game?.id);
 
-  const event = await prisma.event.findFirst({ where: { status: { in: ["PUBLISHED", "IN_PROGRESS"] } }, orderBy: { startTime: "asc" } });
-  const checkInStatuses = event ? await getCheckInStatuses(event.id) : {};
-  const seasonClubs = season
-    ? await prisma.seasonClub.findMany({
-        where: { seasonId: season.id, status: "ACTIVE" },
-        include: { club: true, headCoach: true, players: true },
-        orderBy: { club: { name: "asc" } },
-      })
-    : [];
+  const checkInStatuses = event ? await getCheckInStatuses(session.user.organizationId, event.id) : {};
   const clubReadiness = seasonClubs.map((seasonClub) => {
     const present = seasonClub.players.filter((p) => checkInStatuses[p.id]?.status === "PRESENT").length;
     const late = seasonClub.players.filter((p) => checkInStatuses[p.id]?.status === "LATE").length;

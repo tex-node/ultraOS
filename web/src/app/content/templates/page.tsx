@@ -1,14 +1,16 @@
 import { OperationsShell } from "@/app/components/operations-shell";
 import { updateContentTemplate } from "../actions";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function ContentTemplatesPage() {
-  const session = await requirePermission("content:manage");
-  const templates = await prisma.contentTemplate.findMany({
-    include: { competition: true },
-    orderBy: [{ type: "asc" }, { version: "desc" }],
-  });
+  const { session, organizationId } = await requirePermissionWithOrganization("content:manage");
+  const templates = await withOrganizationContext(organizationId, (tx) =>
+    tx.contentTemplate.findMany({
+      include: { competition: true },
+      orderBy: [{ type: "asc" }, { version: "desc" }],
+    }),
+  );
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-6xl px-6 py-10">

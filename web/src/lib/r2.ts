@@ -1,5 +1,6 @@
 import { MediaAssetPurpose, MediaVisibility } from "@/generated/prisma/enums";
 import { uploadMediaAsset } from "@/lib/media-storage";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export type UploadedFile = {
   key: string;
@@ -8,13 +9,21 @@ export type UploadedFile = {
   size: number;
 };
 
-export async function uploadProfilePhoto(file: File, userId: string) {
-  const asset = await uploadMediaAsset({
-    file,
-    purpose: MediaAssetPurpose.PLAYER_PROFILE_PHOTO,
-    uploadedById: userId,
-    visibility: MediaVisibility.PUBLIC,
-  });
+// Phase 1 Stage 5.2B-1: organizationId is now the caller's responsibility - resolved from the
+// trusted /apply/[organizationSlug] route via resolveActiveOrganizationBySlug(), never guessed
+// or hardcoded here. This function makes no assumption about which organization it's uploading
+// into.
+export async function uploadProfilePhoto(file: File, userId: string, organizationId: string) {
+  const asset = await withOrganizationContext(organizationId, (tx) =>
+    uploadMediaAsset({
+      tx,
+      organizationId,
+      file,
+      purpose: MediaAssetPurpose.PLAYER_PROFILE_PHOTO,
+      uploadedById: userId,
+      visibility: MediaVisibility.PUBLIC,
+    }),
+  );
   return {
     key: asset.objectKey,
     url: asset.publicUrl ?? `/media/assets/${asset.id}/file`,

@@ -16,9 +16,9 @@ import {
   startSuspenseAction,
 } from "@/app/draft-events/actions";
 import { DraftEventOperatingMode, DraftEventStage } from "@/generated/prisma/enums";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { draftEventReadiness, nextAllocationReadiness, stageGenderHint, stageSubjectType } from "@/lib/draft-events";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 // The operator relies on this page reflecting the true DraftEvent state
 // immediately after every action, never a cached render from before it.
@@ -29,19 +29,23 @@ export default async function DraftControlPage({ params }: { params: Promise<{ d
   const { draftEventId } = await params;
   const rawSession = await auth();
   if (!rawSession?.user) redirect(`/login?callbackUrl=/draft-events/${draftEventId}/control`);
-  const session = await requirePermission("draft-event:operate");
-  const event = await prisma.draftEvent.findUnique({
-    where: { id: draftEventId },
-    include: {
-      season: true,
-      allocations: { include: { division: true, draftSquad: true, seasonClub: { include: { club: true } }, staff: true }, orderBy: { sequence: "asc" } },
-    },
+  const { session, organizationId } = await requirePermissionWithOrganization("draft-event:operate");
+  const { event, readiness, divisions } = await withOrganizationContext(organizationId, async (tx) => {
+    const event = await tx.draftEvent.findUnique({
+      where: { id: draftEventId },
+      include: {
+        season: true,
+        allocations: { include: { division: true, draftSquad: true, seasonClub: { include: { club: true } }, staff: true }, orderBy: { sequence: "asc" } },
+      },
+    });
+    if (!event) return { event: null, readiness: [], divisions: [] };
+    const [readiness, divisions] = await Promise.all([
+      draftEventReadiness(tx, event.id),
+      tx.division.findMany({ where: { competitionId: event.season.competitionId }, orderBy: { name: "asc" } }),
+    ]);
+    return { event, readiness, divisions };
   });
   if (!event) notFound();
-  const [readiness, divisions] = await Promise.all([
-    draftEventReadiness(event.id),
-    prisma.division.findMany({ where: { competitionId: event.season.competitionId }, orderBy: { name: "asc" } }),
-  ]);
   const current = event.currentAllocationId ? event.allocations.find((allocation) => allocation.id === event.currentAllocationId) : null;
   const subjectType = stageSubjectType(event.currentStage);
   const genderHint = stageGenderHint(event.currentStage);
@@ -49,7 +53,7 @@ export default async function DraftControlPage({ params }: { params: Promise<{ d
   const eligibleDivisions = genderHint ? divisions.filter((division) => division.name.toLowerCase().includes(genderHint)) : [];
   const lockedDivision = eligibleDivisions.length === 1 ? eligibleDivisions[0] : null;
   const reserveReadiness = subjectType && lockedDivision
-    ? await nextAllocationReadiness(event.id, lockedDivision.id, subjectType, event.operatingMode)
+    ? await nextAllocationReadiness(organizationId, event.id, lockedDivision.id, subjectType, event.operatingMode)
     : null;
   return (
     <OperationsShell user={session.user}>

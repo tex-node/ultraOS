@@ -1,5 +1,5 @@
 import { LaunchBlockerPriority, OpsHealthStatus, OpsItemStatus } from "@/generated/prisma/enums";
-import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 
 export type OpsSignal = {
   label: string;
@@ -19,7 +19,7 @@ export function isOverdue(dueAt: Date | null | undefined, status: OpsItemStatus)
   return Boolean(dueAt && dueAt.getTime() < Date.now() && !closedStatuses.includes(status));
 }
 
-export async function operationsSnapshot() {
+export async function operationsSnapshot(db: Prisma.TransactionClient) {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(todayStart);
@@ -45,24 +45,24 @@ export async function operationsSnapshot() {
     openP1Blockers,
     latestAudit,
   ] = await Promise.all([
-    prisma.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } }),
-    prisma.event.findFirst({ where: { date: { gte: todayStart } }, orderBy: { date: "asc" } }),
-    prisma.draftEvent.findFirst({ where: { status: { in: ["READY", "LIVE", "PAUSED"] } }, orderBy: { updatedAt: "desc" } }),
-    prisma.fixture.count({ where: { scheduledAt: { gte: todayStart, lt: todayEnd } } }),
-    prisma.application.count({ where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } } }),
-    prisma.importJob.count({ where: { status: { in: ["UPLOADED", "PARSED", "NEEDS_REVIEW", "READY", "PROCESSING"] } } }),
-    prisma.incident.count({ where: { status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
-    prisma.opsTask.count({ where: { status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
-    prisma.opsTask.count({ where: { dueAt: { lt: new Date() }, status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
-    prisma.operationalChecklist.count({ where: { status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
-    prisma.seatReservation.count({ where: { status: "CONFIRMED" } }),
-    prisma.order.count({ where: { status: { in: ["PENDING_PAYMENT", "PAID", "PREPARING", "READY"] } } }),
-    prisma.opsNotification.count({ where: { status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
-    prisma.displayHeartbeat.count({ where: { status: { in: ["AMBER", "RED"] } } }),
-    prisma.equipment.count({ where: { status: { in: ["MAINTENANCE", "MISSING"] } } }),
-    prisma.launchReadinessCheck.count({ where: { priority: LaunchBlockerPriority.P0, status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
-    prisma.launchReadinessCheck.count({ where: { priority: LaunchBlockerPriority.P1, status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
-    prisma.auditLog.findFirst({ orderBy: { createdAt: "desc" }, select: { action: true, createdAt: true } }),
+    db.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } }),
+    db.event.findFirst({ where: { date: { gte: todayStart } }, orderBy: { date: "asc" } }),
+    db.draftEvent.findFirst({ where: { status: { in: ["READY", "LIVE", "PAUSED"] } }, orderBy: { updatedAt: "desc" } }),
+    db.fixture.count({ where: { scheduledAt: { gte: todayStart, lt: todayEnd } } }),
+    db.application.count({ where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } } }),
+    db.importJob.count({ where: { status: { in: ["UPLOADED", "PARSED", "NEEDS_REVIEW", "READY", "PROCESSING"] } } }),
+    db.incident.count({ where: { status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
+    db.opsTask.count({ where: { status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
+    db.opsTask.count({ where: { dueAt: { lt: new Date() }, status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
+    db.operationalChecklist.count({ where: { status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
+    db.seatReservation.count({ where: { status: "CONFIRMED" } }),
+    db.order.count({ where: { status: { in: ["PENDING_PAYMENT", "PAID", "PREPARING", "READY"] } } }),
+    db.opsNotification.count({ where: { status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
+    db.displayHeartbeat.count({ where: { status: { in: ["AMBER", "RED"] } } }),
+    db.equipment.count({ where: { status: { in: ["MAINTENANCE", "MISSING"] } } }),
+    db.launchReadinessCheck.count({ where: { priority: LaunchBlockerPriority.P0, status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
+    db.launchReadinessCheck.count({ where: { priority: LaunchBlockerPriority.P1, status: { notIn: ["COMPLETE", "CANCELLED"] } } }),
+    db.auditLog.findFirst({ orderBy: { createdAt: "desc" }, select: { action: true, createdAt: true } }),
   ]);
 
   const competitionSignals: OpsSignal[] = [

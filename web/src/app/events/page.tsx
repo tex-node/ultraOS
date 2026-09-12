@@ -1,16 +1,13 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { requirePermission } from "@/lib/authorization";
+import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { formatLagosDateTime } from "@/lib/format-datetime";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function EventsPage() {
-  const rawSession = await auth();
-  if (!rawSession?.user) redirect("/login?callbackUrl=/events");
-  const session = await requirePermission("event:manage");
-  const events = await prisma.event.findMany({
+  const session = await requirePermissionOrRedirect("event:manage", "/events");
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const events = await withOrganizationContext(session.user.organizationId, (tx) => tx.event.findMany({
     include: {
       venue: true,
       season: true,
@@ -25,7 +22,7 @@ export default async function EventsPage() {
       },
     },
     orderBy: { startTime: "desc" },
-  });
+  }));
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">

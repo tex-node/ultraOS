@@ -1,8 +1,8 @@
 import { OperationsShell } from "@/app/components/operations-shell";
 import { createAnnouncement, moderateWellWish, updateAnnouncement } from "./actions";
 import { currentLagosYearMonth, getCelebrantsForMonth } from "@/lib/announcements";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -16,28 +16,24 @@ const VISIBILITY_LABEL: Record<string, string> = {
 };
 
 export default async function AnnouncementsPage() {
-  const session = await requirePermission("announcement:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("announcement:manage");
   const { year, month } = currentLagosYearMonth();
 
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } });
-  const clubs = await prisma.club.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" } });
-
-  const celebrants = season ? await getCelebrantsForMonth(season.id, year, month) : [];
-
-  const announcements = await prisma.announcement.findMany({
-    where: { celebrationYear: year },
-    include: {
-      player: { include: { athlete: true, seasonClub: { include: { club: true } } } },
-      visibilityClub: true,
-      wellWishes: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  const pendingWellWishes = await prisma.wellWish.findMany({
-    where: { status: "PENDING" },
-    include: { announcement: { include: { player: { include: { athlete: true } } } } },
-    orderBy: { createdAt: "asc" },
+  const { season, clubs, celebrants, announcements, pendingWellWishes } = await withOrganizationContext(organizationId, async (tx) => {
+    const season = await tx.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } });
+    const clubs = await tx.club.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" } });
+    const celebrants = season ? await getCelebrantsForMonth(season.id, year, month, tx) : [];
+    const announcements = await tx.announcement.findMany({
+      where: { celebrationYear: year },
+      include: { player: { include: { athlete: true, seasonClub: { include: { club: true } } } }, visibilityClub: true, wellWishes: true },
+      orderBy: { createdAt: "desc" },
+    });
+    const pendingWellWishes = await tx.wellWish.findMany({
+      where: { status: "PENDING" },
+      include: { announcement: { include: { player: { include: { athlete: true } } } } },
+      orderBy: { createdAt: "asc" },
+    });
+    return { season, clubs, celebrants, announcements, pendingWellWishes };
   });
 
   return (

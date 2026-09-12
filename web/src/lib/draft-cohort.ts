@@ -1,9 +1,13 @@
 import { existsSync } from "node:fs";
 import ExcelJS from "exceljs";
+import type { Prisma } from "@/generated/prisma/client";
 import { ApplicationStatus, DraftSelectionGroup } from "@/generated/prisma/enums";
 import { approvedPlayerDuplicateGroups } from "@/lib/data-quality";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
+
+type Db = Prisma.TransactionClient | typeof prisma;
 
 export const draftCohortLabel = "SEASON_ZERO_DRAFT_COHORT";
 const rowResolutionPrefix = "draft-cohort-row-resolution:";
@@ -161,6 +165,7 @@ export async function saveDraftCohortRowResolution(input: {
   applicationId?: string;
   userId?: string;
   actorUserId: string;
+  organizationId: string;
 }) {
   if (!cohortRowResolutionActions.includes(input.action)) throw new Error("Invalid cohort row resolution action.");
   if (!input.reason.trim()) throw new Error("Resolution reason is required.");
@@ -175,14 +180,14 @@ export async function saveDraftCohortRowResolution(input: {
     resolvedById: input.actorUserId,
     resolvedAt: new Date().toISOString(),
   };
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(input.organizationId, async (tx) => {
     await tx.systemSetting.upsert({
       where: { key },
       update: { value, category: "draft-cohort", description: "Selected draft cohort row resolution" },
-      create: { key, value, category: "draft-cohort", description: "Selected draft cohort row resolution" },
+      create: { key, value, organizationId: input.organizationId, category: "draft-cohort", description: "Selected draft cohort row resolution" },
     });
     await tx.auditLog.create({
-      data: { userId: input.actorUserId, action: "DRAFT_COHORT_ROW_RESOLVED", entityType: "DraftCohortRow", entityId: `${input.worksheet}:${input.rowNumber}`, details: value },
+      data: { userId: input.actorUserId, organizationId: input.organizationId, action: "DRAFT_COHORT_ROW_RESOLVED", entityType: "DraftCohortRow", entityId: `${input.worksheet}:${input.rowNumber}`, details: value },
     });
   });
 }
@@ -194,11 +199,13 @@ export async function saveDraftCohortApplicationReview(input: {
   action: CohortApplicationReviewAction;
   reason: string;
   actorUserId: string;
+  organizationId: string;
 }) {
   if (!cohortApplicationReviewActions.includes(input.action)) throw new Error("Invalid cohort application review action.");
   if (!input.reason.trim()) throw new Error("Written reason is required.");
-  const application = await prisma.application.findUnique({ where: { id: input.applicationId }, select: { id: true, status: true, submittedData: true, notes: true } });
-  if (!application) throw new Error("Application not found.");
+  return withOrganizationContext(input.organizationId, async (tx) => {
+    const application = await tx.application.findUnique({ where: { id: input.applicationId }, select: { id: true, status: true, submittedData: true, notes: true } });
+    if (!application) throw new Error("Application not found.");
   const targetStatus =
     input.action === "APPROVE_FOR_SEASON_ZERO" || input.action === "APPROVE_OVERRIDE"
       ? ApplicationStatus.APPROVED
@@ -207,7 +214,6 @@ export async function saveDraftCohortApplicationReview(input: {
         : application.status;
   const rowKey = `${input.worksheet}:${input.rowNumber}`;
   const resolutionAction = input.action === "EXCLUDE_FROM_CURRENT_COHORT" ? "EXCLUDE_FROM_CURRENT_COHORT" : input.action === "INVESTIGATE" ? "PENDING_INVESTIGATION" : "LINK_TO_APPLICATION";
-  await prisma.$transaction(async (tx) => {
     const reviewLine = `[${new Date().toISOString()}] ${input.reason.trim()}`;
     const notes = application.notes?.includes(input.reason.trim())
       ? application.notes
@@ -241,6 +247,7 @@ export async function saveDraftCohortApplicationReview(input: {
       },
       create: {
         key: `${rowResolutionPrefix}${rowKey}`,
+        organizationId: input.organizationId,
         category: "draft-cohort",
         description: "Selected draft cohort application review",
         value: {
@@ -259,6 +266,7 @@ export async function saveDraftCohortApplicationReview(input: {
     });
     await writeAuditLog(tx, {
       userId: input.actorUserId,
+      organizationId: input.organizationId,
       action: "DRAFT_COHORT_APPLICATION_REVIEWED",
       entityType: "Application",
       entityId: application.id,
@@ -274,15 +282,15 @@ export async function saveDraftCohortApplicationReview(input: {
   });
 }
 
-export async function draftCohortAnalysis() {
+export async function draftCohortAnalysis(db: Db, organizationId: string) {
   const [rows, applications, resolutions, duplicateGroups] = await Promise.all([
     readDraftCohortWorkbookRows(),
-    prisma.application.findMany({
-      where: { type: "PLAYER" },
+    db.application.findMany({
+      where: { type: "PLAYER", organizationId },
       include: { applicantUser: { select: { id: true, email: true, name: true } } },
     }),
-    prisma.systemSetting.findMany({ where: { key: { startsWith: rowResolutionPrefix } }, select: { key: true, value: true } }),
-    approvedPlayerDuplicateGroups(),
+    db.systemSetting.findMany({ where: { key: { startsWith: rowResolutionPrefix }, organizationId }, select: { key: true, value: true } }),
+    approvedPlayerDuplicateGroups(db, organizationId),
   ]);
   const resolutionByRow = new Map(resolutions.map((resolution) => [resolution.key.replace(rowResolutionPrefix, ""), resolution.value as { action?: string; reason?: string; applicationId?: string; userId?: string }]));
   const byId = new Map(applications.map((application) => [application.id, application]));

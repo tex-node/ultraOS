@@ -2,9 +2,9 @@ import Link from "next/link";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { SubmitButton } from "@/app/components/submit-button";
 import { setCheckInStatusAction } from "./actions";
-import { requireAnyPermission } from "@/lib/authorization";
+import { requireAnyPermissionOrRedirect, MissingOrganizationContextError } from "@/lib/authorization";
 import { getCheckInStatuses, type CheckInStatus } from "@/lib/game-day-checkin";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -17,19 +17,22 @@ const STATUS_STYLE: Record<CheckInStatus, string> = {
 };
 
 export default async function GameDayCheckIn() {
-  const session = await requireAnyPermission(["game:operate", "check-in:operate"]);
-  const event = await prisma.event.findFirst({ where: { status: { in: ["PUBLISHED", "IN_PROGRESS"] } }, orderBy: { startTime: "asc" } });
-
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } });
-  const seasonClubs = season
-    ? await prisma.seasonClub.findMany({
+  const session = await requireAnyPermissionOrRedirect(["game:operate", "check-in:operate"], "/gameday/checkin");
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const { event, seasonClubs } = await withOrganizationContext(session.user.organizationId, async (tx) => {
+    const event = await tx.event.findFirst({ where: { status: { in: ["PUBLISHED", "IN_PROGRESS"] } }, orderBy: { startTime: "asc" } });
+    const season = await tx.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } });
+    const seasonClubs = season
+    ? await tx.seasonClub.findMany({
         where: { seasonId: season.id, status: "ACTIVE" },
         include: { club: true, players: { include: { athlete: true }, orderBy: { athlete: { firstName: "asc" } } } },
         orderBy: { club: { name: "asc" } },
       })
     : [];
+    return { event, seasonClubs };
+  });
 
-  const statuses = event ? await getCheckInStatuses(event.id) : {};
+  const statuses = event ? await getCheckInStatuses(session.user.organizationId, event.id) : {};
 
   const totals = { present: 0, late: 0, absent: 0, unavailable: 0, notCheckedIn: 0, rostered: 0 };
   for (const seasonClub of seasonClubs) {

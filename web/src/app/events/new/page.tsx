@@ -1,14 +1,14 @@
 import { OperationsShell } from "@/app/components/operations-shell";
 import { createEvent } from "../actions";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function NewEventPage() {
-  const session = await requirePermission("event:manage");
-  const [seasons, venues] = await Promise.all([
-    prisma.season.findMany({ orderBy: { startDate: "desc" } }),
-    prisma.venue.findMany({ orderBy: { name: "asc" } }),
-  ]);
+  const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
+  const [seasons, venues] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+    tx.season.findMany({ orderBy: { startDate: "desc" } }),
+    tx.venue.findMany({ orderBy: { name: "asc" } }),
+  ]));
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">

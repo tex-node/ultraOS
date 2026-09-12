@@ -13,8 +13,9 @@ import { toggleApplicationIntakeAction } from "@/app/applications/intake-actions
 import { ApplicationType } from "@/generated/prisma/enums";
 import type { Prisma } from "@/generated/prisma/client";
 import { getClosedApplicationTypes } from "@/lib/application-intake";
-import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { MissingOrganizationContextError } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -31,10 +32,24 @@ export default async function ApplicationsPage() {
   if (!session?.user) {
     redirect("/login?callbackUrl=/applications");
   }
-
-  if (!hasPermission(session.user.roles, "application:review")) {
+  let authorizedSession;
+  let organizationId: string;
+  try {
+    ({ session: authorizedSession, organizationId } = await requirePermissionWithOrganization("application:review"));
+  } catch (error) {
+    if (error instanceof MissingOrganizationContextError) throw error;
     return (
       <OperationsShell user={session.user}>
+        <main className="mx-auto max-w-3xl px-6 py-16"><p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">Admin review</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Access required</h1><p className="mt-3 text-sm leading-6 text-zinc-400">Your account is signed in, but it does not have application review permission.</p></main>
+      </OperationsShell>
+    );
+  }
+
+  if (!authorizedSession.user.organizationId) throw new MissingOrganizationContextError();
+
+  if (!authorizedSession.user.roles.length) {
+    return (
+      <OperationsShell user={authorizedSession.user}>
         <main className="mx-auto max-w-3xl px-6 py-16">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">
             Admin review
@@ -50,15 +65,15 @@ export default async function ApplicationsPage() {
     );
   }
 
-  const [summaryApplications, recentApplications] = await Promise.all([
-    prisma.application.findMany({
+  const [summaryApplications, recentApplications] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+    tx.application.findMany({
       select: {
         type: true,
         status: true,
         submittedData: true,
       },
     }),
-    prisma.application.findMany({
+    tx.application.findMany({
       include: {
         applicantUser: { select: { name: true, email: true } },
         reviewedBy: { select: { name: true } },
@@ -66,13 +81,13 @@ export default async function ApplicationsPage() {
       orderBy: { createdAt: "desc" },
       take: 20,
     }),
-  ]);
+  ]));
 
   const summaries = summarizeApplicationsByType(summaryApplications);
-  const closedTypes = await getClosedApplicationTypes();
+  const closedTypes = await getClosedApplicationTypes(organizationId);
 
   return (
-    <OperationsShell user={session.user}>
+    <OperationsShell user={authorizedSession.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">
           Admin review

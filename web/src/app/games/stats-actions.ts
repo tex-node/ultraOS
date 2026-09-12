@@ -10,10 +10,11 @@
 // independent set of eyes without risking a duplicate/competing scoring truth (Part I.6).
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization, requireSession, MissingOrganizationContextError } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import {
   effectiveRuleSnapshot,
   isUltraTimeUnderRules,
@@ -41,7 +42,7 @@ function assertGameIsMutable(status: string, fixtureStatus: string) {
   }
 }
 
-async function loadMutableGame(tx: Prisma.TransactionClient, gameId: string, fixtureId: string, actorId: string) {
+async function loadMutableGame(tx: Prisma.TransactionClient, organizationId: string, gameId: string, fixtureId: string, actorId: string) {
   // Locks the same row the scorer console locks (Fixture, not Game) so a concurrent scorer
   // write and a concurrent statistician write can never both read the same
   // Game.nextEventSequence value before either commits - true mutual exclusion requires both
@@ -66,6 +67,7 @@ async function loadMutableGame(tx: Prisma.TransactionClient, gameId: string, fix
   if (game.statisticsVerifiedAt) {
     await tx.game.update({ where: { id: gameId }, data: { statisticsVerifiedAt: null, statisticsVerifiedById: null } });
     await writeAuditLog(tx, {
+      organizationId,
       userId: actorId,
       action: "STATISTICS_VERIFICATION_CLEARED",
       entityType: "Game",
@@ -85,14 +87,18 @@ async function nextSequence(tx: Prisma.TransactionClient, gameId: string, curren
 // every ACTIVE structured substitution since (Part XII). Pure derivation over persisted data -
 // no in-memory state, so it reconstructs identically after a restart.
 export async function getGameLineup(gameId: string): Promise<Lineup> {
-  const [starters, substitutions] = await Promise.all([
-    prisma.gameStarter.findMany({ where: { gameId }, select: { seasonClubId: true, playerId: true } }),
-    prisma.gameEvent.findMany({
-      where: { gameId, eventType: "SUBSTITUTION", status: "ACTIVE" },
-      orderBy: { sequenceNumber: "asc" },
-      select: { seasonClubId: true, playerId: true, substitutedOutPlayerId: true, sequenceNumber: true },
-    }),
-  ]);
+  const session = await requireSession();
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const [starters, substitutions] = await withOrganizationContext(session.user.organizationId, (tx) =>
+    Promise.all([
+      tx.gameStarter.findMany({ where: { gameId }, select: { seasonClubId: true, playerId: true } }),
+      tx.gameEvent.findMany({
+        where: { gameId, eventType: "SUBSTITUTION", status: "ACTIVE" },
+        orderBy: { sequenceNumber: "asc" },
+        select: { seasonClubId: true, playerId: true, substitutedOutPlayerId: true, sequenceNumber: true },
+      }),
+    ]),
+  );
   return deriveLineup(
     starters.map((s) => ({ seasonClubId: s.seasonClubId, playerId: s.playerId })),
     substitutions
@@ -112,12 +118,12 @@ const shotSchema = z.object({
 // Records one shot attempt (make or miss) into the statistician's own ledger. Deliberately
 // does not touch Fixture.homeScore/awayScore or PlayerStat/TeamStat - see file header.
 export async function recordStatisticianShot(gameId: string, fixtureId: string, formData: FormData) {
-  const session = await requirePermission("game:record-stats");
+  const { session, organizationId } = await requirePermissionWithOrganization("game:record-stats");
   const input = shotSchema.parse(Object.fromEntries(formData.entries()));
   const made = input.made === "true";
 
-  await prisma.$transaction(async (tx) => {
-    const game = await loadMutableGame(tx, gameId, fixtureId, session.user.id);
+  await withOrganizationContext(organizationId, async (tx) => {
+    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
     if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
       throw new Error("INVALID_TEAM");
     }
@@ -146,6 +152,7 @@ export async function recordStatisticianShot(gameId: string, fixtureId: string, 
 
     await tx.gameEvent.create({
       data: {
+        organizationId,
         gameId,
         seasonClubId: input.seasonClubId,
         playerId: player.id,
@@ -181,11 +188,11 @@ const otherStatSchema = z.object({
 });
 
 export async function recordStatisticianStat(gameId: string, fixtureId: string, formData: FormData) {
-  const session = await requirePermission("game:record-stats");
+  const { session, organizationId } = await requirePermissionWithOrganization("game:record-stats");
   const input = otherStatSchema.parse(Object.fromEntries(formData.entries()));
 
-  await prisma.$transaction(async (tx) => {
-    const game = await loadMutableGame(tx, gameId, fixtureId, session.user.id);
+  await withOrganizationContext(organizationId, async (tx) => {
+    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
     if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
       throw new Error("INVALID_TEAM");
     }
@@ -207,6 +214,7 @@ export async function recordStatisticianStat(gameId: string, fixtureId: string, 
 
     await tx.gameEvent.create({
       data: {
+        organizationId,
         gameId,
         seasonClubId: input.seasonClubId,
         playerId: player.id,
@@ -239,11 +247,11 @@ const substitutionSchema = z.object({
 // (Part XIV), derived fresh inside this same transaction so a concurrent substitution can never
 // corrupt the check (Part XXXIV).
 export async function recordSubstitution(gameId: string, fixtureId: string, formData: FormData) {
-  const session = await requirePermission("game:record-stats");
+  const { session, organizationId } = await requirePermissionWithOrganization("game:record-stats");
   const input = substitutionSchema.parse(Object.fromEntries(formData.entries()));
 
-  await prisma.$transaction(async (tx) => {
-    const game = await loadMutableGame(tx, gameId, fixtureId, session.user.id);
+  await withOrganizationContext(organizationId, async (tx) => {
+    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
     if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
       throw new Error("INVALID_TEAM");
     }
@@ -275,6 +283,7 @@ export async function recordSubstitution(gameId: string, fixtureId: string, form
 
     await tx.gameEvent.create({
       data: {
+        organizationId,
         gameId,
         seasonClubId: input.seasonClubId,
         playerId: playerIn.id,
@@ -303,15 +312,15 @@ const startingFiveSchema = z.object({
 // replaces its prior selection (still fully audited both ways) rather than erroring, so a
 // pre-tip-off correction doesn't require a support workaround.
 export async function confirmStartingFive(gameId: string, fixtureId: string, formData: FormData) {
-  const session = await requirePermission("game:record-stats");
+  const { session, organizationId } = await requirePermissionWithOrganization("game:record-stats");
   const raw = Object.fromEntries(formData.entries());
   const input = startingFiveSchema.parse({
     seasonClubId: raw.seasonClubId,
     playerIds: formData.getAll("playerIds"),
   });
 
-  await prisma.$transaction(async (tx) => {
-    const game = await loadMutableGame(tx, gameId, fixtureId, session.user.id);
+  await withOrganizationContext(organizationId, async (tx) => {
+    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
     if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
       throw new Error("INVALID_TEAM");
     }
@@ -322,9 +331,10 @@ export async function confirmStartingFive(gameId: string, fixtureId: string, for
 
     await tx.gameStarter.deleteMany({ where: { gameId, seasonClubId: input.seasonClubId } });
     await tx.gameStarter.createMany({
-      data: [...uniqueIds].map((playerId) => ({ gameId, seasonClubId: input.seasonClubId, playerId, confirmedById: session.user.id })),
+      data: [...uniqueIds].map((playerId) => ({ organizationId, gameId, seasonClubId: input.seasonClubId, playerId, confirmedById: session.user.id })),
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "STARTING_FIVE_CONFIRMED",
       entityType: "Game",
@@ -341,10 +351,10 @@ export async function confirmStartingFive(gameId: string, fixtureId: string, for
 // excluded from replayScore, so the reconciliation panel updates correctly without losing
 // audit history.
 export async function undoLastStatisticianEvent(gameId: string, fixtureId: string) {
-  const session = await requirePermission("game:record-stats");
+  const { session, organizationId } = await requirePermissionWithOrganization("game:record-stats");
 
-  await prisma.$transaction(async (tx) => {
-    await loadMutableGame(tx, gameId, fixtureId, session.user.id);
+  await withOrganizationContext(organizationId, async (tx) => {
+    await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
 
     const last = await tx.gameEvent.findFirst({
       where: { gameId, source: STATISTICIAN_SOURCE, status: "ACTIVE" },
@@ -358,6 +368,7 @@ export async function undoLastStatisticianEvent(gameId: string, fixtureId: strin
     });
 
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "STATISTICIAN_EVENT_UNDONE",
       entityType: "GameEvent",
@@ -382,13 +393,17 @@ async function loadActiveStatisticianEvents(client: Prisma.TransactionClient | t
 // truth, never two independent ways of arriving at "the statistician's score"). Read-only -
 // safe to call from a Server Component render.
 export async function getGameReconciliation(gameId: string): Promise<GameReconciliation> {
-  const game = await prisma.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
-  const events = await loadActiveStatisticianEvents(prisma, gameId);
-  const hasStatisticianEvents = events.length > 0;
-  const teamStats = deriveTeamStats(derivePlayerStats(events));
-  const homeScore = deriveTeamScore(teamStats, game.fixture.homeSeasonClubId);
-  const awayScore = deriveTeamScore(teamStats, game.fixture.awaySeasonClubId);
-  return reconcileGameScore(game.fixture.homeScore, game.fixture.awayScore, homeScore, awayScore, hasStatisticianEvents);
+  const session = await requireSession();
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  return withOrganizationContext(session.user.organizationId, async (tx) => {
+    const game = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
+    const events = await loadActiveStatisticianEvents(tx, gameId);
+    const hasStatisticianEvents = events.length > 0;
+    const teamStats = deriveTeamStats(derivePlayerStats(events));
+    const homeScore = deriveTeamScore(teamStats, game.fixture.homeSeasonClubId);
+    const awayScore = deriveTeamScore(teamStats, game.fixture.awaySeasonClubId);
+    return reconcileGameScore(game.fixture.homeScore, game.fixture.awayScore, homeScore, awayScore, hasStatisticianEvents);
+  });
 }
 
 export type LiveBoxScore = {
@@ -400,17 +415,21 @@ export type LiveBoxScore = {
 // on every render. Never writes PlayerStat/TeamStat itself; that only happens through the
 // audited rebuildGameStatsFromEvents() materialization path below, gated on verification.
 export async function getGameLiveBoxScore(gameId: string): Promise<LiveBoxScore> {
-  const game = await prisma.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
-  const events = await loadActiveStatisticianEvents(prisma, gameId);
-  const playerStats = derivePlayerStats(events);
-  const teamStats = deriveTeamStats(playerStats);
-  return {
-    players: [...playerStats.values()],
-    teams: {
-      home: teamStats.get(game.fixture.homeSeasonClubId) ?? emptyTeamStats(game.fixture.homeSeasonClubId),
-      away: teamStats.get(game.fixture.awaySeasonClubId) ?? emptyTeamStats(game.fixture.awaySeasonClubId),
-    },
-  };
+  const session = await requireSession();
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  return withOrganizationContext(session.user.organizationId, async (tx) => {
+    const game = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
+    const events = await loadActiveStatisticianEvents(tx, gameId);
+    const playerStats = derivePlayerStats(events);
+    const teamStats = deriveTeamStats(playerStats);
+    return {
+      players: [...playerStats.values()],
+      teams: {
+        home: teamStats.get(game.fixture.homeSeasonClubId) ?? emptyTeamStats(game.fixture.homeSeasonClubId),
+        away: teamStats.get(game.fixture.awaySeasonClubId) ?? emptyTeamStats(game.fixture.awaySeasonClubId),
+      },
+    };
+  });
 }
 
 // Materializes PlayerStat/TeamStat from the VERIFIED statistician ledger (Part VIII). Every
@@ -419,7 +438,7 @@ export async function getGameLiveBoxScore(gameId: string): Promise<LiveBoxScore>
 // voided - so a rebuild is a genuine full snapshot, not an incremental patch that could leave
 // stale non-zero data behind after a correction. Deterministic and idempotent: called twice
 // against the same ACTIVE event set produces byte-identical PlayerStat/TeamStat rows both times.
-async function rebuildGameStatsFromEvents(tx: Prisma.TransactionClient, gameId: string) {
+async function rebuildGameStatsFromEvents(tx: Prisma.TransactionClient, organizationId: string, gameId: string) {
   const game = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
   const [everyPlayer, activeEvents] = await Promise.all([
     tx.gameEvent.findMany({
@@ -437,7 +456,7 @@ async function rebuildGameStatsFromEvents(tx: Prisma.TransactionClient, gameId: 
     await tx.playerStat.upsert({
       where: { gameId_playerId: { gameId, playerId } },
       create: {
-        gameId, playerId, seasonClubId: p.seasonClubId,
+        organizationId, gameId, playerId, seasonClubId: p.seasonClubId,
         points: p.points, rebounds: p.rebounds, assists: p.assists, steals: p.steals, blocks: p.blocks, turnovers: p.turnovers, fouls: p.fouls,
         fieldGoalsMade: p.fieldGoalsMade, fieldGoalsAttempted: p.fieldGoalsAttempted,
         twoPointsMade: p.twoPointsMade, twoPointsAttempted: p.twoPointsAttempted,
@@ -468,7 +487,7 @@ async function rebuildGameStatsFromEvents(tx: Prisma.TransactionClient, gameId: 
     await tx.teamStat.upsert({
       where: { gameId_seasonClubId: { gameId, seasonClubId } },
       create: {
-        gameId, seasonClubId,
+        organizationId, gameId, seasonClubId,
         points: t.points, rebounds: t.rebounds, assists: t.assists, turnovers: t.turnovers, fouls: t.fouls,
         fourPointsMade: t.fourPointsMade, fourPointsAttempted: t.fourPointsAttempted, ultraTimePointsFor: t.ultraTimePointsFor,
         statSource: "EVENT_DERIVED",
@@ -495,10 +514,10 @@ const verifySchema = z.object({
 // cosmetic flag, it is the gate that promotes the statistician's ledger into the canonical box
 // score.
 export async function verifyStatistics(gameId: string, fixtureId: string, formData: FormData) {
-  const session = await requirePermission("result:confirm");
+  const { session, organizationId } = await requirePermissionWithOrganization("result:confirm");
   const input = verifySchema.parse(Object.fromEntries(formData.entries()));
 
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
     const game = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
     const events = await loadActiveStatisticianEvents(tx, gameId);
@@ -514,13 +533,14 @@ export async function verifyStatistics(gameId: string, fixtureId: string, formDa
       throw new Error("RECONCILIATION_MISMATCH_REQUIRES_OVERRIDE_REASON");
     }
 
-    const materialized = await rebuildGameStatsFromEvents(tx, gameId);
+    const materialized = await rebuildGameStatsFromEvents(tx, organizationId, gameId);
 
     await tx.game.update({
       where: { id: gameId },
       data: { statisticsVerifiedAt: new Date(), statisticsVerifiedById: session.user.id },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "STATISTICS_VERIFIED",
       entityType: "Game",
@@ -578,11 +598,11 @@ const postFinalCorrectionSchema = z.object({
 // or reconcile: "capture once, verify once, derive everything else" means there is exactly one
 // materialization code path, not two.
 export async function correctStatisticianEventPostFinal(gameId: string, fixtureId: string, formData: FormData) {
-  const session = await requirePermission("result:confirm");
+  const { session, organizationId } = await requirePermissionWithOrganization("result:confirm");
   const input = postFinalCorrectionSchema.parse(Object.fromEntries(formData.entries()));
   const hasReplacement = input.replacementShotValue !== undefined && input.replacementMade !== undefined;
 
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const game = await loadFinalGameForCorrection(tx, gameId, fixtureId);
 
     const original = await tx.gameEvent.findUniqueOrThrow({ where: { id: input.eventId } });
@@ -610,7 +630,7 @@ export async function correctStatisticianEventPostFinal(gameId: string, fixtureI
       const eventType = input.replacementShotValue === 1 ? (made ? "FREE_THROW_MADE" : "FREE_THROW_MISSED") : (made ? "SHOT_MADE" : "SHOT_MISSED");
       const replacement = await tx.gameEvent.create({
         data: {
-          gameId, seasonClubId: original.seasonClubId, playerId: original.playerId, eventType,
+          organizationId, gameId, seasonClubId: original.seasonClubId, playerId: original.playerId, eventType,
           points: made ? shot.pointsAwarded : 0, basePointValue: shot.basePointValue, multiplier: shot.multiplier, made,
           isFourPointAttempt: input.replacementShotValue === 4, isUltraTime: shot.isUltraTime,
           period: original.period, clockSeconds: original.clockSeconds,
@@ -633,6 +653,7 @@ export async function correctStatisticianEventPostFinal(gameId: string, fixtureI
     await tx.game.update({ where: { id: gameId }, data: { statisticsVerifiedAt: null, statisticsVerifiedById: null } });
 
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "POST_FINAL_STATISTICAL_CORRECTION",
       entityType: "GameEvent",
@@ -653,6 +674,10 @@ export async function correctStatisticianEventPostFinal(gameId: string, fixtureI
 // True once any post-final correction has ever been recorded for this game - drives the
 // "STATISTICS CORRECTED AFTER FINAL" banner (Part VII, Stage 9). Read-only.
 export async function hasPostFinalCorrections(gameId: string): Promise<boolean> {
-  const count = await prisma.auditLog.count({ where: { entityType: "GameEvent", action: "POST_FINAL_STATISTICAL_CORRECTION", details: { path: ["gameId"], equals: gameId } } });
+  const session = await requireSession();
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const count = await withOrganizationContext(session.user.organizationId, (tx) =>
+    tx.auditLog.count({ where: { entityType: "GameEvent", action: "POST_FINAL_STATISTICAL_CORRECTION", details: { path: ["gameId"], equals: gameId } } }),
+  );
   return count > 0;
 }

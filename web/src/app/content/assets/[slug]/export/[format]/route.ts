@@ -3,16 +3,16 @@ import {
   renderContentPdf,
   renderGraphicPng,
 } from "@/lib/content-renderers";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ slug: string; format: string }> },
 ) {
-  await requirePermission("content:manage");
+  const { organizationId } = await requirePermissionWithOrganization("content:manage");
   const { slug, format } = await params;
-  const asset = await prisma.contentAsset.findUnique({ where: { slug } });
+  const asset = await withOrganizationContext(organizationId, (tx) => tx.contentAsset.findUnique({ where: { slug } }));
   if (!asset) return new Response("Not found", { status: 404 });
   const filename = `${slug}.${format === "text" ? "txt" : format}`;
   const headers = {

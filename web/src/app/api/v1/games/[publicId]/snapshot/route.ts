@@ -4,6 +4,7 @@ import { apiError } from "@/lib/api-v1/errors";
 import { loadPublicGame } from "@/lib/api-v1/game-loader";
 import { resolvePlayerNames } from "@/lib/api-v1/identifiers";
 import { honestClock, type GameSnapshotV1 } from "@/lib/api-v1/contracts";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -20,7 +21,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
     const { fixture, model } = loaded;
 
     const playerIds = model.leaders.map((l) => l.playerId);
-    const names = await resolvePlayerNames(playerIds);
+    const organization = await resolveDefaultPublicOrganization();
+    const names = await withOrganizationContext(organization.id, (tx) => resolvePlayerNames(playerIds, tx));
     const clubFor = (seasonClubId: string) => seasonClubId === model.teams.home.seasonClubId
       ? { publicId: fixture.homeSeasonClub.club.shortName.toLowerCase(), name: fixture.homeSeasonClub.club.name, shortName: fixture.homeSeasonClub.club.shortName }
       : { publicId: fixture.awaySeasonClub.club.shortName.toLowerCase(), name: fixture.awaySeasonClub.club.name, shortName: fixture.awaySeasonClub.club.shortName };

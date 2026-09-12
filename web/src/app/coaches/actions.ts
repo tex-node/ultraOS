@@ -3,17 +3,22 @@
 import { revalidatePath } from "next/cache";
 import { ApplicationType, CoachSeasonZeroDivision, CoachSeasonZeroSelectionStatus, MediaAssetPurpose, StaffRole } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { assignPrimaryMediaAsset, uploadMediaAsset, validateImageFile } from "@/lib/media-storage";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 function value(formData: FormData, key: string) {
   const field = formData.get(key);
   return typeof field === "string" ? field : "";
 }
 
+// Phase 1 Stage 5.5B: markSeasonZeroCoachSelection previously ran on requirePermission() alone
+// (no organization) with a bare prisma.$transaction - an Org B "staff:manage" holder could mark
+// or unmark ANY organization's coach application for Season Zero selection. Scoped to the
+// acting admin's own organization; findUniqueOrThrow under that context now fails closed
+// (RLS-invisible) for a foreign-org applicationId instead of ever reaching the update.
 export async function markSeasonZeroCoachSelection(applicationId: string, formData: FormData) {
-  const session = await requirePermission("staff:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
   const status = value(formData, "status") as CoachSeasonZeroSelectionStatus;
   const divisionInput = value(formData, "division");
   const reason = value(formData, "reason");
@@ -28,7 +33,7 @@ export async function markSeasonZeroCoachSelection(applicationId: string, formDa
     division = divisionInput as CoachSeasonZeroDivision;
   }
 
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const application = await tx.application.findUniqueOrThrow({
       select: { coachSeasonZeroDivision: true, coachSeasonZeroSelectionStatus: true, id: true, status: true, type: true },
       where: { id: applicationId },
@@ -41,6 +46,7 @@ export async function markSeasonZeroCoachSelection(applicationId: string, formDa
       where: { id: applicationId },
     });
     await writeAuditLog(tx, {
+      organizationId,
       action: "COACH_SEASON_ZERO_SELECTION_MARKED",
       details: {
         applicationId,
@@ -61,8 +67,18 @@ export async function markSeasonZeroCoachSelection(applicationId: string, formDa
   revalidatePath("/coaches/season-zero-selection");
 }
 
+// Phase 1 Stage 5.5B: assignSeasonClubCoach/clearSeasonClubCoach previously ran on
+// requirePermission() alone (no organization) with a bare prisma.$transaction and no scoped
+// lookups at all - the most serious gap found this batch. An Org B "staff:manage" holder's
+// /coaches/assignments page (itself unscoped, fixed separately) rendered EVERY organization's
+// SeasonClubs and coaching staff, and both actions would happily create or clear a
+// cross-organization SeasonClub<->Staff coaching relationship (SeasonClub.headCoachId/
+// assistantCoachId are simple, not composite, FKs - nothing at the database level would have
+// stopped it either). Scoped to the acting admin's own organization; a foreign-org seasonClubId
+// or staffId now fails closed (RLS-invisible) before either the competing-assignment check or
+// the update ever runs.
 export async function assignSeasonClubCoach(formData: FormData) {
-  const session = await requirePermission("staff:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
   const seasonClubId = value(formData, "seasonClubId");
   const staffId = value(formData, "staffId");
   const assignmentType = value(formData, "assignmentType");
@@ -71,7 +87,7 @@ export async function assignSeasonClubCoach(formData: FormData) {
     throw new Error("SeasonClub, coach, and assignment type are required.");
   }
 
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const [seasonClub, staff] = await Promise.all([
       tx.seasonClub.findUniqueOrThrow({
         select: { divisionId: true, id: true, seasonId: true },
@@ -106,6 +122,7 @@ export async function assignSeasonClubCoach(formData: FormData) {
       where: { id: seasonClub.id },
     });
     await writeAuditLog(tx, {
+      organizationId,
       action: "SEASON_CLUB_COACH_ASSIGNED",
       details: { assignmentType, seasonClubId, staffId, staffName: staff.name },
       entityId: seasonClub.id,
@@ -119,7 +136,7 @@ export async function assignSeasonClubCoach(formData: FormData) {
 }
 
 export async function clearSeasonClubCoach(formData: FormData) {
-  const session = await requirePermission("staff:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
   const seasonClubId = value(formData, "seasonClubId");
   const assignmentType = value(formData, "assignmentType");
 
@@ -127,12 +144,14 @@ export async function clearSeasonClubCoach(formData: FormData) {
     throw new Error("SeasonClub and assignment type are required.");
   }
 
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
+    await tx.seasonClub.findUniqueOrThrow({ where: { id: seasonClubId }, select: { id: true } });
     await tx.seasonClub.update({
       data: assignmentType === "head" ? { headCoachId: null } : { assistantCoachId: null },
       where: { id: seasonClubId },
     });
     await writeAuditLog(tx, {
+      organizationId,
       action: "SEASON_CLUB_COACH_CLEARED",
       details: { assignmentType, seasonClubId },
       entityId: seasonClubId,
@@ -186,19 +205,27 @@ async function readCoachPhotoFiles(formData: FormData) {
   return { rows, duplicateStaffIds };
 }
 
+// Phase 1 Stage 5.5B: ultraStaffId is a bare, deliberately GLOBAL @unique identifier (Stage
+// 5.4A) - previewCoachPhotoImport's bare prisma.staff.findMany() could therefore match and
+// report on (name/photoUrl-conflict status via matchedStaff/existingPhotoConflicts) another
+// organization's staff member. Scoped to the acting admin's own organization: since a real
+// UBS-xxxxxx id is unique platform-wide, scoping the lookup can never hide a legitimate
+// same-org match - it only ever excludes ids that were never this organization's to see.
 export async function previewCoachPhotoImport(
   _state: CoachPhotoImportState,
   formData: FormData,
 ): Promise<CoachPhotoImportState> {
-  await requirePermission("media:upload");
+  const { organizationId } = await requirePermissionWithOrganization("media:upload");
   const { rows, duplicateStaffIds } = await readCoachPhotoFiles(formData);
   if (rows.length === 0) return { error: "Upload at least one JPG, PNG, or WebP file named like UBS-000001.jpg." };
 
   const ultraStaffIds = rows.map((row) => row.ultraStaffId).filter((id): id is string => Boolean(id));
-  const staff = await prisma.staff.findMany({
-    where: { ultraStaffId: { in: ultraStaffIds } },
-    select: { ultraStaffId: true, photoUrl: true },
-  });
+  const staff = await withOrganizationContext(organizationId, (tx) =>
+    tx.staff.findMany({
+      where: { ultraStaffId: { in: ultraStaffIds } },
+      select: { ultraStaffId: true, photoUrl: true },
+    }),
+  );
   const staffMap = new Map(staff.map((entry) => [entry.ultraStaffId as string, entry]));
 
   const matchedStaff: string[] = [];
@@ -254,16 +281,21 @@ export async function applyCoachPhotoImport(
   _state: CoachPhotoImportState,
   formData: FormData,
 ): Promise<CoachPhotoImportState> {
-  const session = await requirePermission("media:upload");
+  const { session, organizationId } = await requirePermissionWithOrganization("media:upload");
   const allowReplacements = formData.get("allowReplacements") === "on";
   const { rows, duplicateStaffIds } = await readCoachPhotoFiles(formData);
   if (rows.length === 0) return { error: "Upload at least one JPG, PNG, or WebP file named like UBS-000001.jpg." };
 
+  // Same reasoning as previewCoachPhotoImport: ultraStaffId is bare-global-unique, so scoping
+  // this match lookup to the caller's own organization can only exclude ids that were never
+  // this organization's to begin with - it cannot hide a legitimate same-org match.
   const ultraStaffIds = rows.map((row) => row.ultraStaffId).filter((id): id is string => Boolean(id));
-  const staff = await prisma.staff.findMany({
-    where: { ultraStaffId: { in: ultraStaffIds } },
-    select: { id: true, ultraStaffId: true, photoUrl: true },
-  });
+  const staff = await withOrganizationContext(organizationId, (tx) =>
+    tx.staff.findMany({
+      where: { ultraStaffId: { in: ultraStaffIds } },
+      select: { id: true, ultraStaffId: true, photoUrl: true },
+    }),
+  );
   const staffMap = new Map(staff.map((entry) => [entry.ultraStaffId as string, entry]));
 
   const applied: string[] = [];
@@ -285,13 +317,17 @@ export async function applyCoachPhotoImport(
       skippedConflicts.push(row.ultraStaffId);
       continue;
     }
-    const asset = await uploadMediaAsset({
-      file: row.file,
-      purpose: MediaAssetPurpose.COACH_PROFILE_PHOTO,
-      title: `Coach photo bulk import (${row.ultraStaffId})`,
-      uploadedById: session.user.id,
+    await withOrganizationContext(organizationId, async (tx) => {
+      const asset = await uploadMediaAsset({
+        tx,
+        organizationId,
+        file: row.file,
+        purpose: MediaAssetPurpose.COACH_PROFILE_PHOTO,
+        title: `Coach photo bulk import (${row.ultraStaffId})`,
+        uploadedById: session.user.id,
+      });
+      await assignPrimaryMediaAsset(tx, organizationId, { entityId: entry.id, entityType: "Staff", purpose: MediaAssetPurpose.COACH_PROFILE_PHOTO }, asset.id, session.user.id);
     });
-    await assignPrimaryMediaAsset({ entityId: entry.id, entityType: "Staff", purpose: MediaAssetPurpose.COACH_PROFILE_PHOTO }, asset.id, session.user.id);
     applied.push(row.ultraStaffId);
   }
 

@@ -2,8 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
+import { MissingOrganizationContextError } from "@/lib/authorization";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function DraftEventsPage() {
   const session = await auth();
@@ -11,7 +12,10 @@ export default async function DraftEventsPage() {
   if (!hasPermission(session.user.roles, "draft-event:read")) {
     return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
   }
-  const events = await prisma.draftEvent.findMany({ include: { season: true, _count: { select: { squads: true, allocations: true } } }, orderBy: { createdAt: "desc" } });
+  if (!session.user.organizationId) {
+    throw new MissingOrganizationContextError();
+  }
+  const events = await withOrganizationContext(session.user.organizationId, (tx) => tx.draftEvent.findMany({ include: { season: true, _count: { select: { squads: true, allocations: true } } }, orderBy: { createdAt: "desc" } }));
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">

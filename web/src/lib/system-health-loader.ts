@@ -5,6 +5,7 @@
 import path from "node:path";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import { buildLivePresentationModelForGame } from "@/lib/live-game-snapshot-v2";
 import { getBroadcastPresentationState } from "@/lib/broadcast-presentation-state";
 import { isProductionPresentationFixture, productionPresentationFixtureWhere } from "@/lib/presentation-scope";
@@ -106,7 +107,13 @@ function computeBrowserSourceHealth(model: LivePresentationModel): BrowserSource
   });
 }
 
-export async function buildSystemHealth(selectedGameId?: string): Promise<SystemHealth> {
+// Phase 1 Stage 5.2C: `organizationId` is now required and every fixture/game/gameEvent read
+// below runs inside its scoped transaction - previously `selectedGameId` (an optional,
+// client-suppliable `?gameId=` query param on /broadcast/diagnostics) went straight into a bare,
+// unscoped prisma.fixture.findFirst with no tenant check at all, meaning an Org B operator could
+// have inspected Org A's live game health/snapshot (team names, fixture id, clock/reconciliation
+// state) merely by guessing or knowing another organization's real game id.
+export async function buildSystemHealth(organizationId: string, selectedGameId?: string): Promise<SystemHealth> {
   const generatedAt = new Date();
   const warnings: string[] = [];
   const critical: string[] = [];
@@ -116,56 +123,75 @@ export async function buildSystemHealth(selectedGameId?: string): Promise<System
 
   const service: ComponentHealth = { status: "HEALTHY", label: "Application service", detail: "Responding (this page rendered)." };
 
-  // Selected game: explicit ?gameId= wins; otherwise the same discovery a normal operator would
-  // expect - the first current PRODUCTION LIVE/PAUSED fixture.
-  const fixtureWhere: Prisma.FixtureWhereInput = selectedGameId
-    ? { game: { id: selectedGameId } }
-    : { game: { status: { in: ["LIVE", "PAUSED"] } }, ...productionPresentationFixtureWhere() };
-  const fixture = database.status === "CRITICAL" ? null : await prisma.fixture.findFirst({
-    where: fixtureWhere,
-    include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
-  }).catch(() => null);
-
   let selectedGame: SystemHealth["selectedGame"] = null;
   let snapshot: SystemHealth["snapshot"] = null;
   let reconciliation: SystemHealth["reconciliation"] = null;
   let browserSources: BrowserSourceHealth[] = [];
   let noLiveGameReason: string | null = null;
-
-  if (fixture?.game) {
-    selectedGame = {
-      fixtureId: fixture.id, gameId: fixture.game.id,
-      homeShortName: fixture.homeSeasonClub.club.shortName, awayShortName: fixture.awaySeasonClub.club.shortName,
-      status: fixture.game.status,
-    };
-    const model = await buildLivePresentationModelForGame(fixture.game.id);
-    const lastActiveEvent = await prisma.gameEvent.findFirst({ where: { gameId: fixture.game.id, status: "ACTIVE" }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
-    snapshot = computeSnapshotHealth({ gameStatus: model.status, clockRunning: model.clock.running, lastEventAt: lastActiveEvent?.createdAt ?? null, nowMs: generatedAt.getTime() });
-    reconciliation = computeReconciliationHealth({ overallStatus: model.reconciliation.overallStatus, isFinal: model.isFinal });
-    browserSources = computeBrowserSourceHealth(model);
-    if (snapshot.status === "WARNING") warnings.push(snapshot.detail);
-    if (snapshot.status === "CRITICAL") critical.push(snapshot.detail);
-    if (reconciliation.status === "WARNING") warnings.push(reconciliation.detail);
-    if (reconciliation.status === "CRITICAL") critical.push(reconciliation.detail);
-  } else {
-    noLiveGameReason = selectedGameId ? "No LIVE/PAUSED production game found with that id." : "No LIVE/PAUSED production game right now.";
-  }
-
-  // Presentation health - independent of which game is "selected" above; Program can reference
-  // any game, live or not.
-  const presentationState = database.status === "CRITICAL" ? null : await getBroadcastPresentationState().catch(() => null);
   let presentation: SystemHealth["presentation"];
-  if (!presentationState || !presentationState.program) {
+
+  if (database.status === "CRITICAL") {
+    noLiveGameReason = "Database unreachable.";
     presentation = computePresentationHealth({ hasProgram: false, programFixtureExists: false, programFixtureIsProduction: false, programAgeSeconds: null });
   } else {
-    const programGame = await prisma.game.findUnique({ where: { id: presentationState.program.gameId }, include: { fixture: true } }).catch(() => null);
-    const ageSeconds = Math.floor((generatedAt.getTime() - new Date(presentationState.updatedAt).getTime()) / 1000);
-    presentation = computePresentationHealth({
-      hasProgram: true,
-      programFixtureExists: programGame !== null,
-      programFixtureIsProduction: programGame ? isProductionPresentationFixture(programGame.fixture) : false,
-      programAgeSeconds: ageSeconds,
-    });
+    ({ selectedGame, snapshot, reconciliation, browserSources, noLiveGameReason, presentation } = await withOrganizationContext(organizationId, async (tx) => {
+      // Selected game: explicit ?gameId= wins; otherwise the same discovery a normal operator
+      // would expect - the first current PRODUCTION LIVE/PAUSED fixture. A foreign-org
+      // selectedGameId is invisible to RLS here and falls through to noLiveGameReason below,
+      // never reaching buildLivePresentationModelForGame.
+      const fixtureWhere: Prisma.FixtureWhereInput = selectedGameId
+        ? { game: { id: selectedGameId } }
+        : { game: { status: { in: ["LIVE", "PAUSED"] } }, ...productionPresentationFixtureWhere() };
+      const fixture = await tx.fixture.findFirst({
+        where: fixtureWhere,
+        include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
+      }).catch(() => null);
+
+      let selectedGame: SystemHealth["selectedGame"] = null;
+      let snapshot: SystemHealth["snapshot"] = null;
+      let reconciliation: SystemHealth["reconciliation"] = null;
+      let browserSources: BrowserSourceHealth[] = [];
+      let noLiveGameReason: string | null = null;
+
+      if (fixture?.game) {
+        selectedGame = {
+          fixtureId: fixture.id, gameId: fixture.game.id,
+          homeShortName: fixture.homeSeasonClub.club.shortName, awayShortName: fixture.awaySeasonClub.club.shortName,
+          status: fixture.game.status,
+        };
+        const model = await buildLivePresentationModelForGame(fixture.game.id, tx);
+        const lastActiveEvent = await tx.gameEvent.findFirst({ where: { gameId: fixture.game.id, status: "ACTIVE" }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
+        snapshot = computeSnapshotHealth({ gameStatus: model.status, clockRunning: model.clock.running, lastEventAt: lastActiveEvent?.createdAt ?? null, nowMs: generatedAt.getTime() });
+        reconciliation = computeReconciliationHealth({ overallStatus: model.reconciliation.overallStatus, isFinal: model.isFinal });
+        browserSources = computeBrowserSourceHealth(model);
+        if (snapshot.status === "WARNING") warnings.push(snapshot.detail);
+        if (snapshot.status === "CRITICAL") critical.push(snapshot.detail);
+        if (reconciliation.status === "WARNING") warnings.push(reconciliation.detail);
+        if (reconciliation.status === "CRITICAL") critical.push(reconciliation.detail);
+      } else {
+        noLiveGameReason = selectedGameId ? "No LIVE/PAUSED production game found with that id." : "No LIVE/PAUSED production game right now.";
+      }
+
+      // Presentation health - independent of which game is "selected" above; Program can
+      // reference any game, live or not. SystemSetting.key (the presentation-state store) is a
+      // separately named, already-known deferred global limitation - see the Stage 5.2C doc.
+      const presentationState = await getBroadcastPresentationState(organizationId, tx).catch(() => null);
+      let presentation: SystemHealth["presentation"];
+      if (!presentationState || !presentationState.program) {
+        presentation = computePresentationHealth({ hasProgram: false, programFixtureExists: false, programFixtureIsProduction: false, programAgeSeconds: null });
+      } else {
+        const programGame = await tx.game.findUnique({ where: { id: presentationState.program.gameId }, include: { fixture: true } }).catch(() => null);
+        const ageSeconds = Math.floor((generatedAt.getTime() - new Date(presentationState.updatedAt).getTime()) / 1000);
+        presentation = computePresentationHealth({
+          hasProgram: true,
+          programFixtureExists: programGame !== null,
+          programFixtureIsProduction: programGame ? isProductionPresentationFixture(programGame.fixture) : false,
+          programAgeSeconds: ageSeconds,
+        });
+      }
+
+      return { selectedGame, snapshot, reconciliation, browserSources, noLiveGameReason, presentation };
+    }));
   }
   if (presentation.status === "CRITICAL") critical.push(presentation.detail);
   else if (presentation.status === "WARNING") warnings.push(presentation.detail);

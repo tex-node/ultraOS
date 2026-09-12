@@ -11,17 +11,20 @@ import {
 import { OfflineIntakeForm } from "@/app/participants/offline-intake/offline-intake-form";
 import { AdminOfflineIntakeStatus, ApplicationType, AthleteGender } from "@/generated/prisma/enums";
 import { missingPlayerProfileFields, type PlayerProfile } from "@/lib/admin-offline-intake";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
+// Phase 1 Stage 5.5B: previously read every organization's seasons and offline-intake records
+// (names, emails, phones, player profile detail) via the bare, unscoped client. Scoped to the
+// acting admin's own organization.
 export default async function OfflineIntakePage() {
   const rawSession = await auth();
   if (!rawSession?.user) redirect("/login?callbackUrl=/participants/offline-intake");
-  const session = await requirePermission("staff:manage");
-  const [seasons, intakes] = await Promise.all([
-    prisma.season.findMany({ orderBy: { startDate: "desc" }, select: { id: true, name: true } }),
-    prisma.adminOfflineIntake.findMany({ orderBy: { createdAt: "desc" } }),
-  ]);
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
+  const [seasons, intakes] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+    tx.season.findMany({ orderBy: { startDate: "desc" }, select: { id: true, name: true } }),
+    tx.adminOfflineIntake.findMany({ orderBy: { createdAt: "desc" } }),
+  ]));
   const seasonNameById = new Map(seasons.map((season) => [season.id, season.name]));
 
   return (

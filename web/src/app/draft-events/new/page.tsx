@@ -2,19 +2,19 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { createDraftEvent } from "@/app/draft-events/actions";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const input = "mt-2 w-full rounded-xl border border-white/10 bg-white/[.04] px-4 py-3 text-sm text-white";
 
 export default async function NewDraftEventPage() {
   const rawSession = await auth();
   if (!rawSession?.user) redirect("/login?callbackUrl=/draft-events/new");
-  const session = await requirePermission("draft-event:configure");
-  const [seasons, events] = await Promise.all([
-    prisma.season.findMany({ orderBy: { startDate: "desc" }, select: { id: true, name: true } }),
-    prisma.event.findMany({ orderBy: { date: "desc" }, select: { id: true, name: true } }),
-  ]);
+  const { session, organizationId } = await requirePermissionWithOrganization("draft-event:configure");
+  const [seasons, events] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+    tx.season.findMany({ orderBy: { startDate: "desc" }, select: { id: true, name: true } }),
+    tx.event.findMany({ orderBy: { date: "desc" }, select: { id: true, name: true } }),
+  ]));
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">

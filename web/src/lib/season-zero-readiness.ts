@@ -6,7 +6,10 @@ import {
   OpsItemStatus,
   StaffRole,
 } from "@/generated/prisma/enums";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+
+type ReadinessDb = Prisma.TransactionClient | typeof prisma;
 
 export const seasonZeroConfig = {
   competitionName: "Ultra Basketball",
@@ -71,25 +74,26 @@ export function signalFromCount(count: number, expected: number): OpsHealthStatu
   return count > 0 ? OpsHealthStatus.AMBER : OpsHealthStatus.RED;
 }
 
-async function countUnsafe(sql: string) {
-  const rows = await prisma.$queryRawUnsafe<{ count: bigint }[]>(sql);
+async function countUnsafe(db: ReadinessDb, sql: string) {
+  const rows = await db.$queryRawUnsafe<{ count: bigint }[]>(sql);
   return Number(rows[0]?.count ?? 0);
 }
 
-export async function demoDataCounts() {
+export async function demoDataCounts(db: ReadinessDb) {
   return {
-    demoAthletes: await countUnsafe(`SELECT COUNT(*) FROM "Athlete" WHERE "email" LIKE '%@athletes.neonultra.ng'`),
-    demoClubs: await countUnsafe(`SELECT COUNT(*) FROM "Club" WHERE "shortName" IN ('VTX','APX','FLX','SRG','NVA','HLO','EMB','ECL')`),
-    demoEvents: await countUnsafe(`SELECT COUNT(*) FROM "Event" WHERE "id" LIKE 'seed-event-%'`),
-    demoStaff: await countUnsafe(`SELECT COUNT(*) FROM "Staff" WHERE "id" LIKE 'seed-coach-%'`),
-    demoSponsors: await countUnsafe(`SELECT COUNT(*) FROM "SponsorCampaign" WHERE "id" LIKE 'seed-campaign-%'`),
+    demoAthletes: await countUnsafe(db, `SELECT COUNT(*) FROM "Athlete" WHERE "email" LIKE '%@athletes.neonultra.ng'`),
+    demoClubs: await countUnsafe(db, `SELECT COUNT(*) FROM "Club" WHERE "shortName" IN ('VTX','APX','FLX','SRG','NVA','HLO','EMB','ECL')`),
+    demoEvents: await countUnsafe(db, `SELECT COUNT(*) FROM "Event" WHERE "id" LIKE 'seed-event-%'`),
+    demoStaff: await countUnsafe(db, `SELECT COUNT(*) FROM "Staff" WHERE "id" LIKE 'seed-coach-%'`),
+    demoSponsors: await countUnsafe(db, `SELECT COUNT(*) FROM "SponsorCampaign" WHERE "id" LIKE 'seed-campaign-%'`),
   };
 }
 
-export async function requiredConfigurationReport() {
+export async function requiredConfigurationReport(db: ReadinessDb) {
+  const prisma = db;
   const sport = await prisma.sport.findUnique({ where: { slug: "basketball" } });
   const competition = sport
-    ? await prisma.competition.findUnique({ where: { sportId_slug: { sportId: sport.id, slug: "ultra-basketball" } } })
+    ? await prisma.competition.findFirst({ where: { sportId: sport.id, slug: "ultra-basketball" } })
     : null;
   const season = competition
     ? await prisma.season.findUnique({ where: { competitionId_name: { competitionId: competition.id, name: seasonZeroConfig.seasonName } } })
@@ -120,7 +124,8 @@ export async function requiredConfigurationReport() {
   };
 }
 
-export async function realDataCounts(seasonId?: string) {
+export async function realDataCounts(seasonId: string | undefined, db: ReadinessDb) {
+  const prisma = db;
   return {
     users: await prisma.user.count(),
     clubs: await prisma.club.count(),
@@ -137,7 +142,8 @@ export async function realDataCounts(seasonId?: string) {
   };
 }
 
-export async function clubReadiness(seasonId: string) {
+export async function clubReadiness(seasonId: string, db: ReadinessDb) {
+  const prisma = db;
   const seasonClubs = await prisma.seasonClub.findMany({
     where: { seasonId },
     include: { club: { include: { fanClub: true } }, players: true, standing: true },
@@ -171,7 +177,8 @@ export async function clubReadiness(seasonId: string) {
   };
 }
 
-export async function playerReconciliation(seasonId: string) {
+export async function playerReconciliation(seasonId: string, db: ReadinessDb) {
+  const prisma = db;
   const [
     totalApplications,
     approvedApplications,
@@ -198,10 +205,10 @@ export async function playerReconciliation(seasonId: string) {
     prisma.player.count({ where: { seasonId, athlete: { photoUrl: null } } }),
     prisma.player.count({ where: { seasonId, position: "" } }),
     prisma.player.count({ where: { seasonId, OR: [{ heightCm: { lte: 0 } }, { weightKg: { lte: 0 } }] } }),
-    countUnsafe(
+    countUnsafe(db,
       `SELECT COUNT(*) FROM (SELECT "playerId" FROM "DraftSquadMember" GROUP BY "playerId" HAVING COUNT(*) > 1) duplicates`,
     ),
-    countUnsafe(
+    countUnsafe(db,
       `SELECT COUNT(*) FROM "Player" p WHERE p."seasonId" = '${seasonId.replace(/'/g, "''")}' AND p."seasonClubId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "DraftAllocation" da WHERE da."seasonClubId" = p."seasonClubId" AND da."status" = 'CONFIRMED')`,
     ),
   ]);
@@ -223,7 +230,8 @@ export async function playerReconciliation(seasonId: string) {
   };
 }
 
-export async function staffReadiness() {
+export async function staffReadiness(db: ReadinessDb) {
+  const prisma = db;
   const assignments = await prisma.eventStaffAssignment.count();
   const openAssignments = await prisma.eventStaffAssignment.count({ where: { status: { notIn: closedStatuses } } });
   const missingPeople = await prisma.eventStaffAssignment.count({ where: { userId: null, staffId: null, personName: null } });
@@ -236,7 +244,8 @@ export async function staffReadiness() {
   };
 }
 
-export async function draftReadiness(seasonId: string) {
+export async function draftReadiness(seasonId: string, db: ReadinessDb) {
+  const prisma = db;
   const draftEvent = await prisma.draftEvent.findFirst({ where: { seasonId }, orderBy: { updatedAt: "desc" } });
   if (!draftEvent) {
     return { configured: false, squads: 0, allocations: 0, duplicateSquadMemberships: 0 };
@@ -248,13 +257,14 @@ export async function draftReadiness(seasonId: string) {
     squads: await prisma.draftSquad.count({ where: { draftEventId: draftEvent.id } }),
     allocations: await prisma.draftAllocation.count({ where: { draftEventId: draftEvent.id } }),
     confirmedAllocations: await prisma.draftAllocation.count({ where: { draftEventId: draftEvent.id, status: "CONFIRMED" } }),
-    duplicateSquadMemberships: await countUnsafe(
+    duplicateSquadMemberships: await countUnsafe(db,
       `SELECT COUNT(*) FROM (SELECT dsm."playerId" FROM "DraftSquadMember" dsm JOIN "DraftSquad" ds ON ds."id" = dsm."draftSquadId" WHERE ds."draftEventId" = '${draftEvent.id.replace(/'/g, "''")}' GROUP BY dsm."playerId" HAVING COUNT(*) > 1) duplicates`,
     ),
   };
 }
 
-export async function eventReadiness(seasonId: string) {
+export async function eventReadiness(seasonId: string, db: ReadinessDb) {
+  const prisma = db;
   const event = await prisma.event.findFirst({ where: { seasonId }, orderBy: { startTime: "asc" } });
   if (!event) return { configured: false };
   const [seatZones, inventoryItems, vendors, sponsorCampaigns, reservations] = await Promise.all([
@@ -277,7 +287,8 @@ export async function eventReadiness(seasonId: string) {
   };
 }
 
-export async function launchBlockerSummary(seasonId?: string) {
+export async function launchBlockerSummary(seasonId: string | undefined, db: ReadinessDb) {
+  const prisma = db;
   const where = seasonId ? { seasonId } : {};
   const [p0, p1, p2, p3, open] = await Promise.all([
     prisma.launchReadinessCheck.count({ where: { ...where, priority: LaunchBlockerPriority.P0, status: { notIn: closedStatuses } } }),
@@ -289,8 +300,9 @@ export async function launchBlockerSummary(seasonId?: string) {
   return { p0, p1, p2, p3, open };
 }
 
-export async function seasonZeroReadinessReport() {
-  const configuration = await requiredConfigurationReport();
+export async function seasonZeroReadinessReport(db: ReadinessDb) {
+  const prisma = db;
+  const configuration = await requiredConfigurationReport(db);
   const seasonId = configuration.season?.id;
   const [
     demos,
@@ -306,14 +318,14 @@ export async function seasonZeroReadinessReport() {
     backupDocs,
     performanceDocs,
   ] = await Promise.all([
-    demoDataCounts(),
-    realDataCounts(seasonId),
-    seasonId ? clubReadiness(seasonId) : Promise.resolve(null),
-    seasonId ? playerReconciliation(seasonId) : Promise.resolve(null),
-    staffReadiness(),
-    seasonId ? draftReadiness(seasonId) : Promise.resolve(null),
-    seasonId ? eventReadiness(seasonId) : Promise.resolve(null),
-    launchBlockerSummary(seasonId),
+    demoDataCounts(db),
+    realDataCounts(seasonId, db),
+    seasonId ? clubReadiness(seasonId, db) : Promise.resolve(null),
+    seasonId ? playerReconciliation(seasonId, db) : Promise.resolve(null),
+    staffReadiness(db),
+    seasonId ? draftReadiness(seasonId, db) : Promise.resolve(null),
+    seasonId ? eventReadiness(seasonId, db) : Promise.resolve(null),
+    launchBlockerSummary(seasonId, db),
     prisma.rehearsal.count(),
     prisma.equipment.count({ where: { status: { in: ["MAINTENANCE", "MISSING"] } } }),
     prisma.opsDocument.count({ where: { category: { contains: "backup", mode: "insensitive" } } }),

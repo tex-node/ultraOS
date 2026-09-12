@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import {
   cohortApplicationReviewActions,
   cohortRowResolutionActions,
@@ -13,7 +13,7 @@ import {
 } from "@/lib/draft-cohort";
 
 export async function resolveDraftCohortRow(formData: FormData) {
-  const session = await requirePermission("application:review");
+  const { session, organizationId } = await requirePermissionWithOrganization("application:review");
   const worksheet = String(formData.get("worksheet") ?? "");
   const rowNumber = Number(formData.get("rowNumber") ?? 0);
   const action = String(formData.get("action") ?? "") as CohortRowResolutionAction;
@@ -30,13 +30,14 @@ export async function resolveDraftCohortRow(formData: FormData) {
     applicationId,
     userId,
     actorUserId: session.user.id,
+    organizationId,
   });
   revalidatePath("/draft-cohort");
   redirect(`/draft-cohort?filter=${action === "EXCLUDE_FROM_CURRENT_COHORT" ? "Excluded" : "All"}`);
 }
 
 export async function reviewDraftCohortApplication(formData: FormData) {
-  const session = await requirePermission("application:review");
+  const { session, organizationId } = await requirePermissionWithOrganization("application:review");
   const worksheet = String(formData.get("worksheet") ?? "");
   const rowNumber = Number(formData.get("rowNumber") ?? 0);
   const applicationId = String(formData.get("applicationId") ?? "");
@@ -51,6 +52,7 @@ export async function reviewDraftCohortApplication(formData: FormData) {
     action,
     reason,
     actorUserId: session.user.id,
+    organizationId,
   });
   revalidatePath("/draft-cohort");
   redirect("/draft-cohort?filter=Pending%20Approval");

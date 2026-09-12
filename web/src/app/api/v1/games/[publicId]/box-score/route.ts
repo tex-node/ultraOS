@@ -4,6 +4,7 @@ import { apiError } from "@/lib/api-v1/errors";
 import { loadPublicGame } from "@/lib/api-v1/game-loader";
 import { resolvePlayerNames } from "@/lib/api-v1/identifiers";
 import type { BoxScoreV1 } from "@/lib/api-v1/contracts";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,7 +16,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
     if (!loaded) return apiError("GAME_NOT_FOUND", "No game found for this id.");
     const { fixture, model } = loaded;
 
-    const names = await resolvePlayerNames(model.players.map((p) => p.playerId));
+    const organization = await resolveDefaultPublicOrganization();
+    const names = await withOrganizationContext(organization.id, (tx) => resolvePlayerNames(model.players.map((p) => p.playerId), tx));
     const clubFor = (seasonClubId: string) => seasonClubId === model.teams.home.seasonClubId
       ? { publicId: fixture.homeSeasonClub.club.shortName.toLowerCase(), name: fixture.homeSeasonClub.club.name, shortName: fixture.homeSeasonClub.club.shortName }
       : { publicId: fixture.awaySeasonClub.club.shortName.toLowerCase(), name: fixture.awaySeasonClub.club.name, shortName: fixture.awaySeasonClub.club.shortName };

@@ -5,7 +5,7 @@ import { resolveSeasonByPublicId, resolvePlayerNames } from "@/lib/api-v1/identi
 import { loadSeasonPlayerTotals } from "@/lib/analytics/game-analytics";
 import { buildPlayerLeaderboard } from "@/lib/analytics/league-analytics";
 import type { SeasonLeadersV1, LeaderV1 } from "@/lib/api-v1/contracts";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -19,18 +19,21 @@ type Category = (typeof VALID_CATEGORIES)[number];
 export async function GET(request: Request, { params }: { params: Promise<{ publicId: string }> }) {
   return withPublicApiV1(request, async () => {
     const { publicId } = await params;
-    const season = await resolveSeasonByPublicId(publicId);
+    const organization = await resolveDefaultPublicOrganization();
+    const season = await withOrganizationContext(organization.id, (tx) => resolveSeasonByPublicId(publicId, tx));
     if (!season) return apiError("SEASON_NOT_FOUND", "No season found for this id.");
 
     const url = new URL(request.url);
     const categoryParam = url.searchParams.get("category") ?? "PPG";
     const category: Category = (VALID_CATEGORIES as readonly string[]).includes(categoryParam) ? (categoryParam as Category) : "PPG";
 
-    const totals = await loadSeasonPlayerTotals(season.id);
+    const totals = await withOrganizationContext(organization.id, (tx) => loadSeasonPlayerTotals(season.id, tx));
     const entries = buildPlayerLeaderboard(totals, category).slice(0, 10);
 
-    const names = await resolvePlayerNames(entries.map((e) => e.playerId));
-    const seasonClubs = await prisma.seasonClub.findMany({ where: { seasonId: season.id }, include: { club: true } });
+    const { names, seasonClubs } = await withOrganizationContext(organization.id, async (tx) => ({
+      names: await resolvePlayerNames(entries.map((e) => e.playerId), tx),
+      seasonClubs: await tx.seasonClub.findMany({ where: { seasonId: season.id }, include: { club: true } }),
+    }));
     const clubByShortName = new Map(seasonClubs.map((sc) => [sc.club.shortName, sc.club]));
 
     const leaders: LeaderV1[] = entries.map((e) => {

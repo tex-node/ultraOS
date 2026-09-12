@@ -2,23 +2,26 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { draftReadinessForPlayer } from "@/lib/participant-profiles";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function DraftEventPlayerPoolPage({ params }: { params: Promise<{ draftEventId: string }> }) {
   const { draftEventId } = await params;
   const rawSession = await auth();
   if (!rawSession?.user) redirect(`/login?callbackUrl=/draft-events/${draftEventId}/player-pool`);
-  const session = await requirePermission("draft-event:read");
-  const draftEvent = await prisma.draftEvent.findUniqueOrThrow({ where: { id: draftEventId }, include: { season: true } });
-  const players = await prisma.player.findMany({
-    where: { seasonId: draftEvent.seasonId, draftSelectionGroup: { in: ["MAIN_DRAFT", "SECONDARY_DRAFT"] } },
-    include: { athlete: true, seasonClub: { include: { club: true } }, draftSquadMembers: { include: { draftSquad: true } } },
-    orderBy: [{ draftSelectionGroup: "asc" }, { athlete: { lastName: "asc" } }],
-    take: 300,
+  const { session, organizationId } = await requirePermissionWithOrganization("draft-event:read");
+  const { draftEvent, players, readiness } = await withOrganizationContext(organizationId, async (tx) => {
+    const draftEvent = await tx.draftEvent.findUniqueOrThrow({ where: { id: draftEventId }, include: { season: true } });
+    const players = await tx.player.findMany({
+      where: { seasonId: draftEvent.seasonId, draftSelectionGroup: { in: ["MAIN_DRAFT", "SECONDARY_DRAFT"] } },
+      include: { athlete: true, seasonClub: { include: { club: true } }, draftSquadMembers: { include: { draftSquad: true } } },
+      orderBy: [{ draftSelectionGroup: "asc" }, { athlete: { lastName: "asc" } }],
+      take: 300,
+    });
+    const readiness = new Map(await Promise.all(players.map(async (player) => [player.id, await draftReadinessForPlayer(tx, player.id)] as const)));
+    return { draftEvent, players, readiness };
   });
-  const readiness = new Map(await Promise.all(players.map(async (player) => [player.id, await draftReadinessForPlayer(player.id)] as const)));
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">

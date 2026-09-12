@@ -6,16 +6,43 @@ import { buildPlayerSpotlightCard } from "@/lib/analytics/cards/player-cards";
 import { loadSeasonPlayerTotals } from "@/lib/analytics/game-analytics";
 import { computePlayerRanks, topRankBadges } from "@/lib/analytics/rank-context";
 import { toSocialCopy, type CardFormat } from "@/lib/analytics/cards/types";
+import { PublicResourceLocatorType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
+import {
+  locatorMatchesResource,
+  resolvePublicResourceLocator,
+} from "@/lib/public-locators";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const FORMAT_MAP: Record<string, CardFormat> = { square: "SOCIAL_SQUARE", portrait: "SOCIAL_PORTRAIT", broadcast: "BROADCAST_16_9" };
 
+async function loadSharedAthlete(athleteId: string) {
+  const locator = await resolvePublicResourceLocator(
+    prisma,
+    PublicResourceLocatorType.ATHLETE,
+    athleteId,
+  );
+  if (!locator) return null;
+  const athlete = await withOrganizationContext(locator.organizationId, (tx) =>
+    tx.athlete.findUnique({
+      where: { id: locator.resourceId },
+      select: {
+        id: true, organizationId: true,
+        firstName: true, lastName: true, photoUrl: true,
+        registrations: { include: { season: true }, orderBy: { season: { startDate: "desc" } } },
+      },
+    }),
+  );
+  if (!locatorMatchesResource(locator, athlete)) return null;
+  return athlete;
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
-  const athlete = await prisma.athlete.findUnique({ where: { id }, select: { firstName: true, lastName: true } });
+  const athlete = await loadSharedAthlete(id);
   if (!athlete) return { title: "Player Card — Ultra Basketball" };
   const title = `${athlete.firstName} ${athlete.lastName} — Season Zero | Ultra Basketball`;
   const description = `Season Zero player card for ${athlete.firstName} ${athlete.lastName} — official box score data, Ultra Basketball.`;
@@ -32,18 +59,12 @@ export default async function SharePlayerCard({ params, searchParams }: { params
   const { format } = await searchParams;
   const cardFormat = FORMAT_MAP[format ?? ""] ?? "SOCIAL_SQUARE";
 
-  const athlete = await prisma.athlete.findUnique({
-    where: { id },
-    select: {
-      firstName: true, lastName: true, photoUrl: true,
-      registrations: { include: { season: true }, orderBy: { season: { startDate: "desc" } } },
-    },
-  });
+  const athlete = await loadSharedAthlete(id);
   if (!athlete) notFound();
   const reg = athlete.registrations.find((r) => r.season.status === "ACTIVE");
   if (!reg) notFound();
 
-  const totals = await loadSeasonPlayerTotals(reg.seasonId);
+  const totals = await withOrganizationContext(reg.organizationId, (tx) => loadSeasonPlayerTotals(reg.seasonId, tx));
   const target = totals.find((t) => t.playerId === reg.id);
   if (!target) notFound();
 

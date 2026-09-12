@@ -4,7 +4,8 @@ import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { loadSeasonGameCores } from "@/lib/analytics/game-analytics";
 import { classifyGameStory } from "@/lib/analytics/game-story";
-import { prisma } from "@/lib/prisma";
+import { MissingOrganizationContextError } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -40,8 +41,10 @@ const TOOLS = [
 export default async function BroadcastHub() {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/broadcast");
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const organizationId = session.user.organizationId;
 
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" } });
+  const season = await withOrganizationContext(organizationId, (tx) => tx.season.findFirst({ where: { status: "ACTIVE" } }));
   if (!season) {
     return (
       <OperationsShell user={session.user}>
@@ -50,7 +53,7 @@ export default async function BroadcastHub() {
     );
   }
 
-  const games = await loadSeasonGameCores(season.id);
+  const games = await withOrganizationContext(organizationId, (tx) => loadSeasonGameCores(season.id, tx));
   const recentFinals = games
     .filter((g) => g.status === "FINAL")
     .sort((a, b) => b.scheduledAt.getTime() - a.scheduledAt.getTime())

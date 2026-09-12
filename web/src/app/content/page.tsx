@@ -2,11 +2,11 @@ import Link from "next/link";
 import { ContentType } from "@/generated/prisma/enums";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { generateContentAsset } from "./actions";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function ContentStudioPage() {
-  const session = await requirePermission("content:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("content:manage");
   const [
     draftPicks,
     fixtures,
@@ -15,8 +15,8 @@ export default async function ContentStudioPage() {
     fanClubs,
     assets,
     jobs,
-  ] = await Promise.all([
-    prisma.draftPick.findMany({
+  ] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+    tx.draftPick.findMany({
       include: {
         draft: true,
         player: { include: { athlete: true } },
@@ -25,7 +25,7 @@ export default async function ContentStudioPage() {
       orderBy: { pickedAt: "desc" },
       take: 100,
     }),
-    prisma.fixture.findMany({
+    tx.fixture.findMany({
       include: {
         homeSeasonClub: { include: { club: true } },
         awaySeasonClub: { include: { club: true } },
@@ -33,26 +33,26 @@ export default async function ContentStudioPage() {
       orderBy: { scheduledAt: "desc" },
       take: 100,
     }),
-    prisma.season.findMany({ orderBy: { startDate: "desc" } }),
-    prisma.sponsorCampaign.findMany({
+    tx.season.findMany({ orderBy: { startDate: "desc" } }),
+    tx.sponsorCampaign.findMany({
       orderBy: { createdAt: "desc" },
       take: 100,
     }),
-    prisma.fanClub.findMany({
+    tx.fanClub.findMany({
       include: { club: true },
       orderBy: { club: { name: "asc" } },
     }),
-    prisma.contentAsset.findMany({
+    tx.contentAsset.findMany({
       include: { job: true },
       orderBy: { createdAt: "desc" },
       take: 30,
     }),
-    prisma.contentJob.findMany({
+    tx.contentJob.findMany({
       where: { status: "FAILED" },
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
-  ]);
+  ]));
 
   const sourceGroups: Array<{
     type: ContentType;

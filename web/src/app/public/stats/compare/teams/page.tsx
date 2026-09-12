@@ -5,7 +5,7 @@ import { compareTeams, type TeamComparisonResult } from "@/lib/analytics/team-co
 import { computeLeagueTeamDna, TEAM_DNA_DIMENSION_LABEL, type TeamDnaDimensionKey } from "@/lib/analytics/team-dna";
 import { MatchupCardView } from "@/components/analytics/cards/MatchupCardView";
 import { buildMatchupCard } from "@/lib/analytics/cards/game-cards";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,7 +14,8 @@ const DNA_KEYS: TeamDnaDimensionKey[] = ["SCORING", "SHOOTING", "PLAYMAKING", "R
 
 export default async function CompareTeams({ searchParams }: { searchParams: Promise<{ a?: string; b?: string }> }) {
   const { a, b } = await searchParams;
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" } });
+  const organization = await resolveDefaultPublicOrganization();
+  const season = await withOrganizationContext(organization.id, (tx) => tx.season.findFirst({ where: { status: "ACTIVE" } }));
   if (!season) {
     return (
       <main className="mx-auto max-w-5xl px-6 py-12">
@@ -24,7 +25,7 @@ export default async function CompareTeams({ searchParams }: { searchParams: Pro
     );
   }
 
-  const games = await loadSeasonGameCores(season.id);
+  const games = await withOrganizationContext(organization.id, (tx) => loadSeasonGameCores(season.id, tx));
   const totalsByTeam = computeSeasonTeamTotals(games);
   const options = [...totalsByTeam.values()].sort((x, y) => x.shortName.localeCompare(y.shortName));
 

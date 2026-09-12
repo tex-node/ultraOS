@@ -4,8 +4,8 @@ import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { markSeasonZeroCoachSelection } from "@/app/coaches/actions";
 import { ApplicationStatus, ApplicationType, CoachSeasonZeroDivision, CoachSeasonZeroSelectionStatus } from "@/generated/prisma/enums";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 function textValue(data: unknown, keys: string[]) {
   if (!data || typeof data !== "object") return "";
@@ -17,22 +17,29 @@ function textValue(data: unknown, keys: string[]) {
   return "";
 }
 
+// Phase 1 Stage 5.5B: previously read every organization's approved coach applications and
+// provisioned staff via the bare, unscoped client - an Org B "staff:manage" holder could see
+// (and, via the also-fixed markSeasonZeroCoachSelection, act on) every organization's coach
+// applications. Scoped to the acting admin's own organization.
 export default async function SeasonZeroCoachSelectionPage() {
   const rawSession = await auth();
   if (!rawSession?.user) redirect("/login?callbackUrl=/coaches/season-zero-selection");
-  const session = await requirePermission("staff:manage");
-  const applications = await prisma.application.findMany({
-    where: { type: ApplicationType.COACH, status: ApplicationStatus.APPROVED },
-    include: { applicantUser: { select: { email: true, name: true } } },
-    orderBy: [{ coachSeasonZeroSelectionStatus: "asc" }, { createdAt: "asc" }],
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
+  const { applications, staffById } = await withOrganizationContext(organizationId, async (tx) => {
+    const applications = await tx.application.findMany({
+      where: { type: ApplicationType.COACH, status: ApplicationStatus.APPROVED },
+      include: { applicantUser: { select: { email: true, name: true } } },
+      orderBy: [{ coachSeasonZeroSelectionStatus: "asc" }, { createdAt: "asc" }],
+    });
+    const staffIds = applications.map((application) => application.provisionedStaffId).filter((id): id is string => Boolean(id));
+    const staffById = new Map(
+      (staffIds.length > 0
+        ? await tx.staff.findMany({ where: { id: { in: staffIds } }, select: { id: true, photoUrl: true, ultraStaffId: true } })
+        : []
+      ).map((staff) => [staff.id, staff]),
+    );
+    return { applications, staffById };
   });
-  const staffIds = applications.map((application) => application.provisionedStaffId).filter((id): id is string => Boolean(id));
-  const staffById = new Map(
-    (staffIds.length > 0
-      ? await prisma.staff.findMany({ where: { id: { in: staffIds } }, select: { id: true, photoUrl: true, ultraStaffId: true } })
-      : []
-    ).map((staff) => [staff.id, staff]),
-  );
   const counts = applications.reduce<Record<string, number>>((acc, application) => {
     acc[application.coachSeasonZeroSelectionStatus] = (acc[application.coachSeasonZeroSelectionStatus] ?? 0) + 1;
     return acc;

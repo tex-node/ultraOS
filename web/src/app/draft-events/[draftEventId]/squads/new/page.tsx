@@ -2,8 +2,8 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { createDraftSquad } from "@/app/draft-events/actions";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const input = "mt-2 w-full rounded-xl border border-white/10 bg-white/[.04] px-4 py-3 text-sm text-white";
 
@@ -11,10 +11,14 @@ export default async function NewDraftSquadPage({ params }: { params: Promise<{ 
   const { draftEventId } = await params;
   const rawSession = await auth();
   if (!rawSession?.user) redirect(`/login?callbackUrl=/draft-events/${draftEventId}/squads/new`);
-  const session = await requirePermission("draft-squad:manage");
-  const event = await prisma.draftEvent.findUnique({ where: { id: draftEventId }, include: { season: true } });
+  const { session, organizationId } = await requirePermissionWithOrganization("draft-squad:manage");
+  const { event, divisions } = await withOrganizationContext(organizationId, async (tx) => {
+    const event = await tx.draftEvent.findUnique({ where: { id: draftEventId }, include: { season: true } });
+    if (!event) return { event: null, divisions: [] };
+    const divisions = await tx.division.findMany({ where: { competitionId: event.season.competitionId }, orderBy: { name: "asc" } });
+    return { event, divisions };
+  });
   if (!event) notFound();
-  const divisions = await prisma.division.findMany({ where: { competitionId: event.season.competitionId }, orderBy: { name: "asc" } });
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">

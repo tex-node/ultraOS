@@ -7,7 +7,7 @@ import {
   hasVisionEnrichment,
   type GameDataCapability,
 } from "@/lib/game-data-capability";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -19,10 +19,13 @@ export const revalidate = 0;
 // total while having zero visibility into 4PT/Ultra Time at all.
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const game = await prisma.game.findUnique({
-    where: { id },
-    select: { id: true, dataCapability: true, statSource: true, resultSource: true },
-  });
+  const organization = await resolveDefaultPublicOrganization();
+  const game = await withOrganizationContext(organization.id, (tx) =>
+    tx.game.findUnique({
+      where: { id },
+      select: { id: true, dataCapability: true, statSource: true, resultSource: true },
+    }),
+  );
   if (!game) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   const capability = game.dataCapability as GameDataCapability;

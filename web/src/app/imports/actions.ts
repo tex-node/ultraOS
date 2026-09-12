@@ -8,8 +8,8 @@ import {
   confirmImportJob,
   createImportJobFromCsv,
 } from "@/lib/imports";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 function permissionForType(type: ImportType) {
   if (type === ImportType.PLAYER) return "data:import:players" as const;
@@ -36,8 +36,8 @@ function parseResolutionAction(value: FormDataEntryValue | null) {
 
 export async function uploadImportCsv(formData: FormData) {
   const type = parseImportType(formData.get("type"));
-  const session = await requirePermission(permissionForType(type));
-  await requirePermission("data:import");
+  const { session, organizationId } = await requirePermissionWithOrganization(permissionForType(type));
+  await requirePermissionWithOrganization("data:import");
 
   const file = formData.get("file");
   if (!(file instanceof File)) {
@@ -67,6 +67,7 @@ export async function uploadImportCsv(formData: FormData) {
     text,
     type,
     userId: session.user.id,
+    organizationId,
   });
 
   revalidatePath("/imports");
@@ -74,7 +75,7 @@ export async function uploadImportCsv(formData: FormData) {
 }
 
 export async function updateImportRowResolution(formData: FormData) {
-  await requirePermission("data:import:resolve");
+  const { organizationId } = await requirePermissionWithOrganization("data:import:resolve");
   const rowId = formData.get("rowId");
   const action = parseResolutionAction(formData.get("resolutionAction"));
   const matchedEntityId = formData.get("matchedEntityId");
@@ -84,7 +85,7 @@ export async function updateImportRowResolution(formData: FormData) {
     throw new Error("Import row ID is required.");
   }
 
-  const row = await prisma.importRow.update({
+  const row = await withOrganizationContext(organizationId, (tx) => tx.importRow.update({
     data: {
       matchedEntityId:
         typeof matchedEntityId === "string" && matchedEntityId.trim() ? matchedEntityId.trim() : undefined,
@@ -96,32 +97,32 @@ export async function updateImportRowResolution(formData: FormData) {
     },
     select: { importJobId: true },
     where: { id: rowId },
-  });
+  }));
 
   revalidatePath(`/imports/${row.importJobId}`);
 }
 
 export async function confirmImport(formData: FormData) {
-  const session = await requirePermission("data:import:confirm");
+  const { session, organizationId } = await requirePermissionWithOrganization("data:import:confirm");
   const importJobId = formData.get("importJobId");
   if (typeof importJobId !== "string" || !importJobId) {
     throw new Error("Import job ID is required.");
   }
-  await confirmImportJob(importJobId, session.user.id);
+  await confirmImportJob(organizationId, importJobId, session.user.id);
   revalidatePath("/imports");
   revalidatePath(`/imports/${importJobId}`);
 }
 
 export async function cancelImport(formData: FormData) {
-  await requirePermission("data:import:confirm");
+  const { organizationId } = await requirePermissionWithOrganization("data:import:confirm");
   const importJobId = formData.get("importJobId");
   if (typeof importJobId !== "string" || !importJobId) {
     throw new Error("Import job ID is required.");
   }
-  await prisma.importJob.update({
+  await withOrganizationContext(organizationId, (tx) => tx.importJob.update({
     data: { status: "CANCELLED" },
     where: { id: importJobId },
-  });
+  }));
   revalidatePath("/imports");
   revalidatePath(`/imports/${importJobId}`);
 }

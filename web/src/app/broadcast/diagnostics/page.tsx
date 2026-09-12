@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requirePermissionOrRedirect } from "@/lib/authorization";
+import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { buildSystemHealth, type BrowserSourceHealth } from "@/lib/system-health-loader";
 import type { HealthStatus, ComponentHealth } from "@/lib/system-health";
@@ -15,7 +15,8 @@ export const revalidate = 0;
 export default async function BroadcastDiagnostics({ searchParams }: { searchParams: Promise<{ gameId?: string }> }) {
   const { gameId } = await searchParams;
   const session = await requirePermissionOrRedirect("broadcast:operate", "/broadcast/diagnostics");
-  const health = await buildSystemHealth(gameId);
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const health = await buildSystemHealth(session.user.organizationId, gameId);
 
   return (
     <OperationsShell user={session.user}>

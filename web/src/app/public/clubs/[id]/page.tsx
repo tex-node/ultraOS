@@ -15,31 +15,46 @@ import { buildTeamDnaCard } from "@/lib/analytics/cards/team-cards";
 import { AnalyticsCard } from "@/components/analytics/cards/AnalyticsCard";
 import { buildTeamMilestoneCard } from "@/lib/analytics/cards/leaderboard-cards";
 import type { GameCore } from "@/lib/analytics/types";
+import { PublicResourceLocatorType } from "@/generated/prisma/enums";
 import { formatLagosDate } from "@/lib/format-datetime";
 import { prisma } from "@/lib/prisma";
+import {
+  locatorMatchesResource,
+  resolvePublicResourceLocator,
+} from "@/lib/public-locators";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const FALLBACK_PRIMARY_COLOR = "#16F2B3";
 
 export default async function PublicClubPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const club = await prisma.club.findUnique({
-    where: { id },
-    include: {
-      sport: true,
-      seasonClubs: {
-        where: { status: "ACTIVE" },
-        include: {
-          assistantCoach: true,
-          division: true,
-          headCoach: true,
-          players: { include: { athlete: true }, orderBy: { jerseyNumber: "asc" } },
-          season: true,
-          standing: true,
+  const locator = await resolvePublicResourceLocator(
+    prisma,
+    PublicResourceLocatorType.CLUB,
+    id,
+  );
+  if (!locator) notFound();
+  const club = await withOrganizationContext(locator.organizationId, (tx) =>
+    tx.club.findUnique({
+      where: { id: locator.resourceId },
+      include: {
+        sport: true,
+        seasonClubs: {
+          where: { status: "ACTIVE" },
+          include: {
+            assistantCoach: true,
+            division: true,
+            headCoach: true,
+            players: { include: { athlete: true }, orderBy: { jerseyNumber: "asc" } },
+            season: true,
+            standing: true,
+          },
         },
       },
-    },
-  });
-  if (!club) notFound();
+    }),
+  );
+  if (!club || !locatorMatchesResource(locator, club)) notFound();
+  const organizationId = locator.organizationId;
 
   const primarySeasonClub = club.seasonClubs[0];
   const displayPrimaryColor = club.primaryColor ?? FALLBACK_PRIMARY_COLOR;
@@ -75,6 +90,7 @@ export default async function PublicClubPage({ params }: { params: Promise<{ id:
           <h2 className="text-2xl font-semibold">{seasonClub.season.name} · {seasonClub.division.name}</h2>
           <p className="mt-2 text-zinc-400">Record {seasonClub.standing?.won ?? 0}-{seasonClub.standing?.lost ?? 0} · {seasonClub.standing?.leaguePoints ?? 0} points</p>
           <TeamDnaSection
+            organizationId={organizationId}
             seasonId={seasonClub.seasonId}
             seasonClubId={seasonClub.id}
             accentColor={displayPrimaryColor}
@@ -82,7 +98,7 @@ export default async function PublicClubPage({ params }: { params: Promise<{ id:
             teamName={club.name}
             logoUrl={club.logoUrl}
           />
-          <TeamGameLogSection seasonId={seasonClub.seasonId} seasonClubId={seasonClub.id} />
+          <TeamGameLogSection organizationId={organizationId} seasonId={seasonClub.seasonId} seasonClubId={seasonClub.id} />
           {seasonClub.headCoach || seasonClub.assistantCoach ? (
             <div
               className="mt-4 flex flex-wrap gap-6 rounded-xl border p-4"
@@ -117,6 +133,7 @@ export default async function PublicClubPage({ params }: { params: Promise<{ id:
 }
 
 async function TeamDnaSection({
+  organizationId,
   seasonId,
   seasonClubId,
   accentColor,
@@ -124,6 +141,7 @@ async function TeamDnaSection({
   teamName,
   logoUrl,
 }: {
+  organizationId: string;
   seasonId: string;
   seasonClubId: string;
   accentColor: string;
@@ -131,7 +149,7 @@ async function TeamDnaSection({
   teamName: string;
   logoUrl: string | null;
 }) {
-  const games = await loadSeasonGameCores(seasonId);
+  const games = await withOrganizationContext(organizationId, (tx) => loadSeasonGameCores(seasonId, tx));
   if (games.length === 0) return null;
   const dnaByTeam = computeLeagueTeamDna(games);
   const dna = dnaByTeam.get(seasonClubId);
@@ -231,16 +249,16 @@ async function TeamDnaSection({
         </div>
       ) : null}
 
-      {similarTeams.length > 0 ? <SimilarTeams matches={similarTeams} /> : null}
+      {similarTeams.length > 0 ? <SimilarTeams organizationId={organizationId} matches={similarTeams} /> : null}
     </div>
   );
 }
 
-async function SimilarTeams({ matches }: { matches: ReturnType<typeof findSimilarTeams> }) {
-  const seasonClubs = await prisma.seasonClub.findMany({
+async function SimilarTeams({ organizationId, matches }: { organizationId: string; matches: ReturnType<typeof findSimilarTeams> }) {
+  const seasonClubs = await withOrganizationContext(organizationId, (tx) => tx.seasonClub.findMany({
     where: { id: { in: matches.map((m) => m.seasonClubId) } },
     select: { id: true, club: { select: { id: true, name: true } } },
-  });
+  }));
   const byId = new Map(seasonClubs.map((sc) => [sc.id, sc.club]));
 
   return (
@@ -268,8 +286,8 @@ async function SimilarTeams({ matches }: { matches: ReturnType<typeof findSimila
   );
 }
 
-async function TeamGameLogSection({ seasonId, seasonClubId }: { seasonId: string; seasonClubId: string }) {
-  const games = await loadSeasonGameCores(seasonId);
+async function TeamGameLogSection({ organizationId, seasonId, seasonClubId }: { organizationId: string; seasonId: string; seasonClubId: string }) {
+  const games = await withOrganizationContext(organizationId, (tx) => loadSeasonGameCores(seasonId, tx));
   const log = buildTeamGameLog(games, seasonClubId);
   if (log.length === 0) return null;
   const best = selectBestTeamPerformance(log);

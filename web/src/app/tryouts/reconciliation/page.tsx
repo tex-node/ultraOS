@@ -3,19 +3,23 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { ApplicationStatus, ApplicationType } from "@/generated/prisma/enums";
+import { MissingOrganizationContextError } from "@/lib/authorization";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function TryoutReconciliationPage() {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/tryouts/reconciliation");
   if (!hasPermission(session.user.roles, "draft:manage")) return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
-  const applications = await prisma.application.findMany({
+  if (!session.user.organizationId) {
+    throw new MissingOrganizationContextError();
+  }
+  const applications = await withOrganizationContext(session.user.organizationId, (tx) => tx.application.findMany({
     where: { type: ApplicationType.PLAYER, status: ApplicationStatus.APPROVED },
     orderBy: { createdAt: "desc" },
     take: 200,
     include: { applicantUser: { include: { athleteProfile: { include: { registrations: { orderBy: { createdAt: "desc" }, take: 1 } } } } } },
-  });
+  }));
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">

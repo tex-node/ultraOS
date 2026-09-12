@@ -6,6 +6,10 @@ import { classifyGameStory } from "@/lib/analytics/game-story";
 import { rankWhyTheyWon } from "@/lib/analytics/why-they-won";
 import { getGameAnalyticsCapability } from "@/lib/game-data-capability";
 import type { CardFormat } from "@/lib/analytics/cards/types";
+import { PublicResourceLocatorType } from "@/generated/prisma/enums";
+import { prisma } from "@/lib/prisma";
+import { resolvePublicResourceLocator } from "@/lib/public-locators";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,7 +20,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const format = FORMAT_MAP[new URL(request.url).searchParams.get("format") ?? ""] ?? "SOCIAL_SQUARE";
 
-  const game = await loadGameCoreByFixture(id);
+  const locator = await resolvePublicResourceLocator(
+    prisma,
+    PublicResourceLocatorType.FIXTURE,
+    id,
+  );
+  if (!locator) return NextResponse.json({ error: "Game not found" }, { status: 404 });
+  const game = await withOrganizationContext(locator.organizationId, (tx) =>
+    loadGameCoreByFixture(locator.resourceId, tx),
+  );
   if (!game || game.status !== "FINAL") return NextResponse.json({ error: "Game not found" }, { status: 404 });
 
   const tags = classifyGameStory(game);

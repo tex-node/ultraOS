@@ -275,6 +275,10 @@ export function hasPermission(roles: UserRole | UserRole[] | undefined, permissi
   return normalizeRoles(roles).some((role) => rolePermissions[role]?.has(permission));
 }
 
+export function roleGrantsPermission(role: UserRole, permission: Permission) {
+  return rolePermissions[role]?.has(permission) ?? false;
+}
+
 export function primaryRole(roles: UserRole[] | undefined): UserRole {
   const rank: UserRole[] = [
     "SUPER_ADMIN",

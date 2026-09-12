@@ -1,12 +1,12 @@
 import { OperationsShell } from "@/app/components/operations-shell";
 import { confirmOrderPayment, setOrderStatus } from "./actions";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formatNaira } from "@/lib/money";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function OrdersPage() {
-  const session = await requirePermission("order:manage");
-  const orders = await prisma.order.findMany({
+  const { session, organizationId } = await requirePermissionWithOrganization("order:manage");
+  const orders = await withOrganizationContext(organizationId, (tx) => tx.order.findMany({
     include: {
       event: true,
       items: { include: { product: { include: { vendor: true } } } },
@@ -14,7 +14,7 @@ export default async function OrdersPage() {
     },
     orderBy: { createdAt: "desc" },
     take: 200,
-  });
+  }));
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">

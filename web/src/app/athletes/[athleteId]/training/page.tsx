@@ -3,17 +3,24 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
+// Phase 1 Stage 5.5B: previously read the Athlete (and every training record/metric) via the
+// bare, unscoped client - an Org B "training:read" holder could view Org A's athlete training
+// history in full. ultraAthleteId is deliberately GLOBAL-unique (Stage 5.4A), so scoping this
+// lookup to the caller's own organization can only exclude ids that were never theirs to see.
 export default async function AthleteTrainingPage({ params }: { params: Promise<{ athleteId: string }> }) {
   const session = await auth();
   const { athleteId } = await params;
   if (!session?.user) redirect(`/login?callbackUrl=/athletes/${athleteId}/training`);
   if (!hasPermission(session.user.roles, "training:read")) return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
-  const athlete = await prisma.athlete.findFirst({
-    where: athleteId.startsWith("UBA-") ? { ultraAthleteId: athleteId } : { id: athleteId },
-    include: { trainingRecords: { include: { trainingSession: true, metrics: { include: { metricDefinition: true } } }, orderBy: { createdAt: "desc" } } },
-  });
+  if (!session.user.organizationId) return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Organization context required</h1></main></OperationsShell>;
+  const athlete = await withOrganizationContext(session.user.organizationId, (tx) =>
+    tx.athlete.findFirst({
+      where: athleteId.startsWith("UBA-") ? { ultraAthleteId: athleteId } : { id: athleteId },
+      include: { trainingRecords: { include: { trainingSession: true, metrics: { include: { metricDefinition: true } } }, orderBy: { createdAt: "desc" } } },
+    }),
+  );
   if (!athlete) notFound();
   const canViewPrivate = hasPermission(session.user.roles, "training:view-private-notes");
   return (

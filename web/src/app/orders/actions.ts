@@ -4,16 +4,16 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { OrderStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export async function confirmOrderPayment(
   orderId: string,
   formData: FormData,
 ) {
-  const session = await requirePermission("order:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("order:manage");
   const reference = z.string().trim().min(2).max(100).parse(formData.get("reference"));
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const order = await tx.order.findUniqueOrThrow({
       where: { id: orderId },
       include: { items: true, reservation: true, promoCode: true },
@@ -83,6 +83,7 @@ export async function confirmOrderPayment(
       });
     }
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "ORDER_PAYMENT_CONFIRMED",
       entityType: "Order",
@@ -98,11 +99,11 @@ export async function confirmOrderPayment(
 }
 
 export async function setOrderStatus(orderId: string, status: OrderStatus) {
-  const session = await requirePermission("order:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("order:manage");
   if (!["PAID", "PREPARING", "READY"].includes(status)) {
     throw new Error("INVALID_ORDER_STATUS");
   }
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const order = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
     if (order.paymentStatus !== "PAID") throw new Error("ORDER_NOT_PAID");
     if (order.status === "COLLECTED" || order.status === "CANCELLED") {
@@ -110,6 +111,7 @@ export async function setOrderStatus(orderId: string, status: OrderStatus) {
     }
     await tx.order.update({ where: { id: orderId }, data: { status } });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "ORDER_STATUS_CHANGED",
       entityType: "Order",

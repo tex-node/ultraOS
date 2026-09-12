@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DraftSelectionGroup } from "@/generated/prisma/enums";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 function csvCell(value: unknown) {
   const text = value == null ? "" : String(value);
@@ -9,13 +9,13 @@ function csvCell(value: unknown) {
 }
 
 export async function GET(request: NextRequest) {
-  await requirePermission("draft:manage");
+  const { organizationId } = await requirePermissionWithOrganization("draft:manage");
   const group = request.nextUrl.searchParams.get("group");
   const where = Object.values(DraftSelectionGroup).includes(group as DraftSelectionGroup)
     ? { draftSelectionGroup: group as DraftSelectionGroup }
     : {};
 
-  const players = await prisma.player.findMany({
+  const players = await withOrganizationContext(organizationId, (tx) => tx.player.findMany({
     include: {
       athlete: true,
       season: true,
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     },
     orderBy: [{ draftSelectionGroup: "asc" }, { athlete: { lastName: "asc" } }],
     where,
-  });
+  }));
 
   const rows = [
     [

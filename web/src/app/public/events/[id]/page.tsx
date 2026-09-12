@@ -1,9 +1,15 @@
 import { notFound } from "next/navigation";
 import { reserveZone } from "../actions";
 import { SponsorImpression } from "../sponsor-impression";
+import { PublicResourceLocatorType } from "@/generated/prisma/enums";
 import { formatLagosDateTime } from "@/lib/format-datetime";
 import { formatNaira } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
+import {
+  locatorMatchesResource,
+  resolvePublicResourceLocator,
+} from "@/lib/public-locators";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,28 +20,36 @@ export default async function PublicEventPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const event = await prisma.event.findFirst({
-    where: { id, status: { in: ["PUBLISHED", "IN_PROGRESS"] } },
-    include: {
-      venue: true,
-      fixtures: {
-        include: {
-          homeSeasonClub: { include: { club: true } },
-          awaySeasonClub: { include: { club: true } },
+  const locator = await resolvePublicResourceLocator(
+    prisma,
+    PublicResourceLocatorType.EVENT,
+    id,
+  );
+  if (!locator) notFound();
+  const event = await withOrganizationContext(locator.organizationId, (tx) =>
+    tx.event.findFirst({
+      where: { id: locator.resourceId, status: { in: ["PUBLISHED", "IN_PROGRESS"] } },
+      include: {
+        venue: true,
+        fixtures: {
+          include: {
+            homeSeasonClub: { include: { club: true } },
+            awaySeasonClub: { include: { club: true } },
+          },
+        },
+        seatZones: {
+          where: { isActive: true },
+          include: { fanClub: { include: { club: true } } },
+          orderBy: { priceKobo: "desc" },
+        },
+        sponsorCampaigns: {
+          where: { isActive: true },
+          orderBy: { sponsorName: "asc" },
         },
       },
-      seatZones: {
-        where: { isActive: true },
-        include: { fanClub: { include: { club: true } } },
-        orderBy: { priceKobo: "desc" },
-      },
-      sponsorCampaigns: {
-        where: { isActive: true },
-        orderBy: { sponsorName: "asc" },
-      },
-    },
-  });
-  if (!event) notFound();
+    }),
+  );
+  if (!event || !locatorMatchesResource(locator, event)) notFound();
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">
       <p className="text-xs uppercase tracking-[.24em] text-emerald-400">{event.status}</p>

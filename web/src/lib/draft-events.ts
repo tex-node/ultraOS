@@ -21,6 +21,7 @@ import {
   type DraftSquadReadinessStatus,
 } from "@/lib/draft-squad-capacity";
 import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export type ReadinessItem = {
   key: string;
@@ -54,8 +55,18 @@ export function shouldPersistOfficialAllocation(mode: DraftEventOperatingMode | 
   return mode === DraftEventOperatingMode.LIVE || mode === "LIVE";
 }
 
-export async function draftEventReadiness(draftEventId: string): Promise<ReadinessItem[]> {
-  const event = await prisma.draftEvent.findUnique({
+// Phase 1 Stage 5.2B-3: every function below that touches the database now takes `tx` - a
+// transaction client already scoped to the acting organization via withOrganizationContext -
+// instead of the bare `prisma` client. RLS then makes any cross-org id (draftEventId, seasonId,
+// divisionId, playerId, staffId, seasonClubId, draftSquadId, pickId, allocationId - all of which
+// can originate from client-submitted form data or a URL segment) invisible to every lookup here,
+// so a foreign-org id fails the same "not found"/validation path a genuinely missing id would,
+// rather than ever being read far enough to compare its fields or be written into a new row.
+// Callers (draft-events/actions.ts, drafts/actions.ts) resolve organizationId via
+// requirePermissionWithOrganization() and open the transaction with withOrganizationContext()
+// before calling into any function here - never the reverse.
+export async function draftEventReadiness(tx: Prisma.TransactionClient, draftEventId: string): Promise<ReadinessItem[]> {
+  const event = await tx.draftEvent.findUnique({
     include: {
       season: true,
       squads: { include: { members: true, division: true } },
@@ -65,18 +76,18 @@ export async function draftEventReadiness(draftEventId: string): Promise<Readine
   });
   if (!event) return [{ key: "event", label: "Draft event", status: "RED", message: "DraftEvent not found." }];
 
-  const divisions = await prisma.division.findMany({
+  const divisions = await tx.division.findMany({
     where: { competitionId: event.season.competitionId },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
-  const seasonClubs = await prisma.seasonClub.findMany({
+  const seasonClubs = await tx.seasonClub.findMany({
     where: { seasonId: event.seasonId, status: "ACTIVE" },
     include: { club: true, division: true },
   });
-  const capacityConfig = await draftSquadCapacityConfig(event.seasonId);
+  const capacityConfig = await draftSquadCapacityConfig(tx, event.seasonId);
 
-  const selectedAssignedPlayers = await prisma.player.count({
+  const selectedAssignedPlayers = await tx.player.count({
     where: { seasonId: event.seasonId, draftSelectionGroup: { in: ["MAIN_DRAFT", "SECONDARY_DRAFT"] }, seasonClubId: { not: null } },
   });
 
@@ -156,7 +167,7 @@ export async function draftEventReadiness(draftEventId: string): Promise<Readine
     });
   }
 
-  const duplicateMemberships = await prisma.draftSquadMember.groupBy({
+  const duplicateMemberships = await tx.draftSquadMember.groupBy({
     by: ["playerId"],
     where: { draftSquad: { draftEventId } },
     _count: { playerId: true },
@@ -172,8 +183,8 @@ export async function draftEventReadiness(draftEventId: string): Promise<Readine
   return items;
 }
 
-export async function assertReadyToStart(draftEventId: string) {
-  const items = await draftEventReadiness(draftEventId);
+export async function assertReadyToStart(tx: Prisma.TransactionClient, draftEventId: string) {
+  const items = await draftEventReadiness(tx, draftEventId);
   const redItems = items.filter((item) => item.status === "RED");
   if (redItems.length > 0) {
     throw new Error(`DraftEvent is not ready: ${redItems.map((item) => item.label).join(", ")}`);
@@ -227,21 +238,24 @@ async function nextSubject(tx: Prisma.TransactionClient, draftEventId: string, d
 // reserveNextAllocation()'s "No eligible subject/SeasonClub remains" errors —
 // both are entirely expected once a division/subjectType is fully allocated
 // (e.g. a surplus coach with no club left, or every squad already placed).
-export async function nextAllocationReadiness(draftEventId: string, divisionId: string, subjectType: AllocationSubjectType, operatingMode: DraftEventOperatingMode) {
-  const subject = await nextSubject(prisma, draftEventId, divisionId, subjectType, operatingMode);
-  if (!subject) return { canReserve: false as const, reason: `Every ${subjectType.toLowerCase()} in this division has already been allocated for this stage.` };
-  const clubs = await eligibleSeasonClubs(prisma, draftEventId, divisionId, subjectType, operatingMode);
-  if (clubs.length === 0) return { canReserve: false as const, reason: "Every Club in this division already has a confirmed allocation for this stage." };
-  return { canReserve: true as const, reason: null };
+export async function nextAllocationReadiness(organizationId: string, draftEventId: string, divisionId: string, subjectType: AllocationSubjectType, operatingMode: DraftEventOperatingMode) {
+  return withOrganizationContext(organizationId, async (tx) => {
+    const subject = await nextSubject(tx, draftEventId, divisionId, subjectType, operatingMode);
+    if (!subject) return { canReserve: false as const, reason: `Every ${subjectType.toLowerCase()} in this division has already been allocated for this stage.` };
+    const clubs = await eligibleSeasonClubs(tx, draftEventId, divisionId, subjectType, operatingMode);
+    if (clubs.length === 0) return { canReserve: false as const, reason: "Every Club in this division already has a confirmed allocation for this stage." };
+    return { canReserve: true as const, reason: null };
+  });
 }
 
 export async function reserveNextAllocation(params: {
+  organizationId: string;
   draftEventId: string;
   divisionId: string;
   subjectType: AllocationSubjectType;
   userId: string;
 }) {
-  return prisma.$transaction(async (tx) => {
+  return withOrganizationContext(params.organizationId, async (tx) => {
     const event = await tx.draftEvent.findUniqueOrThrow({ where: { id: params.draftEventId } });
     if (event.status !== DraftEventStatus.LIVE) throw new Error("DraftEvent must be LIVE before allocation.");
     if (stageSubjectType(event.currentStage) !== params.subjectType) throw new Error("Current stage does not match requested allocation type.");
@@ -255,6 +269,9 @@ export async function reserveNextAllocation(params: {
       if (current && !terminalStatuses.includes(current.status)) return current;
     }
 
+    // divisionId is resolved here via the SAME scoped transaction that resolved draftEventId
+    // above - a foreign-org divisionId is invisible to eligibleSeasonClubs()/nextSubject()'s own
+    // scoped queries below, so this never needs a separate explicit division-ownership check.
     const subject = await nextSubject(tx, params.draftEventId, params.divisionId, params.subjectType, event.operatingMode);
     if (!subject) throw new Error("No eligible subject remains.");
     const clubs = await eligibleSeasonClubs(tx, params.draftEventId, params.divisionId, params.subjectType, event.operatingMode);
@@ -291,6 +308,7 @@ export async function reserveNextAllocation(params: {
     const sequence = (maxSequence._max.sequence ?? 0) + 1;
     const allocation = await tx.draftAllocation.create({
       data: {
+        organizationId: params.organizationId,
         candidateSnapshot: clubs.map((club) => ({
           clubId: club.clubId,
           crowdChant: club.club.crowdChant,
@@ -320,6 +338,7 @@ export async function reserveNextAllocation(params: {
       data: { currentAllocationId: allocation.id, displaySequence: { increment: 1 }, publicMessage: "Allocation reserved" },
     });
     await writeAuditLog(tx, {
+      organizationId: params.organizationId,
       action: "DRAFT_EVENT_ALLOCATION_RESERVED",
       details: {
         allocationId: allocation.id,
@@ -336,24 +355,24 @@ export async function reserveNextAllocation(params: {
   });
 }
 
-export async function markAllocationRevealing(allocationId: string, userId: string) {
-  await prisma.$transaction(async (tx) => {
+export async function markAllocationRevealing(organizationId: string, allocationId: string, userId: string) {
+  await withOrganizationContext(organizationId, async (tx) => {
     const allocation = await tx.draftAllocation.update({ where: { id: allocationId }, data: { status: AllocationStatus.REVEALING } });
     await tx.draftEvent.update({ where: { id: allocation.draftEventId }, data: { displaySequence: { increment: 1 }, publicMessage: "Suspense animation running" } });
-    await writeAuditLog(tx, { action: "DRAFT_EVENT_ALLOCATION_REVEALING", entityId: allocationId, entityType: "DraftAllocation", userId });
+    await writeAuditLog(tx, { organizationId, action: "DRAFT_EVENT_ALLOCATION_REVEALING", entityId: allocationId, entityType: "DraftAllocation", userId });
   });
 }
 
-export async function revealAllocation(allocationId: string, userId: string) {
-  await prisma.$transaction(async (tx) => {
+export async function revealAllocation(organizationId: string, allocationId: string, userId: string) {
+  await withOrganizationContext(organizationId, async (tx) => {
     const allocation = await tx.draftAllocation.update({ where: { id: allocationId }, data: { revealedAt: new Date(), status: AllocationStatus.REVEALED } });
     await tx.draftEvent.update({ where: { id: allocation.draftEventId }, data: { displaySequence: { increment: 1 }, publicMessage: "Result revealed" } });
-    await writeAuditLog(tx, { action: "DRAFT_EVENT_ALLOCATION_REVEALED", entityId: allocationId, entityType: "DraftAllocation", userId });
+    await writeAuditLog(tx, { organizationId, action: "DRAFT_EVENT_ALLOCATION_REVEALED", entityId: allocationId, entityType: "DraftAllocation", userId });
   });
 }
 
-export async function confirmAllocation(allocationId: string, userId: string) {
-  await prisma.$transaction(async (tx) => {
+export async function confirmAllocation(organizationId: string, allocationId: string, userId: string) {
+  await withOrganizationContext(organizationId, async (tx) => {
     const allocation = await tx.draftAllocation.findUniqueOrThrow({
       where: { id: allocationId },
       include: { draftEvent: true, draftSquad: { include: { members: true } }, staff: true, seasonClub: true },
@@ -388,6 +407,7 @@ export async function confirmAllocation(allocationId: string, userId: string) {
       data: { currentAllocationId: null, displaySequence: { increment: 1 }, publicMessage: "Allocation confirmed" },
     });
     await writeAuditLog(tx, {
+      organizationId,
       action: "DRAFT_EVENT_ALLOCATION_CONFIRMED",
       details: { allocationId, seasonClubId: allocation.seasonClubId, subjectType: allocation.subjectType, operatingMode: allocation.draftEvent.operatingMode, persistedOfficially: persistOfficially },
       entityId: allocationId,
@@ -397,9 +417,9 @@ export async function confirmAllocation(allocationId: string, userId: string) {
   });
 }
 
-export async function resetRehearsalAllocations(draftEventId: string, userId: string, reason: string) {
+export async function resetRehearsalAllocations(organizationId: string, draftEventId: string, userId: string, reason: string) {
   if (!reason.trim()) throw new Error("A reset reason is required.");
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const event = await tx.draftEvent.findUniqueOrThrow({ where: { id: draftEventId } });
     if (event.operatingMode !== DraftEventOperatingMode.REHEARSAL) throw new Error("Only rehearsal mode can be reset with this action.");
     const deleted = await tx.draftAllocation.deleteMany({ where: { draftEventId, operatingMode: DraftEventOperatingMode.REHEARSAL } });
@@ -408,6 +428,7 @@ export async function resetRehearsalAllocations(draftEventId: string, userId: st
       data: { currentAllocationId: null, currentStage: DraftEventStage.INTRO, displaySequence: { increment: 1 }, publicMessage: "Rehearsal reset" },
     });
     await writeAuditLog(tx, {
+      organizationId,
       action: "DRAFT_EVENT_REHEARSAL_RESET",
       details: { deletedAllocations: deleted.count, reason },
       entityId: draftEventId,
@@ -424,9 +445,9 @@ export async function resetRehearsalAllocations(draftEventId: string, userId: st
 // both fall out of "claimed" status automatically, since eligibleSeasonClubs()
 // and nextSubject() already exclude CORRECTED allocations — the next reserve
 // picks them up again with no further bookkeeping needed here.
-export async function correctAllocation(allocationId: string, userId: string, reason: string) {
+export async function correctAllocation(organizationId: string, allocationId: string, userId: string, reason: string) {
   if (!reason.trim()) throw new Error("A correction reason is required.");
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const allocation = await tx.draftAllocation.findUniqueOrThrow({
       where: { id: allocationId },
       include: { draftEvent: true, draftSquad: { include: { members: true } }, staff: true },
@@ -459,17 +480,24 @@ export async function correctAllocation(allocationId: string, userId: string, re
       data: { displaySequence: { increment: 1 }, publicMessage: "Allocation corrected" },
     });
     await writeAuditLog(tx, {
+      organizationId,
       action: "DRAFT_EVENT_ALLOCATION_CORRECTED",
       details: { allocationId, operatingMode: allocation.operatingMode, reason, reversedOfficialAssignment: wasOfficial, subjectType: allocation.subjectType },
       entityId: allocationId,
-      entityType: "DraftAllocation",
+      entityType: "DraftEvent",
       userId,
     });
   });
 }
 
-export async function publicDraftEventState(draftEventId: string, token?: string) {
-  const event = await prisma.draftEvent.findUnique({
+// Phase 1 Stage 5.2B-3: this pair (publicDraftEventState/publicSecondaryDraftState) is the
+// unauthenticated public/projector read surface, gated only by the displayToken - not an
+// authenticated 5.2B-3 workflow, so left unscoped and classified DEFER_5.2D rather than
+// converted here, per this stage's explicit boundary (public reads are a later stage's job
+// unless a read is directly required to safely complete an authenticated workflow in THIS
+// stage - these are not).
+export async function publicDraftEventState(draftEventId: string, token?: string, db: Prisma.TransactionClient | typeof prisma = prisma) {
+  const event = await db.draftEvent.findUnique({
     where: { id: draftEventId },
     include: {
       season: true,
@@ -562,13 +590,14 @@ export async function draftOperatingMode(tx: Prisma.TransactionClient, draftId: 
 }
 
 export async function reserveSecondaryDraftPick(params: {
+  organizationId: string;
   draftId: string;
   playerId: string;
   seasonClubId: string;
   round: number;
   userId: string;
 }) {
-  return prisma.$transaction(async (tx) => {
+  return withOrganizationContext(params.organizationId, async (tx) => {
     const { draft, operatingMode } = await draftOperatingMode(tx, params.draftId);
     if (draft.status !== DraftStatus.LIVE) throw new Error("Draft must be started before reserving a pick.");
 
@@ -607,6 +636,7 @@ export async function reserveSecondaryDraftPick(params: {
     const pickNumber = draft.nextPickNumber;
     const pick = await tx.draftPick.create({
       data: {
+        organizationId: params.organizationId,
         createdById: params.userId,
         draftId: params.draftId,
         operatingMode,
@@ -619,6 +649,7 @@ export async function reserveSecondaryDraftPick(params: {
     });
     await tx.draft.update({ where: { id: params.draftId }, data: { currentRound: params.round, nextPickNumber: { increment: 1 } } });
     await writeAuditLog(tx, {
+      organizationId: params.organizationId,
       action: "SECONDARY_DRAFT_PICK_RESERVED",
       details: { draftId: params.draftId, operatingMode, pickNumber, playerId: params.playerId, round: params.round, seasonClubId: params.seasonClubId },
       entityId: pick.id,
@@ -629,22 +660,22 @@ export async function reserveSecondaryDraftPick(params: {
   });
 }
 
-export async function markSecondaryDraftPickRevealing(pickId: string, userId: string) {
-  await prisma.$transaction(async (tx) => {
+export async function markSecondaryDraftPickRevealing(organizationId: string, pickId: string, userId: string) {
+  await withOrganizationContext(organizationId, async (tx) => {
     await tx.draftPick.update({ where: { id: pickId }, data: { status: DraftPickStatus.REVEALING } });
-    await writeAuditLog(tx, { action: "SECONDARY_DRAFT_PICK_REVEALING", entityId: pickId, entityType: "DraftPick", userId });
+    await writeAuditLog(tx, { organizationId, action: "SECONDARY_DRAFT_PICK_REVEALING", entityId: pickId, entityType: "DraftPick", userId });
   });
 }
 
-export async function revealSecondaryDraftPick(pickId: string, userId: string) {
-  await prisma.$transaction(async (tx) => {
+export async function revealSecondaryDraftPick(organizationId: string, pickId: string, userId: string) {
+  await withOrganizationContext(organizationId, async (tx) => {
     await tx.draftPick.update({ where: { id: pickId }, data: { revealedAt: new Date(), status: DraftPickStatus.REVEALED } });
-    await writeAuditLog(tx, { action: "SECONDARY_DRAFT_PICK_REVEALED", entityId: pickId, entityType: "DraftPick", userId });
+    await writeAuditLog(tx, { organizationId, action: "SECONDARY_DRAFT_PICK_REVEALED", entityId: pickId, entityType: "DraftPick", userId });
   });
 }
 
-export async function confirmSecondaryDraftPick(pickId: string, userId: string) {
-  await prisma.$transaction(async (tx) => {
+export async function confirmSecondaryDraftPick(organizationId: string, pickId: string, userId: string) {
+  await withOrganizationContext(organizationId, async (tx) => {
     const pick = await tx.draftPick.findUniqueOrThrow({ where: { id: pickId } });
     if (pick.status !== DraftPickStatus.REVEALED) throw new Error("Pick must be revealed before confirmation.");
     const persistOfficially = shouldPersistOfficialAllocation(pick.operatingMode);
@@ -658,6 +689,7 @@ export async function confirmSecondaryDraftPick(pickId: string, userId: string) 
     }
     await tx.draftPick.update({ where: { id: pickId }, data: { confirmedAt: new Date(), status: DraftPickStatus.CONFIRMED } });
     await writeAuditLog(tx, {
+      organizationId,
       action: "SECONDARY_DRAFT_PICK_CONFIRMED",
       details: { operatingMode: pick.operatingMode, persistedOfficially: persistOfficially, pickId },
       entityId: pickId,
@@ -667,9 +699,9 @@ export async function confirmSecondaryDraftPick(pickId: string, userId: string) 
   });
 }
 
-export async function correctSecondaryDraftPick(pickId: string, userId: string, reason: string) {
+export async function correctSecondaryDraftPick(organizationId: string, pickId: string, userId: string, reason: string) {
   if (!reason.trim()) throw new Error("A correction reason is required.");
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const pick = await tx.draftPick.findUniqueOrThrow({ where: { id: pickId } });
     if (pick.status === DraftPickStatus.CORRECTED) throw new Error("Pick is already corrected.");
     const wasOfficial = pick.status === DraftPickStatus.CONFIRMED && shouldPersistOfficialAllocation(pick.operatingMode);
@@ -681,6 +713,7 @@ export async function correctSecondaryDraftPick(pickId: string, userId: string, 
     }
     await tx.draftPick.update({ where: { id: pickId }, data: { correctedAt: new Date(), correctionReason: reason, status: DraftPickStatus.CORRECTED } });
     await writeAuditLog(tx, {
+      organizationId,
       action: "SECONDARY_DRAFT_PICK_CORRECTED",
       details: { pickId, reason, reversedOfficialAssignment: wasOfficial },
       entityId: pickId,
@@ -690,9 +723,9 @@ export async function correctSecondaryDraftPick(pickId: string, userId: string, 
   });
 }
 
-export async function resetSecondaryDraftRehearsal(draftId: string, userId: string, reason: string) {
+export async function resetSecondaryDraftRehearsal(organizationId: string, draftId: string, userId: string, reason: string) {
   if (!reason.trim()) throw new Error("A reset reason is required.");
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const { operatingMode } = await draftOperatingMode(tx, draftId);
     if (operatingMode !== DraftEventOperatingMode.REHEARSAL) {
       throw new Error("Only a Draft governed by a REHEARSAL DraftEvent (or with no DraftEvent linked) can be reset with this action.");
@@ -700,6 +733,7 @@ export async function resetSecondaryDraftRehearsal(draftId: string, userId: stri
     const deleted = await tx.draftPick.deleteMany({ where: { draftId, operatingMode: DraftEventOperatingMode.REHEARSAL } });
     await tx.draft.update({ where: { id: draftId }, data: { currentRound: 1, nextPickNumber: 1 } });
     await writeAuditLog(tx, {
+      organizationId,
       action: "SECONDARY_DRAFT_REHEARSAL_RESET",
       details: { deletedPicks: deleted.count, reason },
       entityId: draftId,
@@ -709,8 +743,9 @@ export async function resetSecondaryDraftRehearsal(draftId: string, userId: stri
   });
 }
 
-export async function publicSecondaryDraftState(draftId: string, token?: string) {
-  const draft = await prisma.draft.findUnique({
+// Same public/projector classification as publicDraftEventState above.
+export async function publicSecondaryDraftState(draftId: string, token?: string, db: Prisma.TransactionClient | typeof prisma = prisma) {
+  const draft = await db.draft.findUnique({
     where: { id: draftId },
     include: {
       draftEvent: true,

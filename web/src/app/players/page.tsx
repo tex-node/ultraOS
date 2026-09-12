@@ -4,25 +4,31 @@ import { OperationsShell } from "@/app/components/operations-shell";
 import { auth } from "@/auth";
 import { requireSession } from "@/lib/authorization";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
+// Phase 1 Stage 5.5B: previously listed every organization's athletes via the bare, unscoped
+// client, with no permission gate beyond being logged in. Scoped to the acting user's own
+// organization.
 export default async function PlayersPage() {
   const rawSession = await auth();
   if (!rawSession?.user) redirect("/login?callbackUrl=/players");
   const session = await requireSession();
   const canManage = hasPermission(session.user.roles, "player:manage");
-  const athletes = await prisma.athlete.findMany({
-    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-    include: {
-      registrations: {
-        orderBy: { season: { startDate: "desc" } },
-        include: {
-          season: { select: { name: true } },
-          seasonClub: { include: { club: { select: { name: true, shortName: true } }, division: { select: { name: true } } } },
+  if (!session.user.organizationId) return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Organization context required</h1></main></OperationsShell>;
+  const athletes = await withOrganizationContext(session.user.organizationId, (tx) =>
+    tx.athlete.findMany({
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      include: {
+        registrations: {
+          orderBy: { season: { startDate: "desc" } },
+          include: {
+            season: { select: { name: true } },
+            seasonClub: { include: { club: { select: { name: true, shortName: true } }, division: { select: { name: true } } } },
+          },
         },
       },
-    },
-  });
+    }),
+  );
   return <OperationsShell user={session.user}><main className="mx-auto max-w-7xl px-6 py-10">
     <div className="flex items-end justify-between gap-4"><div><p className="text-xs uppercase tracking-[.2em] text-emerald-400">Permanent identity and season registration</p><h1 className="mt-2 text-3xl font-semibold">Athletes and players</h1></div>
       {canManage ? <Link className="rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950" href="/players/new">Create athlete</Link> : null}</div>

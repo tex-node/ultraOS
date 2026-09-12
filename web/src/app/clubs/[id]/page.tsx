@@ -4,9 +4,9 @@ import { OperationsShell } from "@/app/components/operations-shell";
 import { archiveClub, withdrawSeasonClub } from "@/app/clubs/actions";
 import { uploadClubLogo } from "@/app/media/actions";
 import { auth } from "@/auth";
-import { requireSession } from "@/lib/authorization";
+import { MissingOrganizationContextError, requireSession } from "@/lib/authorization";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const FALLBACK_PRIMARY_COLOR = "#16F2B3";
 
@@ -21,10 +21,13 @@ export default async function ClubDetailPage({
   const rawSession = await auth();
   if (!rawSession?.user) redirect(`/login?callbackUrl=/clubs/${id}`);
   const session = await requireSession();
+  if (!session.user.organizationId) {
+    throw new MissingOrganizationContextError();
+  }
   const canManage = hasPermission(session.user.roles, "club:manage");
   const canUploadMedia = hasPermission(session.user.roles, "media:upload");
   const query = await searchParams;
-  const club = await prisma.club.findUnique({
+  const club = await withOrganizationContext(session.user.organizationId, (tx) => tx.club.findUnique({
     where: { id },
     include: {
       sport: { select: { name: true } },
@@ -51,7 +54,7 @@ export default async function ClubDetailPage({
         },
       },
     },
-  });
+  }));
 
   if (!club) {
     notFound();

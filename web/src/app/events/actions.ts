@@ -9,12 +9,14 @@ import {
   AccreditationStatus,
   EventStatus,
   PaymentStatus,
+  PublicResourceLocatorType,
 } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
 import { nairaToKobo } from "@/lib/money";
-import { prisma } from "@/lib/prisma";
+import { upsertPublicResourceLocator } from "@/lib/public-locators";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const eventSchema = z.object({
   name: z.string().trim().min(3).max(120),
@@ -27,11 +29,18 @@ const eventSchema = z.object({
 });
 
 export async function createEvent(formData: FormData) {
-  const session = await requirePermission("event:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
   const input = eventSchema.parse(formDataToRecord(formData));
-  const event = await prisma.$transaction(async (tx) => {
+  const event = await withOrganizationContext(organizationId, async (tx) => {
+    // seasonId/venueId are client-submitted <select> values - a foreign-org id is invisible to
+    // RLS here and throws not-found, never reaching the create below. The composite FK on
+    // Event.venueId is the database-level backstop behind the venue half of this guard (Season
+    // isn't hardened to composite this stage - see the doc's relation inventory).
+    await tx.season.findUniqueOrThrow({ where: { id: input.seasonId }, select: { id: true } });
+    await tx.venue.findUniqueOrThrow({ where: { id: input.venueId }, select: { id: true } });
     const created = await tx.event.create({
       data: {
+        organizationId,
         name: input.name,
         seasonId: input.seasonId,
         venueId: input.venueId,
@@ -43,7 +52,14 @@ export async function createEvent(formData: FormData) {
         endTime: input.endTime ? new Date(input.endTime) : null,
       },
     });
+    await upsertPublicResourceLocator(tx, {
+      resourceType: PublicResourceLocatorType.EVENT,
+      publicKey: created.id,
+      organizationId,
+      resourceId: created.id,
+    });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "EVENT_CREATED",
       entityType: "Event",
@@ -57,10 +73,11 @@ export async function createEvent(formData: FormData) {
 }
 
 export async function setEventStatus(eventId: string, status: EventStatus) {
-  const session = await requirePermission("event:manage");
-  await prisma.$transaction(async (tx) => {
+  const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
+  await withOrganizationContext(organizationId, async (tx) => {
     await tx.event.update({ where: { id: eventId }, data: { status } });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "EVENT_STATUS_CHANGED",
       entityType: "Event",
@@ -83,13 +100,18 @@ export async function createVenueSection(
   eventId: string,
   formData: FormData,
 ) {
-  const session = await requirePermission("event:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
   const input = sectionSchema.parse(formDataToRecord(formData));
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
+    // venueId arrives as a route-derived value (the event's own venueId, rendered into the
+    // form's bound action args) - a foreign-org venueId is invisible to RLS here and throws
+    // not-found, never reaching the create below.
+    await tx.venue.findUniqueOrThrow({ where: { id: venueId }, select: { id: true } });
     const section = await tx.venueSection.create({
-      data: { venueId, ...input },
+      data: { organizationId, venueId, ...input },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "VENUE_SECTION_CREATED",
       entityType: "VenueSection",
@@ -113,30 +135,37 @@ const zoneSchema = z.object({
 });
 
 export async function createSeatZone(eventId: string, formData: FormData) {
-  const session = await requirePermission("event:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
   const input = zoneSchema.parse(formDataToRecord(formData));
-  const event = await prisma.event.findUniqueOrThrow({
-    where: { id: eventId },
-    select: { venueId: true },
-  });
-  const section = await prisma.venueSection.findFirst({
-    where: { id: input.venueSectionId, venueId: event.venueId, isActive: true },
-  });
-  const allocatedCapacity = section
-    ? await prisma.seatZone.aggregate({
-        where: { eventId, venueSectionId: section.id },
-        _sum: { capacity: true },
-      })
-    : null;
-  if (
-    !section ||
-    (allocatedCapacity?._sum.capacity ?? 0) + input.capacity > section.capacity
-  ) {
-    throw new Error("INVALID_SECTION_CAPACITY");
-  }
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
+    const event = await tx.event.findUniqueOrThrow({
+      where: { id: eventId },
+      select: { venueId: true },
+    });
+    // fanClubId (optional) is a client-submitted <select> value - a foreign-org fanClubId is
+    // invisible to RLS here and throws not-found, never reaching the create below. Not
+    // composite-FK hardened this stage (nullable + ON DELETE SET NULL - see the doc).
+    if (input.fanClubId) {
+      await tx.fanClub.findUniqueOrThrow({ where: { id: input.fanClubId }, select: { id: true } });
+    }
+    const section = await tx.venueSection.findFirst({
+      where: { id: input.venueSectionId, venueId: event.venueId, isActive: true },
+    });
+    const allocatedCapacity = section
+      ? await tx.seatZone.aggregate({
+          where: { eventId, venueSectionId: section.id },
+          _sum: { capacity: true },
+        })
+      : null;
+    if (
+      !section ||
+      (allocatedCapacity?._sum.capacity ?? 0) + input.capacity > section.capacity
+    ) {
+      throw new Error("INVALID_SECTION_CAPACITY");
+    }
     const zone = await tx.seatZone.create({
       data: {
+        organizationId,
         eventId,
         venueSectionId: input.venueSectionId,
         name: input.name,
@@ -152,6 +181,7 @@ export async function createSeatZone(eventId: string, formData: FormData) {
       },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "SEAT_ZONE_CREATED",
       entityType: "SeatZone",
@@ -179,11 +209,12 @@ const accreditationSchema = z.object({
 });
 
 export async function createAccreditation(eventId: string, formData: FormData) {
-  const session = await requirePermission("accreditation:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("accreditation:manage");
   const input = accreditationSchema.parse(formDataToRecord(formData));
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     const accreditation = await tx.accreditation.create({
       data: {
+        organizationId,
         eventId,
         personName: input.personName,
         email: input.email || null,
@@ -195,6 +226,7 @@ export async function createAccreditation(eventId: string, formData: FormData) {
       },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "ACCREDITATION_CREATED",
       entityType: "Accreditation",
@@ -214,8 +246,8 @@ export async function setAccreditationStatus(
   eventId: string,
   status: AccreditationStatus,
 ) {
-  const session = await requirePermission("accreditation:manage");
-  await prisma.$transaction(async (tx) => {
+  const { session, organizationId } = await requirePermissionWithOrganization("accreditation:manage");
+  await withOrganizationContext(organizationId, async (tx) => {
     await tx.accreditation.update({
       where: { id: accreditationId },
       data: {
@@ -224,6 +256,7 @@ export async function setAccreditationStatus(
       },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "ACCREDITATION_STATUS_CHANGED",
       entityType: "Accreditation",
@@ -239,9 +272,9 @@ export async function confirmReservationPayment(
   eventId: string,
   formData: FormData,
 ) {
-  const session = await requirePermission("reservation:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("reservation:manage");
   const reference = z.string().trim().min(2).max(100).parse(formData.get("reference"));
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(organizationId, async (tx) => {
     await tx.seatReservation.update({
       where: { id: reservationId },
       data: {
@@ -251,6 +284,7 @@ export async function confirmReservationPayment(
       },
     });
     await writeAuditLog(tx, {
+      organizationId,
       userId: session.user.id,
       action: "RESERVATION_PAYMENT_CONFIRMED",
       entityType: "SeatReservation",

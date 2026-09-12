@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { requirePermissionOrRedirect } from "@/lib/authorization";
+import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { listGameVideosForFixture } from "@/lib/vision/vision-loader";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import { registerGameVideoAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -16,12 +16,14 @@ export const revalidate = 0;
 export default async function GameVideoRegistry({ params }: { params: Promise<{ fixtureId: string }> }) {
   const { fixtureId } = await params;
   const session = await requirePermissionOrRedirect("vision:manage", `/games/${fixtureId}/video`);
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  const organizationId = session.user.organizationId;
 
-  const fixture = await prisma.fixture.findUniqueOrThrow({
+  const fixture = await withOrganizationContext(organizationId, (tx) => tx.fixture.findUniqueOrThrow({
     where: { id: fixtureId },
     include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
-  });
-  const videos = await listGameVideosForFixture(fixtureId);
+  }));
+  const videos = await listGameVideosForFixture(organizationId, fixtureId);
 
   return (
     <OperationsShell user={session.user}>

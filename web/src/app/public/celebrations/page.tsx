@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { submitWellWish } from "./actions";
 import { canViewAnnouncement, currentLagosYearMonth, getViewerClubMemberships } from "@/lib/announcements";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,15 +14,18 @@ const MONTH_NAMES = [
 export default async function PublicCelebrationsPage() {
   const session = await auth();
   const { year, month } = currentLagosYearMonth();
-  const viewerClubIds = await getViewerClubMemberships(session?.user?.id);
+  const organization = await resolveDefaultPublicOrganization();
 
-  const announcements = await prisma.announcement.findMany({
-    where: { celebrationYear: year, status: "PUBLISHED" },
-    include: {
-      player: { include: { athlete: true, seasonClub: { include: { club: true } } } },
-      wellWishes: { where: { status: "APPROVED" }, orderBy: { createdAt: "desc" } },
-    },
-  });
+  const { viewerClubIds, announcements } = await withOrganizationContext(organization.id, async (tx) => ({
+    viewerClubIds: await getViewerClubMemberships(session?.user?.id, tx),
+    announcements: await tx.announcement.findMany({
+      where: { celebrationYear: year, status: "PUBLISHED" },
+      include: {
+        player: { include: { athlete: true, seasonClub: { include: { club: true } } } },
+        wellWishes: { where: { status: "APPROVED" }, orderBy: { createdAt: "desc" } },
+      },
+    }),
+  }));
 
   const celebrants = announcements
     .filter((announcement) => announcement.player.athlete.dateOfBirth.getUTCMonth() + 1 === month)

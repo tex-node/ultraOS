@@ -3,7 +3,7 @@ import { withPublicApiV1 } from "@/lib/api-v1/respond";
 import { apiError } from "@/lib/api-v1/errors";
 import { resolveSeasonByPublicId } from "@/lib/api-v1/identifiers";
 import type { SeasonStandingsV1, StandingV1 } from "@/lib/api-v1/contracts";
-import { prisma } from "@/lib/prisma";
+import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,14 +14,21 @@ export const revalidate = 0;
 export async function GET(request: Request, { params }: { params: Promise<{ publicId: string }> }) {
   return withPublicApiV1(request, async () => {
     const { publicId } = await params;
-    const season = await resolveSeasonByPublicId(publicId);
+    const organization = await resolveDefaultPublicOrganization();
+    const loaded = await withOrganizationContext(organization.id, async (tx) => {
+      const season = await resolveSeasonByPublicId(publicId, tx);
+      if (!season) return null;
+      const rows = await tx.standing.findMany({
+        where: { seasonId: season.id },
+        include: { seasonClub: { include: { club: true, division: true } } },
+        orderBy: [{ leaguePoints: "desc" }, { won: "desc" }, { pointDifference: "desc" }],
+      });
+      return { season, rows };
+    });
+    const season = loaded?.season;
     if (!season) return apiError("SEASON_NOT_FOUND", "No season found for this id.");
 
-    const rows = await prisma.standing.findMany({
-      where: { seasonId: season.id },
-      include: { seasonClub: { include: { club: true, division: true } } },
-      orderBy: [{ leaguePoints: "desc" }, { won: "desc" }, { pointDifference: "desc" }],
-    });
+    const rows = loaded.rows;
 
     const standings: StandingV1[] = rows.map((s) => ({
       club: { publicId: s.seasonClub.club.shortName.toLowerCase(), name: s.seasonClub.club.name, shortName: s.seasonClub.club.shortName },

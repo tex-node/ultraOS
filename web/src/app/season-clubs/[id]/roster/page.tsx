@@ -3,9 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { setPlayerJerseyNumber } from "@/app/players/actions";
 import { auth } from "@/auth";
-import { requireSession } from "@/lib/authorization";
+import { MissingOrganizationContextError, requireSession } from "@/lib/authorization";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const ERROR_MESSAGES: Record<string, string> = {
   "invalid-number": "Jersey number must be a whole number between 0 and 999.",
@@ -24,10 +24,13 @@ export default async function SeasonClubRosterPage({
   const rawSession = await auth();
   if (!rawSession?.user) redirect(`/login?callbackUrl=/season-clubs/${id}/roster`);
   const session = await requireSession();
+  if (!session.user.organizationId) {
+    throw new MissingOrganizationContextError();
+  }
   const canEdit = hasPermission(session.user.roles, "player:manage");
   const query = await searchParams;
 
-  const registration = await prisma.seasonClub.findUnique({
+  const registration = await withOrganizationContext(session.user.organizationId, (tx) => tx.seasonClub.findUnique({
     where: { id },
     include: {
       club: { select: { id: true, name: true, shortName: true } },
@@ -38,7 +41,7 @@ export default async function SeasonClubRosterPage({
         include: { athlete: { select: { firstName: true, lastName: true, ultraAthleteId: true } } },
       },
     },
-  });
+  }));
   if (!registration) notFound();
 
   const errorMessage =

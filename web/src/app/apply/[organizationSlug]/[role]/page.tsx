@@ -3,37 +3,47 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { ApplicationForm } from "@/app/apply/application-form";
 import { applicationConfigs, applySlugToType } from "@/app/apply/application-config";
+import { submitApplication } from "@/app/apply/[organizationSlug]/actions";
 import { getClosedApplicationTypes } from "@/lib/application-intake";
+import { OrganizationNotFoundError, resolveActiveOrganizationBySlug } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type ApplyRolePageProps = {
-  params: Promise<{ role: string }>;
+  params: Promise<{ organizationSlug: string; role: string }>;
 };
 
 export default async function ApplyRolePage({ params }: ApplyRolePageProps) {
-  const { role } = await params;
+  const { organizationSlug, role } = await params;
   const type = applySlugToType[role];
   if (!type) {
     notFound();
   }
 
+  let organization;
+  try {
+    organization = await resolveActiveOrganizationBySlug(organizationSlug);
+  } catch (error) {
+    if (error instanceof OrganizationNotFoundError) notFound();
+    throw error;
+  }
+
   const config = applicationConfigs[type];
   const session = await auth();
-  const callbackUrl = `/apply/${role}`;
-  const closedTypes = await getClosedApplicationTypes();
+  const callbackUrl = `/apply/${organizationSlug}/${role}`;
+  const closedTypes = await getClosedApplicationTypes(organization.id);
   const isClosed = closedTypes.includes(type);
 
   return (
     <main className="min-h-screen bg-[#050807] px-6 py-12 text-white">
       <section className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.8fr_1.2fr]">
         <div>
-          <Link className="text-sm text-emerald-400 hover:text-emerald-300" href="/apply">
+          <Link className="text-sm text-emerald-400 hover:text-emerald-300" href={`/apply/${organizationSlug}`}>
             Back to applications
           </Link>
           <p className="mt-8 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">
-            {config.type} intake
+            {config.type} intake — {organization.name}
           </p>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight">{config.title}</h1>
           <p className="mt-4 text-sm leading-6 text-zinc-400">{config.description}</p>
@@ -53,7 +63,7 @@ export default async function ApplyRolePage({ params }: ApplyRolePageProps) {
             </p>
           </div>
         ) : session?.user ? (
-          <ApplicationForm config={config} />
+          <ApplicationForm config={config} action={submitApplication.bind(null, organizationSlug)} />
         ) : (
           <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-6">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">
