@@ -89,30 +89,6 @@ export async function createTeamRegistration(input: CreateRegistrationInput) {
 
     const now = new Date();
     const status = input.mode === "DRAFT" ? RegistrationSubmissionStatus.DRAFT : RegistrationSubmissionStatus.PENDING;
-    const participants: Prisma.RegistrationParticipantCreateWithoutSubmissionInput[] = input.team.participants.map((participant: ParticipantInput, index) => ({
-      role: "PARTICIPANT",
-      fullName: participant.fullName.trim(),
-      dateOfBirth: participant.dateOfBirth ? new Date(participant.dateOfBirth) : null,
-      gender: participant.gender ?? null,
-      guardianName: participant.guardianName ?? null,
-      guardianPhone: participant.guardianPhone ?? null,
-      consentAccepted: participant.consentAccepted === true,
-      consentAcceptedAt: participant.consentAccepted === true ? now : null,
-      athleteId: null, // never trust a client athleteId; linking is a separate guarded step
-      sortOrder: index,
-      organization: { connect: { id: input.organizationId } },
-      sportMemberships: {
-        create: participant.sportMemberships.map((membership) => ({
-          sport: membership.sport,
-          rosterOrder: membership.rosterOrder ?? 0,
-          position: membership.position ?? null,
-          isCaptain: membership.isCaptain === true,
-          isActive: membership.isActive !== false,
-          organization: { connect: { id: input.organizationId } },
-        })),
-      },
-    }));
-
     const submission = await createWithReference((referenceNumber) =>
       tx.registrationSubmission.create({
         data: {
@@ -128,11 +104,48 @@ export async function createTeamRegistration(input: CreateRegistrationInput) {
           teamCategory: input.team.teamCategory?.trim() || null,
           answers: (input.submissionAnswers ?? {}) as Prisma.InputJsonValue,
           submittedAt: input.mode === "DRAFT" ? null : now,
-          participants: { create: participants },
         },
-        include: { participants: { include: { sportMemberships: true } } },
       }),
     );
+
+    // Participants and sport memberships are created with an explicit
+    // organizationId (unchecked create) so the tenant RLS WITH CHECK always
+    // evaluates against the caller's organization. Nested relation connects are
+    // deliberately avoided on RLS-protected tables.
+    const createdParticipants: { id: string }[] = [];
+    for (let index = 0; index < input.team.participants.length; index += 1) {
+      const participant: ParticipantInput = input.team.participants[index];
+      const created = await tx.registrationParticipant.create({
+        data: {
+          organizationId: input.organizationId,
+          submissionId: submission.id,
+          role: "PARTICIPANT",
+          fullName: participant.fullName.trim(),
+          dateOfBirth: participant.dateOfBirth ? new Date(participant.dateOfBirth) : null,
+          gender: participant.gender ?? null,
+          guardianName: participant.guardianName ?? null,
+          guardianPhone: participant.guardianPhone ?? null,
+          consentAccepted: participant.consentAccepted === true,
+          consentAcceptedAt: participant.consentAccepted === true ? now : null,
+          sortOrder: index,
+        },
+        select: { id: true },
+      });
+      createdParticipants.push(created);
+      for (const membership of participant.sportMemberships) {
+        await tx.registrationParticipantSport.create({
+          data: {
+            organizationId: input.organizationId,
+            participantId: created.id,
+            sport: membership.sport,
+            rosterOrder: membership.rosterOrder ?? 0,
+            position: membership.position ?? null,
+            isCaptain: membership.isCaptain === true,
+            isActive: membership.isActive !== false,
+          },
+        });
+      }
+    }
 
     const auditActor = input.actorUserId ?? input.applicantUserId ?? null;
     if (auditActor) {
@@ -142,10 +155,10 @@ export async function createTeamRegistration(input: CreateRegistrationInput) {
         entityId: submission.id,
         userId: auditActor,
         organizationId: input.organizationId,
-        details: { referenceNumber: submission.referenceNumber, participants: submission.participants.length },
+        details: { referenceNumber: submission.referenceNumber, participants: createdParticipants.length },
       });
     }
-    return submission;
+    return { ...submission, participants: createdParticipants };
   });
 }
 

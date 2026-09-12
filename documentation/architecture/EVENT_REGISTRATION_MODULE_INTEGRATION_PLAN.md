@@ -1,6 +1,19 @@
 # Event Registration Module — Integration Plan (Option B)
 
-Status: Independent module implemented; NOT integrated, NOT migrated, NOT deployed.
+Status: Independent module implemented. Staging R1/R2 migrations **applied and verified**
+(2026-09-12); DB-backed adapter contract passes. Not integrated into routes; not deployed.
+
+## Defects found during this work
+
+1. **Cross-team duplicate check counted drafts** (adapter conformance): a team's own
+   draft blocked its later submission. Fixed in both adapters; only active
+   registrations (`notIn DRAFT, WITHDRAWN, REJECTED`) count.
+2. **DB-only, found by the DB-backed contract** (invisible to `tsc`): the nested
+   participant create passed `athleteId: null` (invalid on the checked variant) and
+   used `organization: { connect }`, which failed the tenant RLS `WITH CHECK`.
+   Fixed in `service.ts` by creating participants and sport memberships with
+   explicit `organizationId` (unchecked creates), avoiding nested relation connects
+   on RLS-protected tables.
 
 The Volleyball/Flag Race registration experience is developed against a narrow
 `RegistrationHost` port with two adapters, so it can run and be tested **without**
@@ -88,11 +101,6 @@ Once the Ultra League OS adapter is verified, delete or keep the in-memory
 adapter as test-only tooling; `getRegistrationHost` continues to default to
 `ultraos`. No data migration or removal of the shared schema is involved.
 
-## Defect found during this work
-
-Adapter conformance testing found that **draft** submissions were counted by the
-cross-team duplicate check, so a team's own draft blocked its later submission.
-
 ## Regression requirements
 
 The following are explicit, tested regression requirements — do not weaken them
@@ -110,6 +118,8 @@ during integration:
 
 ## Not in scope here
 
-- No migration applied, no staging/production access, no deploy/push.
+- Staging R1/R2 migrations were applied and verified 2026-09-12; production was
+  never accessed. No deploy/push. Route integration is still pending (see
+  `STAGE_EVENT_REGISTRATION_STAGING_MIGRATION_RUNBOOK.md` "Execution results").
 - Event-detail "Registration setup" navigation link: still a documented
   follow-up (not required for module usability).

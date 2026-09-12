@@ -223,4 +223,17 @@ npm run registration:seed-sport-config -- --organization-slug neon-ultra --event
    is a separate approved action.
 3. R2 M5's `ALTER TYPE ADD VALUE` is transaction-compatible on PG16 only (staging
    is `postgres:16-alpine`); no production PG version assumption is made here.
-4. All commands are proposals — **nothing has been executed**.
+4. All commands are proposals — superseded by the execution results below.
+
+## Execution results (2026-09-12)
+
+Status: STAGING MIGRATION APPLIED AND VERIFIED. Production untouched.
+
+- Target: `ultraos_staging` @ `127.0.0.1:55411` (privileged `ultraos` for deploy/status, restricted `ultraos_staging` for the DB contract). Production DB `ultraleagueos` on the same container was **not** targeted.
+- Fresh backup: `/var/backups/ultraleagueos-staging/event_registration_premigration_20260912T171050Z.dump` - 839874 bytes, SHA-256 `612cc5df0cd9f16cefe58d9cf7ea25a6bf1dde3335881b07f7ccf461778a8693`, 1253 TOC entries.
+- `prisma migrate deploy`: applied the 5 approved migrations in order (121200, 121201, 121300, 121301, 121400); exit 0; `migrate status` reports "Database schema is up to date!". The residual rolled-back Stage 4a row did **not** block.
+- Post-migration DB checks: 5 registration tables present; `Event.slug` text nullable; `RegistrationSubmissionStatus = DRAFT,PENDING,UNDER_REVIEW,APPROVED,REJECTED,WAITLISTED,WITHDRAWN` (DRAFT before PENDING); RLS enabled+forced with 1 policy per new table; runtime role has CRUD grants on all 5; row counts unchanged (Organization=1, Event=1, Athlete=219, Player=219).
+- DB-backed adapter contract (`REGISTRATION_HOST_DB=1 npm test`): **496/496 pass, 0 fail, 0 skipped**; disposable-org residue 0; counts unchanged.
+- Seed: **NOT RUN** - no approved all-female event/form target exists (see blocker 2).
+- Route integration: **NOT DONE** (pending seed and end-to-end verification).
+- Two DB-only defects were found and fixed during conformance (see the integration plan): nested-create `athleteId` was an invalid argument; nested `organization: connect` failed the tenant RLS `WITH CHECK` (now explicit unchecked creates).
