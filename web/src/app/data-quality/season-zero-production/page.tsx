@@ -3,8 +3,9 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { recordSeasonZeroPlayerResolutionAction } from "@/app/data-quality/season-zero-production/actions";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { seasonZeroPlayerResolutionActions, seasonZeroProductionReconciliation } from "@/lib/season-zero-production-reconciliation";
-import { hasPermission } from "@/lib/permissions";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 const DUPLICATE_APPLICATION_IDS = new Set([
   "cmroxtfm800a8fekk9cb94x3n", // Ifoghale Justine
@@ -17,11 +18,14 @@ export default async function SeasonZeroProductionReviewPage({ searchParams }: {
   const { status } = await searchParams;
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/data-quality/season-zero-production");
-  if (!hasPermission(session.user.roles, "data:readiness")) {
+  let organizationId: string;
+  try {
+    ({ organizationId } = await requirePermissionWithOrganization("data:readiness"));
+  } catch {
     return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
   }
 
-  const rows = await seasonZeroProductionReconciliation();
+  const rows = await withOrganizationContext(organizationId, (tx) => seasonZeroProductionReconciliation(tx, organizationId));
   const counts = rows.reduce<Record<string, number>>((acc, row) => {
     acc[row.resolutionStatus] = (acc[row.resolutionStatus] ?? 0) + 1;
     return acc;

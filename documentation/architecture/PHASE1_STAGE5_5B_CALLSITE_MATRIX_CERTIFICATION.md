@@ -26,9 +26,17 @@ D: 0
 E: 0
 ```
 
-The Batch 7 remediation (see "Lineage") drove the E-classified set to zero.
-The Batch 6 corrected state (`B=190/C=68/D=0/E=25`) is recorded below as an
-intermediate lineage point, not as the final committed state.
+The Batch 7 work (see "Lineage") drove the E-classified set to zero. The Batch 6
+corrected state (`B=190/C=68/D=0/E=25`) is recorded below as an intermediate
+lineage point, not as the final committed state.
+
+This matrix is a **classification certificate, not a runtime isolation proof**.
+The `classification` column records the intended tenant-context posture of each
+call site; the `verification` column records how strongly that posture has been
+demonstrated. `E=0` means every site carries a classification — it does **not**
+mean every site has been empirically proven. The 21 Batch 7 context conversions
+are `CODE_INSPECTION_ONLY`; no former E-site has a runtime or test proof
+covering it.
 
 The CSV was reconstructed and reconciled from `session.md` evidence plus direct
 source inspection — **it was not recovered byte-for-byte** from any prior
@@ -42,7 +50,7 @@ version, because the previous file was never under version control. See
 | Batch 5 baseline (last known-good before the drift) | 180 | 68 | 0 | 35 | 283 | Recorded in `session.md` |
 | Batch 6 raw (as found on disk) | 186 | 15 | 0 | 81 | 282 | Classification-generator drift; invalid |
 | Corrected Batch 6 (reconciled) | 190 | 68 | 0 | 25 | 283 | 10 genuine conversions applied to Batch 5 |
-| Batch 7 (final, committed) | 213 | 70 | 0 | 0 | 283 | 22 conversions + 3 reclassifications |
+| Batch 7 (final, this commit) | 213 | 70 | 0 | 0 | 283 | 21 context conversions + 1 type-only correction + 3 classification-only changes |
 
 ### Why the raw Batch 6 matrix was invalid
 
@@ -65,7 +73,7 @@ reconciliation.
 
 ### Why the C rows were restored
 
-The 53 missing `C` rows from Batch 6 were all `web/src/lib/data-hygiene.ts`
+The missing `C` rows from Batch 6 were all in `web/src/lib/data-hygiene.ts`
 (`auditRealData` / `purgePlan`), the intentionally platform-global
 demo/rehearsal residue diagnostic — the same rows Batch 4 had reclassified
 `E -> C` with documented reasoning matching Stage 5.2C's and Stage 5.2D's own
@@ -159,31 +167,50 @@ Batch 5 E set minus the 10 genuine conversions above.
 #282  tenant-context.ts:69                          resolveDefaultPublicOrganization  club
 ```
 
-## Batch 7 resolution of the E set (final committed state)
+## Batch 7 resolution of the E set (this commit)
 
-Batch 7 closed all 25 rows. 22 were genuine conversions to explicit
-organization context; 3 were matrix corrections, not code changes:
+Batch 7 closed all 25 former E rows: **21 genuine context conversions**, **one
+type-only correction**, and **three classification-only changes**. The Batch 7
+code changes were local-only (uncommitted) before this task; they are committed
+by this task.
 
-- `#279 system-health-loader.ts:113` -> `B`. Matrix false positive: the
-  attributed line is prose in `buildSystemHealth`'s doc comment quoting a
-  historical `prisma.fixture.findFirst`; the real read at line 145 has run
-  inside `withOrganizationContext` since Stage 5.2C.
-- `#280 tenant-context.ts:11` -> `C`. `resolveActiveOrganizationId` reads
-  `UserRoleAssignment` bare because it is the bootstrap resolver that
-  establishes a signed-in user's organization before any tenant context can
-  exist. Reclassified as platform-global infrastructure.
-- `#282 tenant-context.ts:69` -> `C`. Matrix false positive: the attributed
-  line is again doc-comment prose; the real `resolveDefaultPublicOrganization`
-  delegates to `resolveActiveOrganizationBySlug`, which reads the
-  platform-global `Organization` table.
+**21 genuine context conversions** (`REMEDIATED_CODE_INSPECTION_ONLY`):
 
-The 22 genuine conversions (pages scoped with `withOrganizationContext`;
-`all-star-teams.ts` and `season-zero-production-reconciliation.ts` library
-functions given explicit scoped `db`/`organizationId`; `standings/page.tsx`
-type-only reference replaced with `Prisma.StandingGetPayload`;
-`public/celebrations/actions.ts` converted to the Pattern D public
-organization resolution) are recorded in full in the `session.md` Batch 7
-entry.
+- Ops/read pages scoped with `withOrganizationContext`: `#19` audit,
+  `#32` display-monitoring, `#33` documents, `#36` equipment, `#57` incidents,
+  `#62` notifications, `#100` rehearsals, `#101`/`#102` runbooks, `#107` tasks.
+- `#97` `public/celebrations/actions.ts`: bare announcement seed read replaced
+  with Pattern D `resolveDefaultPublicOrganization()` + `withOrganizationContext`.
+- `#98`/`#99` rehearsal broadcast/live: fixture read and presentation model in
+  one scoped transaction.
+- `#120`–`#123` `all-star-teams.ts`: `getAllStarTeams`/`getAllStarCandidatePool`
+  take an explicit scoped `db`; the four write functions now require
+  `organizationId`, run in `withOrganizationContext`, and stamp the audit row.
+- `#222`–`#225` `season-zero-production-reconciliation.ts`: functions take an
+  explicit scoped `db`/`organizationId`; resolution writes run in
+  `withOrganizationContext`.
+
+**One type-only correction** (`ALREADY_SAFE_BUT_PREVIOUSLY_MISCLASSIFIED`):
+
+- `#106` `standings/page.tsx`: the read was already scoped; the row was a
+  type-only `Awaited<ReturnType<typeof prisma.standing.findMany>>` reference,
+  replaced with `Prisma.StandingGetPayload`.
+
+**Three classification-only changes** (no application code change):
+
+- `#279` `system-health-loader.ts` `E -> B`: matrix false positive on a doc
+  comment; the real `tx.fixture.findFirst` (now line 145, `buildSystemHealth`)
+  has been scoped since Stage 5.2C.
+- `#280` `tenant-context.ts` `E -> C`: `resolveActiveOrganizationId` is the
+  `UserRoleAssignment` bootstrap resolver and is bare by necessity.
+- `#282` `tenant-context.ts` `E -> C`: matrix false positive on a doc comment;
+  the real `resolveDefaultPublicOrganization` delegates to
+  `resolveActiveOrganizationBySlug`, a platform-global `Organization` resolver.
+
+**No empirical proof** exists for the 21 Batch 7 conversions. They were verified
+by TypeScript compilation and code inspection only (`CODE_INSPECTION_ONLY`). No
+`stage55b-*` proof script references any Batch 7 site, and no staging or
+production run was performed for them.
 
 ## Reconstruction caveat
 
@@ -211,15 +238,46 @@ NUMBER_RANGE:                                 1..283, all distinct
 DUPLICATE_CALLSITE_IDENTITIES:                0
 ROWS_MISSING_FILE_OR_LINE:                    0
 UNEXPLAINED_CLASSIFICATIONS:                  0
+E_ROWS:                                       0 (classification only; not proof)
 applyCoachPhotoImport_PRESENT:                YES (#283)
 data-hygiene.ts_ROWS:                         54, all C
 coaches/actions.ts_ROWS:                      #23, #283, both B and correctly attributed
 training/actions.ts_ROWS:                     #109, #110, both B and correctly attributed
+BATCH7_GENUINE_CONTEXT_CONVERSIONS:           21 (CODE_INSPECTION_ONLY)
+BATCH7_TYPE_ONLY_CORRECTION:                  1 (#106)
+BATCH7_CLASSIFICATION_ONLY_CHANGES:           3 (#279, #280, #282)
 ```
 
 ## Scope and safety
 
-This commit contains only the matrix CSV and this certification document.
-No application behavior, RLS policy, RLS fallback, `organizationId` database
-default, staging data, migration, or production deployment was changed by this
-task. Stage 5.5C has not started.
+The Batch 7 commit contains: the 21 genuine Batch 7 source changes and their
+directly required helper/action files (20 source files total), the fixed
+call-site classifier `web/scripts/stage55b-callsite-inventory.ts`, the refreshed
+matrix CSV, and this certification document. It contains no secrets, environment
+files, backups, build output, `node_modules`, or unrelated documentation.
+
+No RLS policy, RLS fallback, `organizationId` database default, staging data,
+migration, or production deployment was changed. Stage 5.5C has not started.
+
+## Classifier note
+
+`web/scripts/stage55b-callsite-inventory.ts` was fixed for the Batch 6 defects.
+It now:
+
+- strips comments and string/template literals before matching, so call-like
+  text quoted in prose is never misread as a call;
+- preserves intentional manual `C` classifications (`data-hygiene.ts` and the
+  `UserRoleAssignment` bootstrap resolver) and the known `tenant-context.ts`
+  comment false positive;
+- records the current source line for baseline-restored (already-remediated)
+  rows by locating the scoped `tx.<model>.<op>` / `db.<model>.<op>` call;
+- separates classification from verification in the emitted `verification`
+  column; and
+- is **dry-run by default**, writing only with `--apply`.
+
+Because the certified matrix uses stable, history-referenced row numbers while
+the classifier re-sorts rows by file and line, the classifier is a **validation
+and inventory tool, not the generator of the certified artifact**. The matrix
+was manually refreshed against the committed source; a classifier run is a
+cross-check, not an overwrite. A dry-run of the fixed classifier reproduces the
+same totals (`TOTAL=283, B=213, C=70, D=0, E=0`).

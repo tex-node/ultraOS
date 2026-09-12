@@ -4,13 +4,14 @@ import { OperationsShell } from "@/app/components/operations-shell";
 import { createIncident, updateIncidentStatus } from "@/app/operations/actions";
 import { IncidentType, OpsItemStatus, OpsSeverity } from "@/generated/prisma/enums";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function IncidentsPage({ searchParams }: { searchParams: Promise<{ type?: string; severity?: string; title?: string; description?: string }> }) {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/incidents");
   if (!hasPermission(session.user.roles, "incident:manage")) return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
-  const incidents = await prisma.incident.findMany({ orderBy: [{ status: "asc" }, { createdAt: "desc" }], take: 100 });
+  if (!session.user.organizationId) return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Organization context required</h1></main></OperationsShell>;
+  const incidents = await withOrganizationContext(session.user.organizationId, (tx) => tx.incident.findMany({ orderBy: [{ status: "asc" }, { createdAt: "desc" }], take: 100 }));
   // G.20 Part XIII: diagnostics links here with the category/context prefilled - the operator
   // still reviews and submits the form themselves, so this is prefill only, never an
   // auto-created incident.

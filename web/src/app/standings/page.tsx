@@ -1,18 +1,21 @@
 import { OperationsShell } from "@/app/components/operations-shell";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
+import { MissingOrganizationContextError } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function Standings() {
   const session = await auth();
   if (!session?.user) {
     redirect("/login?callbackUrl=/standings");
   }
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
 
-  const season = await prisma.season.findFirst({
+  const season = await withOrganizationContext(session.user.organizationId, (tx) => tx.season.findFirst({
     where: { status: "ACTIVE" },
     include: { standings: { include: { seasonClub: { include: { club: true, division: true } } } } },
-  });
+  }));
   const divisions = groupByDivision(season?.standings ?? []);
   return <OperationsShell user={session.user}><main className="mx-auto max-w-6xl px-6 py-10">
     <p className="text-xs uppercase tracking-[.2em] text-emerald-400">{season?.name ?? "No active season"}</p>
@@ -24,9 +27,7 @@ export default async function Standings() {
   </main></OperationsShell>;
 }
 
-type Row = Awaited<ReturnType<typeof prisma.standing.findMany>>[number] & {
-  seasonClub: { club: { name: string }; division: { name: string } };
-};
+type Row = Prisma.StandingGetPayload<{ include: { seasonClub: { include: { club: true; division: true } } } }>;
 function groupByDivision(rows: Row[]) {
   const groups = new Map<string, Row[]>();
   for (const row of rows) {

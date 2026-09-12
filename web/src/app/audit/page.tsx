@@ -1,14 +1,14 @@
 import { OperationsShell } from "@/app/components/operations-shell";
-import { requirePermission } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function AuditPage() {
-  const session = await requirePermission("audit:view");
-  const logs = await prisma.auditLog.findMany({
+  const { session, organizationId } = await requirePermissionWithOrganization("audit:view");
+  const logs = await withOrganizationContext(organizationId, (tx) => tx.auditLog.findMany({
     include: { user: { select: { name: true, email: true } } },
     orderBy: { createdAt: "desc" },
     take: 250,
-  });
+  }));
 
   return (
     <OperationsShell user={session.user}>

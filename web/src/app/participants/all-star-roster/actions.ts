@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { addAllStarRosterMember, lockAllStarRoster, unlockAllStarRoster, updateAllStarPlayer, ALL_STAR_TEAM_SLUGS, type AllStarMemberKind, type AllStarTeamSlug } from "@/lib/all-star-teams";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 
 function value(formData: FormData, key: string) {
   const field = formData.get(key);
@@ -18,14 +18,14 @@ function requireTeamSlug(formData: FormData): AllStarTeamSlug {
 export type AllStarRosterFormState = { error?: string };
 
 export async function addAllStarMemberAction(_state: AllStarRosterFormState, formData: FormData): Promise<AllStarRosterFormState> {
-  const session = await requirePermission("staff:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
   const teamSlug = requireTeamSlug(formData);
   const selection = value(formData, "selection");
   const [kind, sourceId] = selection.split(":") as [AllStarMemberKind | undefined, string | undefined];
   if ((kind !== "PLAYER" && kind !== "COACH") || !sourceId) return { error: "Select a player or coach to add." };
 
   try {
-    await addAllStarRosterMember(teamSlug, { kind, sourceId }, session.user.id);
+    await addAllStarRosterMember(teamSlug, { kind, sourceId }, session.user.id, organizationId);
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not add to roster." };
   }
@@ -35,7 +35,7 @@ export async function addAllStarMemberAction(_state: AllStarRosterFormState, for
 }
 
 export async function updateAllStarPlayerAction(teamSlug: AllStarTeamSlug, playerId: string, formData: FormData) {
-  const session = await requirePermission("staff:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
   const heightCm = value(formData, "heightCm");
   const weightKg = value(formData, "weightKg");
   await updateAllStarPlayer(
@@ -51,20 +51,21 @@ export async function updateAllStarPlayerAction(teamSlug: AllStarTeamSlug, playe
       stats: value(formData, "stats"),
     },
     session.user.id,
+    organizationId,
   );
   revalidatePath("/participants/all-star-roster");
 }
 
 export async function lockAllStarRosterAction(formData: FormData) {
-  const session = await requirePermission("staff:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
   const teamSlug = requireTeamSlug(formData);
-  await lockAllStarRoster(teamSlug, session.user.id);
+  await lockAllStarRoster(teamSlug, session.user.id, organizationId);
   revalidatePath("/participants/all-star-roster");
 }
 
 export async function unlockAllStarRosterAction(formData: FormData) {
-  const session = await requirePermission("staff:manage");
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
   const teamSlug = requireTeamSlug(formData);
-  await unlockAllStarRoster(teamSlug, session.user.id, value(formData, "reason"));
+  await unlockAllStarRoster(teamSlug, session.user.id, value(formData, "reason"), organizationId);
   revalidatePath("/participants/all-star-roster");
 }

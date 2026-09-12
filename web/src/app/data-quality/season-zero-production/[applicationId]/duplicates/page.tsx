@@ -3,20 +3,24 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { recordSeasonZeroPlayerResolutionAction } from "@/app/data-quality/season-zero-production/actions";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { SEASON_ZERO_SELECTED_PLAYERS, duplicateCandidatesForApplication, seasonZeroPlayerResolutionActions } from "@/lib/season-zero-production-reconciliation";
-import { hasPermission } from "@/lib/permissions";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function SeasonZeroDuplicateReviewPage({ params }: { params: Promise<{ applicationId: string }> }) {
   const { applicationId } = await params;
   const session = await auth();
   if (!session?.user) redirect(`/login?callbackUrl=/data-quality/season-zero-production/${applicationId}/duplicates`);
-  if (!hasPermission(session.user.roles, "data:readiness")) {
+  let organizationId: string;
+  try {
+    ({ organizationId } = await requirePermissionWithOrganization("data:readiness"));
+  } catch {
     return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
   }
   const selected = SEASON_ZERO_SELECTED_PLAYERS.find((p) => p.applicationId === applicationId);
   if (!selected) notFound();
 
-  const candidates = await duplicateCandidatesForApplication(applicationId);
+  const candidates = await withOrganizationContext(organizationId, (tx) => duplicateCandidatesForApplication(applicationId, tx, organizationId));
 
   return (
     <OperationsShell user={session.user}>

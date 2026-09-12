@@ -4,8 +4,9 @@ import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { lockAllStarRosterAction, unlockAllStarRosterAction, updateAllStarPlayerAction } from "@/app/participants/all-star-roster/actions";
 import { AddAllStarMemberForm } from "@/app/participants/all-star-roster/add-member-form";
-import { requirePermission } from "@/lib/authorization";
+import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { ALL_STAR_QUOTA_PER_TEAM, countByKindAndGender, getAllStarCandidatePool, getAllStarTeams } from "@/lib/all-star-teams";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,9 +14,11 @@ export const revalidate = 0;
 export default async function AllStarRosterPage() {
   const rawSession = await auth();
   if (!rawSession?.user) redirect("/login?callbackUrl=/participants/all-star-roster");
-  const session = await requirePermission("staff:manage");
-  const teams = await getAllStarTeams();
-  const candidatePool = await getAllStarCandidatePool();
+  const { session, organizationId } = await requirePermissionWithOrganization("staff:manage");
+  const [teams, candidatePool] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+    getAllStarTeams(tx),
+    getAllStarCandidatePool(tx),
+  ]));
 
   return (
     <OperationsShell user={session.user}>

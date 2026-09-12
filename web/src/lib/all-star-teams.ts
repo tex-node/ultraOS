@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { ALL_STAR_TEAM_SLUGS, type AllStarTeamSlug } from "@/lib/all-star-teams-constants";
 import { normalizePhone } from "@/lib/participant-internalization";
 import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
+
+type Db = Prisma.TransactionClient | typeof prisma;
 
 export { ALL_STAR_TEAM_SLUGS, type AllStarTeamSlug };
 
@@ -63,8 +67,8 @@ function normalizeMember(record: Partial<AllStarPlayerRecord> & { id: string; fu
   };
 }
 
-export async function getAllStarTeams(): Promise<AllStarTeamView[]> {
-  const settings = await prisma.systemSetting.findMany({ where: { key: { in: ALL_STAR_TEAM_SLUGS.map(keyFor) } } });
+export async function getAllStarTeams(db: Db = prisma): Promise<AllStarTeamView[]> {
+  const settings = await db.systemSetting.findMany({ where: { key: { in: ALL_STAR_TEAM_SLUGS.map(keyFor) } } });
   return ALL_STAR_TEAM_SLUGS.map((slug) => {
     const setting = settings.find((s) => s.key === keyFor(slug));
     if (!setting) return null;
@@ -92,27 +96,27 @@ export type AllStarCandidate = {
 // Real, currently-rostered players (drafted onto a club this season) and real, currently-assigned
 // coaches (head/assistant coach of an active SeasonClub). Coach gender is derived from the division
 // of the club they coach, since Staff has no personal gender field on file.
-export async function getAllStarCandidatePool(): Promise<{
+export async function getAllStarCandidatePool(db: Db = prisma): Promise<{
   playersMale: AllStarCandidate[];
   playersFemale: AllStarCandidate[];
   coachesMale: AllStarCandidate[];
   coachesFemale: AllStarCandidate[];
 }> {
-  const teams = await getAllStarTeams();
+  const teams = await getAllStarTeams(db);
   const rosteredPlayerIds = new Set(teams.flatMap((team) => team.players.filter((m) => m.sourcePlayerId).map((m) => m.sourcePlayerId as string)));
   const rosteredStaffIds = new Set(teams.flatMap((team) => team.players.filter((m) => m.sourceStaffId).map((m) => m.sourceStaffId as string)));
 
-  const season = await prisma.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } });
+  const season = await db.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } });
 
   const players = season
-    ? await prisma.player.findMany({
+    ? await db.player.findMany({
         where: { seasonId: season.id, seasonClubId: { not: null } },
         include: { athlete: true, seasonClub: { include: { club: true } } },
         orderBy: { athlete: { firstName: "asc" } },
       })
     : [];
 
-  const seasonClubs = await prisma.seasonClub.findMany({
+  const seasonClubs = await db.seasonClub.findMany({
     where: { status: "ACTIVE" },
     include: { headCoach: true, assistantCoach: true, division: true, club: true },
   });
@@ -163,8 +167,9 @@ export async function addAllStarRosterMember(
   slug: AllStarTeamSlug,
   input: { kind: AllStarMemberKind; sourceId: string },
   actorId: string,
+  organizationId: string,
 ) {
-  return prisma.$transaction(async (tx) => {
+  return withOrganizationContext(organizationId, async (tx) => {
     const key = keyFor(slug);
     const setting = await tx.systemSetting.findUniqueOrThrow({ where: { key } });
     const value = setting.value as TeamValue;
@@ -246,6 +251,7 @@ export async function addAllStarRosterMember(
       entityId: `${slug}:${member.id}`,
       entityType: "AllStarPlayer",
       userId: actorId,
+      organizationId,
     });
 
     return member;
@@ -257,8 +263,9 @@ export async function updateAllStarPlayer(
   playerId: string,
   input: { fullName?: string; phone?: string; bio?: string; position?: string; heightCm?: number; weightKg?: number; stats?: string },
   actorId: string,
+  organizationId: string,
 ) {
-  return prisma.$transaction(async (tx) => {
+  return withOrganizationContext(organizationId, async (tx) => {
     const key = keyFor(slug);
     const setting = await tx.systemSetting.findUniqueOrThrow({ where: { key } });
     const value = setting.value as TeamValue;
@@ -290,14 +297,15 @@ export async function updateAllStarPlayer(
       entityId: `${slug}:${playerId}`,
       entityType: "AllStarPlayer",
       userId: actorId,
+      organizationId,
     });
 
     return updated;
   });
 }
 
-export async function lockAllStarRoster(slug: AllStarTeamSlug, actorId: string) {
-  return prisma.$transaction(async (tx) => {
+export async function lockAllStarRoster(slug: AllStarTeamSlug, actorId: string, organizationId: string) {
+  return withOrganizationContext(organizationId, async (tx) => {
     const key = keyFor(slug);
     const setting = await tx.systemSetting.findUniqueOrThrow({ where: { key } });
     const value = setting.value as TeamValue;
@@ -317,13 +325,14 @@ export async function lockAllStarRoster(slug: AllStarTeamSlug, actorId: string) 
       entityId: slug,
       entityType: "AllStarTeam",
       userId: actorId,
+      organizationId,
     });
   });
 }
 
-export async function unlockAllStarRoster(slug: AllStarTeamSlug, actorId: string, reason: string) {
+export async function unlockAllStarRoster(slug: AllStarTeamSlug, actorId: string, reason: string, organizationId: string) {
   if (!reason.trim()) throw new Error("A reason is required to unlock a roster.");
-  return prisma.$transaction(async (tx) => {
+  return withOrganizationContext(organizationId, async (tx) => {
     const key = keyFor(slug);
     const setting = await tx.systemSetting.findUniqueOrThrow({ where: { key } });
     const value = setting.value as TeamValue;
@@ -334,6 +343,7 @@ export async function unlockAllStarRoster(slug: AllStarTeamSlug, actorId: string
       entityId: slug,
       entityType: "AllStarTeam",
       userId: actorId,
+      organizationId,
     });
   });
 }

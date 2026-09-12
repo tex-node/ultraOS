@@ -1,8 +1,12 @@
 import { ApplicationStatus } from "@/generated/prisma/enums";
+import type { Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { maskEmail, maskPhone } from "@/lib/data-quality";
 import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import selectedPlayers from "@/data/season-zero-selected-players.json";
+
+type Db = Prisma.TransactionClient | typeof prisma;
 
 const resolutionPrefix = "season-zero-player-resolution:";
 
@@ -41,14 +45,14 @@ export type SeasonZeroPlayerRow = SelectedPlayer & {
   resolution: { action: string; reason: string; resolvedById: string; resolvedAt: string } | null;
 };
 
-export async function seasonZeroProductionReconciliation(): Promise<SeasonZeroPlayerRow[]> {
+export async function seasonZeroProductionReconciliation(db: Db = prisma, organizationId?: string): Promise<SeasonZeroPlayerRow[]> {
   const ids = SEASON_ZERO_SELECTED_PLAYERS.map((p) => p.applicationId);
   const [applications, resolutions] = await Promise.all([
-    prisma.application.findMany({
-      where: { id: { in: ids } },
+    db.application.findMany({
+      where: { id: { in: ids }, ...(organizationId ? { organizationId } : {}) },
       select: { id: true, status: true, applicantUserId: true, reviewedAt: true, notes: true },
     }),
-    prisma.systemSetting.findMany({ where: { key: { startsWith: resolutionPrefix } }, select: { key: true, value: true } }),
+    db.systemSetting.findMany({ where: { key: { startsWith: resolutionPrefix }, ...(organizationId ? { organizationId } : {}) }, select: { key: true, value: true } }),
   ]);
   const byId = new Map(applications.map((a) => [a.id, a]));
   const resolutionById = new Map(resolutions.map((r) => [r.key.replace(resolutionPrefix, ""), r.value as { action: string; reason: string; resolvedById: string; resolvedAt: string }]));
@@ -81,13 +85,13 @@ export async function seasonZeroProductionReconciliation(): Promise<SeasonZeroPl
 // For a canonical Application, find every OTHER Application sharing its
 // applicant email — the full duplicate-candidate list an administrator needs
 // to see before picking a canonical record. Never auto-resolved.
-export async function duplicateCandidatesForApplication(applicationId: string) {
-  const canonical = await prisma.application.findUniqueOrThrow({ where: { id: applicationId } });
+export async function duplicateCandidatesForApplication(applicationId: string, db: Db = prisma, organizationId?: string) {
+  const canonical = await db.application.findFirstOrThrow({ where: { id: applicationId, ...(organizationId ? { organizationId } : {}) } });
   const data = canonical.submittedData as Record<string, unknown> | null;
   const email = String(data?.email ?? "").trim().toLowerCase();
   if (!email) return [];
-  const candidates = await prisma.application.findMany({
-    where: { submittedData: { path: ["email"], string_contains: email } },
+  const candidates = await db.application.findMany({
+    where: { submittedData: { path: ["email"], string_contains: email }, ...(organizationId ? { organizationId } : {}) },
     orderBy: { createdAt: "asc" },
   });
   // Exact case-insensitive match only — string_contains is a coarse pre-filter.
@@ -115,6 +119,7 @@ export async function saveSeasonZeroPlayerResolution(input: {
   action: SeasonZeroPlayerResolutionAction;
   reason: string;
   actorUserId: string;
+  organizationId: string;
 }) {
   if (!seasonZeroPlayerResolutionActions.includes(input.action)) throw new Error("Invalid resolution action.");
   if (!input.reason.trim()) throw new Error("A resolution reason is required.");
@@ -127,11 +132,11 @@ export async function saveSeasonZeroPlayerResolution(input: {
     resolvedById: input.actorUserId,
     resolvedAt: new Date().toISOString(),
   };
-  await prisma.$transaction(async (tx) => {
+  await withOrganizationContext(input.organizationId, async (tx) => {
     await tx.systemSetting.upsert({
       where: { key: `${resolutionPrefix}${input.applicationId}` },
       update: { value, description: "Season Zero production player reconciliation decision", category: "data-quality" },
-      create: { key: `${resolutionPrefix}${input.applicationId}`, value, description: "Season Zero production player reconciliation decision", category: "data-quality" },
+      create: { key: `${resolutionPrefix}${input.applicationId}`, value, organizationId: input.organizationId, description: "Season Zero production player reconciliation decision", category: "data-quality" },
     });
     await writeAuditLog(tx, {
       action: "SEASON_ZERO_PLAYER_RESOLUTION_RECORDED",
@@ -139,6 +144,7 @@ export async function saveSeasonZeroPlayerResolution(input: {
       entityId: input.applicationId,
       entityType: "Application",
       userId: input.actorUserId,
+      organizationId: input.organizationId,
     });
   });
 }
@@ -148,8 +154,8 @@ export async function saveSeasonZeroPlayerResolution(input: {
 // applying it are two distinct, independently-audited steps. Not invoked
 // anywhere yet; this exists so applying a decision later is a one-function
 // call once an administrator has actually recorded one.
-export async function applySeasonZeroPlayerApproval(applicationId: string, actorUserId: string) {
-  return prisma.$transaction(async (tx) => {
+export async function applySeasonZeroPlayerApproval(applicationId: string, actorUserId: string, organizationId: string) {
+  return withOrganizationContext(organizationId, async (tx) => {
     const resolution = await tx.systemSetting.findUnique({ where: { key: `${resolutionPrefix}${applicationId}` } });
     if (!resolution) throw new Error("No recorded resolution for this Application — record a decision before applying it.");
     const value = resolution.value as { action: string; reason: string };
@@ -168,6 +174,7 @@ export async function applySeasonZeroPlayerApproval(applicationId: string, actor
       entityId: applicationId,
       entityType: "Application",
       userId: actorUserId,
+      organizationId,
     });
   });
 }

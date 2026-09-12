@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
-import { requirePermissionOrRedirect } from "@/lib/authorization";
+import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { CommentatorCommandCenter } from "@/app/broadcast/commentator-command-center";
 import { buildLivePresentationModelForGame } from "@/lib/live-game-snapshot-v2";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,14 +15,19 @@ export const revalidate = 0;
 export default async function RehearsalBroadcast({ params }: { params: Promise<{ fixtureId: string }> }) {
   const { fixtureId } = await params;
   const session = await requirePermissionOrRedirect("broadcast:operate", `/rehearsal/broadcast/${fixtureId}`);
+  if (!session.user.organizationId) throw new MissingOrganizationContextError();
 
-  const fixture = await prisma.fixture.findUnique({
-    where: { id: fixtureId },
-    include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
+  const data = await withOrganizationContext(session.user.organizationId, async (tx) => {
+    const fixture = await tx.fixture.findUnique({
+      where: { id: fixtureId },
+      include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
+    });
+    if (!fixture || fixture.recordOrigin !== "REHEARSAL" || !fixture.game || !["LIVE", "PAUSED"].includes(fixture.game.status)) return null;
+    const model = await buildLivePresentationModelForGame(fixture.game.id, tx);
+    return { fixture, model };
   });
-  if (!fixture || fixture.recordOrigin !== "REHEARSAL" || !fixture.game || !["LIVE", "PAUSED"].includes(fixture.game.status)) notFound();
-
-  const model = await buildLivePresentationModelForGame(fixture.game.id);
+  if (!data) notFound();
+  const { fixture, model } = data;
 
   return (
     <OperationsShell user={session.user}>

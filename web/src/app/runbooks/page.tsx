@@ -4,16 +4,17 @@ import { OperationsShell } from "@/app/components/operations-shell";
 import { addChecklistItem, addRunbookTask, createChecklist, createRunbook, updateChecklistItemStatus } from "@/app/operations/actions";
 import { OpsItemStatus } from "@/generated/prisma/enums";
 import { hasPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function RunbooksPage() {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/runbooks");
   if (!hasPermission(session.user.roles, "runbook:manage")) return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
-  const [checklists, runbooks] = await Promise.all([
-    prisma.operationalChecklist.findMany({ include: { items: { orderBy: { createdAt: "asc" } } }, orderBy: { createdAt: "desc" } }),
-    prisma.runbook.findMany({ include: { tasks: { orderBy: { dueAt: "asc" } } }, orderBy: { createdAt: "desc" } }),
-  ]);
+  if (!session.user.organizationId) return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Organization context required</h1></main></OperationsShell>;
+  const [checklists, runbooks] = await withOrganizationContext(session.user.organizationId, (tx) => Promise.all([
+    tx.operationalChecklist.findMany({ include: { items: { orderBy: { createdAt: "asc" } } }, orderBy: { createdAt: "desc" } }),
+    tx.runbook.findMany({ include: { tasks: { orderBy: { dueAt: "asc" } } }, orderBy: { createdAt: "desc" } }),
+  ]));
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">
