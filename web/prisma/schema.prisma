@@ -589,79 +589,86 @@ enum DocumentApprovalStatus {
 }
 
 model User {
-  id                           String                  @id @default(cuid())
+  id                           String                   @id @default(cuid())
   name                         String
-  email                        String                  @unique
+  email                        String                   @unique
   emailVerified                DateTime?
   image                        String?
   passwordHash                 String?
-  role                         UserRole                @default(FAN)
-  isActive                     Boolean                 @default(true)
-  roles                        UserRoleAssignment[]    @relation("AssignedUserRoles")
-  rolesGranted                 UserRoleAssignment[]    @relation("GrantedUserRoles")
+  role                         UserRole                 @default(FAN)
+  isActive                     Boolean                  @default(true)
+  roles                        UserRoleAssignment[]     @relation("AssignedUserRoles")
+  rolesGranted                 UserRoleAssignment[]     @relation("GrantedUserRoles")
   staffProfile                 Staff?
   athleteProfile               Athlete?
   vendorProfile                Vendor?
   mediaProfile                 MediaProfile?
   volunteerProfile             VolunteerProfile?
   fanMemberships               FanMembership[]
-  scoutReports                 ScoutReport[]           @relation("ScoutReports")
+  scoutReports                 ScoutReport[]            @relation("ScoutReports")
   mvpVotes                     MVPVote[]
   auditLogs                    AuditLog[]
   seatReservations             SeatReservation[]
   tickets                      Ticket[]
   orders                       Order[]
   accreditations               Accreditation[]
-  applicationsSubmitted        Application[]           @relation("ApplicantApplications")
-  applicationsReviewed         Application[]           @relation("ReviewedApplications")
-  offlineIntakesCreated        AdminOfflineIntake[]    @relation("OfflineIntakeCreatedBy")
-  draftPicksCreated            DraftPick[]             @relation("DraftPickCreatedBy")
-  playersSelected              Player[]                @relation("PlayerSelectedBy")
-  draftEventsCreated           DraftEvent[]            @relation("DraftEventCreatedBy")
-  draftAllocationsCreated      DraftAllocation[]       @relation("DraftAllocationCreatedBy")
-  draftAllocationsConfirmed    DraftAllocation[]       @relation("DraftAllocationConfirmedBy")
-  performedCheckIns            CheckIn[]               @relation("CheckInOperator")
+  applicationsSubmitted        Application[]            @relation("ApplicantApplications")
+  applicationsReviewed         Application[]            @relation("ReviewedApplications")
+  offlineIntakesCreated        AdminOfflineIntake[]     @relation("OfflineIntakeCreatedBy")
+  draftPicksCreated            DraftPick[]              @relation("DraftPickCreatedBy")
+  playersSelected              Player[]                 @relation("PlayerSelectedBy")
+  draftEventsCreated           DraftEvent[]             @relation("DraftEventCreatedBy")
+  draftAllocationsCreated      DraftAllocation[]        @relation("DraftAllocationCreatedBy")
+  draftAllocationsConfirmed    DraftAllocation[]        @relation("DraftAllocationConfirmedBy")
+  performedCheckIns            CheckIn[]                @relation("CheckInOperator")
   contentJobs                  ContentJob[]
   importJobs                   ImportJob[]
   trainingSessionsCreated      TrainingSession[]
   trainingRecordsCreated       AthleteTrainingRecord[]
   mediaUploaded                AthleteMedia[]
-  mediaAssetsUploaded          MediaAsset[]            @relation("MediaAssetsUploaded")
+  mediaAssetsUploaded          MediaAsset[]             @relation("MediaAssetsUploaded")
   participantDocumentsUploaded ParticipantDocument[]
-  eventDebriefsCreated         EventDebrief[]          @relation("EventDebriefCreatedBy")
-  eventVendorReviewsCreated    EventVendorReview[]     @relation("EventVendorReviewCreatedBy")
-  eventVolunteerReviews        EventVolunteerReview[]  @relation("EventVolunteerReviewVolunteer")
-  eventVolunteerReviewsCreated EventVolunteerReview[]  @relation("EventVolunteerReviewCreatedBy")
-  announcementsCreated         Announcement[]          @relation("AnnouncementCreatedBy")
-  wellWishesAuthored           WellWish[]              @relation("WellWishAuthor")
-  wellWishesModerated          WellWish[]              @relation("WellWishModeratedBy")
-  gameVideosRegistered         GameVideo[]             @relation("GameVideoRegisteredBy")
-  timelineAnchorsCreated       VideoTimelineAnchor[]   @relation("VideoTimelineAnchorCreatedBy")
-  courtCalibrationsCreated     CourtCalibration[]      @relation("CourtCalibrationCreatedBy")
-  visionAnalysisRunsRequested  VisionAnalysisRun[]     @relation("VisionAnalysisRunRequestedBy")
-  courtSpecificationsCreated   CourtSpecification[]    @relation("CourtSpecificationCreatedBy")
-  recordOrigin                 RecordOrigin            @default(PRODUCTION)
-  createdAt                    DateTime                @default(now())
-  updatedAt                    DateTime                @updatedAt
+  eventDebriefsCreated         EventDebrief[]           @relation("EventDebriefCreatedBy")
+  eventVendorReviewsCreated    EventVendorReview[]      @relation("EventVendorReviewCreatedBy")
+  eventVolunteerReviews        EventVolunteerReview[]   @relation("EventVolunteerReviewVolunteer")
+  eventVolunteerReviewsCreated EventVolunteerReview[]   @relation("EventVolunteerReviewCreatedBy")
+  announcementsCreated         Announcement[]           @relation("AnnouncementCreatedBy")
+  wellWishesAuthored           WellWish[]               @relation("WellWishAuthor")
+  wellWishesModerated          WellWish[]               @relation("WellWishModeratedBy")
+  gameVideosRegistered         GameVideo[]              @relation("GameVideoRegisteredBy")
+  timelineAnchorsCreated       VideoTimelineAnchor[]    @relation("VideoTimelineAnchorCreatedBy")
+  courtCalibrationsCreated     CourtCalibration[]       @relation("CourtCalibrationCreatedBy")
+  visionAnalysisRunsRequested  VisionAnalysisRun[]      @relation("VisionAnalysisRunRequestedBy")
+  courtSpecificationsCreated   CourtSpecification[]     @relation("CourtSpecificationCreatedBy")
+  recordOrigin                 RecordOrigin             @default(PRODUCTION)
+  createdAt                    DateTime                 @default(now())
+  updatedAt                    DateTime                 @updatedAt
 
   @@index([role, isActive])
 }
 
 model UserRoleAssignment {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation("AssignedUserRoles", fields: [userId], references: [id], onDelete: Cascade)
-  role        UserRole
-  grantedById String?
-  grantedBy   User?     @relation("GrantedUserRoles", fields: [grantedById], references: [id], onDelete: SetNull)
-  grantedAt   DateTime  @default(now())
-  revokedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation("AssignedUserRoles", fields: [userId], references: [id], onDelete: Cascade)
+  role           UserRole
+  // Phase 1 multi-tenancy (see Organization doc comment below). Null = a platform-level grant
+  // (e.g. SUPER_ADMIN, or today's single-tenant FAN/etc. grants before any org exists to scope
+  // them to) - never assumed to mean "every organization." Non-null scopes the grant to exactly
+  // one organization (e.g. a League Manager for one league only).
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  grantedById    String?
+  grantedBy      User?         @relation("GrantedUserRoles", fields: [grantedById], references: [id], onDelete: SetNull)
+  grantedAt      DateTime      @default(now())
+  revokedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  @@unique([userId, role])
+  @@unique([userId, role, organizationId])
   @@index([role, revokedAt])
   @@index([grantedById, grantedAt])
+  @@index([organizationId, role])
 }
 
 model Sport {
@@ -677,6 +684,8 @@ model Sport {
 
 model Competition {
   id               String            @id @default(cuid())
+  organizationId   String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   sportId          String
   sport            Sport             @relation(fields: [sportId], references: [id], onDelete: Restrict)
   name             String
@@ -690,13 +699,19 @@ model Competition {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
-  @@unique([sportId, name])
-  @@unique([sportId, slug])
+  // Phase 1 Stage 3b: was @@unique([sportId, name/slug]) - rewritten to organizationId so two
+  // different organizations playing the same sport can each have their own "Season Zero"
+  // competition. No application code depended on the old compound key (verified: only Prisma's
+  // own generated types referenced sportId_name/sportId_slug).
+  @@unique([organizationId, name])
+  @@unique([organizationId, slug])
   @@index([sportId, isActive])
 }
 
 model Division {
   id                    String                @id @default(cuid())
+  organizationId        String                @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization          Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   competitionId         String
   competition           Competition           @relation(fields: [competitionId], references: [id], onDelete: Restrict)
   name                  String
@@ -713,10 +728,17 @@ model Division {
 
   @@unique([competitionId, name])
   @@unique([competitionId, slug])
+  // Phase 1 Stage 5.4B: lets a child table's FK be composite - (organizationId, divisionId) ->
+  // Division(organizationId, id) - so the database itself rejects a division reference whose
+  // organizationId doesn't match the referencing row's own, not just RLS/application checks. See
+  // SeasonClub's own doc comment for the full reasoning.
+  @@unique([organizationId, id])
 }
 
 model Season {
   id                    String                 @id @default(cuid())
+  organizationId        String                 @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   competitionId         String
   competition           Competition            @relation(fields: [competitionId], references: [id], onDelete: Restrict)
   name                  String
@@ -742,11 +764,15 @@ model Season {
   updatedAt             DateTime               @updatedAt
 
   @@unique([competitionId, name])
+  // Phase 1 Stage 5.4B: see Division's identical addition above and SeasonClub's doc comment.
+  @@unique([organizationId, id])
   @@index([competitionId, status])
 }
 
 model Club {
   id                           String             @id @default(cuid())
+  organizationId               String             @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization                 Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   sportId                      String
   sport                        Sport              @relation(fields: [sportId], references: [id], onDelete: Restrict)
   name                         String
@@ -771,19 +797,39 @@ model Club {
   createdAt                    DateTime           @default(now())
   updatedAt                    DateTime           @updatedAt
 
-  @@unique([sportId, name])
-  @@unique([sportId, shortName])
+  // Phase 1 Stage 3b: was @@unique([sportId, name/shortName]) - rewritten to organizationId so
+  // two different organizations can each have a club with the same name (e.g. both could
+  // independently have a "Warriors"). No application code depended on the old compound key.
+  @@unique([organizationId, name])
+  @@unique([organizationId, shortName])
+  // Phase 1 Stage 5.4B: see Division's identical addition above and SeasonClub's doc comment.
+  @@unique([organizationId, id])
   @@index([sportId, status])
 }
 
+// Phase 1 Stage 5.4B: season/club/division are composite foreign keys, not bare id references.
+// Proven necessary empirically (Stage 5.2B-2's rehearsal): a bare `FOREIGN KEY (clubId)
+// REFERENCES Club(id)` only checks that SOME Club row with that id exists anywhere on the
+// platform - Postgres foreign key validation is not subject to row-level security, so RLS making
+// a cross-org Club invisible to a SELECT does nothing to stop it being a valid FK target. Pairing
+// organizationId into the FK (`FOREIGN KEY (organizationId, clubId) REFERENCES Club
+// (organizationId, id)`, backed by Club's own `@@unique([organizationId, id])`) means the
+// database itself now rejects a SeasonClub whose clubId belongs to a different organization than
+// the SeasonClub's own - true regardless of which role performs the write, RLS policy, or
+// whether the caller remembered to validate scope first. Application-level scope validation
+// (clubs/actions.ts's validateSeasonClubScope) is retained regardless - it produces a clean
+// domain error before this constraint would ever fire, not a raw Postgres constraint-violation
+// message.
 model SeasonClub {
   id               String            @id @default(cuid())
+  organizationId   String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   seasonId         String
-  season           Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  season           Season            @relation(fields: [organizationId, seasonId], references: [organizationId, id], onDelete: Cascade)
   clubId           String
-  club             Club              @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  club             Club              @relation(fields: [organizationId, clubId], references: [organizationId, id], onDelete: Restrict)
   divisionId       String
-  division         Division          @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  division         Division          @relation(fields: [organizationId, divisionId], references: [organizationId, id], onDelete: Restrict)
   headCoachId      String?
   headCoach        Staff?            @relation("HeadCoachAssignments", fields: [headCoachId], references: [id], onDelete: SetNull)
   assistantCoachId String?
@@ -812,42 +858,62 @@ model SeasonClub {
   updatedAt        DateTime          @updatedAt
 
   @@unique([seasonId, clubId, divisionId])
+  // Phase 1 Stage 5.2B-3: backs DraftAllocation.seasonClubId's and DraftPick.seasonClubId's
+  // composite FK - see Division's identical Stage 5.4B addition for the full reasoning.
+  @@unique([organizationId, id])
   @@index([seasonId, divisionId, status])
   @@index([clubId])
 }
 
 model Athlete {
-  id               String                  @id @default(cuid())
-  ultraAthleteId   String?                 @unique
-  userId           String?                 @unique
-  user             User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
-  firstName        String
-  lastName         String
-  gender           AthleteGender
-  dateOfBirth      DateTime
-  dominantHand     String
-  phone            String?
-  email            String?                 @unique
-  emergencyContact String?
-  previousTeam     String?
-  photoUrl         String?
-  nationality      String?
-  registrations    Player[]
-  awards           AthleteAward[]
-  videos           AthleteVideo[]
-  media            AthleteMedia[]
-  documents        ParticipantDocument[]
-  trainingRecords  AthleteTrainingRecord[]
-  scoutReports     ScoutReport[]
-  recordOrigin     RecordOrigin            @default(PRODUCTION)
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
+  id                       String                    @id @default(cuid())
+  organizationId           String                    @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization             Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  // Phase 1 Stage 3b: ultraAthleteId and userId are deliberately LEFT as bare global @unique,
+  // not rewritten to organizationId-composite like email below. Both have real call sites
+  // (api-v1/identifiers.ts's public lookup, imports.ts's user-linking) that assume a single-field
+  // unique lookup and would need real session-derived organization context to fix correctly -
+  // that's a later stage's job (deferred again, and still deliberately not this one). As of
+  // Stage 5.4A, PublicIdCounter's sequence is tenant-local (each org allocates independently),
+  // so this field's platform-wide uniqueness now rests on Organization.idPrefixAthlete being
+  // @unique across every organization, not on a shared global sequence - see public-ids.ts and
+  // PublicIdCounter's doc comment.
+  ultraAthleteId           String?                   @unique
+  userId                   String?                   @unique
+  user                     User?                     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  firstName                String
+  lastName                 String
+  gender                   AthleteGender
+  dateOfBirth              DateTime
+  dominantHand             String
+  phone                    String?
+  email                    String?
+  emergencyContact         String?
+  previousTeam             String?
+  photoUrl                 String?
+  nationality              String?
+  registrations            Player[]
+  awards                   AthleteAward[]
+  videos                   AthleteVideo[]
+  media                    AthleteMedia[]
+  documents                ParticipantDocument[]
+  trainingRecords          AthleteTrainingRecord[]
+  scoutReports             ScoutReport[]
+  recordOrigin             RecordOrigin              @default(PRODUCTION)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
 
+  // Phase 1 Stage 3b: was a bare @unique - rewritten to organizationId-composite so the same
+  // real email can register as an athlete in two different organizations. No application code
+  // depended on the old bare constraint (verified: only a .count() filter referenced email).
+  @@unique([organizationId, email])
   @@index([lastName, firstName])
 }
 
 model Player {
   id                         String                  @id @default(cuid())
+  organizationId             String                  @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization               Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   athleteId                  String
   athlete                    Athlete                 @relation(fields: [athleteId], references: [id], onDelete: Restrict)
   seasonId                   String
@@ -892,6 +958,9 @@ model Player {
 
   @@unique([athleteId, seasonId])
   @@unique([seasonClubId, jerseyNumber])
+  // Phase 1 Stage 5.2B-3: backs DraftSquadMember.playerId's and DraftPick.playerId's composite
+  // FK - see Division's identical Stage 5.4B addition for the full reasoning.
+  @@unique([organizationId, id])
   @@index([seasonId, status])
   @@index([seasonId, draftSelectionGroup])
   @@index([seasonClubId])
@@ -899,37 +968,43 @@ model Player {
 }
 
 model AthleteAward {
-  id        String   @id @default(cuid())
-  athleteId String
-  athlete   Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
-  seasonId  String?
-  season    Season?  @relation(fields: [seasonId], references: [id], onDelete: SetNull)
-  name      String
-  awardedAt DateTime
-  notes     String?
-  createdAt DateTime @default(now())
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  athleteId      String
+  athlete        Athlete      @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  seasonId       String?
+  season         Season?      @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  name           String
+  awardedAt      DateTime
+  notes          String?
+  createdAt      DateTime     @default(now())
 
   @@index([athleteId, awardedAt])
   @@index([seasonId])
 }
 
 model AthleteVideo {
-  id         String    @id @default(cuid())
-  athleteId  String
-  athlete    Athlete   @relation(fields: [athleteId], references: [id], onDelete: Cascade)
-  title      String
-  url        String
-  provider   String?
-  recordedAt DateTime?
-  isPublic   Boolean   @default(false)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  athleteId      String
+  athlete        Athlete      @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  title          String
+  url            String
+  provider       String?
+  recordedAt     DateTime?
+  isPublic       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([athleteId, recordedAt])
 }
 
 model TrainingSession {
   id              String                  @id @default(cuid())
+  organizationId  String                  @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization    Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   seasonId        String?
   season          Season?                 @relation(fields: [seasonId], references: [id], onDelete: SetNull)
   seasonClubId    String?
@@ -957,6 +1032,8 @@ model TrainingSession {
 
 model AthleteTrainingRecord {
   id                String                   @id @default(cuid())
+  organizationId    String                   @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization      Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   trainingSessionId String
   trainingSession   TrainingSession          @relation(fields: [trainingSessionId], references: [id], onDelete: Cascade)
   athleteId         String
@@ -995,6 +1072,8 @@ model TrainingMetricDefinition {
 
 model AthleteTrainingMetric {
   id                      String                   @id @default(cuid())
+  organizationId          String                   @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   athleteTrainingRecordId String
   athleteTrainingRecord   AthleteTrainingRecord    @relation(fields: [athleteTrainingRecordId], references: [id], onDelete: Cascade)
   metricDefinitionId      String
@@ -1009,6 +1088,8 @@ model AthleteTrainingMetric {
 
 model AthleteMedia {
   id                String           @id @default(cuid())
+  organizationId    String           @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   athleteId         String
   athlete           Athlete          @relation(fields: [athleteId], references: [id], onDelete: Cascade)
   playerId          String?
@@ -1038,6 +1119,8 @@ model AthleteMedia {
 
 model MediaAsset {
   id               String               @id @default(cuid())
+  organizationId   String               @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   storageProvider  MediaStorageProvider
   objectKey        String
   publicUrl        String?
@@ -1064,6 +1147,8 @@ model MediaAsset {
   updatedAt        DateTime             @updatedAt
 
   @@unique([storageProvider, objectKey])
+  // Phase 1 Stage 5.2C: lets GameVideo.mediaAssetId become a composite tenant-aware FK.
+  @@unique([organizationId, id])
   @@index([purpose, status, visibility])
   @@index([uploadedById, createdAt])
   @@index([checksumSha256])
@@ -1071,6 +1156,8 @@ model MediaAsset {
 
 model MediaAssetVariant {
   id              String               @id @default(cuid())
+  organizationId  String               @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   assetId         String
   asset           MediaAsset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
   name            String
@@ -1089,16 +1176,18 @@ model MediaAssetVariant {
 }
 
 model MediaAssetUsage {
-  id           String            @id @default(cuid())
-  assetId      String
-  asset        MediaAsset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  purpose      MediaAssetPurpose
-  entityType   String
-  entityId     String
-  isPrimary    Boolean           @default(false)
-  active       Boolean           @default(true)
-  assignedById String
-  assignedAt   DateTime          @default(now())
+  id             String            @id @default(cuid())
+  organizationId String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  assetId        String
+  asset          MediaAsset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  purpose        MediaAssetPurpose
+  entityType     String
+  entityId       String
+  isPrimary      Boolean           @default(false)
+  active         Boolean           @default(true)
+  assignedById   String
+  assignedAt     DateTime          @default(now())
 
   @@index([entityType, entityId, active])
   @@index([purpose, isPrimary, active])
@@ -1107,6 +1196,8 @@ model MediaAssetUsage {
 
 model ParticipantDocument {
   id             String                  @id @default(cuid())
+  organizationId String                  @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   athleteId      String?
   athlete        Athlete?                @relation(fields: [athleteId], references: [id], onDelete: Cascade)
   staffId        String?
@@ -1132,6 +1223,9 @@ model ParticipantDocument {
 
 model Staff {
   id                        String                @id @default(cuid())
+  organizationId            String                @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization              Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  // Same bare global @unique reasoning as Athlete.ultraAthleteId - see that field's doc comment.
   ultraStaffId              String?               @unique
   name                      String
   role                      StaffRole
@@ -1153,20 +1247,25 @@ model Staff {
   createdAt                 DateTime              @default(now())
   updatedAt                 DateTime              @updatedAt
 
+  // Phase 1 Stage 5.2B-3: backs DraftAllocation.staffId's and DraftCoachPoolEntry.staffId's
+  // composite FK - see Division's identical Stage 5.4B addition for the full reasoning.
+  @@unique([organizationId, id])
   @@index([role])
 }
 
 model Draft {
-  id             String      @id @default(cuid())
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   name           String
   seasonId       String
-  season         Season      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  season         Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   divisionId     String
-  division       Division    @relation(fields: [divisionId], references: [id], onDelete: Restrict)
-  tier           DraftTier   @default(MAIN)
-  status         DraftStatus @default(NOT_STARTED)
-  currentRound   Int         @default(1)
-  nextPickNumber Int         @default(1)
+  division       Division     @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  tier           DraftTier    @default(MAIN)
+  status         DraftStatus  @default(NOT_STARTED)
+  currentRound   Int          @default(1)
+  nextPickNumber Int          @default(1)
   // Optional link to the governing DraftEvent. When set, Draft/DraftPick's
   // REHEARSAL-vs-LIVE behavior is derived from draftEvent.operatingMode —
   // this is what lets Secondary Draft (Draft/DraftPick) participate in the
@@ -1175,12 +1274,12 @@ model Draft {
   // with no linked DraftEvent is always treated as REHEARSAL (never writes
   // official Player.seasonClubId) — the safe default.
   draftEventId   String?
-  draftEvent     DraftEvent? @relation(fields: [draftEventId], references: [id], onDelete: SetNull)
+  draftEvent     DraftEvent?  @relation(fields: [draftEventId], references: [id], onDelete: SetNull)
   startedAt      DateTime?
   completedAt    DateTime?
   picks          DraftPick[]
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([seasonId, divisionId, name])
   @@index([seasonId, divisionId, tier, status])
@@ -1197,6 +1296,8 @@ enum DraftPickStatus {
 
 model DraftPick {
   id               String                  @id @default(cuid())
+  organizationId   String                  @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization     Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   draftId          String
   draft            Draft                   @relation(fields: [draftId], references: [id], onDelete: Cascade)
   round            Int
@@ -1231,6 +1332,8 @@ model DraftPick {
 
 model DraftEvent {
   id                  String                  @id @default(cuid())
+  organizationId      String                  @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization        Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   name                String
   publicTitle         String
   seasonId            String
@@ -1260,44 +1363,63 @@ model DraftEvent {
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
 
+  // Phase 1 Stage 5.2B-3: backs DraftAllocation.draftEventId's composite FK, the one relation
+  // into DraftEvent hardened this stage - see Division's identical Stage 5.4B addition for the
+  // full reasoning. DraftEvent's OWN outbound relations (seasonId, eventId), and DraftSquad's/
+  // DraftCoachPoolEntry's own draftEventId relations, are deliberately left as bare
+  // (non-composite) FKs this stage - see the whole-repo inventory doc for what's hardened vs.
+  // classified-but-not-hardened.
+  @@unique([organizationId, id])
   @@index([seasonId, status])
   @@index([eventId])
 }
 
 model DraftSquad {
-  id           String             @id @default(cuid())
-  draftEventId String
-  draftEvent   DraftEvent         @relation(fields: [draftEventId], references: [id], onDelete: Cascade)
-  seasonId     String
-  season       Season             @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  divisionId   String
-  division     Division           @relation(fields: [divisionId], references: [id], onDelete: Restrict)
-  name         String
-  shortName    String?
-  publicLabel  String?
-  color        String?
-  iconUrl      String?
-  photoUrl     String?
-  sequence     Int
-  status       String             @default("DRAFT")
-  members      DraftSquadMember[]
-  allocations  DraftAllocation[]
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  id             String             @id @default(cuid())
+  organizationId String             @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  draftEventId   String
+  draftEvent     DraftEvent         @relation(fields: [draftEventId], references: [id], onDelete: Cascade)
+  seasonId       String
+  season         Season             @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  divisionId     String
+  division       Division           @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  name           String
+  shortName      String?
+  publicLabel    String?
+  color          String?
+  iconUrl        String?
+  photoUrl       String?
+  sequence       Int
+  status         String             @default("DRAFT")
+  members        DraftSquadMember[]
+  allocations    DraftAllocation[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
   @@unique([draftEventId, divisionId, sequence])
+  // Phase 1 Stage 5.2B-3: backs DraftAllocation.draftSquadId's and DraftSquadMember.draftSquadId's
+  // composite FK - see Division's identical Stage 5.4B addition for the full reasoning.
+  @@unique([organizationId, id])
   @@index([seasonId, divisionId])
 }
 
+// Phase 1 Stage 5.2B-3: composite FKs on both relations - see DraftAllocation's identical
+// reasoning above. This is the table that actually determines squad membership, which
+// DraftAllocation's own confirm step later reads to decide which players get an official
+// SeasonClub assignment - a cross-org player silently added to a squad here would otherwise
+// reach that write path unguarded.
 model DraftSquadMember {
-  id           String     @id @default(cuid())
-  draftSquadId String
-  draftSquad   DraftSquad @relation(fields: [draftSquadId], references: [id], onDelete: Cascade)
-  playerId     String
-  player       Player     @relation(fields: [playerId], references: [id], onDelete: Restrict)
-  sequence     Int?
-  captain      Boolean    @default(false)
-  createdAt    DateTime   @default(now())
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  draftSquadId   String
+  draftSquad     DraftSquad   @relation(fields: [organizationId, draftSquadId], references: [organizationId, id], onDelete: Cascade)
+  playerId       String
+  player         Player       @relation(fields: [organizationId, playerId], references: [organizationId, id], onDelete: Restrict)
+  sequence       Int?
+  captain        Boolean      @default(false)
+  createdAt      DateTime     @default(now())
 
   @@unique([draftSquadId, playerId])
   @@unique([playerId, draftSquadId])
@@ -1305,39 +1427,59 @@ model DraftSquadMember {
 }
 
 model DraftCoachPoolEntry {
-  id                     String     @id @default(cuid())
+  id                     String       @id @default(cuid())
+  organizationId         String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   draftEventId           String
-  draftEvent             DraftEvent @relation(fields: [draftEventId], references: [id], onDelete: Cascade)
+  draftEvent             DraftEvent   @relation(fields: [draftEventId], references: [id], onDelete: Cascade)
   divisionId             String
-  division               Division   @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  division               Division     @relation(fields: [divisionId], references: [id], onDelete: Restrict)
   staffId                String
-  staff                  Staff      @relation(fields: [staffId], references: [id], onDelete: Restrict)
-  eligibleHeadCoach      Boolean    @default(true)
-  eligibleAssistantCoach Boolean    @default(false)
+  staff                  Staff        @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  eligibleHeadCoach      Boolean      @default(true)
+  eligibleAssistantCoach Boolean      @default(false)
   publicBio              String?
   photoUrl               String?
   sequence               Int?
-  createdAt              DateTime   @default(now())
-  updatedAt              DateTime   @updatedAt
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
 
   @@unique([draftEventId, staffId, divisionId])
   @@index([draftEventId, divisionId])
 }
 
+// Phase 1 Stage 5.2B-3: the three REQUIRED tenant-owned relations this model establishes are
+// composite FKs (organizationId, childId) -> Parent(organizationId, id) - draftEvent, division,
+// and seasonClub - since this is the exact table whose live confirm step writes permanent
+// Player.seasonClubId / SeasonClub coach assignments. Same reasoning as SeasonClub's Stage 5.4B
+// hardening: RLS alone cannot stop a cross-org relation (Postgres FK validation is not subject
+// to RLS), so the database itself now rejects it.
+//
+// draftSquadId/staffId are deliberately LEFT as simple (non-composite) FKs, not hardened this
+// stage: both are nullable, and Prisma/Postgres reject a composite FK with `onDelete: SetNull`
+// when any column in that FK (here, organizationId) is itself non-nullable - Postgres would have
+// to null out organizationId too on a referenced-row delete, violating this table's own NOT NULL
+// constraint. This is the same reason SeasonClub's own nullable Staff references
+// (headCoachId/assistantCoachId/teamManagerId/scoutId/fanCaptainId) were never made composite
+// either - discovered here, not new to this table. The application-level guard (both ids are
+// always server-resolved inside reserveNextAllocation()'s own scoped transaction, never
+// client-supplied) remains the operative protection for these two relations.
 model DraftAllocation {
   id                String                  @id @default(cuid())
+  organizationId    String                  @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization      Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   draftEventId      String
-  draftEvent        DraftEvent              @relation(fields: [draftEventId], references: [id], onDelete: Cascade)
+  draftEvent        DraftEvent              @relation(fields: [organizationId, draftEventId], references: [organizationId, id], onDelete: Cascade)
   operatingMode     DraftEventOperatingMode @default(REHEARSAL)
   divisionId        String
-  division          Division                @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  division          Division                @relation(fields: [organizationId, divisionId], references: [organizationId, id], onDelete: Restrict)
   subjectType       AllocationSubjectType
   draftSquadId      String?
   draftSquad        DraftSquad?             @relation(fields: [draftSquadId], references: [id], onDelete: SetNull)
   staffId           String?
   staff             Staff?                  @relation(fields: [staffId], references: [id], onDelete: SetNull)
   seasonClubId      String
-  seasonClub        SeasonClub              @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
+  seasonClub        SeasonClub              @relation(fields: [organizationId, seasonClubId], references: [organizationId, id], onDelete: Restrict)
   sequence          Int
   status            AllocationStatus        @default(PENDING)
   randomSeed        String?
@@ -1365,116 +1507,130 @@ model DraftAllocation {
 }
 
 model OperationalChecklist {
-  id          String                     @id @default(cuid())
-  name        String
-  category    String
-  eventId     String?
-  status      OpsItemStatus              @default(OPEN)
-  createdById String
-  items       OperationalChecklistItem[]
-  createdAt   DateTime                   @default(now())
-  updatedAt   DateTime                   @updatedAt
+  id             String                     @id @default(cuid())
+  organizationId String                     @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization               @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  category       String
+  eventId        String?
+  status         OpsItemStatus              @default(OPEN)
+  createdById    String
+  items          OperationalChecklistItem[]
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
 
   @@index([eventId, status])
   @@index([category, status])
 }
 
 model OperationalChecklistItem {
-  id            String               @id @default(cuid())
-  checklistId   String
-  checklist     OperationalChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
-  label         String
-  description   String?
-  status        OpsItemStatus        @default(OPEN)
-  ownerUserId   String?
-  dueAt         DateTime?
-  completedAt   DateTime?
-  completedById String?
-  notes         String?
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  id             String               @id @default(cuid())
+  organizationId String               @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  checklistId    String
+  checklist      OperationalChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  label          String
+  description    String?
+  status         OpsItemStatus        @default(OPEN)
+  ownerUserId    String?
+  dueAt          DateTime?
+  completedAt    DateTime?
+  completedById  String?
+  notes          String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
   @@index([checklistId, status])
   @@index([ownerUserId, dueAt])
 }
 
 model Incident {
-  id           String        @id @default(cuid())
-  title        String
-  type         IncidentType
-  severity     OpsSeverity   @default(MEDIUM)
-  status       OpsItemStatus @default(OPEN)
-  eventId      String?
-  ownerUserId  String?
-  description  String?
-  timeline     Json?
-  resolution   String?
-  reportedById String
-  resolvedAt   DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  title          String
+  type           IncidentType
+  severity       OpsSeverity   @default(MEDIUM)
+  status         OpsItemStatus @default(OPEN)
+  eventId        String?
+  ownerUserId    String?
+  description    String?
+  timeline       Json?
+  resolution     String?
+  reportedById   String
+  resolvedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([eventId, status, severity])
   @@index([type, status])
 }
 
 model Runbook {
-  id          String        @id @default(cuid())
-  name        String
-  category    String
-  eventId     String?
-  status      OpsItemStatus @default(OPEN)
-  createdById String
-  tasks       RunbookTask[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  category       String
+  eventId        String?
+  status         OpsItemStatus @default(OPEN)
+  createdById    String
+  tasks          RunbookTask[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([eventId, status])
   @@index([category, status])
 }
 
 model RunbookTask {
-  id          String        @id @default(cuid())
-  runbookId   String
-  runbook     Runbook       @relation(fields: [runbookId], references: [id], onDelete: Cascade)
-  title       String
-  responsible String?
-  dueAt       DateTime?
-  status      OpsItemStatus @default(OPEN)
-  notes       String?
-  attachments Json?
-  completedAt DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  runbookId      String
+  runbook        Runbook       @relation(fields: [runbookId], references: [id], onDelete: Cascade)
+  title          String
+  responsible    String?
+  dueAt          DateTime?
+  status         OpsItemStatus @default(OPEN)
+  notes          String?
+  attachments    Json?
+  completedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([runbookId, status, dueAt])
 }
 
 model OperatorMessage {
-  id          String        @id @default(cuid())
-  title       String
-  message     String
-  severity    OpsSeverity   @default(MEDIUM)
-  status      OpsItemStatus @default(OPEN)
-  eventId     String?
-  createdById String
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  title          String
+  message        String
+  severity       OpsSeverity   @default(MEDIUM)
+  status         OpsItemStatus @default(OPEN)
+  eventId        String?
+  createdById    String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([eventId, status, severity])
   @@index([createdAt])
 }
 
 model DisplayHeartbeat {
-  id         String          @id @default(cuid())
-  eventId    String?
-  surface    DisplaySurface
-  label      String
-  status     OpsHealthStatus @default(AMBER)
-  lastSeenAt DateTime?
-  metadata   Json?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id             String          @id @default(cuid())
+  organizationId String          @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  eventId        String?
+  surface        DisplaySurface
+  label          String
+  status         OpsHealthStatus @default(AMBER)
+  lastSeenAt     DateTime?
+  metadata       Json?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@unique([eventId, surface, label])
   @@index([eventId, status, lastSeenAt])
@@ -1482,6 +1638,8 @@ model DisplayHeartbeat {
 
 model Rehearsal {
   id                 String        @id @default(cuid())
+  organizationId     String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization       Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   name               String
   type               String
   eventId            String?
@@ -1501,6 +1659,8 @@ model Rehearsal {
 
 model Equipment {
   id                 String          @id @default(cuid())
+  organizationId     String          @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization       Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   name               String
   type               String
   serial             String?
@@ -1517,49 +1677,55 @@ model Equipment {
 }
 
 model EventStaffAssignment {
-  id         String        @id @default(cuid())
-  eventId    String
-  role       String
-  userId     String?
-  staffId    String?
-  personName String?
-  status     OpsItemStatus @default(OPEN)
-  notes      String?
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  eventId        String
+  role           String
+  userId         String?
+  staffId        String?
+  personName     String?
+  status         OpsItemStatus @default(OPEN)
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@unique([eventId, role, userId])
   @@index([eventId, role, status])
 }
 
 model VenueZone {
-  id        String          @id @default(cuid())
-  eventId   String?
-  name      String
-  category  String
-  capacity  Int?
-  occupancy Int             @default(0)
-  status    OpsHealthStatus @default(GREEN)
-  notes     String?
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  id             String          @id @default(cuid())
+  organizationId String          @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  eventId        String?
+  name           String
+  category       String
+  capacity       Int?
+  occupancy      Int             @default(0)
+  status         OpsHealthStatus @default(GREEN)
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([eventId, category])
   @@index([status])
 }
 
 model SystemSetting {
-  id            String       @id @default(cuid())
-  key           String       @unique
-  value         Json
-  description   String?
-  category      String       @default("season-zero")
-  competitionId String?
-  competition   Competition? @relation(fields: [competitionId], references: [id], onDelete: Cascade)
-  seasonId      String?
-  season        Season?      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  key            String       @unique
+  value          Json
+  description    String?
+  category       String       @default("season-zero")
+  competitionId  String?
+  competition    Competition? @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  seasonId       String?
+  season         Season?      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([category])
   @@index([competitionId])
@@ -1567,22 +1733,24 @@ model SystemSetting {
 }
 
 model LaunchReadinessCheck {
-  id          String                @id @default(cuid())
-  seasonId    String?
-  season      Season?               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  eventId     String?
-  category    String
-  title       String
-  details     String?
-  priority    LaunchBlockerPriority @default(P2)
-  status      OpsItemStatus         @default(OPEN)
-  ownerUserId String?
-  evidenceUrl String?
-  dueAt       DateTime?
-  resolvedAt  DateTime?
-  createdById String?
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
+  id             String                @id @default(cuid())
+  organizationId String                @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  seasonId       String?
+  season         Season?               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  eventId        String?
+  category       String
+  title          String
+  details        String?
+  priority       LaunchBlockerPriority @default(P2)
+  status         OpsItemStatus         @default(OPEN)
+  ownerUserId    String?
+  evidenceUrl    String?
+  dueAt          DateTime?
+  resolvedAt     DateTime?
+  createdById    String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
 
   @@index([seasonId, category])
   @@index([eventId, category])
@@ -1590,18 +1758,20 @@ model LaunchReadinessCheck {
 }
 
 model OpsTask {
-  id          String        @id @default(cuid())
-  title       String
-  eventId     String?
-  ownerUserId String?
-  dueAt       DateTime?
-  status      OpsItemStatus @default(OPEN)
-  priority    OpsSeverity   @default(MEDIUM)
-  dependsOnId String?
-  notes       String?
-  createdById String
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  title          String
+  eventId        String?
+  ownerUserId    String?
+  dueAt          DateTime?
+  status         OpsItemStatus @default(OPEN)
+  priority       OpsSeverity   @default(MEDIUM)
+  dependsOnId    String?
+  notes          String?
+  createdById    String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([eventId, status, dueAt])
   @@index([ownerUserId, dueAt])
@@ -1609,32 +1779,36 @@ model OpsTask {
 }
 
 model OpsNotification {
-  id          String        @id @default(cuid())
-  title       String
-  message     String
-  category    String
-  severity    OpsSeverity   @default(MEDIUM)
-  status      OpsItemStatus @default(OPEN)
-  eventId     String?
-  createdById String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  title          String
+  message        String
+  category       String
+  severity       OpsSeverity   @default(MEDIUM)
+  status         OpsItemStatus @default(OPEN)
+  eventId        String?
+  createdById    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([eventId, status, severity])
   @@index([category, createdAt])
 }
 
 model OpsDocument {
-  id           String        @id @default(cuid())
-  title        String
-  category     String
-  eventId      String?
-  fileUrl      String?
-  notes        String?
-  status       OpsItemStatus @default(OPEN)
-  uploadedById String
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  title          String
+  category       String
+  eventId        String?
+  fileUrl        String?
+  notes          String?
+  status         OpsItemStatus @default(OPEN)
+  uploadedById   String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([eventId, category])
   @@index([uploadedById, createdAt])
@@ -1642,6 +1816,8 @@ model OpsDocument {
 
 model Venue {
   id                  String               @id @default(cuid())
+  organizationId      String               @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   name                String
   address             String
   city                String
@@ -1656,38 +1832,55 @@ model Venue {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
-  @@unique([name, city])
+  // Phase 1 Stage 3b: was @@unique([name, city]) - rewritten to organizationId-composite. Each
+  // organization gets its own Venue records even for a physically shared building (two leagues
+  // renting the same stadium each register it as their own row) - a deliberate product choice,
+  // not an oversight, made to keep Venue consistent with every other tenant-scoped table rather
+  // than building shared-resource semantics. No application code depended on the old compound key.
+  @@unique([organizationId, name, city])
+  // Phase 1 Stage 5.2B-4: lets Event.venueId become a composite tenant-aware FK (see Event
+  // below) - same pattern as every parent in Stage 5.4B/5.2B-3's composite-FK set.
+  @@unique([organizationId, id])
 }
 
 model Event {
-  id               String                 @id @default(cuid())
-  name             String
-  date             DateTime
-  venueId          String
-  venue            Venue                  @relation(fields: [venueId], references: [id], onDelete: Restrict)
-  seasonId         String
-  season           Season                 @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  doorsOpenTime    DateTime?
-  startTime        DateTime
-  endTime          DateTime?
-  status           EventStatus            @default(DRAFT)
-  fixtures         Fixture[]
-  seatZones        SeatZone[]
-  reservations     SeatReservation[]
-  accreditations   Accreditation[]
-  inventories      VendorInventory[]
-  orders           Order[]
-  promoCodes       PromoCode[]
-  sponsorCampaigns SponsorCampaign[]
-  draftEvents      DraftEvent[]
-  noveltyMatches   NoveltyMatch[]
-  debrief          EventDebrief?
-  vendorReviews    EventVendorReview[]
-  volunteerReviews EventVolunteerReview[]
-  recordOrigin     RecordOrigin           @default(PRODUCTION)
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
+  id                      String                   @id @default(cuid())
+  organizationId          String                   @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name                    String
+  date                    DateTime
+  venueId                 String
+  // Phase 1 Stage 5.2B-4: composite tenant-aware FK - createEvent() is a live, previously
+  // fully-unscoped write path (see PHASE1_STAGE5_2B4 doc) that let a client-submitted venueId
+  // attach an Event to any organization's Venue with nothing to stop it. Required (not
+  // nullable), onDelete stays RESTRICT - no Prisma/Postgres SetNull incompatibility here.
+  venue                   Venue                    @relation(fields: [organizationId, venueId], references: [organizationId, id], onDelete: Restrict)
+  seasonId                String
+  season                  Season                   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  doorsOpenTime           DateTime?
+  startTime               DateTime
+  endTime                 DateTime?
+  status                  EventStatus              @default(DRAFT)
+  fixtures                Fixture[]
+  seatZones               SeatZone[]
+  reservations            SeatReservation[]
+  accreditations          Accreditation[]
+  inventories             VendorInventory[]
+  orders                  Order[]
+  promoCodes              PromoCode[]
+  sponsorCampaigns        SponsorCampaign[]
+  draftEvents             DraftEvent[]
+  noveltyMatches          NoveltyMatch[]
+  debrief                 EventDebrief?
+  vendorReviews           EventVendorReview[]
+  volunteerReviews        EventVolunteerReview[]
+  recordOrigin            RecordOrigin             @default(PRODUCTION)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
 
+  // Phase 1 Stage 5.2B-4: lets SeatZone.eventId/SeatReservation.eventId/VendorInventory.eventId
+  // become composite tenant-aware FKs.
+  @@unique([organizationId, id])
   @@index([seasonId, date])
   @@index([venueId, date])
 }
@@ -1696,48 +1889,54 @@ model Event {
 // (execution checklists) and Incident (live safety/ops issues) models. This is where
 // "how did it actually go" gets captured for improving the next edition.
 model EventDebrief {
-  id                String   @id @default(cuid())
-  eventId           String   @unique
-  event             Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id                String       @id @default(cuid())
+  organizationId    String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  eventId           String       @unique
+  event             Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   actualAttendance  Int?
   weatherConditions String?
   whatWentWell      String?
   whatToImprove     String?
   generalNotes      String?
   createdById       String
-  createdBy         User     @relation("EventDebriefCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdBy         User         @relation("EventDebriefCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 }
 
 model EventVendorReview {
-  id              String   @id @default(cuid())
+  id              String       @id @default(cuid())
+  organizationId  String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   eventId         String
-  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event           Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   vendorId        String
-  vendor          Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  vendor          Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   rating          Int?
   wouldInviteBack Boolean?
   notes           String?
   createdById     String
-  createdBy       User     @relation("EventVendorReviewCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt       DateTime @default(now())
+  createdBy       User         @relation("EventVendorReviewCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime     @default(now())
 
   @@unique([eventId, vendorId])
 }
 
 model EventVolunteerReview {
-  id              String   @id @default(cuid())
+  id              String       @id @default(cuid())
+  organizationId  String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   eventId         String
-  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event           Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   volunteerId     String
-  volunteer       User     @relation("EventVolunteerReviewVolunteer", fields: [volunteerId], references: [id], onDelete: Cascade)
+  volunteer       User         @relation("EventVolunteerReviewVolunteer", fields: [volunteerId], references: [id], onDelete: Cascade)
   roleDescription String?
   rating          Int?
   notes           String?
   createdById     String
-  createdBy       User     @relation("EventVolunteerReviewCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt       DateTime @default(now())
+  createdBy       User         @relation("EventVolunteerReviewCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime     @default(now())
 
   @@unique([eventId, volunteerId])
 }
@@ -1756,6 +1955,8 @@ enum AnnouncementVisibility {
 
 model Announcement {
   id               String                 @id @default(cuid())
+  organizationId   String                 @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization     Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   playerId         String
   player           Player                 @relation(fields: [playerId], references: [id], onDelete: Cascade)
   celebrationYear  Int
@@ -1784,6 +1985,8 @@ enum WellWishStatus {
 
 model WellWish {
   id             String         @id @default(cuid())
+  organizationId String         @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   announcementId String
   announcement   Announcement   @relation(fields: [announcementId], references: [id], onDelete: Cascade)
   authorUserId   String?
@@ -1800,16 +2003,18 @@ model WellWish {
 }
 
 model VenueSection {
-  id        String     @id @default(cuid())
-  venueId   String
-  venue     Venue      @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  name      String
-  code      String
-  capacity  Int
-  isActive  Boolean    @default(true)
-  seatZones SeatZone[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  venueId        String
+  venue          Venue        @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  name           String
+  code           String
+  capacity       Int
+  isActive       Boolean      @default(true)
+  seatZones      SeatZone[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([venueId, code])
   @@index([venueId, isActive])
@@ -1817,6 +2022,8 @@ model VenueSection {
 
 model SeatZone {
   id                   String            @id @default(cuid())
+  organizationId       String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization         Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   eventId              String
   event                Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
   venueSectionId       String
@@ -1837,16 +2044,25 @@ model SeatZone {
   updatedAt            DateTime          @updatedAt
 
   @@unique([eventId, name])
+  // Phase 1 Stage 5.2B-4: lets SeatReservation.seatZoneId become a composite tenant-aware FK.
+  @@unique([organizationId, id])
   @@index([eventId, isActive])
   @@index([fanClubId])
 }
 
 model SeatReservation {
   id               String            @id @default(cuid())
+  organizationId   String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   eventId          String
-  event            Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  // Phase 1 Stage 5.2B-4: composite tenant-aware FK - reserveZone() (public) previously let a
+  // client-submitted eventId/seatZoneId pair reserve capacity against any organization's Event/
+  // SeatZone with nothing to stop it. This is the exact "Reservation.organizationId ==
+  // Zone.organizationId == Event.organizationId" invariant named in the stage plan. Both
+  // required, onDelete stays CASCADE/RESTRICT.
+  event            Event             @relation(fields: [organizationId, eventId], references: [organizationId, id], onDelete: Cascade)
   seatZoneId       String
-  seatZone         SeatZone          @relation(fields: [seatZoneId], references: [id], onDelete: Restrict)
+  seatZone         SeatZone          @relation(fields: [organizationId, seatZoneId], references: [organizationId, id], onDelete: Restrict)
   userId           String?
   user             User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
   fanClubId        String?
@@ -1866,6 +2082,8 @@ model SeatReservation {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
+  // Phase 1 Stage 5.2B-4: lets Ticket.reservationId become a composite tenant-aware FK.
+  @@unique([organizationId, id])
   @@index([eventId, status])
   @@index([seatZoneId, status])
   @@index([userId, createdAt])
@@ -1873,44 +2091,61 @@ model SeatReservation {
 }
 
 model Ticket {
-  id            String          @id @default(cuid())
-  reservationId String          @unique
-  reservation   SeatReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
-  userId        String?
-  user          User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  code          String          @unique
-  status        TicketStatus    @default(ACTIVE)
-  issuedAt      DateTime        @default(now())
-  usedAt        DateTime?
-  checkIns      CheckIn[]
+  id             String          @id @default(cuid())
+  organizationId String          @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  reservationId  String          @unique
+  // Phase 1 Stage 5.2B-4: composite tenant-aware FK - reserveZone() (public) creates this
+  // Ticket nested inside the SeatReservation create, always same-org by construction today, but
+  // hardened anyway since "an Org A ticket must never be redeemable as an Org B ticket" (this
+  // stage's named invariant) deserves a database backstop, not just current-code behavior.
+  // Required, onDelete stays CASCADE.
+  reservation    SeatReservation @relation(fields: [organizationId, reservationId], references: [organizationId, id], onDelete: Cascade)
+  userId         String?
+  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  code           String          @unique
+  status         TicketStatus    @default(ACTIVE)
+  issuedAt       DateTime        @default(now())
+  usedAt         DateTime?
+  checkIns       CheckIn[]
 
+  // Required by Prisma for the composite @relation above (a 1:1 relation must expose the FK
+  // pair as a unique constraint on the defining side) - reservationId's own bare @unique already
+  // guarantees the real 1:1 cardinality, this is purely to satisfy that mechanical requirement.
+  @@unique([organizationId, reservationId])
   @@index([code, status])
 }
 
 model Accreditation {
-  id           String                @id @default(cuid())
-  eventId      String
-  event        Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  userId       String?
-  user         User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
-  personName   String
-  email        String?
-  phone        String?
-  category     AccreditationCategory
-  organization String?
-  roleTitle    String?
-  code         String                @unique
-  status       AccreditationStatus   @default(PENDING)
-  approvedAt   DateTime?
-  checkIns     CheckIn[]
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
+  id                 String                @id @default(cuid())
+  organizationId     String                @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  // Named tenantOrganization, not organization - `organization` below is a pre-existing free-text
+  // field (e.g. a press credential's employer name) and must not be renamed or removed.
+  tenantOrganization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  eventId            String
+  event              Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId             String?
+  user               User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  personName         String
+  email              String?
+  phone              String?
+  category           AccreditationCategory
+  organization       String?
+  roleTitle          String?
+  code               String                @unique
+  status             AccreditationStatus   @default(PENDING)
+  approvedAt         DateTime?
+  checkIns           CheckIn[]
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
   @@index([eventId, category, status])
 }
 
 model Application {
   id                             String                         @id @default(cuid())
+  organizationId                 String                         @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization                   Organization                   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   applicantUserId                String?
   applicantUser                  User?                          @relation("ApplicantApplications", fields: [applicantUserId], references: [id], onDelete: SetNull)
   type                           ApplicationType
@@ -1943,6 +2178,8 @@ model Application {
 // fabricated Application — this model is the record of how they entered.
 model AdminOfflineIntake {
   id                             String                         @id @default(cuid())
+  organizationId                 String                         @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization                   Organization                   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   participantType                ApplicationType
   status                         AdminOfflineIntakeStatus       @default(DRAFT)
   fullName                       String
@@ -1973,43 +2210,114 @@ model AdminOfflineIntake {
   @@index([phone])
 }
 
+// Phase 1 Stage 5.4A: genuinely tenant-scoped, not merely RLS-compatible. `namespace` was the
+// bare primary key through Stage 5.2B-1 - a single global sequence per namespace regardless of
+// organization, meaning every org's allocation silently shared and advanced the same counter.
+// The real per-organization identity is the (organizationId, namespace) pair; `id` exists only
+// because Prisma models need a scalar primary key, not because it carries any meaning of its
+// own. Existing Neon Ultra rows were migrated in place with their `nextValue` untouched - no
+// existing ultraAthleteId/ultraStaffId was renumbered or reset.
 model PublicIdCounter {
-  namespace String   @id
-  nextValue BigInt
-  updatedAt DateTime @updatedAt
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  namespace      String
+  nextValue      BigInt
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, namespace])
 }
 
 model PublicIdAlias {
-  id         String   @id @default(cuid())
-  alias      String   @unique
-  entityType String
-  entityId   String
-  reason     String?
-  createdAt  DateTime @default(now())
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  alias          String       @unique
+  entityType     String
+  entityId       String
+  reason         String?
+  createdAt      DateTime     @default(now())
 
   @@index([entityType, entityId])
 }
 
+enum PublicResourceLocatorType {
+  ATHLETE
+  CLUB
+  EVENT
+  FIXTURE
+  MEDIA_ASSET
+}
+
+enum PublicTokenLocatorType {
+  ORDER
+  TICKET
+}
+
+enum PublicLocatorStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// Phase 1 Stage 5.5A: global bootstrap infrastructure. This model intentionally
+// has no tenant RLS policy and no Neon Ultra organizationId default. It stores
+// only routing provenance needed to enter withOrganizationContext().
+model PublicResourceLocator {
+  id             String                    @id @default(cuid())
+  resourceType   PublicResourceLocatorType
+  publicKey      String
+  organizationId String
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  resourceId     String
+  status         PublicLocatorStatus       @default(ACTIVE)
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  @@unique([resourceType, publicKey])
+  @@index([organizationId, resourceType, status])
+  @@index([resourceType, resourceId])
+}
+
+// Phase 1 Stage 5.5A: global bootstrap infrastructure for bearer-style public
+// selectors. Raw tokens stay only on their authoritative tenant-owned records.
+model PublicTokenLocator {
+  id             String                 @id @default(cuid())
+  tokenType      PublicTokenLocatorType
+  tokenHash      String
+  organizationId String
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  resourceId     String
+  status         PublicLocatorStatus    @default(ACTIVE)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@unique([tokenType, tokenHash])
+  @@index([organizationId, tokenType, status])
+  @@index([tokenType, resourceId])
+}
+
 model ImportJob {
-  id           String       @id @default(cuid())
-  type         ImportType
-  status       ImportStatus @default(UPLOADED)
-  fileName     String
-  uploadedById String
-  uploadedBy   User         @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
-  totalRows    Int          @default(0)
-  validRows    Int          @default(0)
-  warningRows  Int          @default(0)
-  errorRows    Int          @default(0)
-  importedRows Int          @default(0)
-  skippedRows  Int          @default(0)
-  failedRows   Int          @default(0)
-  startedAt    DateTime?
-  completedAt  DateTime?
-  rows         ImportRow[]
-  recordOrigin RecordOrigin @default(IMPORT)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  type           ImportType
+  status         ImportStatus @default(UPLOADED)
+  fileName       String
+  uploadedById   String
+  uploadedBy     User         @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  totalRows      Int          @default(0)
+  validRows      Int          @default(0)
+  warningRows    Int          @default(0)
+  errorRows      Int          @default(0)
+  importedRows   Int          @default(0)
+  skippedRows    Int          @default(0)
+  failedRows     Int          @default(0)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  rows           ImportRow[]
+  recordOrigin   RecordOrigin @default(IMPORT)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([type, status, createdAt])
   @@index([uploadedById, createdAt])
@@ -2017,6 +2325,8 @@ model ImportJob {
 
 model ImportRow {
   id                 String                  @id @default(cuid())
+  organizationId     String                  @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization       Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   importJobId        String
   importJob          ImportJob               @relation(fields: [importJobId], references: [id], onDelete: Cascade)
   rowNumber          Int
@@ -2040,51 +2350,71 @@ model ImportRow {
 }
 
 model Vendor {
-  id           String              @id @default(cuid())
-  userId       String?             @unique
-  user         User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
-  name         String              @unique
-  contactName  String?
-  email        String?
-  phone        String?
-  logoUrl      String?
-  isActive     Boolean             @default(true)
-  recordOrigin RecordOrigin        @default(PRODUCTION)
-  products     VendorProduct[]
-  eventReviews EventVendorReview[]
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+  id             String              @id @default(cuid())
+  organizationId String              @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  userId         String?             @unique
+  user           User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name           String
+  contactName    String?
+  email          String?
+  phone          String?
+  logoUrl        String?
+  isActive       Boolean             @default(true)
+  recordOrigin   RecordOrigin        @default(PRODUCTION)
+  products       VendorProduct[]
+  eventReviews   EventVendorReview[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  // Phase 1 Stage 3b: was a bare @unique - rewritten to organizationId-composite so two
+  // organizations can each work with a vendor of the same name. No application code depended on
+  // the old bare constraint (verified: every real lookup uses `id`).
+  @@unique([organizationId, name])
+  // Phase 1 Stage 5.2B-4: lets VendorProduct.vendorId become a composite tenant-aware FK.
+  @@unique([organizationId, id])
 }
 
 model MediaProfile {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization String
-  roleTitle    String
-  equipment    String?
-  socialLinks  String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String       @id @default(cuid())
+  organizationId     String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  // Named tenantOrganization, not organization - `organization` below is a pre-existing free-text
+  // field (the media person's own employer name) and must not be renamed or removed.
+  tenantOrganization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  userId             String       @unique
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization       String
+  roleTitle          String
+  equipment          String?
+  socialLinks        String?
+  isActive           Boolean      @default(true)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 }
 
 model VolunteerProfile {
-  id             String   @id @default(cuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  userId         String       @unique
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   areaOfInterest String
   availability   String
   experience     String?
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 }
 
 model VendorProduct {
   id                 String            @id @default(cuid())
+  organizationId     String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization       Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   vendorId           String
-  vendor             Vendor            @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  // Phase 1 Stage 5.2B-4: composite tenant-aware FK - createVendorProduct() is a live,
+  // previously fully-unscoped write path that let a client-submitted vendorId attach a product
+  // to any organization's Vendor with nothing to stop it. Required, onDelete stays CASCADE.
+  vendor             Vendor            @relation(fields: [organizationId, vendorId], references: [organizationId, id], onDelete: Cascade)
   name               String
   description        String?
   category           ProductCategory
@@ -2099,20 +2429,28 @@ model VendorProduct {
   updatedAt          DateTime          @updatedAt
 
   @@unique([vendorId, name])
+  // Phase 1 Stage 5.2B-4: lets VendorInventory.productId/OrderItem.productId become composite
+  // tenant-aware FKs.
+  @@unique([organizationId, id])
   @@index([category, isActive])
 }
 
 model VendorInventory {
-  id        String        @id @default(cuid())
-  eventId   String
-  event     Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  productId String
-  product   VendorProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
-  stock     Int
-  reserved  Int           @default(0)
-  sold      Int           @default(0)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  eventId        String
+  // Phase 1 Stage 5.2B-4: composite tenant-aware FK - setVendorInventory() previously let a
+  // client-submitted eventId/productId pair attach inventory to any organization's Event/
+  // VendorProduct with nothing to stop it. Both required, onDelete stays CASCADE.
+  event          Event         @relation(fields: [organizationId, eventId], references: [organizationId, id], onDelete: Cascade)
+  productId      String
+  product        VendorProduct @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Cascade)
+  stock          Int
+  reserved       Int           @default(0)
+  sold           Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@unique([eventId, productId])
   @@index([eventId])
@@ -2120,6 +2458,8 @@ model VendorInventory {
 
 model Order {
   id               String           @id @default(cuid())
+  organizationId   String           @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   eventId          String
   event            Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
   userId           String?
@@ -2153,15 +2493,20 @@ model Order {
 }
 
 model OrderItem {
-  id            String        @id @default(cuid())
-  orderId       String
-  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId     String
-  product       VendorProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
-  quantity      Int
-  unitPriceKobo Int
-  discountKobo  Int           @default(0)
-  totalKobo     Int
+  id             String        @id @default(cuid())
+  organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  orderId        String
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String
+  // Phase 1 Stage 5.2B-4: composite tenant-aware FK - createWalletOrder() (public) previously
+  // let a client-submitted inventoryId (and therefore productId) attach an order line to any
+  // organization's VendorProduct with nothing to stop it. Required, onDelete stays RESTRICT.
+  product        VendorProduct @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
+  quantity       Int
+  unitPriceKobo  Int
+  discountKobo   Int           @default(0)
+  totalKobo      Int
 
   @@index([orderId])
   @@index([productId])
@@ -2169,6 +2514,8 @@ model OrderItem {
 
 model CheckIn {
   id              String         @id @default(cuid())
+  organizationId  String         @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   type            CheckInType
   ticketId        String?
   ticket          Ticket?        @relation(fields: [ticketId], references: [id], onDelete: SetNull)
@@ -2188,6 +2535,8 @@ model CheckIn {
 
 model PromoCode {
   id                String           @id @default(cuid())
+  organizationId    String           @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   eventId           String?
   event             Event?           @relation(fields: [eventId], references: [id], onDelete: Cascade)
   code              String           @unique
@@ -2208,24 +2557,26 @@ model PromoCode {
 }
 
 model SponsorCampaign {
-  id           String         @id @default(cuid())
-  name         String
-  sponsorName  String
-  eventId      String?
-  event        Event?         @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  productId    String?
-  product      VendorProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  impressions  Int            @default(0)
-  redemptions  Int            @default(0)
-  unitsSold    Int            @default(0)
-  revenueKobo  Int            @default(0)
-  promoCodes   PromoCode[]
-  startsAt     DateTime?
-  endsAt       DateTime?
-  isActive     Boolean        @default(true)
-  recordOrigin RecordOrigin   @default(PRODUCTION)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  organizationId String         @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  sponsorName    String
+  eventId        String?
+  event          Event?         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        VendorProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  impressions    Int            @default(0)
+  redemptions    Int            @default(0)
+  unitsSold      Int            @default(0)
+  revenueKobo    Int            @default(0)
+  promoCodes     PromoCode[]
+  startsAt       DateTime?
+  endsAt         DateTime?
+  isActive       Boolean        @default(true)
+  recordOrigin   RecordOrigin   @default(PRODUCTION)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   @@index([eventId, isActive])
   @@index([sponsorName])
@@ -2233,6 +2584,8 @@ model SponsorCampaign {
 
 model Fixture {
   id                 String            @id @default(cuid())
+  organizationId     String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization       Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   seasonId           String
   season             Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   divisionId         String
@@ -2259,20 +2612,24 @@ model Fixture {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
+  // Phase 1 Stage 5.2C: lets GameVideo.fixtureId become a composite tenant-aware FK.
+  @@unique([organizationId, id])
   @@index([seasonId, divisionId, scheduledAt])
   @@index([status, scheduledAt])
   @@index([venueId, scheduledAt])
 }
 
 model FixtureOfficial {
-  id        String   @id @default(cuid())
-  fixtureId String
-  fixture   Fixture  @relation(fields: [fixtureId], references: [id], onDelete: Cascade)
-  name      String
-  role      String
-  phone     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  fixtureId      String
+  fixture        Fixture      @relation(fields: [fixtureId], references: [id], onDelete: Cascade)
+  name           String
+  role           String
+  phone          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([fixtureId, name, role])
   @@index([fixtureId])
@@ -2280,6 +2637,8 @@ model FixtureOfficial {
 
 model Game {
   id                         String             @id @default(cuid())
+  organizationId             String             @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization               Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   fixtureId                  String             @unique
   fixture                    Fixture            @relation(fields: [fixtureId], references: [id], onDelete: Cascade)
   status                     GameStatus         @default(NOT_STARTED)
@@ -2345,12 +2704,14 @@ model Game {
 // currently linked to that Season; a game's actual rules are frozen into a GameRuleSnapshot
 // at game-start time so later edits here never retroactively change a played game.
 model RuleSet {
-  id       String  @id @default(cuid())
-  name     String
-  version  Int     @default(1)
-  isActive Boolean @default(true)
-  seasonId String?
-  season   Season? @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  version        Int          @default(1)
+  isActive       Boolean      @default(true)
+  seasonId       String?
+  season         Season?      @relation(fields: [seasonId], references: [id], onDelete: SetNull)
 
   periodCount             Int @default(2)
   periodDurationSeconds   Int @default(600)
@@ -2382,11 +2743,13 @@ model RuleSet {
 // or even deleting the source RuleSet later can never change what an already-played game's
 // rules were. ruleSetId is kept only for traceability.
 model GameRuleSnapshot {
-  id             String   @id @default(cuid())
-  gameId         String   @unique
-  game           Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  gameId         String       @unique
+  game           Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
   ruleSetId      String?
-  ruleSet        RuleSet? @relation(fields: [ruleSetId], references: [id], onDelete: SetNull)
+  ruleSet        RuleSet?     @relation(fields: [ruleSetId], references: [id], onDelete: SetNull)
   ruleSetName    String
   ruleSetVersion Int
 
@@ -2415,20 +2778,24 @@ model GameRuleSnapshot {
 // play-by-play) scoring resolution is available — e.g. an imported FIBA box score, which
 // reports "Scoring by 5 Minute intervals" as one cumulative figure per half/OT period.
 model GamePeriodScore {
-  id        String   @id @default(cuid())
-  gameId    String
-  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  period    Int
-  label     String
-  homeScore Int
-  awayScore Int
-  createdAt DateTime @default(now())
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  gameId         String
+  game           Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  period         Int
+  label          String
+  homeScore      Int
+  awayScore      Int
+  createdAt      DateTime     @default(now())
 
   @@unique([gameId, period])
 }
 
 model GameEvent {
   id                           String                        @id @default(cuid())
+  organizationId               String                        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization                 Organization                  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   gameId                       String
   game                         Game                          @relation(fields: [gameId], references: [id], onDelete: Cascade)
   // Monotonic per-game ordering, assigned from Game.nextEventSequence at write time. Lets the
@@ -2521,37 +2888,41 @@ model GameEvent {
 // statistical event. `confirmedById`/`confirmedAt` record who attested the lineup and when,
 // same audit shape as the existing mandatory-substitution confirmation.
 model GameStarter {
-  id            String     @id @default(cuid())
-  gameId        String
-  game          Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  seasonClubId  String
-  seasonClub    SeasonClub @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
-  playerId      String
-  player        Player     @relation("GameStarterPlayer", fields: [playerId], references: [id], onDelete: Restrict)
-  confirmedById String
-  confirmedAt   DateTime   @default(now())
-  createdAt     DateTime   @default(now())
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  gameId         String
+  game           Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  seasonClubId   String
+  seasonClub     SeasonClub   @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
+  playerId       String
+  player         Player       @relation("GameStarterPlayer", fields: [playerId], references: [id], onDelete: Restrict)
+  confirmedById  String
+  confirmedAt    DateTime     @default(now())
+  createdAt      DateTime     @default(now())
 
   @@unique([gameId, playerId])
   @@index([gameId, seasonClubId])
 }
 
 model PlayerStat {
-  id                   String     @id @default(cuid())
+  id                   String       @id @default(cuid())
+  organizationId       String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   gameId               String
-  game                 Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  game                 Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
   playerId             String
-  player               Player     @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  player               Player       @relation(fields: [playerId], references: [id], onDelete: Restrict)
   seasonClubId         String
-  seasonClub           SeasonClub @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
-  points               Int        @default(0)
-  rebounds             Int        @default(0)
-  assists              Int        @default(0)
-  steals               Int        @default(0)
-  blocks               Int        @default(0)
-  turnovers            Int        @default(0)
-  fouls                Int        @default(0)
-  minutesPlayed        Int        @default(0)
+  seasonClub           SeasonClub   @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
+  points               Int          @default(0)
+  rebounds             Int          @default(0)
+  assists              Int          @default(0)
+  steals               Int          @default(0)
+  blocks               Int          @default(0)
+  turnovers            Int          @default(0)
+  fouls                Int          @default(0)
+  minutesPlayed        Int          @default(0)
   // Additive detail available from a full FIBA-style box score. Nullable — never required,
   // never inferred from `points`/`rebounds` when absent. All conventional (non-Ultra) stats.
   fieldGoalsMade       Int?
@@ -2567,7 +2938,7 @@ model PlayerStat {
   foulsDrawn           Int?
   plusMinus            Int?
   efficiency           Int?
-  didNotPlay           Boolean    @default(false)
+  didNotPlay           Boolean      @default(false)
 
   // Ultra-specific aggregates. NULL means NOT_CAPTURED (the source this row came from doesn't
   // support the dimension at all — e.g. every Season Zero FIBA-imported row); a real 0 means
@@ -2606,16 +2977,18 @@ model PlayerStat {
 }
 
 model TeamStat {
-  id                           String     @id @default(cuid())
+  id                           String       @id @default(cuid())
+  organizationId               String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization                 Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   gameId                       String
-  game                         Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  game                         Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
   seasonClubId                 String
-  seasonClub                   SeasonClub @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
-  points                       Int        @default(0)
-  rebounds                     Int        @default(0)
-  assists                      Int        @default(0)
-  turnovers                    Int        @default(0)
-  fouls                        Int        @default(0)
+  seasonClub                   SeasonClub   @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
+  points                       Int          @default(0)
+  rebounds                     Int          @default(0)
+  assists                      Int          @default(0)
+  turnovers                    Int          @default(0)
+  fouls                        Int          @default(0)
   // Additive advanced team metrics available from a full FIBA-style box score. Nullable —
   // never required, never inferred when a source doesn't report them.
   pointsFromTurnovers          Int?
@@ -2628,7 +3001,7 @@ model TeamStat {
   benchPoints                  Int?
   biggestLead                  Int?
   biggestScoringRun            Int?
-  pointsPerPossession          Decimal?   @db.Decimal(4, 2)
+  pointsPerPossession          Decimal?     @db.Decimal(4, 2)
   leadChanges                  Int?
   timesTied                    Int?
   timeWithLeadSeconds          Int?
@@ -2646,19 +3019,21 @@ model TeamStat {
 }
 
 model Standing {
-  id              String     @id @default(cuid())
+  id              String       @id @default(cuid())
+  organizationId  String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   seasonId        String
-  season          Season     @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  seasonClubId    String     @unique
-  seasonClub      SeasonClub @relation(fields: [seasonClubId], references: [id], onDelete: Cascade)
-  played          Int        @default(0)
-  won             Int        @default(0)
-  lost            Int        @default(0)
-  pointsFor       Int        @default(0)
-  pointsAgainst   Int        @default(0)
-  pointDifference Int        @default(0)
-  leaguePoints    Int        @default(0)
-  updatedAt       DateTime   @updatedAt
+  season          Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  seasonClubId    String       @unique
+  seasonClub      SeasonClub   @relation(fields: [seasonClubId], references: [id], onDelete: Cascade)
+  played          Int          @default(0)
+  won             Int          @default(0)
+  lost            Int          @default(0)
+  pointsFor       Int          @default(0)
+  pointsAgainst   Int          @default(0)
+  pointDifference Int          @default(0)
+  leaguePoints    Int          @default(0)
+  updatedAt       DateTime     @updatedAt
 
   @@index([seasonId, leaguePoints, won, pointDifference, pointsFor])
 }
@@ -2667,19 +3042,26 @@ model Standing {
 // separate from Club/SeasonClub so they never touch real league standings. Players in a
 // novelty match are still real league Players; only the "team" side is a lightweight entity.
 model NoveltyTeam {
-  id           String              @id @default(cuid())
-  name         String              @unique
-  shortName    String?
-  logoUrl      String?
-  primaryColor String?
-  description  String?
-  homeMatches  NoveltyMatch[]      @relation("HomeNoveltyTeam")
-  awayMatches  NoveltyMatch[]      @relation("AwayNoveltyTeam")
-  wonMatches   NoveltyMatch[]      @relation("WinnerNoveltyTeam")
-  events       NoveltyGameEvent[]
-  playerStats  NoveltyPlayerStat[]
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+  id             String              @id @default(cuid())
+  organizationId String              @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  shortName      String?
+  logoUrl        String?
+  primaryColor   String?
+  description    String?
+  homeMatches    NoveltyMatch[]      @relation("HomeNoveltyTeam")
+  awayMatches    NoveltyMatch[]      @relation("AwayNoveltyTeam")
+  wonMatches     NoveltyMatch[]      @relation("WinnerNoveltyTeam")
+  events         NoveltyGameEvent[]
+  playerStats    NoveltyPlayerStat[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  // Phase 1 Stage 3b: was a bare @unique - rewritten to organizationId-composite so two
+  // organizations can each independently name a novelty/exhibition team the same thing. No
+  // application code depended on the old bare constraint.
+  @@unique([organizationId, name])
 }
 
 enum NoveltyMatchStatus {
@@ -2690,29 +3072,33 @@ enum NoveltyMatchStatus {
 }
 
 model NoveltyMatch {
-  id           String             @id @default(cuid())
-  name         String
-  eventId      String?
-  event        Event?             @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  venueId      String?
-  venue        Venue?             @relation(fields: [venueId], references: [id], onDelete: SetNull)
-  scheduledAt  DateTime
-  status       NoveltyMatchStatus @default(SCHEDULED)
-  homeTeamId   String
-  homeTeam     NoveltyTeam        @relation("HomeNoveltyTeam", fields: [homeTeamId], references: [id], onDelete: Restrict)
-  awayTeamId   String
-  awayTeam     NoveltyTeam        @relation("AwayNoveltyTeam", fields: [awayTeamId], references: [id], onDelete: Restrict)
-  homeScore    Int                @default(0)
-  awayScore    Int                @default(0)
-  winnerTeamId String?
-  winnerTeam   NoveltyTeam?       @relation("WinnerNoveltyTeam", fields: [winnerTeamId], references: [id], onDelete: SetNull)
-  game         NoveltyGame?
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  id             String             @id @default(cuid())
+  organizationId String             @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  eventId        String?
+  event          Event?             @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  venueId        String?
+  venue          Venue?             @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  scheduledAt    DateTime
+  status         NoveltyMatchStatus @default(SCHEDULED)
+  homeTeamId     String
+  homeTeam       NoveltyTeam        @relation("HomeNoveltyTeam", fields: [homeTeamId], references: [id], onDelete: Restrict)
+  awayTeamId     String
+  awayTeam       NoveltyTeam        @relation("AwayNoveltyTeam", fields: [awayTeamId], references: [id], onDelete: Restrict)
+  homeScore      Int                @default(0)
+  awayScore      Int                @default(0)
+  winnerTeamId   String?
+  winnerTeam     NoveltyTeam?       @relation("WinnerNoveltyTeam", fields: [winnerTeamId], references: [id], onDelete: SetNull)
+  game           NoveltyGame?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 }
 
 model NoveltyGame {
   id                    String              @id @default(cuid())
+  organizationId        String              @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization          Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   matchId               String              @unique
   match                 NoveltyMatch        @relation(fields: [matchId], references: [id], onDelete: Cascade)
   status                GameStatus          @default(NOT_STARTED)
@@ -2729,6 +3115,8 @@ model NoveltyGame {
 
 model NoveltyGameEvent {
   id             String        @id @default(cuid())
+  organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   gameId         String
   game           NoveltyGame   @relation(fields: [gameId], references: [id], onDelete: Cascade)
   teamId         String
@@ -2752,97 +3140,109 @@ model NoveltyGameEvent {
 }
 
 model NoveltyPlayerStat {
-  id        String      @id @default(cuid())
-  gameId    String
-  game      NoveltyGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  playerId  String
-  player    Player      @relation(fields: [playerId], references: [id], onDelete: Restrict)
-  teamId    String
-  team      NoveltyTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
-  points    Int         @default(0)
-  rebounds  Int         @default(0)
-  assists   Int         @default(0)
-  steals    Int         @default(0)
-  blocks    Int         @default(0)
-  turnovers Int         @default(0)
-  fouls     Int         @default(0)
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  gameId         String
+  game           NoveltyGame  @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  playerId       String
+  player         Player       @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  teamId         String
+  team           NoveltyTeam  @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  points         Int          @default(0)
+  rebounds       Int          @default(0)
+  assists        Int          @default(0)
+  steals         Int          @default(0)
+  blocks         Int          @default(0)
+  turnovers      Int          @default(0)
+  fouls          Int          @default(0)
 
   @@unique([gameId, playerId])
   @@index([teamId])
 }
 
 model FanClub {
-  id           String            @id @default(cuid())
-  clubId       String            @unique
-  club         Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  name         String
-  captainName  String
-  description  String
-  memberships  FanMembership[]
-  seatZones    SeatZone[]
-  reservations SeatReservation[]
-  orders       Order[]
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  id             String            @id @default(cuid())
+  organizationId String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  clubId         String            @unique
+  club           Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  name           String
+  captainName    String
+  description    String
+  memberships    FanMembership[]
+  seatZones      SeatZone[]
+  reservations   SeatReservation[]
+  orders         Order[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 }
 
 model FanMembership {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   userId         String?
-  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   fanClubId      String
-  fanClub        FanClub  @relation(fields: [fanClubId], references: [id], onDelete: Cascade)
+  fanClub        FanClub      @relation(fields: [fanClubId], references: [id], onDelete: Cascade)
   name           String?
   phone          String?
   whatsappNumber String?
   source         String?
-  joinedAt       DateTime @default(now())
+  joinedAt       DateTime     @default(now())
 
   @@unique([userId, fanClubId])
   @@index([fanClubId, phone])
 }
 
 model ScoutReport {
-  id         String                @id @default(cuid())
-  scoutId    String
-  scout      User                  @relation("ScoutReports", fields: [scoutId], references: [id], onDelete: Cascade)
-  athleteId  String
-  athlete    Athlete               @relation(fields: [athleteId], references: [id], onDelete: Cascade)
-  seasonId   String?
-  season     Season?               @relation(fields: [seasonId], references: [id], onDelete: SetNull)
-  visibility ScoutReportVisibility @default(PRIVATE)
-  rating     Int
-  report     String
-  createdAt  DateTime              @default(now())
-  updatedAt  DateTime              @updatedAt
+  id             String                @id @default(cuid())
+  organizationId String                @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  scoutId        String
+  scout          User                  @relation("ScoutReports", fields: [scoutId], references: [id], onDelete: Cascade)
+  athleteId      String
+  athlete        Athlete               @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  seasonId       String?
+  season         Season?               @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  visibility     ScoutReportVisibility @default(PRIVATE)
+  rating         Int
+  report         String
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
 
   @@index([scoutId, athleteId])
   @@index([athleteId, seasonId, visibility])
 }
 
 model MVPVote {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gameId    String
-  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  playerId  String
-  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameId         String
+  game           Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  playerId       String
+  player         Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
 
   @@unique([userId, gameId])
   @@index([gameId, playerId])
 }
 
 model AuditLog {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  action     String
-  entityType String
-  entityId   String
-  details    Json?
-  createdAt  DateTime @default(now())
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  action         String
+  entityType     String
+  entityId       String
+  details        Json?
+  createdAt      DateTime     @default(now())
 
   @@index([createdAt])
   @@index([userId, createdAt])
@@ -2851,39 +3251,43 @@ model AuditLog {
 }
 
 model ContentTemplate {
-  id            String       @id @default(cuid())
-  competitionId String?
-  competition   Competition? @relation(fields: [competitionId], references: [id], onDelete: Cascade)
-  type          ContentType
-  name          String
-  textTemplate  String
-  htmlTemplate  String
-  isActive      Boolean      @default(true)
-  version       Int          @default(1)
-  jobs          ContentJob[]
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  competitionId  String?
+  competition    Competition? @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  type           ContentType
+  name           String
+  textTemplate   String
+  htmlTemplate   String
+  isActive       Boolean      @default(true)
+  version        Int          @default(1)
+  jobs           ContentJob[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([competitionId, type, version])
   @@index([type, isActive])
 }
 
 model ContentJob {
-  id            String           @id @default(cuid())
-  templateId    String
-  template      ContentTemplate  @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  requestedById String
-  requestedBy   User             @relation(fields: [requestedById], references: [id], onDelete: Restrict)
-  type          ContentType
-  sourceType    String
-  sourceId      String
-  status        ContentJobStatus @default(PENDING)
-  errorMessage  String?
-  asset         ContentAsset?
-  startedAt     DateTime?
-  completedAt   DateTime?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id             String           @id @default(cuid())
+  organizationId String           @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  templateId     String
+  template       ContentTemplate  @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  requestedById  String
+  requestedBy    User             @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+  type           ContentType
+  sourceType     String
+  sourceId       String
+  status         ContentJobStatus @default(PENDING)
+  errorMessage   String?
+  asset          ContentAsset?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@index([status, createdAt])
   @@index([sourceType, sourceId])
@@ -2891,16 +3295,18 @@ model ContentJob {
 }
 
 model ContentAsset {
-  id          String     @id @default(cuid())
-  jobId       String     @unique
-  job         ContentJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  slug        String     @unique
-  title       String
-  textContent String
-  htmlContent String
-  graphicData Json
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  jobId          String       @unique
+  job            ContentJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  slug           String       @unique
+  title          String
+  textContent    String
+  htmlContent    String
+  graphicData    Json
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([createdAt])
 }
@@ -2987,12 +3393,20 @@ enum VisionMatchBand {
 // provider already supports that.
 model GameVideo {
   id                 String            @id @default(cuid())
+  organizationId     String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization       Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   fixtureId          String
-  fixture            Fixture           @relation(fields: [fixtureId], references: [id], onDelete: Cascade)
+  // Phase 1 Stage 5.2C: composite tenant-aware FK - registerGameVideoFromExistingAsset() was
+  // previously a live, fully-unscoped write path that let a client-submitted fixtureId/
+  // mediaAssetId pair attach a video to any organization's Fixture/MediaAsset with nothing to
+  // stop it. Both required, onDelete stays CASCADE/RESTRICT. gameId (optional, ON DELETE
+  // SetNull) is left as a simple FK for the same Prisma/Postgres composite+SetNull-on-a-
+  // NOT-NULL-organizationId incompatibility Stage 5.2B-3 documented.
+  fixture            Fixture           @relation(fields: [organizationId, fixtureId], references: [organizationId, id], onDelete: Cascade)
   gameId             String?
   game               Game?             @relation(fields: [gameId], references: [id], onDelete: SetNull)
   mediaAssetId       String            @unique
-  mediaAsset         MediaAsset        @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+  mediaAsset         MediaAsset        @relation(fields: [organizationId, mediaAssetId], references: [organizationId, id], onDelete: Restrict)
   sourceType         VideoSourceType
   durationSeconds    Int?
   frameRate          Float?
@@ -3032,6 +3446,10 @@ model GameVideo {
   trajectoryArtifacts VisionTrajectoryArtifact[]
   spatialSummaries    VisionSpatialSummary[]
 
+  // Required by Prisma for the composite @relation above (a 1:1 relation must expose the FK
+  // pair as a unique constraint on the defining side) - mediaAssetId's own bare @unique already
+  // guarantees the real 1:1 cardinality.
+  @@unique([organizationId, mediaAssetId])
   @@index([fixtureId])
   @@index([gameId])
   @@index([visionCapability])
@@ -3043,6 +3461,8 @@ model GameVideo {
 // REVIEW -> ACCEPT -> CANONICAL VIDEO ANCHOR" workflow the track specifies.
 model VideoTimelineAnchor {
   id               String               @id @default(cuid())
+  organizationId   String               @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   gameVideoId      String
   gameVideo        GameVideo            @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
   videoTimeMs      Int
@@ -3063,9 +3483,11 @@ model VideoTimelineAnchor {
 // verifying the camera genuinely didn't move between games - not attempted this track; every
 // video gets its own explicit calibration instead of assuming reuse is safe).
 model CourtCalibration {
-  id                     String    @id @default(cuid())
-  gameVideoId            String    @unique
-  gameVideo              GameVideo @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
+  id                     String       @id @default(cuid())
+  organizationId         String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  gameVideoId            String       @unique
+  gameVideo              GameVideo    @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
   // [{ imageX, imageY, courtX, courtY }, ...] - the point correspondences a homography is fit
   // from. See COURT_CALIBRATION.md for the coordinate system definition.
   referencePoints        Json
@@ -3076,7 +3498,7 @@ model CourtCalibration {
   // guessed; see COURT_CALIBRATION.md's "what is and isn't defined" section.
   courtWidthUnits        Float?
   courtLengthUnits       Float?
-  units                  String    @default("meters")
+  units                  String       @default("meters")
   // G.22 Part XXVIII: computed by meanReprojectionError() (court-homography.ts) once the
   // homography is fit - how well the transform explains its own reference points. Null until a
   // calibration is actually computed (never guessed). qualityBand is the calibration-quality.ts
@@ -3086,18 +3508,20 @@ model CourtCalibration {
   reprojectionErrorUnits Float?
   qualityBand            String?
   createdById            String
-  createdBy              User      @relation("CourtCalibrationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt              DateTime  @default(now())
+  createdBy              User         @relation("CourtCalibrationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt              DateTime     @default(now())
 }
 
 // Model Registry (Part XV) - identity/version only, not an ML platform.
 model VisionModel {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  version     String
-  description String?
-  configHash  String?
-  createdAt   DateTime @default(now())
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  key            String       @unique
+  version        String
+  description    String?
+  configHash     String?
+  createdAt      DateTime     @default(now())
 
   analysisRuns VisionAnalysisRun[]
 }
@@ -3106,6 +3530,8 @@ model VisionModel {
 // place by a later model version; a re-analysis is a new run, not an update to an old one.
 model VisionAnalysisRun {
   id               String                  @id @default(cuid())
+  organizationId   String                  @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization     Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   gameVideoId      String
   gameVideo        GameVideo               @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
   visionModelId    String
@@ -3134,6 +3560,8 @@ model VisionAnalysisRun {
 // candidate, always paired with identityConfidence, always subject to human review.
 model VisionTrack {
   id                        String            @id @default(cuid())
+  organizationId            String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization              Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   gameVideoId               String
   gameVideo                 GameVideo         @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
   analysisRunId             String
@@ -3158,6 +3586,8 @@ model VisionTrack {
 // caller mistakes this for a verified attribution the way a GameEvent's fields are.
 model VisionObservation {
   id                        String                  @id @default(cuid())
+  organizationId            String                  @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization              Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   analysisRunId             String
   analysisRun               VisionAnalysisRun       @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
   gameVideoId               String
@@ -3201,6 +3631,8 @@ model VisionObservation {
 // vision-match-confidence.ts.
 model VisionEventMatch {
   id              String                  @id @default(cuid())
+  organizationId  String                  @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization    Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   observationId   String
   observation     VisionObservation       @relation(fields: [observationId], references: [id], onDelete: Cascade)
   gameEventId     String
@@ -3231,6 +3663,8 @@ model VisionEventMatch {
 // a real, evaluated pipeline producing that volume of data first).
 model VisionSpatialSummary {
   id                   String            @id @default(cuid())
+  organizationId       String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization         Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   gameVideoId          String
   gameVideo            GameVideo         @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
   analysisRunId        String
@@ -3278,6 +3712,8 @@ enum CourtBasketSide {
 
 model CourtSpecification {
   id                 String                   @id @default(cuid())
+  organizationId     String                   @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization       Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   venueId            String
   venue              Venue                    @relation(fields: [venueId], references: [id], onDelete: Cascade)
   version            Int                      @default(1)
@@ -3344,6 +3780,8 @@ enum VisionFailureCategory {
 // this table is only the metadata pointer + summary, never the samples themselves.
 model VisionTrajectoryArtifact {
   id               String               @id @default(cuid())
+  organizationId   String               @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   gameVideoId      String
   gameVideo        GameVideo            @relation(fields: [gameVideoId], references: [id], onDelete: Cascade)
   analysisRunId    String
@@ -3366,4 +3804,166 @@ model VisionTrajectoryArtifact {
   @@unique([storageProvider, objectKey])
   @@index([gameVideoId])
   @@index([analysisRunId])
+}
+
+// ============================================================================
+// PHASE 1 — MULTI-TENANCY FOUNDATION
+//
+// Organization is the tenant root: one row per league this platform operates. Neon Ultra
+// Basketball League (slug "neon-ultra") is the first and, as of Stage 3, the ONLY one -
+// created and backfilled onto every existing row by Stage 2's script
+// (scripts/phase1-stage2-backfill-organization.ts).
+//
+// Deliberately does NOT carry a sportId: sport selection already lives correctly on
+// Competition, and one Organization may eventually run competitions in more than one sport
+// (e.g. a future basketball + football league under one operator) - duplicating sport onto
+// Organization would create two disagreeing sources of truth for "what sport is this," which
+// this project has consistently avoided elsewhere (see CourtSpecification vs RuleSet in G.22).
+//
+// STAGE 3 TRACKED BRIDGE - READ BEFORE ONBOARDING A SECOND ORGANIZATION:
+// Every tenant-scoped table's organizationId column has a database-level
+// @default(dbgenerated("'<neon-ultra-org-id>'")). This was a deliberate choice, not an oversight
+// - making the column required in Prisma's generated types without a default would have forced
+// threading real session-derived organization context through every create call site across the
+// app first (799 compile errors surfaced when this was tried), which is Stage 5's job, not
+// Stage 3's. The default lets every existing, not-yet-org-aware code path keep compiling and
+// working unchanged while NOT NULL + the foreign key become real and enforced at the database
+// level today.
+//
+// This default is safe ONLY because Neon Ultra is still the only tenant that exists. The moment
+// a second real Organization is onboarded, this default becomes a genuine footgun: any code path
+// that forgets to pass organizationId explicitly would SILENTLY (not loudly) attribute new data
+// to Neon Ultra instead of failing a compile or a query. Before onboarding organization #2:
+// complete Stage 5 (thread real organization context through every create call site), then
+// remove every one of these @default(dbgenerated(...)) annotations in a dedicated migration.
+// ============================================================================
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model Organization {
+  id                        String                     @id @default(cuid())
+  name                      String
+  slug                      String                     @unique
+  status                    OrganizationStatus         @default(ACTIVE)
+  // Phase 1 Stage 5.4A: wired up in public-ids.ts. PublicIdCounter's sequence allocation is
+  // tenant-local (each org allocates 1, 2, 3... independently, never advancing another org's
+  // counter) - the formatted external id's platform-wide uniqueness now rests entirely on no two
+  // organizations ever sharing a prefix, which is why both are @unique here. Do not let a new
+  // organization reuse an existing prefix.
+  idPrefixAthlete           String                     @unique @default("UBA")
+  idPrefixStaff             String                     @unique @default("UBS")
+  roleAssignments           UserRoleAssignment[]
+  competitions              Competition[]
+  divisions                 Division[]
+  seasons                   Season[]
+  clubs                     Club[]
+  seasonClubs               SeasonClub[]
+  athletes                  Athlete[]
+  players                   Player[]
+  athleteAwards             AthleteAward[]
+  athleteVideos             AthleteVideo[]
+  trainingSessions          TrainingSession[]
+  athleteTrainingRecords    AthleteTrainingRecord[]
+  athleteTrainingMetrics    AthleteTrainingMetric[]
+  athleteMedias             AthleteMedia[]
+  mediaAssets               MediaAsset[]
+  mediaAssetVariants        MediaAssetVariant[]
+  mediaAssetUsages          MediaAssetUsage[]
+  participantDocuments      ParticipantDocument[]
+  staffs                    Staff[]
+  drafts                    Draft[]
+  draftPicks                DraftPick[]
+  draftEvents               DraftEvent[]
+  draftSquads               DraftSquad[]
+  draftSquadMembers         DraftSquadMember[]
+  draftCoachPoolEntrys      DraftCoachPoolEntry[]
+  draftAllocations          DraftAllocation[]
+  operationalChecklists     OperationalChecklist[]
+  operationalChecklistItems OperationalChecklistItem[]
+  incidents                 Incident[]
+  runbooks                  Runbook[]
+  runbookTasks              RunbookTask[]
+  operatorMessages          OperatorMessage[]
+  displayHeartbeats         DisplayHeartbeat[]
+  rehearsals                Rehearsal[]
+  equipments                Equipment[]
+  eventStaffAssignments     EventStaffAssignment[]
+  venueZones                VenueZone[]
+  systemSettings            SystemSetting[]
+  launchReadinessChecks     LaunchReadinessCheck[]
+  opsTasks                  OpsTask[]
+  opsNotifications          OpsNotification[]
+  opsDocuments              OpsDocument[]
+  venues                    Venue[]
+  events                    Event[]
+  eventDebriefs             EventDebrief[]
+  eventVendorReviews        EventVendorReview[]
+  eventVolunteerReviews     EventVolunteerReview[]
+  announcements             Announcement[]
+  wellWishs                 WellWish[]
+  venueSections             VenueSection[]
+  seatZones                 SeatZone[]
+  seatReservations          SeatReservation[]
+  tickets                   Ticket[]
+  accreditations            Accreditation[]
+  applications              Application[]
+  adminOfflineIntakes       AdminOfflineIntake[]
+  publicIdCounters          PublicIdCounter[]
+  publicIdAliass            PublicIdAlias[]
+  publicResourceLocators    PublicResourceLocator[]
+  publicTokenLocators       PublicTokenLocator[]
+  importJobs                ImportJob[]
+  importRows                ImportRow[]
+  vendors                   Vendor[]
+  mediaProfiles             MediaProfile[]
+  volunteerProfiles         VolunteerProfile[]
+  vendorProducts            VendorProduct[]
+  vendorInventorys          VendorInventory[]
+  orders                    Order[]
+  orderItems                OrderItem[]
+  checkIns                  CheckIn[]
+  promoCodes                PromoCode[]
+  sponsorCampaigns          SponsorCampaign[]
+  fixtures                  Fixture[]
+  fixtureOfficials          FixtureOfficial[]
+  games                     Game[]
+  ruleSets                  RuleSet[]
+  gameRuleSnapshots         GameRuleSnapshot[]
+  gamePeriodScores          GamePeriodScore[]
+  gameEvents                GameEvent[]
+  gameStarters              GameStarter[]
+  playerStats               PlayerStat[]
+  teamStats                 TeamStat[]
+  standings                 Standing[]
+  noveltyTeams              NoveltyTeam[]
+  noveltyMatchs             NoveltyMatch[]
+  noveltyGames              NoveltyGame[]
+  noveltyGameEvents         NoveltyGameEvent[]
+  noveltyPlayerStats        NoveltyPlayerStat[]
+  fanClubs                  FanClub[]
+  fanMemberships            FanMembership[]
+  scoutReports              ScoutReport[]
+  mVPVotes                  MVPVote[]
+  auditLogs                 AuditLog[]
+  contentTemplates          ContentTemplate[]
+  contentJobs               ContentJob[]
+  contentAssets             ContentAsset[]
+  gameVideos                GameVideo[]
+  videoTimelineAnchors      VideoTimelineAnchor[]
+  courtCalibrations         CourtCalibration[]
+  visionModels              VisionModel[]
+  visionAnalysisRuns        VisionAnalysisRun[]
+  visionTracks              VisionTrack[]
+  visionObservations        VisionObservation[]
+  visionEventMatchs         VisionEventMatch[]
+  visionSpatialSummarys     VisionSpatialSummary[]
+  courtSpecifications       CourtSpecification[]
+  visionTrajectoryArtifacts VisionTrajectoryArtifact[]
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+
+  @@index([status])
 }
