@@ -1918,6 +1918,8 @@ enum RegistrationFormStatus {
 }
 
 enum RegistrationSubmissionStatus {
+  // Draft (pre-submission) - R2 team registration workflow.
+  DRAFT
   PENDING
   UNDER_REVIEW
   APPROVED
@@ -2068,28 +2070,33 @@ model RegistrationSubmission {
 // @@unique([organizationId, id]); any future link write must be application-level
 // assertSameOrganization-guarded. Nothing auto-internalizes an Athlete in v1.
 model RegistrationParticipant {
-  id               String                         @id @default(cuid())
-  organizationId   String                         @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
-  organization     Organization                   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  submissionId     String
-  submission       RegistrationSubmission         @relation(fields: [organizationId, submissionId], references: [organizationId, id], onDelete: Cascade)
-  role             RegistrationParticipantRole    @default(PARTICIPANT)
-  fullName         String
-  dateOfBirth      DateTime?
-  gender           String?
-  email            String?
-  phone            String?
-  category         String?
-  clubOrSchool     String?
-  jerseyNumber     Int?
-  answers          Json?
-  athleteId        String?
-  athlete          Athlete?                       @relation(fields: [athleteId], references: [id], onDelete: SetNull)
-  sortOrder        Int                            @default(0)
-  sportMemberships RegistrationParticipantSport[]
-  recordOrigin     RecordOrigin                   @default(PRODUCTION)
-  createdAt        DateTime                       @default(now())
-  updatedAt        DateTime                       @updatedAt
+  id                String                         @id @default(cuid())
+  organizationId    String                         @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization      Organization                   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  submissionId      String
+  submission        RegistrationSubmission         @relation(fields: [organizationId, submissionId], references: [organizationId, id], onDelete: Cascade)
+  role              RegistrationParticipantRole    @default(PARTICIPANT)
+  fullName          String
+  dateOfBirth       DateTime?
+  gender            String?
+  email             String?
+  phone             String?
+  category          String?
+  clubOrSchool      String?
+  jerseyNumber      Int?
+  answers           Json?
+  athleteId         String?
+  athlete           Athlete?                       @relation(fields: [athleteId], references: [id], onDelete: SetNull)
+  // Per-child guardian consent (required for every child in this competition).
+  guardianName      String?
+  guardianPhone     String?
+  consentAccepted   Boolean                        @default(false)
+  consentAcceptedAt DateTime?
+  sortOrder         Int                            @default(0)
+  sportMemberships  RegistrationParticipantSport[]
+  recordOrigin      RecordOrigin                   @default(PRODUCTION)
+  createdAt         DateTime                       @default(now())
+  updatedAt         DateTime                       @updatedAt
 
   @@unique([organizationId, id])
   @@index([organizationId, submissionId, sortOrder])
@@ -2114,6 +2121,8 @@ model RegistrationParticipantSport {
   rosterOrder    Int                     @default(0)
   position       String?
   isCaptain      Boolean                 @default(false)
+  // Volleyball active vs substitute within the same roster. Ignored for Flag Race.
+  isActive       Boolean                 @default(true)
   recordOrigin   RecordOrigin            @default(PRODUCTION)
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
