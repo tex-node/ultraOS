@@ -67,10 +67,16 @@ No parallel registration schema is created.
 ## 4. Server actions to connect
 
 The existing server actions already delegate to `service.ts`:
-`/events/[organizationSlug]/[eventSlug]/register/actions.ts` (public) and
+`/register/[organizationSlug]/[eventSlug]/actions.ts` (public) and
 `/events/[id]/registration/actions.ts` (admin). At integration they can either
 keep calling `service.ts` or be switched to `getRegistrationHost()`; both expose
 the same behavior because the Ultra League OS adapter delegates to `service.ts`.
+
+The public route was relocated from `/events/[organizationSlug]/[eventSlug]/register`
+to `/register/[organizationSlug]/[eventSlug]`. Next.js forbids two different
+dynamic segment names (`[id]` vs `[organizationSlug]`) at the same path position,
+and the existing admin routes already own `app/events/[id]`; the static `register`
+segment removes the conflict without changing organization/event scoping.
 
 ## 5. ID mapping
 

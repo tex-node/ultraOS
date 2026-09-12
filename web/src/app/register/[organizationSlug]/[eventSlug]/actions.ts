@@ -109,7 +109,7 @@ export async function submitTeamRegistration(
         })),
       },
     });
-    revalidatePath(`/events/${organizationSlug}/${eventSlug}/register`);
+    revalidatePath(`/register/${organizationSlug}/${eventSlug}`);
     return { success: { referenceNumber: submission.referenceNumber, status: submission.status } };
   } catch (error) {
     if (error instanceof RegistrationValidationError) return { error: error.issues.map((issue) => issue.message).join(" ") };

@@ -3716,3 +3716,47 @@ STAGE_5_5C: NOT_STARTED
 - Approve an all-female event/form target; run the seed (dry-run then apply);
   complete end-to-end staging verification; only then switch public/admin routes
   to `getRegistrationHost()` and retire the in-memory adapter to test-only use.
+
+---
+
+## Stage — Staging release `27bca12` and public registration route relocation
+
+**Commits**
+
+- `27bca12`: tenancy tooling/scripts (`web/prisma/seed.ts` + `web/scripts/**`,
+  81 files). Required at build time: `web/tsconfig.json` type-checks
+  `prisma/**` and `scripts/**`, so the `706d92b` runtime-only release failed
+  `next build` on stale `UserRoleAssignmentWhereUniqueInput` usage in `seed.ts`.
+- Public route relocation commit: moved the public registration route from
+  `/events/[organizationSlug]/[eventSlug]/register` to
+  `/register/[organizationSlug]/[eventSlug]`.
+
+**Why the route moved**
+
+- The `27bca12` staging build was clean (BUILD_ID `zNSLeeulSdKcxkotlksSj`, all
+  R2 routes present) but `next start` returned HTTP 500 on every request:
+  `Error: You cannot use different slug names for the same dynamic path
+  ('id' !== 'organizationSlug')`.
+- Next.js forbids two different dynamic segment names at the same path position;
+  the public route under `app/events/[organizationSlug]` collided with the
+  existing admin `app/events/[id]` routes. `tsc`/lint/tests/`next build` do not
+  catch this class of error — only `next start`.
+- Fix: moved the three route files to
+  `app/register/[organizationSlug]/[eventSlug]/` (static `register` segment),
+  URL `/register/{organizationSlug}/{eventSlug}`; updated `revalidatePath`;
+  admin `/events/[id]` routes unchanged; organization/event scoping and
+  registration behavior preserved.
+
+**Verification**
+
+- Gates at the fix head: Prisma validate/generate, TypeScript, lint (0 errors /
+  6 warnings), tests, production build PASS.
+- Staging was rolled back to the previous release `20260908-030506` immediately
+  after the 500s and is healthy (`/login`, `/public` -> 200).
+
+**Known issues**
+
+- The failed release dir `release-27bca12-20260912T192701Z` remains on staging
+  (inactive).
+- Route integration/`getRegistrationHost()` switch and HTTP end-to-end
+  verification still pending a successful deploy.
