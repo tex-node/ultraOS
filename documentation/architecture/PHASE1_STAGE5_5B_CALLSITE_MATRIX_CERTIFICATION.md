@@ -1,6 +1,6 @@
 # Stage 5.5B — Call-Site Matrix Certification and Provenance
 
-Status: CERTIFIED (artifact under version control)
+Status: BATCH 7 CODE CERTIFIED — EMPIRICAL PROOF: CONDITIONAL PASS
 
 Certification date: 2026-09-12
 
@@ -30,13 +30,36 @@ The Batch 7 work (see "Lineage") drove the E-classified set to zero. The Batch 6
 corrected state (`B=190/C=68/D=0/E=25`) is recorded below as an intermediate
 lineage point, not as the final committed state.
 
-This matrix is a **classification certificate, not a runtime isolation proof**.
-The `classification` column records the intended tenant-context posture of each
-call site; the `verification` column records how strongly that posture has been
-demonstrated. `E=0` means every site carries a classification — it does **not**
-mean every site has been empirically proven. The 21 Batch 7 context conversions
-are `CODE_INSPECTION_ONLY`; no former E-site has a runtime or test proof
-covering it.
+Certification state:
+
+```text
+STAGE_5_5: IN_PROGRESS
+STAGE_5_5A: CLOSED/DEPLOYED
+STAGE_5_5B: BATCH 7 CODE CERTIFIED
+STAGE_5_5B_BATCH7_EMPIRICAL_PROOF: CONDITIONAL PASS
+RLS_FALLBACK: RETAINED
+ORGANIZATION_ID_DB_DEFAULT: RETAINED
+STAGE_5_5C: NOT STARTED
+```
+
+This matrix is a **classification certificate**, and — after the Batch 7
+empirical proof — also an **empirical-isolation certificate** for the 21 genuine
+Batch 7 conversions. The `classification` column records the intended
+tenant-context posture of each call site; the `verification` column records how
+strongly that posture has been demonstrated. The 21 Batch 7 context conversions
+are `PROVEN` (empirical staging proof). Other `B` rows remain
+`CODE_INSPECTION_ONLY; TSC_PASS` where no dedicated runtime proof exists, so
+`E=0` still does not mean every row in the file has been empirically exercised.
+
+The empirical proof, its backup/residue/restoration evidence, and the two
+blocked cases are recorded in
+`documentation/architecture/PHASE1_STAGE5_5B_BATCH7_EMPIRICAL_PROOF.md`.
+
+Qualification: proven through a controlled staging proof; two same-org
+operations (real all-star slugs `zenith`/`pulse`, and `apply` against the real
+cohort Applications) were **blocked from testing** because doing so would mutate
+existing real Neon Ultra records. Blocked is not failed, and no same-org test was
+fabricated against real production-like records merely to remove the label.
 
 The CSV was reconstructed and reconciled from `session.md` evidence plus direct
 source inspection — **it was not recovered byte-for-byte** from any prior
@@ -207,10 +230,13 @@ by this task.
   the real `resolveDefaultPublicOrganization` delegates to
   `resolveActiveOrganizationBySlug`, a platform-global `Organization` resolver.
 
-**No empirical proof** exists for the 21 Batch 7 conversions. They were verified
-by TypeScript compilation and code inspection only (`CODE_INSPECTION_ONLY`). No
-`stage55b-*` proof script references any Batch 7 site, and no staging or
-production run was performed for them.
+**Empirical proof (2026-09-12)**: the 21 Batch 7 conversions are `PROVEN` through
+a controlled staging proof (`stage55b-batch7-empirical-proof.ts`) against
+`ultraos_staging` as the restricted role: 74 assertions, 72 PASS, 0 FAIL, 2
+BLOCKED (the two data-safety exclusions above), zero residue. This is a
+conditional pass; re-run the proof after the actual Batch 7 code is deployed in
+a later controlled release. Full evidence in
+`PHASE1_STAGE5_5B_BATCH7_EMPIRICAL_PROOF.md`.
 
 ## Reconstruction caveat
 
@@ -243,7 +269,7 @@ applyCoachPhotoImport_PRESENT:                YES (#283)
 data-hygiene.ts_ROWS:                         54, all C
 coaches/actions.ts_ROWS:                      #23, #283, both B and correctly attributed
 training/actions.ts_ROWS:                     #109, #110, both B and correctly attributed
-BATCH7_GENUINE_CONTEXT_CONVERSIONS:           21 (CODE_INSPECTION_ONLY)
+BATCH7_GENUINE_CONTEXT_CONVERSIONS:           21 (PROVEN — empirical staging proof, conditional)
 BATCH7_TYPE_ONLY_CORRECTION:                  1 (#106)
 BATCH7_CLASSIFICATION_ONLY_CHANGES:           3 (#279, #280, #282)
 ```
