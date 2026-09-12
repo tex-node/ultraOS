@@ -1,11 +1,11 @@
 import { Prisma } from "@/generated/prisma/client";
-import { RegistrationSubmissionStatus } from "@/generated/prisma/enums";
+import { RegistrationFormStatus, RegistrationSubmissionStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
 import { resolveActiveOrganizationBySlug, withOrganizationContext } from "@/lib/tenant-context";
 import { assertSameOrganization } from "@/lib/authorization";
 import { participantMatchKey } from "./normalization";
 import { createWithReference } from "./reference";
-import { parseSportConfig } from "./sport-config";
+import { parseSportConfig, type SportConfig } from "./sport-config";
 import { validateTeamSubmission, type ParticipantInput, type TeamSubmissionInput, type ValidationIssue } from "./validation";
 
 export class RegistrationNotFoundError extends Error {
@@ -188,4 +188,66 @@ export async function updateRegistrationStatus(
 
 export async function getRegistrationById(organizationId: string, id: string) {
   return getRegistration(organizationId, id);
+}
+
+// Admin: read an event + its registration form (may be null) within tenant scope.
+export async function getEventRegistrationConfig(organizationId: string, eventId: string) {
+  return withOrganizationContext(organizationId, async (tx) => {
+    const event = await tx.event.findFirst({ where: { id: eventId, organizationId }, select: { id: true, name: true, slug: true } });
+    if (!event) return null;
+    const form = await tx.registrationForm.findFirst({ where: { organizationId, eventId }, include: { _count: { select: { submissions: true, fields: true } } } });
+    return { event, form };
+  });
+}
+
+export type SportConfigUpsertInput = {
+  title: string;
+  description?: string | null;
+  status: RegistrationFormStatus;
+  publicEnabled: boolean;
+  opensAt?: Date | null;
+  closesAt?: Date | null;
+  capacity?: number | null;
+  config: SportConfig;
+};
+
+// Admin: create or update the event's registration form sport configuration.
+// Callers MUST have already validated `config` with parseSportConfigForm(). This
+// only writes form configuration - it never touches submissions or participants.
+export async function upsertEventRegistrationConfig(
+  organizationId: string,
+  eventId: string,
+  input: SportConfigUpsertInput,
+  actorUserId: string,
+) {
+  return withOrganizationContext(organizationId, async (tx) => {
+    const event = await tx.event.findFirst({ where: { id: eventId, organizationId }, select: { id: true, name: true } });
+    if (!event) return null;
+    const existing = await tx.registrationForm.findFirst({ where: { organizationId, eventId }, select: { id: true } });
+    const data = {
+      organizationId,
+      eventId,
+      title: input.title.trim() || `${event.name} registration`,
+      description: input.description?.trim() || null,
+      status: input.status,
+      publicEnabled: input.publicEnabled,
+      opensAt: input.opensAt ?? null,
+      closesAt: input.closesAt ?? null,
+      capacity: input.capacity ?? null,
+      sports: input.config.sports,
+      sportConfig: input.config as unknown as Prisma.InputJsonValue,
+    };
+    const form = existing
+      ? await tx.registrationForm.update({ where: { id: existing.id }, data })
+      : await tx.registrationForm.create({ data: { ...data, mode: "TEAM" } });
+    await writeAuditLog(tx, {
+      action: "REGISTRATION_CONFIG_UPDATED",
+      entityType: "RegistrationForm",
+      entityId: form.id,
+      userId: actorUserId,
+      organizationId,
+      details: { eventId, sports: input.config.sports },
+    });
+    return form;
+  });
 }
