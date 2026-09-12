@@ -42,7 +42,18 @@ export async function loadPublicRegistration(organizationSlug: string, eventSlug
 }
 
 async function existingMatchKeysForEvent(tx: Prisma.TransactionClient, organizationId: string, eventId: string): Promise<Set<string>> {
-  const rows = await tx.registrationParticipant.findMany({ where: { organizationId, submission: { eventId } }, select: { fullName: true, dateOfBirth: true } });
+  // Only ACTIVE registrations count towards "already registered to another team".
+  // Drafts, withdrawn, and rejected submissions must not block a later submission.
+  const rows = await tx.registrationParticipant.findMany({
+    where: {
+      organizationId,
+      submission: {
+        eventId,
+        status: { notIn: [RegistrationSubmissionStatus.DRAFT, RegistrationSubmissionStatus.WITHDRAWN, RegistrationSubmissionStatus.REJECTED] },
+      },
+    },
+    select: { fullName: true, dateOfBirth: true },
+  });
   const keys = new Set<string>();
   for (const row of rows) {
     const key = participantMatchKey(row.fullName, row.dateOfBirth);
