@@ -92,8 +92,21 @@ adapter as test-only tooling; `getRegistrationHost` continues to default to
 
 Adapter conformance testing found that **draft** submissions were counted by the
 cross-team duplicate check, so a team's own draft blocked its later submission.
-Fixed in both adapters: only active registrations (`notIn: DRAFT, WITHDRAWN,
-REJECTED`) count towards "already registered to another team".
+
+## Regression requirements
+
+The following are explicit, tested regression requirements — do not weaken them
+during integration:
+
+- **Duplicate detection counts only ACTIVE registrations.** A participant whose
+  only prior registration is `DRAFT`, `WITHDRAWN`, or `REJECTED` **must be allowed
+  to submit again**, subject to the normal validation and active-registration
+  rules. A `PENDING`/`UNDER_REVIEW`/`APPROVED`/`WAITLISTED` registration for the
+  same child in the same event still blocks a duplicate.
+- Enforced in both adapters: `adapters/in-memory.ts` (skips inactive statuses) and
+  `service.ts` `existingMatchKeysForEvent` (`submission.status notIn DRAFT,
+  WITHDRAWN, REJECTED`). Regression tests live in
+  `src/lib/registration/adapters/host.test.ts`.
 
 ## Not in scope here
 

@@ -102,4 +102,12 @@ export class InMemoryRegistrationHost implements RegistrationHost {
   async getSubmission({ organizationId, id }: { organizationId: string; id: string }): Promise<RegistrationRecord | null> {
     return this.submissions.find((submission) => submission.record.organizationId === organizationId && submission.record.id === id)?.record ?? null;
   }
+
+  // Test/dev-only helper: change a stored submission's status so regression tests
+  // can exercise the active-vs-inactive duplicate rules.
+  setSubmissionStatus(id: string, status: RegistrationSubmissionStatus): void {
+    const stored = this.submissions.find((submission) => submission.record.id === id);
+    if (!stored) throw new Error(`Submission ${id} not found.`);
+    stored.record = { ...stored.record, status };
+  }
 }

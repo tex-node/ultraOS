@@ -112,8 +112,29 @@ runContract("in-memory host", () => {
   return host as unknown as RegistrationHost;
 });
 
-test("in-memory and Ultra League OS adapters expose the same RegistrationHost surface", async () => {
-  const { UltraLeagueOsRegistrationHost } = await import("./ultra-league-os");
+// Regression requirement: a participant whose only registration is DRAFT,
+// WITHDRAWN, or REJECTED must be allowed to submit again. Only ACTIVE
+// registrations block a new submission. Mirrors the service.ts rule
+// (status notIn DRAFT/WITHDRAWN/REJECTED) for the Ultra League OS adapter.
+test("in-memory host: inactive registrations (DRAFT/WITHDRAWN/REJECTED) do not block a new submission", async () => {
+  for (const status of [RegistrationSubmissionStatus.DRAFT, RegistrationSubmissionStatus.WITHDRAWN, RegistrationSubmissionStatus.REJECTED]) {
+    const host = new InMemoryRegistrationHost();
+    seed(host);
+    const first = await host.saveRegistrationSubmission(submission(status === RegistrationSubmissionStatus.DRAFT ? "DRAFT" : "SUBMIT"));
+    host.setSubmissionStatus(first.id, status);
+    const second = await host.saveRegistrationSubmission(submission("SUBMIT"));
+    assert.equal(second.status, RegistrationSubmissionStatus.PENDING, `status ${status} must not block a new submission`);
+  }
+});
+
+test("in-memory host: an active registration still blocks a duplicate submission", async () => {
+  const host = new InMemoryRegistrationHost();
+  seed(host);
+  await host.saveRegistrationSubmission(submission("SUBMIT"));
+  await assert.rejects(() => host.saveRegistrationSubmission(submission("SUBMIT")), (error) => error instanceof RegistrationValidationError);
+});
+
+test("in-memory and Ultra League OS adapters expose the same RegistrationHost surface", async () => {  const { UltraLeagueOsRegistrationHost } = await import("./ultra-league-os");
   const memory = new InMemoryRegistrationHost() as unknown as Record<string, unknown>;
   const ultra = new UltraLeagueOsRegistrationHost() as unknown as Record<string, unknown>;
   for (const method of hostInterface()) {
