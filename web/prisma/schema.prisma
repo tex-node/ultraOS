@@ -614,6 +614,8 @@ model User {
   accreditations               Accreditation[]
   applicationsSubmitted        Application[]            @relation("ApplicantApplications")
   applicationsReviewed         Application[]            @relation("ReviewedApplications")
+  registrationSubmissions      RegistrationSubmission[] @relation("RegistrationApplicant")
+  registrationReviews          RegistrationSubmission[] @relation("RegistrationReviewer")
   offlineIntakesCreated        AdminOfflineIntake[]     @relation("OfflineIntakeCreatedBy")
   draftPicksCreated            DraftPick[]              @relation("DraftPickCreatedBy")
   playersSelected              Player[]                 @relation("PlayerSelectedBy")
@@ -897,6 +899,7 @@ model Athlete {
   videos                   AthleteVideo[]
   media                    AthleteMedia[]
   documents                ParticipantDocument[]
+  registrationParticipants RegistrationParticipant[]
   trainingRecords          AthleteTrainingRecord[]
   scoutReports             ScoutReport[]
   recordOrigin             RecordOrigin              @default(PRODUCTION)
@@ -1848,6 +1851,10 @@ model Event {
   organizationId          String                   @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
   organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   name                    String
+  // Event Registration v1: optional public slug, unique per organization (see @@unique below).
+  // Nullable so existing events are unaffected; the public registration route only resolves
+  // events that have a non-null slug.
+  slug                    String?
   date                    DateTime
   venueId                 String
   // Phase 1 Stage 5.2B-4: composite tenant-aware FK - createEvent() is a live, previously
@@ -1871,6 +1878,9 @@ model Event {
   sponsorCampaigns        SponsorCampaign[]
   draftEvents             DraftEvent[]
   noveltyMatches          NoveltyMatch[]
+  // Event Registration v1 (sport-neutral, tenant-owned). See the Registration* models below.
+  registrationForms       RegistrationForm[]
+  registrationSubmissions RegistrationSubmission[]
   debrief                 EventDebrief?
   vendorReviews           EventVendorReview[]
   volunteerReviews        EventVolunteerReview[]
@@ -1881,8 +1891,202 @@ model Event {
   // Phase 1 Stage 5.2B-4: lets SeatZone.eventId/SeatReservation.eventId/VendorInventory.eventId
   // become composite tenant-aware FKs.
   @@unique([organizationId, id])
+  // Event Registration v1: org-scoped public slug. Nullable, so multiple NULL slugs are allowed
+  // per organization (Postgres treats NULLs as distinct in a unique index).
+  @@unique([organizationId, slug])
   @@index([seasonId, date])
   @@index([venueId, date])
+}
+
+// ============================================================================
+// Event Registration v1 (sport-neutral). These models are deliberately generic:
+// they configure and capture event participation (individual or team) without
+// embedding any sport's scoring, timing, fixture, or standings logic. Team
+// registration is folded into RegistrationSubmission (one team per submission)
+// rather than a separate RegistrationTeam model - see the R1 plan.
+// ============================================================================
+
+enum RegistrationMode {
+  INDIVIDUAL
+  TEAM
+}
+
+enum RegistrationFormStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+enum RegistrationSubmissionStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  WAITLISTED
+  WITHDRAWN
+}
+
+enum RegistrationFieldType {
+  TEXT
+  TEXTAREA
+  EMAIL
+  PHONE
+  NUMBER
+  DATE
+  SELECT
+  MULTISELECT
+  CHECKBOX
+  CONSENT
+}
+
+enum RegistrationFieldScope {
+  SUBMISSION
+  PARTICIPANT
+}
+
+enum RegistrationParticipantRole {
+  PARTICIPANT
+  COACH
+  MANAGER
+}
+
+// One registration form per event (per organization). Team/individual mode,
+// open/close window, capacity, and consent requirements are configuration data,
+// not code branches.
+model RegistrationForm {
+  id                  String                   @id @default(cuid())
+  organizationId      String                   @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization        Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  eventId             String
+  event               Event                    @relation(fields: [organizationId, eventId], references: [organizationId, id], onDelete: Cascade)
+  title               String
+  description         String?
+  mode                RegistrationMode         @default(INDIVIDUAL)
+  status              RegistrationFormStatus   @default(DRAFT)
+  publicEnabled       Boolean                  @default(false)
+  opensAt             DateTime?
+  closesAt            DateTime?
+  capacity            Int?
+  waitlistEnabled     Boolean                  @default(false)
+  minTeamSize         Int?
+  maxTeamSize         Int?
+  requiresConsent     Boolean                  @default(false)
+  confirmationMessage String?
+  fields              RegistrationField[]
+  submissions         RegistrationSubmission[]
+  recordOrigin        RecordOrigin             @default(PRODUCTION)
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  // Composite-FK parents for RegistrationField/RegistrationSubmission.
+  @@unique([organizationId, id])
+  @@unique([organizationId, eventId])
+  @@index([organizationId, status])
+}
+
+// A single configurable question. `scope` decides whether an answer belongs on
+// the submission (team/contact level) or on each participant. `conditionalOn`
+// carries a minimal { key, equals } visibility rule (e.g. guardian details only
+// when isMinor == true).
+model RegistrationField {
+  id             String                 @id @default(cuid())
+  organizationId String                 @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  formId         String
+  form           RegistrationForm       @relation(fields: [organizationId, formId], references: [organizationId, id], onDelete: Cascade)
+  key            String
+  label          String
+  type           RegistrationFieldType  @default(TEXT)
+  scope          RegistrationFieldScope @default(SUBMISSION)
+  required       Boolean                @default(false)
+  options        Json?
+  validation     Json?
+  conditionalOn  Json?
+  sortOrder      Int                    @default(0)
+  recordOrigin   RecordOrigin           @default(PRODUCTION)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, formId, key])
+  @@index([organizationId, formId, sortOrder])
+}
+
+// One registration (individual or team). For TEAM mode the team itself is this
+// row; roster members are RegistrationParticipant rows. `referenceNumber` is
+// server-generated and organization-scoped unique. `status`, reviewer fields,
+// timestamps, and organizationId are server-controlled.
+model RegistrationSubmission {
+  id                String                       @id @default(cuid())
+  organizationId    String                       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization      Organization                 @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  formId            String
+  form              RegistrationForm             @relation(fields: [organizationId, formId], references: [organizationId, id], onDelete: Restrict)
+  // Derived server-side from form.eventId; never client-supplied.
+  eventId           String
+  event             Event                        @relation(fields: [organizationId, eventId], references: [organizationId, id], onDelete: Restrict)
+  mode              RegistrationMode
+  status            RegistrationSubmissionStatus @default(PENDING)
+  referenceNumber   String
+  applicantUserId   String?
+  applicantUser     User?                        @relation("RegistrationApplicant", fields: [applicantUserId], references: [id], onDelete: SetNull)
+  contactName       String?
+  contactEmail      String?
+  contactPhone      String?
+  teamName          String?
+  teamClubOrSchool  String?
+  teamCategory      String?
+  answers           Json?
+  consentAccepted   Boolean                      @default(false)
+  consentName       String?
+  consentAcceptedAt DateTime?
+  reviewedById      String?
+  reviewedBy        User?                        @relation("RegistrationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt        DateTime?
+  reviewNotes       String?
+  submittedAt       DateTime?
+  participants      RegistrationParticipant[]
+  recordOrigin      RecordOrigin                 @default(PRODUCTION)
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, referenceNumber])
+  @@index([organizationId, formId, status])
+  @@index([organizationId, eventId])
+  @@index([organizationId, createdAt])
+}
+
+// A person on a registration: roster member, coach, or manager. Free-form
+// registrant records; they are NOT required to pre-exist as Athlete. The
+// optional athleteId link is a simple (non-composite) FK because Athlete lacks
+// @@unique([organizationId, id]); any future link write must be application-level
+// assertSameOrganization-guarded. Nothing auto-internalizes an Athlete in v1.
+model RegistrationParticipant {
+  id             String                      @id @default(cuid())
+  organizationId String                      @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  submissionId   String
+  submission     RegistrationSubmission      @relation(fields: [organizationId, submissionId], references: [organizationId, id], onDelete: Cascade)
+  role           RegistrationParticipantRole @default(PARTICIPANT)
+  fullName       String
+  dateOfBirth    DateTime?
+  gender         String?
+  email          String?
+  phone          String?
+  category       String?
+  clubOrSchool   String?
+  jerseyNumber   Int?
+  answers        Json?
+  athleteId      String?
+  athlete        Athlete?                    @relation(fields: [athleteId], references: [id], onDelete: SetNull)
+  sortOrder      Int                         @default(0)
+  recordOrigin   RecordOrigin                @default(PRODUCTION)
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  @@unique([organizationId, id])
+  @@index([organizationId, submissionId, sortOrder])
 }
 
 // Post-event retrospective data - deliberately separate from the pre-event Runbook
@@ -3899,6 +4103,10 @@ model Organization {
   opsDocuments              OpsDocument[]
   venues                    Venue[]
   events                    Event[]
+  registrationForms         RegistrationForm[]
+  registrationFields        RegistrationField[]
+  registrationSubmissions   RegistrationSubmission[]
+  registrationParticipants  RegistrationParticipant[]
   eventDebriefs             EventDebrief[]
   eventVendorReviews        EventVendorReview[]
   eventVolunteerReviews     EventVolunteerReview[]
