@@ -3766,6 +3766,29 @@ STAGE_5_5C: NOT_STARTED
   it, preserving the resolved organization context. Anonymous users now get a
   307 redirect to `/login?callbackUrl=...`.
 
+**Staging HTTP verification (release `21f254f`)**
+
+- Deployed `21f254f` (BUILD_ID `GjgEhreXP1MSrwPZs2OvG`); service active;
+  `/login`, `/public` -> 200. Route present at
+  `/register/[organizationSlug]/[eventSlug]`; `events/[organizationSlug]` gone;
+  admin `/events/[id]` unchanged.
+- Anonymous admin pages now 307 -> `/login?callbackUrl=...` (`/registrations`,
+  `/registrations/[id]`, `/events/[id]/registration`); `/registrations/export`
+  -> 401.
+- Public route with the provisioned target at `DRAFT` -> 404 (fail-closed). A
+  temporary approved publish (`Event.PUBLISHED` + form `OPEN`/`publicEnabled`)
+  made the page 200; the server action was then driven over a no-JS multipart
+  POST:
+  - valid 8-player team (VB 6 active + 2 subs, FR 6 ordered) -> `PENDING`
+    submission created with 8 participants;
+  - re-submitting the same participants while active -> blocked;
+  - invalid roster (VB 7 < min 8) -> rejected;
+  - `DRAFT` saved, then same participants submitted -> allowed;
+  - `WITHDRAWN` then re-submit -> allowed; `REJECTED` then re-submit -> allowed.
+- Cleanup: all test submissions/participants/sports removed (0 residue; no audit
+  rows, submissions were anonymous); event/form restored to
+  `DRAFT`/`DRAFT`/`publicEnabled=false`; public route 404 again.
+
 **Known issues**
 
 - The failed release dir `release-27bca12-20260912T192701Z` remains on staging
