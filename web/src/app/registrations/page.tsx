@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { requirePermissionWithOrganizationOrRedirect } from "@/lib/authorization";
 import { listRegistrations } from "@/lib/registration/service";
 
 export const dynamic = "force-dynamic";
 
 export default async function RegistrationsPage() {
-  const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
+  const { session, organizationId } = await requirePermissionWithOrganizationOrRedirect("event:manage", "/registrations");
   const rows = await listRegistrations(organizationId);
 
   return (

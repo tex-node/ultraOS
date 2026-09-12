@@ -87,6 +87,19 @@ export async function requirePermissionWithOrganization(permission: Permission) 
   return { session, organizationId: session.user.organizationId };
 }
 
+// Same redirect-on-anonymous behavior as requirePermissionOrRedirect, for pages that also need the
+// resolved organization context (Stage 5.2's requirePermissionWithOrganization).
+export async function requirePermissionWithOrganizationOrRedirect(permission: Permission, loginRedirectTo: string) {
+  try {
+    return await requirePermissionWithOrganization(permission);
+  } catch (error) {
+    if (error instanceof AuthenticationError) {
+      redirect(`/login?callbackUrl=${encodeURIComponent(loginRedirectTo)}`);
+    }
+    throw error;
+  }
+}
+
 // G.16, Part IV: requirePermission() throws AuthenticationError for a fully anonymous request,
 // which Next.js renders as a generic 500 rather than a clean login redirect (documented as a
 // G.15 P1 for /games/[fixtureId]/live and /games/[fixtureId]/stats). This wrapper redirects on

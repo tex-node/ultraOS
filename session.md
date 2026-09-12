@@ -3754,6 +3754,18 @@ STAGE_5_5C: NOT_STARTED
 - Staging was rolled back to the previous release `20260908-030506` immediately
   after the 500s and is healthy (`/login`, `/public` -> 200).
 
+**Admin auth redirect fix**
+
+- Staging HTTP verification found the three R2 admin pages (`/registrations`,
+  `/registrations/[id]`, `/events/[id]/registration`) returned HTTP 500 for
+  anonymous users: they called `requirePermissionWithOrganization`, which throws
+  an uncaught `AuthenticationError` (`authorization.ts`), unlike every existing
+  admin page which redirects to `/login`.
+- Added `requirePermissionWithOrganizationOrRedirect(permission, loginRedirectTo)`
+  (same pattern as `requirePermissionOrRedirect`) and switched the three pages to
+  it, preserving the resolved organization context. Anonymous users now get a
+  307 redirect to `/login?callbackUrl=...`.
+
 **Known issues**
 
 - The failed release dir `release-27bca12-20260912T192701Z` remains on staging

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { requirePermissionWithOrganizationOrRedirect } from "@/lib/authorization";
 import { getEventRegistrationConfig } from "@/lib/registration/service";
 import { parseSportConfig } from "@/lib/registration/sport-config";
 import { SportConfigForm } from "./sport-config-form";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function EventRegistrationConfigPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
+  const { session, organizationId } = await requirePermissionWithOrganizationOrRedirect("event:manage", `/events/${id}/registration`);
   const result = await getEventRegistrationConfig(organizationId, id);
   if (!result) notFound();
   const { event, form } = result;

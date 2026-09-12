@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { RegistrationSubmissionStatus } from "@/generated/prisma/enums";
-import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { requirePermissionWithOrganizationOrRedirect } from "@/lib/authorization";
 import { getRegistration } from "@/lib/registration/service";
 import { updateRegistrationStatusAction } from "../actions";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function RegistrationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
+  const { session, organizationId } = await requirePermissionWithOrganizationOrRedirect("event:manage", `/registrations/${id}`);
   const registration = await getRegistration(organizationId, id);
   if (!registration) notFound();
 
