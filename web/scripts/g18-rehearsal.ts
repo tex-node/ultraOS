@@ -211,7 +211,7 @@ async function main() {
   await prisma.gameStarter.deleteMany({ where: { gameId: game.id } });
   await prisma.game.delete({ where: { id: game.id } });
   await prisma.fixture.delete({ where: { id: fixture.id } });
-  await prisma.$transaction(async (tx) => { await recalculateStandings(tx, SEASON_ID); });
+  await prisma.$transaction(async (tx) => { await recalculateStandings(tx, "cmt4odhgn0000wokk8fbwr6ro", SEASON_ID); });
   console.log("=== Rehearsal fully cleaned up. ===");
 
   const postFinalGames = await prisma.game.count({ where: { status: "FINAL" } });

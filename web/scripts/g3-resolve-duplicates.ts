@@ -3,11 +3,13 @@ import { approvedPlayerDuplicateGroups, saveDuplicateResolution } from "../src/l
 import { prisma } from "../src/lib/prisma";
 
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";
+const ORGANIZATION_ID = process.env.ORGANIZATION_ID;
 const selectedIds = new Set(selectedPlayers.map((p) => p.applicationId));
 const APPLY = process.argv.includes("--apply");
 
 async function main() {
-  const groups = await approvedPlayerDuplicateGroups();
+  if (!ORGANIZATION_ID) throw new Error("ORGANIZATION_ID is required for duplicate resolution maintenance.");
+  const groups = await approvedPlayerDuplicateGroups(undefined, ORGANIZATION_ID);
   const cohortGroups = groups.filter(
     (g) => g.currentResolution === "UNRESOLVED" && g.applications.some((a) => selectedIds.has(a.applicationId))
   );
@@ -26,6 +28,7 @@ async function main() {
           reason: "Grouped only because these applications share the same linked login/User email (family/shared device); submitted names and applicant emails are different real people, each independently selected in the authoritative TryOutsPlayers.xlsx workbook. Not a duplicate identity.",
           secondaryApplicationIds: group.applications.map((a) => a.applicationId),
           actorUserId: ACTOR_ID,
+          organizationId: ORGANIZATION_ID,
         });
       }
       continue;
@@ -42,6 +45,7 @@ async function main() {
       primaryApplicationId: canonical.applicationId,
       secondaryApplicationIds: others,
       actorUserId: ACTOR_ID,
+      organizationId: ORGANIZATION_ID,
     });
   }
 }

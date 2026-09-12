@@ -19,16 +19,16 @@ const picks = [
 async function main() {
   let round = 1;
   for (const pick of picks) {
-    const reserved = await reserveSecondaryDraftPick({
+    const reserved = await reserveSecondaryDraftPick({ organizationId: "cmt4odhgn0000wokk8fbwr6ro", 
       draftId: MEN_SECONDARY_DRAFT_ID,
       playerId: pick.playerId,
       round,
       seasonClubId: pick.seasonClubId,
       userId: ACTOR_ID,
     });
-    await markSecondaryDraftPickRevealing(reserved.id, ACTOR_ID);
-    await revealSecondaryDraftPick(reserved.id, ACTOR_ID);
-    await confirmSecondaryDraftPick(reserved.id, ACTOR_ID);
+    await markSecondaryDraftPickRevealing("cmt4odhgn0000wokk8fbwr6ro", reserved.id, ACTOR_ID);
+    await revealSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", reserved.id, ACTOR_ID);
+    await confirmSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", reserved.id, ACTOR_ID);
     console.log(`${pick.playerName} -> ${pick.clubName} confirmed (pick #${reserved.pickNumber})`);
     round++;
   }

@@ -42,6 +42,11 @@ async function main() {
     return;
   }
 
+  // Phase 1 Stage 5.2C: this is a standalone worker with no session/org of its own - the video
+  // id supplied on the command line is the only input, so (same as any other token/id-resolved
+  // provenance in this codebase) the video's OWN organizationId is looked up first via a bare
+  // read, then every subsequent operation runs inside that resolved organization's scoped
+  // context. Never guesses/defaults an organization.
   const video = await prisma.gameVideo.findUnique({ where: { id: videoId }, include: { mediaAsset: true } });
   if (!video) {
     console.log(`VISION_EMPIRICAL_REHEARSAL_BLOCKED_NO_VIDEO: no GameVideo found with id ${videoId}.`);
@@ -53,10 +58,11 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  const organizationId = video.organizationId;
 
-  const model = await ensureVisionModel(modelKey, "0.1.0-poc", "G.21 offline proof-of-concept - architecture only, no real inference implemented");
-  const run = await createAnalysisRun({ gameVideoId: video.id, visionModelId: model.id, requestedById: ACTOR_ID });
-  await setAnalysisRunStatus(run.id, "PROCESSING", { startedAt: new Date() });
+  const model = await ensureVisionModel(organizationId, modelKey, "0.1.0-poc", "G.21 offline proof-of-concept - architecture only, no real inference implemented");
+  const run = await createAnalysisRun(organizationId, { gameVideoId: video.id, visionModelId: model.id, requestedById: ACTOR_ID });
+  await setAnalysisRunStatus(organizationId, run.id, "PROCESSING", { startedAt: new Date() });
 
   // --- THIS IS THE EXTENSION POINT ---
   // A real pipeline would decode `video.mediaAsset.publicUrl` (or fetch it from
@@ -67,7 +73,7 @@ async function main() {
   // Part LIV. Marking the run FAILED with an honest, specific reason rather than fabricating
   // COMPLETED with zero real observations (which would misleadingly look like "analyzed, nothing
   // found" instead of "never actually ran").
-  await setAnalysisRunStatus(run.id, "FAILED", {
+  await setAnalysisRunStatus(organizationId, run.id, "FAILED", {
     completedAt: new Date(),
     errorMessage: "VISION_EMPIRICAL_REHEARSAL_BLOCKED_NO_VIDEO: no computer-vision inference implementation exists in this environment (no CV runtime, no model weights, no GPU worker). This run recorded the QUEUED->PROCESSING->FAILED lifecycle correctly but performed no real detection.",
   });

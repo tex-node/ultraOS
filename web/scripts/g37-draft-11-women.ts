@@ -34,16 +34,16 @@ async function main() {
   let round = 2;
   for (const pick of picks) {
     const seasonClubId = CLUBS[pick.club as keyof typeof CLUBS];
-    const reserved = await reserveSecondaryDraftPick({
+    const reserved = await reserveSecondaryDraftPick({ organizationId: "cmt4odhgn0000wokk8fbwr6ro", 
       draftId: WOMEN_SECONDARY_DRAFT_ID,
       playerId: pick.playerId,
       round,
       seasonClubId,
       userId: ACTOR_ID,
     });
-    await markSecondaryDraftPickRevealing(reserved.id, ACTOR_ID);
-    await revealSecondaryDraftPick(reserved.id, ACTOR_ID);
-    await confirmSecondaryDraftPick(reserved.id, ACTOR_ID);
+    await markSecondaryDraftPickRevealing("cmt4odhgn0000wokk8fbwr6ro", reserved.id, ACTOR_ID);
+    await revealSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", reserved.id, ACTOR_ID);
+    await confirmSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", reserved.id, ACTOR_ID);
     console.log(`${pick.name} -> ${pick.club} confirmed (pick #${reserved.pickNumber})`);
     round++;
   }

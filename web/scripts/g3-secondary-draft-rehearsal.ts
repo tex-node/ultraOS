@@ -56,15 +56,15 @@ async function main() {
     if (!playerId) throw new Error(`No provisioned player for ${p.applicationId}`);
     const seasonClubId = MEN_CLUB_IDS[i % MEN_CLUB_IDS.length];
 
-    const pick = await reserveSecondaryDraftPick({ draftId: draft.id, playerId, seasonClubId, round, userId: ACTOR_ID });
+    const pick = await reserveSecondaryDraftPick({ organizationId: "cmt4odhgn0000wokk8fbwr6ro",  draftId: draft.id, playerId, seasonClubId, round, userId: ACTOR_ID });
 
     const stateReserved = await publicSecondaryDraftState(draft.id);
     const reservedPick = stateReserved?.picks?.find((pk: { id: string }) => pk.id === pick.id);
     console.log(`RESERVE pick #${i + 1}: ${pick.id} — public payload: ${JSON.stringify(reservedPick)}`);
 
-    await markSecondaryDraftPickRevealing(pick.id, ACTOR_ID);
-    await revealSecondaryDraftPick(pick.id, ACTOR_ID);
-    await confirmSecondaryDraftPick(pick.id, ACTOR_ID);
+    await markSecondaryDraftPickRevealing("cmt4odhgn0000wokk8fbwr6ro", pick.id, ACTOR_ID);
+    await revealSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick.id, ACTOR_ID);
+    await confirmSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick.id, ACTOR_ID);
     console.log(`  CONFIRM pick #${i + 1}: done (player=${p.name})`);
   }
 
@@ -75,7 +75,7 @@ async function main() {
   console.log("LIVE DraftAllocations (must be 0):", liveAllocations);
 
   console.log("\n--- Resetting secondary draft rehearsal ---");
-  await resetSecondaryDraftRehearsal(draft.id, ACTOR_ID, "Final production Draft Day rehearsal completed successfully.");
+  await resetSecondaryDraftRehearsal("cmt4odhgn0000wokk8fbwr6ro", draft.id, ACTOR_ID, "Final production Draft Day rehearsal completed successfully.");
   const remaining = await prisma.draftPick.count({ where: { draftId: draft.id } });
   console.log("DraftPick rows remaining after reset (must be 0):", remaining);
 }

@@ -30,12 +30,12 @@ async function main() {
   // 3. Submit the exact params the fixed UI form now generates (locked subjectType + locked
   //    division) through the real reserveNextAllocation function — same code path the Reserve
   //    button calls. This must NOT throw "Current stage does not match requested allocation type."
-  const allocation = await reserveNextAllocation({ draftEventId: DRAFT_EVENT_ID, divisionId: MEN_DIVISION_ID, subjectType: subjectType!, userId: ACTOR_ID });
+  const allocation = await reserveNextAllocation({ organizationId: "cmt4odhgn0000wokk8fbwr6ro",  draftEventId: DRAFT_EVENT_ID, divisionId: MEN_DIVISION_ID, subjectType: subjectType!, userId: ACTOR_ID });
   console.log("Reserve succeeded with fixed-UI params — allocation:", allocation.id, "status:", allocation.status);
 
   // 4. Clean up: correct this verification allocation (audited, reversible, leaves 0 official
   //    writes since we're in REHEARSAL) and reset the stage back to INTRO for the operator.
-  await correctAllocation(allocation.id, ACTOR_ID, "Verification test for control-room stage/subjectType guard fix — not a real allocation.");
+  await correctAllocation("cmt4odhgn0000wokk8fbwr6ro", allocation.id, ACTOR_ID, "Verification test for control-room stage/subjectType guard fix — not a real allocation.");
   await prisma.$transaction(async (tx) => {
     await tx.draftEvent.update({ where: { id: DRAFT_EVENT_ID }, data: { currentStage: DraftEventStage.INTRO, currentAllocationId: null, displaySequence: { increment: 1 } } });
     await writeAuditLog(tx, { action: "DRAFT_EVENT_STAGE_CHANGED", entityId: DRAFT_EVENT_ID, entityType: "DraftEvent", userId: ACTOR_ID, details: { stage: "INTRO", note: "reset after verification" } });

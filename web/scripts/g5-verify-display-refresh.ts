@@ -13,13 +13,13 @@ async function main() {
     await writeAuditLog(tx, { action: "DRAFT_EVENT_STAGE_CHANGED", entityId: DRAFT_EVENT_ID, entityType: "DraftEvent", userId: ACTOR_ID, details: { stage: "WOMEN_COACH_ALLOCATION" } });
   });
 
-  const allocation = await reserveNextAllocation({ draftEventId: DRAFT_EVENT_ID, divisionId: WOMEN_DIVISION_ID, subjectType: AllocationSubjectType.COACH, userId: ACTOR_ID });
-  await revealAllocation(allocation.id, ACTOR_ID);
-  await confirmAllocation(allocation.id, ACTOR_ID);
+  const allocation = await reserveNextAllocation({ organizationId: "cmt4odhgn0000wokk8fbwr6ro",  draftEventId: DRAFT_EVENT_ID, divisionId: WOMEN_DIVISION_ID, subjectType: AllocationSubjectType.COACH, userId: ACTOR_ID });
+  await revealAllocation("cmt4odhgn0000wokk8fbwr6ro", allocation.id, ACTOR_ID);
+  await confirmAllocation("cmt4odhgn0000wokk8fbwr6ro", allocation.id, ACTOR_ID);
   console.log("Confirmed allocation:", allocation.id);
 
   // Cleanup: correct it back and reset stage, leave 0 allocations.
-  await correctAllocation(allocation.id, ACTOR_ID, "Display auto-refresh verification — not a real allocation.");
+  await correctAllocation("cmt4odhgn0000wokk8fbwr6ro", allocation.id, ACTOR_ID, "Display auto-refresh verification — not a real allocation.");
   await prisma.$transaction(async (tx) => {
     await tx.draftEvent.update({ where: { id: DRAFT_EVENT_ID }, data: { currentStage: DraftEventStage.INTRO, currentAllocationId: null, displaySequence: { increment: 1 } } });
     await writeAuditLog(tx, { action: "DRAFT_EVENT_STAGE_CHANGED", entityId: DRAFT_EVENT_ID, entityType: "DraftEvent", userId: ACTOR_ID, details: { stage: "INTRO", note: "reset after display-refresh verification" } });

@@ -2,6 +2,7 @@ import { AthleteGender, DraftSelectionGroup, PlayerStatus, RecordOrigin, UserRol
 import { writeAuditLog } from "../src/lib/audit";
 import { ensureAthletePublicId } from "../src/lib/public-ids";
 import { prisma } from "../src/lib/prisma";
+import { upsertRoleAssignment } from "../src/lib/user-roles";
 
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";
 const APPLICATION_ID = "cmrqftl8u00bjfekkmhl91nh0";
@@ -27,11 +28,7 @@ async function main() {
       where: { id: application.applicantUserId! },
       data: { name: "Igwebuike Oluchukwu Sylvia" },
     });
-    await tx.userRoleAssignment.upsert({
-      where: { userId_role: { userId: user.id, role: UserRole.PLAYER } },
-      update: { grantedById: ACTOR_ID, revokedAt: null },
-      create: { grantedById: ACTOR_ID, role: UserRole.PLAYER, userId: user.id },
-    });
+    await upsertRoleAssignment(tx, { userId: user.id, role: UserRole.PLAYER, grantedById: ACTOR_ID });
 
     const athlete = await tx.athlete.create({
       data: {
@@ -48,7 +45,7 @@ async function main() {
         userId: user.id,
       },
     });
-    await ensureAthletePublicId(tx, athlete.id);
+    await ensureAthletePublicId(tx, athlete.organizationId, athlete.id);
 
     const player = await tx.player.create({
       data: {

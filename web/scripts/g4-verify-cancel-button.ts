@@ -13,14 +13,14 @@ async function main() {
     await writeAuditLog(tx, { action: "DRAFT_EVENT_STAGE_CHANGED", entityId: DRAFT_EVENT_ID, entityType: "DraftEvent", userId: ACTOR_ID, details: { stage: "MEN_COACH_ALLOCATION" } });
   });
 
-  const allocation = await reserveNextAllocation({ draftEventId: DRAFT_EVENT_ID, divisionId: MEN_DIVISION_ID, subjectType: AllocationSubjectType.COACH, userId: ACTOR_ID });
+  const allocation = await reserveNextAllocation({ organizationId: "cmt4odhgn0000wokk8fbwr6ro",  draftEventId: DRAFT_EVENT_ID, divisionId: MEN_DIVISION_ID, subjectType: AllocationSubjectType.COACH, userId: ACTOR_ID });
   console.log("Reserved:", allocation.id, "status:", allocation.status);
 
   const eventDuring = await prisma.draftEvent.findUniqueOrThrow({ where: { id: DRAFT_EVENT_ID } });
   console.log("currentAllocationId while reserved:", eventDuring.currentAllocationId);
 
   // This mirrors exactly what the new "Cancel this reservation" button calls.
-  await correctAllocation(allocation.id, ACTOR_ID, "Operator cancelled before reveal — testing new cancel button.");
+  await correctAllocation("cmt4odhgn0000wokk8fbwr6ro", allocation.id, ACTOR_ID, "Operator cancelled before reveal — testing new cancel button.");
 
   const eventAfter = await prisma.draftEvent.findUniqueOrThrow({ where: { id: DRAFT_EVENT_ID } });
   const allocationAfter = await prisma.draftAllocation.findUniqueOrThrow({ where: { id: allocation.id } });
@@ -31,9 +31,9 @@ async function main() {
   console.log("Official coach writes (must be 0):", officialWrites);
 
   // Prove the subject/club is immediately available again — the exact scenario the earlier fix addressed.
-  const reReserved = await reserveNextAllocation({ draftEventId: DRAFT_EVENT_ID, divisionId: MEN_DIVISION_ID, subjectType: AllocationSubjectType.COACH, userId: ACTOR_ID });
+  const reReserved = await reserveNextAllocation({ organizationId: "cmt4odhgn0000wokk8fbwr6ro",  draftEventId: DRAFT_EVENT_ID, divisionId: MEN_DIVISION_ID, subjectType: AllocationSubjectType.COACH, userId: ACTOR_ID });
   console.log("Re-reserve after cancel succeeded:", reReserved.id, "staffId:", reReserved.staffId);
-  await correctAllocation(reReserved.id, ACTOR_ID, "Cleanup after cancel-button verification.");
+  await correctAllocation("cmt4odhgn0000wokk8fbwr6ro", reReserved.id, ACTOR_ID, "Cleanup after cancel-button verification.");
 
   await prisma.$transaction(async (tx) => {
     await tx.draftEvent.update({ where: { id: DRAFT_EVENT_ID }, data: { currentStage: DraftEventStage.INTRO, currentAllocationId: null, displaySequence: { increment: 1 } } });

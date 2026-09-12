@@ -724,7 +724,7 @@ async function main() {
     const season = await prisma.season.findFirst({ where: { name: { contains: "Season Zero" } }, select: { id: true } });
     if (season) {
       await prisma.$transaction(async (tx) => {
-        await recalculateStandings(tx, season.id);
+        await recalculateStandings(tx, "cmt4odhgn0000wokk8fbwr6ro", season.id);
       });
       console.log(`\nStandings recalculated for season ${season.id}.`);
     }

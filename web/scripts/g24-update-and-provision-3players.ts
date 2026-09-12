@@ -1,6 +1,10 @@
 import { updateAdminOfflineIntakePlayerProfile, provisionPlayerOfflineIntake } from "../src/lib/admin-offline-intake";
 import { prisma } from "../src/lib/prisma";
 
+// Phase 1 Stage 5.5B: admin-offline-intake.ts functions now require an explicit
+// organizationId - this historical one-off script always meant Neon Ultra.
+const NEON_ULTRA_ORGANIZATION_ID = "cmt4odhgn0000wokk8fbwr6ro";
+
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";
 const SEASON_ID = "cmqfqpnkr0005lgkkihisj759";
 
@@ -28,10 +32,10 @@ const updates = [
 
 async function main() {
   for (const u of updates) {
-    const updated = await updateAdminOfflineIntakePlayerProfile(u.intakeId, u.profile, ACTOR_ID);
+    const updated = await updateAdminOfflineIntakePlayerProfile(NEON_ULTRA_ORGANIZATION_ID, u.intakeId, u.profile, ACTOR_ID);
     console.log(`${u.name}: profile updated, status=${updated.status}, heightCm=${u.profile.heightCm}`);
 
-    const result = await provisionPlayerOfflineIntake(u.intakeId, SEASON_ID, ACTOR_ID);
+    const result = await provisionPlayerOfflineIntake(NEON_ULTRA_ORGANIZATION_ID, u.intakeId, SEASON_ID, ACTOR_ID);
     if (result.alreadyProvisioned) {
       console.log(`${u.name}: already provisioned`);
     } else {

@@ -137,7 +137,7 @@ async function run() {
     },
   });
 
-  await confirmAllocation(rehearsalAllocation.id, staffUser.id);
+  await confirmAllocation("cmt4odhgn0000wokk8fbwr6ro", rehearsalAllocation.id, staffUser.id);
   const playerAfterRehearsal = await prisma.player.findUniqueOrThrow({ where: { id: player.id } });
   assert.equal(playerAfterRehearsal.seasonClubId, null, "REHEARSAL confirm must NOT write Player.seasonClubId");
   results.test1_rehearsal_does_not_persist = { pass: true };
@@ -160,7 +160,7 @@ async function run() {
     },
   });
 
-  await confirmAllocation(liveAllocation.id, staffUser.id);
+  await confirmAllocation("cmt4odhgn0000wokk8fbwr6ro", liveAllocation.id, staffUser.id);
   const playerAfterLive = await prisma.player.findUniqueOrThrow({ where: { id: player.id } });
   assert.equal(playerAfterLive.seasonClubId, seasonClub.id, "LIVE confirm MUST write Player.seasonClubId");
   results.test2_live_does_persist = { pass: true };
@@ -169,7 +169,7 @@ async function run() {
 
   // --- Test 3: rehearsal reset removes only REHEARSAL allocations, and refuses on a LIVE event ---
   const beforeReset = await prisma.draftAllocation.count({ where: { draftEventId: draftEventRehearsal.id } });
-  await resetRehearsalAllocations(draftEventRehearsal.id, staffUser.id, "Rehearsal isolation integration test");
+  await resetRehearsalAllocations("cmt4odhgn0000wokk8fbwr6ro", draftEventRehearsal.id, staffUser.id, "Rehearsal isolation integration test");
   const afterReset = await prisma.draftAllocation.count({ where: { draftEventId: draftEventRehearsal.id } });
   assert.equal(afterReset, 0, "Rehearsal reset must delete all REHEARSAL allocations for the event");
   results.test3a_rehearsal_reset_clears_allocations = { pass: true, before: beforeReset, after: afterReset };
@@ -180,7 +180,7 @@ async function run() {
 
   let refused = false;
   try {
-    await resetRehearsalAllocations(draftEventLive.id, staffUser.id, "should be refused");
+    await resetRehearsalAllocations("cmt4odhgn0000wokk8fbwr6ro", draftEventLive.id, staffUser.id, "should be refused");
   } catch (error) {
     refused = error instanceof Error && /Only rehearsal mode/.test(error.message);
   }

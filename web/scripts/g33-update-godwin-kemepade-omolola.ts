@@ -2,6 +2,10 @@ import { writeAuditLog } from "../src/lib/audit";
 import { provisionPlayerOfflineIntake, updateAdminOfflineIntakePlayerProfile } from "../src/lib/admin-offline-intake";
 import { prisma } from "../src/lib/prisma";
 
+// Phase 1 Stage 5.5B: admin-offline-intake.ts functions now require an explicit
+// organizationId - this historical one-off script always meant Neon Ultra.
+const NEON_ULTRA_ORGANIZATION_ID = "cmt4odhgn0000wokk8fbwr6ro";
+
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";
 const SEASON_ID = "cmqfqpnkr0005lgkkihisj759";
 
@@ -42,22 +46,22 @@ async function main() {
 
   // Kemepade Precious - offline intake, no existing conflicts.
   const KEMEPADE_INTAKE_ID = "cmsoqoynu000agckkz4ix96ay";
-  await updateAdminOfflineIntakePlayerProfile(
+  await updateAdminOfflineIntakePlayerProfile(NEON_ULTRA_ORGANIZATION_ID, 
     KEMEPADE_INTAKE_ID,
     { dateOfBirth: "2008-10-02", dominantHand: "RIGHT", heightCm: decimalFeetToCm(6.3), position: "Small forward / Power forward", weightKg: 70 },
     ACTOR_ID,
   );
-  const kemepadeResult = await provisionPlayerOfflineIntake(KEMEPADE_INTAKE_ID, SEASON_ID, ACTOR_ID);
+  const kemepadeResult = await provisionPlayerOfflineIntake(NEON_ULTRA_ORGANIZATION_ID, KEMEPADE_INTAKE_ID, SEASON_ID, ACTOR_ID);
   console.log(kemepadeResult.alreadyProvisioned ? "Kemepade: already provisioned" : `Kemepade Precious: provisioned -> playerId=${kemepadeResult.player.id}`);
 
   // Omolola Adeseke Rachael - offline intake, no existing conflicts.
   const OMOLOLA_INTAKE_ID = "cmsoqoyot000egckkargbbbe9";
-  await updateAdminOfflineIntakePlayerProfile(
+  await updateAdminOfflineIntakePlayerProfile(NEON_ULTRA_ORGANIZATION_ID, 
     OMOLOLA_INTAKE_ID,
     { dateOfBirth: "2009-04-21", dominantHand: "RIGHT", heightCm: feetInchesToCm(5, 10), position: "Small forward", weightKg: 60 },
     ACTOR_ID,
   );
-  const omololaResult = await provisionPlayerOfflineIntake(OMOLOLA_INTAKE_ID, SEASON_ID, ACTOR_ID);
+  const omololaResult = await provisionPlayerOfflineIntake(NEON_ULTRA_ORGANIZATION_ID, OMOLOLA_INTAKE_ID, SEASON_ID, ACTOR_ID);
   console.log(omololaResult.alreadyProvisioned ? "Omolola: already provisioned" : `Omolola Adeseke Rachael: provisioned -> playerId=${omololaResult.player.id}`);
 }
 

@@ -55,7 +55,7 @@ async function main() {
         recordOrigin: RecordOrigin.APPLICATION,
       },
     });
-    const ultraAthleteId = await ensureAthletePublicId(tx, athlete.id);
+    const ultraAthleteId = await ensureAthletePublicId(tx, athlete.organizationId, athlete.id);
 
     const season = await tx.season.findFirst({ where: { status: { in: ["ACTIVE", "DRAFT"] } }, orderBy: { startDate: "desc" } });
     let playerId: string | undefined;

@@ -7,13 +7,13 @@ const ALLOCATION_ID = "cmsmoti3r0001zlkk0ulqz54w";
 async function main() {
   // Verify reason is required.
   try {
-    await correctAllocation(ALLOCATION_ID, ACTOR_ID, "");
+    await correctAllocation("cmt4odhgn0000wokk8fbwr6ro", ALLOCATION_ID, ACTOR_ID, "");
     console.log("FAIL: empty reason was accepted");
   } catch (e) {
     console.log("OK: empty reason rejected —", (e as Error).message);
   }
 
-  await correctAllocation(ALLOCATION_ID, ACTOR_ID, "Rehearsal correction test before Draft Day — verifying correction mechanism.");
+  await correctAllocation("cmt4odhgn0000wokk8fbwr6ro", ALLOCATION_ID, ACTOR_ID, "Rehearsal correction test before Draft Day — verifying correction mechanism.");
 
   const allocation = await prisma.draftAllocation.findUniqueOrThrow({ where: { id: ALLOCATION_ID } });
   console.log("Allocation after correction:", JSON.stringify({ status: allocation.status, correctedAt: allocation.correctedAt, correctionReason: allocation.correctionReason }));

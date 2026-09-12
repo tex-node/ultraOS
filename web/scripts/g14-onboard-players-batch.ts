@@ -1,6 +1,10 @@
 import { createAdminOfflineIntake, provisionPlayerOfflineIntake, type PlayerProfile } from "../src/lib/admin-offline-intake";
 import { prisma } from "../src/lib/prisma";
 
+// Phase 1 Stage 5.5B: admin-offline-intake.ts functions now require an explicit
+// organizationId - this historical one-off script always meant Neon Ultra.
+const NEON_ULTRA_ORGANIZATION_ID = "cmt4odhgn0000wokk8fbwr6ro";
+
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";
 const SEASON_ID = "cmqfqpnkr0005lgkkihisj759"; // Season Zero 2026
 
@@ -22,7 +26,7 @@ type Result = Record<string, unknown>;
 async function main() {
   const results: Result[] = [];
   for (const p of PLAYERS) {
-    const created = await createAdminOfflineIntake({
+    const created = await createAdminOfflineIntake(NEON_ULTRA_ORGANIZATION_ID, {
       createdById: ACTOR_ID,
       fullName: p.fullName,
       participantType: "PLAYER",
@@ -38,7 +42,7 @@ async function main() {
       continue;
     }
 
-    const provisioned = await provisionPlayerOfflineIntake(created.intake.id, SEASON_ID, ACTOR_ID);
+    const provisioned = await provisionPlayerOfflineIntake(NEON_ULTRA_ORGANIZATION_ID, created.intake.id, SEASON_ID, ACTOR_ID);
     if (provisioned.alreadyProvisioned) {
       results.push({ fullName: p.fullName, alreadyProvisioned: true });
       continue;

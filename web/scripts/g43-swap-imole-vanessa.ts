@@ -15,8 +15,8 @@ const EMBER = "cmqfqpnrb0017lgkkm9i40f6u";
 const NOVA = "cmqfqpnq6000vlgkk3tyi7n08";
 
 async function main() {
-  await correctSecondaryDraftPick("cmsp6yvq300052ykkwrsu64k4", ACTOR_ID, REASON); // Imole's Ember pick
-  await correctSecondaryDraftPick("cmsp6yvrp000a2ykkhi26hgfn", ACTOR_ID, REASON); // Vanessa's Nova pick
+  await correctSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", "cmsp6yvq300052ykkwrsu64k4", ACTOR_ID, REASON); // Imole's Ember pick
+  await correctSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", "cmsp6yvrp000a2ykkhi26hgfn", ACTOR_ID, REASON); // Vanessa's Nova pick
   console.log("Corrected both original picks.");
 
   const swaps = [
@@ -26,16 +26,16 @@ async function main() {
 
   let round = 16;
   for (const s of swaps) {
-    const reserved = await reserveSecondaryDraftPick({
+    const reserved = await reserveSecondaryDraftPick({ organizationId: "cmt4odhgn0000wokk8fbwr6ro", 
       draftId: WOMEN_SECONDARY_DRAFT_ID,
       playerId: s.playerId,
       round,
       seasonClubId: s.seasonClubId,
       userId: ACTOR_ID,
     });
-    await markSecondaryDraftPickRevealing(reserved.id, ACTOR_ID);
-    await revealSecondaryDraftPick(reserved.id, ACTOR_ID);
-    await confirmSecondaryDraftPick(reserved.id, ACTOR_ID);
+    await markSecondaryDraftPickRevealing("cmt4odhgn0000wokk8fbwr6ro", reserved.id, ACTOR_ID);
+    await revealSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", reserved.id, ACTOR_ID);
+    await confirmSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", reserved.id, ACTOR_ID);
     console.log(`${s.name} -> ${s.club} confirmed (pick #${reserved.pickNumber})`);
     round++;
   }

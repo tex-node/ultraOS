@@ -12,7 +12,7 @@ const FAVOUR_FRANKLIN_PLAYER_ID = "cmrb30eqc00wputkk86emwtfu";
 const HALO_SEASON_CLUB_ID = "cmqfqpnqs0011lgkkg2pvftnj";
 
 async function main() {
-  const pick = await reserveSecondaryDraftPick({
+  const pick = await reserveSecondaryDraftPick({ organizationId: "cmt4odhgn0000wokk8fbwr6ro", 
     draftId: WOMEN_SECONDARY_DRAFT_ID,
     playerId: FAVOUR_FRANKLIN_PLAYER_ID,
     round: 1,
@@ -21,13 +21,13 @@ async function main() {
   });
   console.log("Reserved:", pick.id, "pick #", pick.pickNumber);
 
-  await markSecondaryDraftPickRevealing(pick.id, ACTOR_ID);
+  await markSecondaryDraftPickRevealing("cmt4odhgn0000wokk8fbwr6ro", pick.id, ACTOR_ID);
   console.log("Marked revealing");
 
-  await revealSecondaryDraftPick(pick.id, ACTOR_ID);
+  await revealSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick.id, ACTOR_ID);
   console.log("Revealed");
 
-  await confirmSecondaryDraftPick(pick.id, ACTOR_ID);
+  await confirmSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick.id, ACTOR_ID);
   console.log("Confirmed");
 
   const player = await prisma.player.findUniqueOrThrow({

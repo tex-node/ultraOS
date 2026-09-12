@@ -13,6 +13,7 @@ import {
   StaffRole,
   UserRole,
 } from "../src/generated/prisma/enums";
+import { upsertRoleAssignment } from "../src/lib/user-roles";
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -72,14 +73,14 @@ async function main() {
     },
   });
   await Promise.all(
-    [UserRole.SUPER_ADMIN, UserRole.FAN].map((role) =>
-      prisma.userRoleAssignment.upsert({
-        where: { userId_role: { userId: admin.id, role } },
-        update: { revokedAt: null },
-        create: { userId: admin.id, role },
-      }),
-    ),
+    [UserRole.SUPER_ADMIN, UserRole.FAN].map((role) => upsertRoleAssignment(prisma, { userId: admin.id, role })),
   );
+
+  const organization = await prisma.organization.upsert({
+    where: { slug: "neon-ultra" },
+    update: {},
+    create: { name: "Neon Ultra Basketball League", slug: "neon-ultra" },
+  });
 
   const sport = await prisma.sport.upsert({
     where: { slug: "basketball" },
@@ -89,13 +90,14 @@ async function main() {
 
   const competition = await prisma.competition.upsert({
     where: {
-      sportId_slug: {
-        sportId: sport.id,
+      organizationId_slug: {
+        organizationId: organization.id,
         slug: "ultra-basketball",
       },
     },
     update: { name: "Ultra Basketball", isActive: true },
     create: {
+      organizationId: organization.id,
       sportId: sport.id,
       name: "Ultra Basketball",
       slug: "ultra-basketball",
@@ -300,8 +302,8 @@ async function main() {
   for (const [index, [name, shortName, primaryColor, secondaryColor]] of clubs.entries()) {
     const club = await prisma.club.upsert({
       where: {
-        sportId_name: {
-          sportId: sport.id,
+        organizationId_name: {
+          organizationId: organization.id,
           name,
         },
       },
@@ -311,6 +313,7 @@ async function main() {
         secondaryColor,
       },
       create: {
+        organizationId: organization.id,
         sportId: sport.id,
         name,
         shortName,
@@ -371,13 +374,14 @@ async function main() {
     const [firstName, lastName] = athleteNames[index];
     const email = `${firstName}.${lastName}@athletes.neonultra.ng`.toLowerCase();
     const athlete = await prisma.athlete.upsert({
-      where: { email },
+      where: { organizationId_email: { organizationId: organization.id, email } },
       update: {
         firstName,
         lastName,
         photoUrl: null,
       },
       create: {
+        organizationId: organization.id,
         firstName,
         lastName,
         gender: AthleteGender.MALE,
@@ -418,9 +422,10 @@ async function main() {
   }
 
   const venue = await prisma.venue.upsert({
-    where: { name_city: { name: "Ultra Arena", city: "Lagos" } },
+    where: { organizationId_name_city: { organizationId: organization.id, name: "Ultra Arena", city: "Lagos" } },
     update: {},
     create: {
+      organizationId: organization.id,
       name: "Ultra Arena",
       address: "Lagos, Nigeria",
       city: "Lagos",
@@ -530,9 +535,10 @@ async function main() {
   ]);
 
   const concessions = await prisma.vendor.upsert({
-    where: { name: "Ultra Concessions" },
+    where: { organizationId_name: { organizationId: organization.id, name: "Ultra Concessions" } },
     update: { isActive: true },
     create: {
+      organizationId: organization.id,
       name: "Ultra Concessions",
       contactName: "Matchday Concessions Lead",
     },

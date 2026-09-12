@@ -14,6 +14,7 @@ import { recalculateStandings } from "../src/lib/standings";
 import { setPreview, takeToProgram, clearProgram, getBroadcastPresentationState } from "../src/lib/broadcast-presentation-state";
 
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";
+const ORGANIZATION_ID = "cmt4odhgn0000wokk8fbwr6ro";
 const SEASON_ID = "cmqfqpnkr0005lgkkihisj759";
 const STAT_SOURCE = "ULTRA_NATIVE_LIVE_STATISTICIAN" as const;
 const SCORER_SOURCE = "ULTRA_NATIVE_LIVE_SCORER" as const;
@@ -134,17 +135,17 @@ async function main() {
   ok("Rehearsal route's own lookup (recordOrigin=REHEARSAL, no production filter) finds this fixture", rehearsalDiscovered?.recordOrigin === "REHEARSAL" && rehearsalDiscovered.game?.status === "LIVE");
 
   // --- Broadcast Presentation State: Preview/Program, TAKE/CLEAR, restart-recovery ---
-  const before = await getBroadcastPresentationState();
+  const before = await getBroadcastPresentationState(ORGANIZATION_ID);
   ok("Presentation state starts with an empty (or pre-existing production) program - test starts from a known preview", true, before);
-  await setPreview({ gameId: game.id, graphicType: "SCORE_BUG", subjectId: null }, ACTOR_ID);
-  const afterPreview = await getBroadcastPresentationState();
+  await setPreview({ gameId: game.id, graphicType: "SCORE_BUG", subjectId: null }, ACTOR_ID, ORGANIZATION_ID);
+  const afterPreview = await getBroadcastPresentationState(ORGANIZATION_ID);
   ok("setPreview wrote Preview without touching Program", afterPreview.preview?.gameId === game.id && afterPreview.program?.gameId !== game.id, afterPreview);
-  await takeToProgram(ACTOR_ID);
-  const afterTake = await getBroadcastPresentationState();
+  await takeToProgram(ACTOR_ID, ORGANIZATION_ID);
+  const afterTake = await getBroadcastPresentationState(ORGANIZATION_ID);
   ok("TAKE copied Preview into Program atomically", afterTake.program?.gameId === game.id && afterTake.program?.graphicType === "SCORE_BUG", afterTake);
   // Restart-recovery proof: state lives in Postgres (SystemSetting), not memory - a fresh read
   // (simulating what a service restart's first request would do) returns the same value.
-  const freshRead = await getBroadcastPresentationState();
+  const freshRead = await getBroadcastPresentationState(ORGANIZATION_ID);
   ok("A fresh read (simulating post-restart) returns the identical Program state - no in-memory state to lose", freshRead.program?.gameId === afterTake.program?.gameId && freshRead.updatedAt === afterTake.updatedAt);
 
   // The public program API must refuse to serve a REHEARSAL game even if it's (erroneously) on
@@ -152,10 +153,10 @@ async function main() {
   const programApiWhileRehearsalOnAir = await fetch(`${HOST}/api/broadcast/program`).then((r) => r.json());
   ok("Public /api/broadcast/program reports null while Program points at a REHEARSAL game", programApiWhileRehearsalOnAir.program === null, programApiWhileRehearsalOnAir);
 
-  await clearProgram(ACTOR_ID);
-  const afterClear = await getBroadcastPresentationState();
+  await clearProgram(ACTOR_ID, ORGANIZATION_ID);
+  const afterClear = await getBroadcastPresentationState(ORGANIZATION_ID);
   ok("CLEAR removed Program without touching Preview", afterClear.program === null && afterClear.preview?.gameId === game.id, afterClear);
-  await setPreview(null, ACTOR_ID);
+  await setPreview(null, ACTOR_ID, ORGANIZATION_ID);
 
   console.log("=== All G.19 rehearsal scenarios passed ===");
 
@@ -165,7 +166,7 @@ async function main() {
   await prisma.gameStarter.deleteMany({ where: { gameId: game.id } });
   await prisma.game.delete({ where: { id: game.id } });
   await prisma.fixture.delete({ where: { id: fixture.id } });
-  await prisma.$transaction(async (tx) => { await recalculateStandings(tx, SEASON_ID); });
+  await prisma.$transaction(async (tx) => { await recalculateStandings(tx, "cmt4odhgn0000wokk8fbwr6ro", SEASON_ID); });
   console.log("=== Rehearsal fully cleaned up. ===");
 
   const postFinalGames = await prisma.game.count({ where: { status: "FINAL" } });

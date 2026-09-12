@@ -4,6 +4,7 @@ import { ApplicationProvisioningStatus, AthleteGender, DraftSelectionGroup, Play
 import { writeAuditLog } from "../src/lib/audit";
 import { ensureAthletePublicId } from "../src/lib/public-ids";
 import { prisma } from "../src/lib/prisma";
+import { upsertRoleAssignment } from "../src/lib/user-roles";
 
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";
 const AKINGBADE_APP_ID = "cmrocxxsk007zfekkktdsqvzy";
@@ -33,16 +34,8 @@ async function main() {
 
   const result = await prisma.$transaction(async (tx) => {
     // Step 1: restore the existing User/Athlete/Player to Akingbade's authoritative data.
-    await tx.userRoleAssignment.upsert({
-      where: { userId_role: { userId: AKINGBADE_USER_ID, role: UserRole.PLAYER } },
-      update: { revokedAt: null, grantedById: ACTOR_ID },
-      create: { userId: AKINGBADE_USER_ID, role: UserRole.PLAYER, grantedById: ACTOR_ID },
-    });
-    await tx.userRoleAssignment.upsert({
-      where: { userId_role: { userId: AKINGBADE_USER_ID, role: UserRole.FAN } },
-      update: { revokedAt: null },
-      create: { userId: AKINGBADE_USER_ID, role: UserRole.FAN, grantedById: ACTOR_ID },
-    });
+    await upsertRoleAssignment(tx, { userId: AKINGBADE_USER_ID, role: UserRole.PLAYER, grantedById: ACTOR_ID });
+    await upsertRoleAssignment(tx, { userId: AKINGBADE_USER_ID, role: UserRole.FAN, grantedById: ACTOR_ID });
 
     const akingbadeAthlete = await tx.athlete.update({
       where: { id: SHARED_ATHLETE_ID },
@@ -58,7 +51,7 @@ async function main() {
         photoUrl: String(akingbadeData.profilePhotoUrl ?? akingbadeData.photoUrl ?? "") || null,
       },
     });
-    const akingbadeUltraAthleteId = await ensureAthletePublicId(tx, akingbadeAthlete.id);
+    const akingbadeUltraAthleteId = await ensureAthletePublicId(tx, akingbadeAthlete.organizationId, akingbadeAthlete.id);
 
     const akingbadePlayer = await tx.player.update({
       where: { id: SHARED_PLAYER_ID },
@@ -114,7 +107,7 @@ async function main() {
         recordOrigin: RecordOrigin.APPLICATION,
       },
     });
-    const oyekanUltraAthleteId = await ensureAthletePublicId(tx, oyekanAthlete.id);
+    const oyekanUltraAthleteId = await ensureAthletePublicId(tx, oyekanAthlete.organizationId, oyekanAthlete.id);
 
     const season = await tx.season.findFirst({ where: { status: { in: ["ACTIVE", "DRAFT"] } }, orderBy: { startDate: "desc" } });
     let oyekanPlayerId: string | undefined;

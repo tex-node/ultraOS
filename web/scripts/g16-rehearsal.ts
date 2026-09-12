@@ -292,7 +292,7 @@ async function main() {
     const winnerSeasonClubId = g.fixture.homeScore > g.fixture.awayScore ? g.fixture.homeSeasonClubId : g.fixture.awaySeasonClubId;
     await tx.fixture.update({ where: { id: fixture.id }, data: { status: "FINAL", winnerSeasonClubId } });
     await tx.game.update({ where: { id: game.id }, data: { status: "FINAL", endedAt: new Date(), clockSecondsRemaining: remainingClockSeconds(g) } });
-    await recalculateStandings(tx, SEASON_ID);
+    await recalculateStandings(tx, "cmt4odhgn0000wokk8fbwr6ro", SEASON_ID);
   });
   const finalizedGame = await prisma.game.findUniqueOrThrow({ where: { id: game.id } });
   ok("Rehearsal game reached FINAL status", finalizedGame.status === "FINAL");
@@ -322,7 +322,7 @@ async function main() {
   await prisma.gameStarter.deleteMany({ where: { gameId: game.id } });
   await prisma.game.delete({ where: { id: game.id } });
   await prisma.fixture.delete({ where: { id: fixture.id } });
-  await prisma.$transaction(async (tx) => { await recalculateStandings(tx, SEASON_ID); }); // restores real standings now that the rehearsal fixture is gone
+  await prisma.$transaction(async (tx) => { await recalculateStandings(tx, "cmt4odhgn0000wokk8fbwr6ro", SEASON_ID); }); // restores real standings now that the rehearsal fixture is gone
   console.log("=== Rehearsal fixture/game/events/starters fully deleted; standings recalculated for the real season only. ===");
 
   const postCleanupStandings = await prisma.standing.findMany({ where: { seasonId: SEASON_ID }, orderBy: { seasonClubId: "asc" } });

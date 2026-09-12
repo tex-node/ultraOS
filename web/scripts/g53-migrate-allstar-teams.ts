@@ -4,6 +4,7 @@ import { prisma } from "../src/lib/prisma";
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";
 const EVENT_ID = "seed-event-season-zero-launch";
 const VENUE_ID = "cmqfqpnsb001ilgkkwq13sr5s";
+const ORGANIZATION_ID = "cmt4odhgn0000wokk8fbwr6ro"; // Neon Ultra Basketball League
 
 async function main() {
   const settings = await prisma.systemSetting.findMany({ where: { key: { in: ["all-star-team:zenith", "all-star-team:pulse"] } } });
@@ -11,7 +12,7 @@ async function main() {
 
   for (const setting of settings) {
     const value = setting.value as { name: string };
-    const existing = await prisma.noveltyTeam.findUnique({ where: { name: value.name } });
+    const existing = await prisma.noveltyTeam.findFirst({ where: { name: value.name } });
     if (existing) {
       teamIds[value.name] = existing.id;
       console.log(`${value.name}: already migrated -> ${existing.id}`);
@@ -19,7 +20,7 @@ async function main() {
     }
     const team = await prisma.$transaction(async (tx) => {
       const created = await tx.noveltyTeam.create({
-        data: { description: "Season Zero All-Star exhibition team.", name: value.name, shortName: value.name },
+        data: { organizationId: ORGANIZATION_ID, description: "Season Zero All-Star exhibition team.", name: value.name, shortName: value.name },
       });
       await writeAuditLog(tx, {
         action: "NOVELTY_TEAM_CREATED",

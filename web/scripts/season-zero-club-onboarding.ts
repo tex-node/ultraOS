@@ -5,6 +5,7 @@ import path from "node:path";
 import { MediaAssetPurpose, MediaVisibility } from "../src/generated/prisma/enums";
 import { assignPrimaryMediaAsset, detectImageType, uploadMediaAsset } from "../src/lib/media-storage";
 import { prisma } from "../src/lib/prisma";
+import { withOrganizationContext } from "../src/lib/tenant-context";
 
 type ClubSpec = {
   name: string;
@@ -173,13 +174,14 @@ async function getSeasonZeroScope() {
   }
 
   return {
+    organizationId: season.organizationId,
     sportId: season.competition.sportId,
     seasonId: season.id,
     divisions,
   };
 }
 
-async function ensureClubLogo(spec: ClubSpec, clubId: string, userId: string) {
+async function ensureClubLogo(spec: ClubSpec, clubId: string, userId: string, organizationId: string) {
   const logo = await readValidatedLogo(spec);
   const existingUsage = await prisma.mediaAssetUsage.findFirst({
     where: {
@@ -198,20 +200,26 @@ async function ensureClubLogo(spec: ClubSpec, clubId: string, userId: string) {
   }
 
   const file = new File([logo.bytes], spec.logoFile, { type: logo.mimeType });
-  const asset = await uploadMediaAsset({
-    altText: `${spec.name} official Season Zero club logo`,
-    file,
-    purpose: MediaAssetPurpose.CLUB_LOGO,
-    title: `${spec.name} official logo`,
-    uploadedById: userId,
-    visibility: MediaVisibility.PUBLIC,
+  return withOrganizationContext(organizationId, async (tx) => {
+    const asset = await uploadMediaAsset({
+      tx,
+      organizationId,
+      altText: `${spec.name} official Season Zero club logo`,
+      file,
+      purpose: MediaAssetPurpose.CLUB_LOGO,
+      title: `${spec.name} official logo`,
+      uploadedById: userId,
+      visibility: MediaVisibility.PUBLIC,
+    });
+    await assignPrimaryMediaAsset(
+      tx,
+      organizationId,
+      { entityId: clubId, entityType: "Club", purpose: MediaAssetPurpose.CLUB_LOGO },
+      asset.id,
+      userId,
+    );
+    return { mediaAssetId: asset.id, logoUrl: asset.publicUrl ?? `/media/assets/${asset.id}/file`, reused: false };
   });
-  await assignPrimaryMediaAsset(
-    { entityId: clubId, entityType: "Club", purpose: MediaAssetPurpose.CLUB_LOGO },
-    asset.id,
-    userId,
-  );
-  return { mediaAssetId: asset.id, logoUrl: asset.publicUrl ?? `/media/assets/${asset.id}/file`, reused: false };
 }
 
 async function main() {
@@ -229,8 +237,9 @@ async function main() {
     if (!divisionId) throw new Error(`${spec.divisionName} was not found.`);
 
     const club = await prisma.club.upsert({
-      where: { sportId_shortName: { sportId: scope.sportId, shortName: spec.shortName } },
+      where: { organizationId_shortName: { organizationId: scope.organizationId, shortName: spec.shortName } },
       create: {
+        organizationId: scope.organizationId,
         brandingStatus: "BRANDING_INCOMPLETE",
         crowdChant: spec.crowdChant,
         identityKeywords: spec.identityKeywords,
@@ -277,7 +286,7 @@ async function main() {
       update: { seasonId: scope.seasonId },
     });
 
-    const logo = await ensureClubLogo(spec, club.id, userId);
+    const logo = await ensureClubLogo(spec, club.id, userId, scope.organizationId);
     results.push({ ...spec, clubId: club.id, seasonClubId: seasonClub.id, ...logo });
   }
 

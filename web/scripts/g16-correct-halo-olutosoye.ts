@@ -44,7 +44,7 @@ async function main() {
   });
   console.log("Reversed Samuel Olutosoye's Halo assignment (record preserved, just undrafted).");
 
-  const pick = await reserveSecondaryDraftPick({
+  const pick = await reserveSecondaryDraftPick({ organizationId: "cmt4odhgn0000wokk8fbwr6ro", 
     draftId: WOMEN_SECONDARY_DRAFT_ID,
     playerId: GRACE_PLAYER_ID,
     round: 1,
@@ -52,9 +52,9 @@ async function main() {
     userId: ACTOR_ID,
   });
   console.log("Reserved:", pick.id, "pick #", pick.pickNumber);
-  await markSecondaryDraftPickRevealing(pick.id, ACTOR_ID);
-  await revealSecondaryDraftPick(pick.id, ACTOR_ID);
-  await confirmSecondaryDraftPick(pick.id, ACTOR_ID);
+  await markSecondaryDraftPickRevealing("cmt4odhgn0000wokk8fbwr6ro", pick.id, ACTOR_ID);
+  await revealSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick.id, ACTOR_ID);
+  await confirmSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick.id, ACTOR_ID);
   console.log("Grace Olutosoye confirmed to Halo.");
 
   const halo = await prisma.player.findMany({

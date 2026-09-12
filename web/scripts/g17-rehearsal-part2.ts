@@ -118,7 +118,7 @@ async function main() {
     const winnerSeasonClubId = g.fixture.homeScore > g.fixture.awayScore ? g.fixture.homeSeasonClubId : g.fixture.awaySeasonClubId;
     await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId } });
     await tx.game.update({ where: { id: gameId }, data: { status: "FINAL", endedAt: new Date(), clockSecondsRemaining: remainingClockSeconds(g) } });
-    await recalculateStandings(tx, SEASON_ID);
+    await recalculateStandings(tx, "cmt4odhgn0000wokk8fbwr6ro", SEASON_ID);
   });
   ok("Rehearsal game reached FINAL", (await prisma.game.findUniqueOrThrow({ where: { id: gameId } })).status === "FINAL");
 
@@ -167,7 +167,7 @@ async function main() {
   await prisma.gameStarter.deleteMany({ where: { gameId } });
   await prisma.game.delete({ where: { id: gameId } });
   await prisma.fixture.delete({ where: { id: fixtureId } });
-  await prisma.$transaction(async (tx) => { await recalculateStandings(tx, SEASON_ID); });
+  await prisma.$transaction(async (tx) => { await recalculateStandings(tx, "cmt4odhgn0000wokk8fbwr6ro", SEASON_ID); });
   console.log("=== Rehearsal fully cleaned up. ===");
 
   const postCleanupStandingsSum = await prisma.standing.aggregate({ where: { seasonId: SEASON_ID }, _sum: { played: true, won: true } });

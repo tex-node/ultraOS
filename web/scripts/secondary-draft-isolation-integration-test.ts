@@ -88,18 +88,18 @@ async function main() {
 
   // --- Test 1: REHEARSAL-linked confirm does not write Player.seasonClubId ---
   const p1 = await makePlayerFixture(season.id, "P1");
-  const pick1 = await reserveSecondaryDraftPick({ draftId: rehearsalDraft.id, playerId: p1.id, round: 1, seasonClubId: seasonClub.id, userId: actor.id });
-  await revealSecondaryDraftPick(pick1.id, actor.id);
-  await confirmSecondaryDraftPick(pick1.id, actor.id);
+  const pick1 = await reserveSecondaryDraftPick({ organizationId: "cmt4odhgn0000wokk8fbwr6ro",  draftId: rehearsalDraft.id, playerId: p1.id, round: 1, seasonClubId: seasonClub.id, userId: actor.id });
+  await revealSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick1.id, actor.id);
+  await confirmSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick1.id, actor.id);
   const p1After = await prisma.player.findUniqueOrThrow({ where: { id: p1.id } });
   assert.equal(p1After.seasonClubId, null, "REHEARSAL-linked Secondary Draft confirm must NOT write Player.seasonClubId");
   results.test1_rehearsal_does_not_persist = { pass: true };
 
   // --- Test 2: LIVE-linked confirm DOES write Player.seasonClubId ---
   const p2 = await makePlayerFixture(season.id, "P2");
-  const pick2 = await reserveSecondaryDraftPick({ draftId: liveDraft.id, playerId: p2.id, round: 1, seasonClubId: seasonClub.id, userId: actor.id });
-  await revealSecondaryDraftPick(pick2.id, actor.id);
-  await confirmSecondaryDraftPick(pick2.id, actor.id);
+  const pick2 = await reserveSecondaryDraftPick({ organizationId: "cmt4odhgn0000wokk8fbwr6ro",  draftId: liveDraft.id, playerId: p2.id, round: 1, seasonClubId: seasonClub.id, userId: actor.id });
+  await revealSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick2.id, actor.id);
+  await confirmSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick2.id, actor.id);
   const p2After = await prisma.player.findUniqueOrThrow({ where: { id: p2.id } });
   assert.equal(p2After.seasonClubId, seasonClub.id, "LIVE-linked Secondary Draft confirm MUST write Player.seasonClubId");
   results.test2_live_does_persist = { pass: true };
@@ -107,32 +107,32 @@ async function main() {
 
   // --- Test 3: unlinked Draft (no DraftEvent) defaults to REHEARSAL-safe ---
   const p3 = await makePlayerFixture(season.id, "P3");
-  const pick3 = await reserveSecondaryDraftPick({ draftId: unlinkedDraft.id, playerId: p3.id, round: 1, seasonClubId: seasonClub.id, userId: actor.id });
+  const pick3 = await reserveSecondaryDraftPick({ organizationId: "cmt4odhgn0000wokk8fbwr6ro",  draftId: unlinkedDraft.id, playerId: p3.id, round: 1, seasonClubId: seasonClub.id, userId: actor.id });
   assert.equal(pick3.operatingMode, DraftEventOperatingMode.REHEARSAL, "Unlinked Draft must record operatingMode REHEARSAL");
-  await revealSecondaryDraftPick(pick3.id, actor.id);
-  await confirmSecondaryDraftPick(pick3.id, actor.id);
+  await revealSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick3.id, actor.id);
+  await confirmSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick3.id, actor.id);
   const p3After = await prisma.player.findUniqueOrThrow({ where: { id: p3.id } });
   assert.equal(p3After.seasonClubId, null, "Unlinked Draft confirm must default to REHEARSAL-safe (no official write)");
   results.test3_unlinked_defaults_to_rehearsal = { pass: true };
 
   // --- Test 4: pre-reveal privacy — RESERVED/REVEALING hide player + Club identity ---
   const p4 = await makePlayerFixture(season.id, "P4");
-  const pick4 = await reserveSecondaryDraftPick({ draftId: rehearsalDraft.id, playerId: p4.id, round: 2, seasonClubId: seasonClub.id, userId: actor.id });
+  const pick4 = await reserveSecondaryDraftPick({ organizationId: "cmt4odhgn0000wokk8fbwr6ro",  draftId: rehearsalDraft.id, playerId: p4.id, round: 2, seasonClubId: seasonClub.id, userId: actor.id });
   const stateReserved = await publicSecondaryDraftState(rehearsalDraft.id);
   const latestReserved = stateReserved!.picks.at(-1)!;
   assert.equal(latestReserved.player, null, "RESERVED Secondary Draft pick must not expose player identity");
   assert.equal(latestReserved.seasonClub, null, "RESERVED Secondary Draft pick must not expose destination Club");
-  await revealSecondaryDraftPick(pick4.id, actor.id);
+  await revealSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick4.id, actor.id);
   const stateRevealed = await publicSecondaryDraftState(rehearsalDraft.id);
   const latestRevealed = stateRevealed!.picks.at(-1)!;
   assert.notEqual(latestRevealed.player, null, "REVEALED Secondary Draft pick must expose player identity");
   results.test4_pre_reveal_privacy = { pass: true };
-  await confirmSecondaryDraftPick(pick4.id, actor.id);
+  await confirmSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick4.id, actor.id);
 
   // --- Test 5: duplicate protection — same player cannot be picked twice ---
   let duplicateRejected = false;
   try {
-    await reserveSecondaryDraftPick({ draftId: rehearsalDraft.id, playerId: p1.id, round: 3, seasonClubId: seasonClub.id, userId: actor.id });
+    await reserveSecondaryDraftPick({ organizationId: "cmt4odhgn0000wokk8fbwr6ro",  draftId: rehearsalDraft.id, playerId: p1.id, round: 3, seasonClubId: seasonClub.id, userId: actor.id });
   } catch (error) {
     duplicateRejected = error instanceof Error && /already been picked/.test(error.message);
   }
@@ -141,12 +141,12 @@ async function main() {
 
   // --- Test 6: correction reverses official effect and preserves audit ---
   const p6 = await makePlayerFixture(season.id, "P6");
-  const pick6 = await reserveSecondaryDraftPick({ draftId: liveDraft.id, playerId: p6.id, round: 2, seasonClubId: seasonClub.id, userId: actor.id });
-  await revealSecondaryDraftPick(pick6.id, actor.id);
-  await confirmSecondaryDraftPick(pick6.id, actor.id);
+  const pick6 = await reserveSecondaryDraftPick({ organizationId: "cmt4odhgn0000wokk8fbwr6ro",  draftId: liveDraft.id, playerId: p6.id, round: 2, seasonClubId: seasonClub.id, userId: actor.id });
+  await revealSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick6.id, actor.id);
+  await confirmSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick6.id, actor.id);
   const p6Confirmed = await prisma.player.findUniqueOrThrow({ where: { id: p6.id } });
   assert.equal(p6Confirmed.seasonClubId, seasonClub.id, "Precondition: LIVE confirm should have written the official assignment");
-  await correctSecondaryDraftPick(pick6.id, actor.id, "Integration test correction");
+  await correctSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick6.id, actor.id, "Integration test correction");
   const p6Corrected = await prisma.player.findUniqueOrThrow({ where: { id: p6.id } });
   assert.equal(p6Corrected.seasonClubId, null, "Correction must reverse the official assignment it made");
   const pick6Row = await prisma.draftPick.findUniqueOrThrow({ where: { id: pick6.id } });
@@ -156,7 +156,7 @@ async function main() {
 
   // --- Test 7: reset removes only REHEARSAL picks for that draft ---
   const beforeReset = await prisma.draftPick.count({ where: { draftId: rehearsalDraft.id } });
-  await resetSecondaryDraftRehearsal(rehearsalDraft.id, actor.id, "Integration test reset");
+  await resetSecondaryDraftRehearsal("cmt4odhgn0000wokk8fbwr6ro", rehearsalDraft.id, actor.id, "Integration test reset");
   const afterReset = await prisma.draftPick.count({ where: { draftId: rehearsalDraft.id } });
   assert.equal(afterReset, 0, "Reset must remove all REHEARSAL picks for the draft");
   const liveDraftPicksStillExist = await prisma.draftPick.count({ where: { draftId: liveDraft.id } });
@@ -165,7 +165,7 @@ async function main() {
 
   let resetRefusedOnLive = false;
   try {
-    await resetSecondaryDraftRehearsal(liveDraft.id, actor.id, "should be refused");
+    await resetSecondaryDraftRehearsal("cmt4odhgn0000wokk8fbwr6ro", liveDraft.id, actor.id, "should be refused");
   } catch (error) {
     resetRefusedOnLive = error instanceof Error && /REHEARSAL DraftEvent/.test(error.message);
   }

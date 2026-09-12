@@ -14,6 +14,7 @@ import { setPreview, takeToProgram, clearProgram, getBroadcastPresentationState 
 import { derivePlayerStats, deriveTeamStats, emptyPlayerStats, emptyTeamStats, type DerivableEvent } from "../src/lib/event-derived-stats";
 
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";
+const ORGANIZATION_ID = "cmt4odhgn0000wokk8fbwr6ro";
 const SEASON_ID = "cmqfqpnkr0005lgkkihisj759";
 const STAT_SOURCE = "ULTRA_NATIVE_LIVE_STATISTICIAN" as const;
 const SCORER_SOURCE = "ULTRA_NATIVE_LIVE_SCORER" as const;
@@ -32,7 +33,7 @@ async function main() {
   ok("No leftover rehearsal residue before this run", preResidue === 0, { preResidue });
 
   // --- Diagnostics rehearsal, part 1: HEALTHY with nothing live ---
-  const idleHealth = await buildSystemHealth();
+  const idleHealth = await buildSystemHealth("cmt4odhgn0000wokk8fbwr6ro");
   ok("Diagnostics reports overall HEALTHY with no live game and no residue", idleHealth.overallStatus === "HEALTHY", idleHealth.overallStatus);
   ok("Diagnostics correctly reports no live game rather than fabricating one", idleHealth.selectedGame === null);
 
@@ -127,11 +128,11 @@ async function main() {
 
   // --- Diagnostics rehearsal, part 2: this LIVE rehearsal game must never appear as the
   // "selected" game in normal diagnostics (it discovers PRODUCTION games only) ---
-  const healthDuringRehearsal = await buildSystemHealth();
+  const healthDuringRehearsal = await buildSystemHealth("cmt4odhgn0000wokk8fbwr6ro");
   ok("Diagnostics (default discovery) does not pick up the REHEARSAL game", healthDuringRehearsal.selectedGame === null || healthDuringRehearsal.selectedGame.gameId !== game.id);
   // But explicit ?gameId= inspection (an operator debugging a specific id) still works - useful,
   // and does not itself leak the game onto any public surface.
-  const healthWithExplicitGameId = await buildSystemHealth(game.id);
+  const healthWithExplicitGameId = await buildSystemHealth("cmt4odhgn0000wokk8fbwr6ro", game.id);
   ok("Diagnostics CAN inspect the rehearsal game explicitly by id (operator debugging), reporting HEALTHY snapshot freshness", healthWithExplicitGameId.selectedGame?.gameId === game.id && healthWithExplicitGameId.snapshot?.status === "HEALTHY");
 
   // --- Stale-data rehearsal (Part L): a real backdated event, not just the pure-function test.
@@ -145,7 +146,7 @@ async function main() {
   await prisma.gameEvent.create({
     data: { gameId: staleGame.id, seasonClubId: home.id, playerId: hp[0].id, eventType: "SCORE", points: 2, basePointValue: 2, multiplier: 1, made: true, period: 1, clockSeconds: 500, description: "Rehearsal stale-data test event", sequenceNumber: 1, source: SCORER_SOURCE, createdById: ACTOR_ID, createdAt: new Date(Date.now() - 200_000) },
   });
-  const staleHealth = await buildSystemHealth(staleGame.id);
+  const staleHealth = await buildSystemHealth("cmt4odhgn0000wokk8fbwr6ro", staleGame.id);
   ok("Stale-data rehearsal: a genuinely 200s-old event while LIVE with the clock running reports CRITICAL/STALE", staleHealth.snapshot?.status === "CRITICAL" && staleHealth.snapshot?.freshness === "STALE", staleHealth.snapshot);
   await prisma.gameEvent.deleteMany({ where: { gameId: staleGame.id } });
   await prisma.game.delete({ where: { id: staleGame.id } });
@@ -154,24 +155,24 @@ async function main() {
   // --- Score reconciliation mismatch rehearsal (Part XLIX): introduce a real mismatch, confirm
   // diagnostics surfaces it, resolve it, confirm it clears - never auto-corrected. ---
   await prisma.fixture.update({ where: { id: fixture.id }, data: { homeScore: { increment: 100 } } }); // official score now disagrees with the statistician's derived total
-  const mismatchHealth = await buildSystemHealth(game.id);
+  const mismatchHealth = await buildSystemHealth("cmt4odhgn0000wokk8fbwr6ro", game.id);
   ok("Diagnostics rehearsal: an introduced score mismatch is surfaced as WARNING (game still LIVE), never silently corrected", mismatchHealth.reconciliation?.status === "WARNING", mismatchHealth.reconciliation);
   await prisma.fixture.update({ where: { id: fixture.id }, data: { homeScore: { decrement: 100 } } }); // resolve
-  const resolvedHealth = await buildSystemHealth(game.id);
+  const resolvedHealth = await buildSystemHealth("cmt4odhgn0000wokk8fbwr6ro", game.id);
   ok("Diagnostics rehearsal: resolving the mismatch returns reconciliation to HEALTHY", resolvedHealth.reconciliation?.status === "HEALTHY");
 
   // --- Program-failure rehearsal (Part LI): Program pointing at this REHEARSAL game must never
   // crash diagnostics or the browser-source route - it must be diagnosed clearly. ---
-  await setPreview({ gameId: game.id, graphicType: "SCORE_BUG", subjectId: null }, ACTOR_ID);
-  await takeToProgram(ACTOR_ID);
-  const healthWithInvalidProgram = await buildSystemHealth();
+  await setPreview({ gameId: game.id, graphicType: "SCORE_BUG", subjectId: null }, ACTOR_ID, ORGANIZATION_ID);
+  await takeToProgram(ACTOR_ID, ORGANIZATION_ID);
+  const healthWithInvalidProgram = await buildSystemHealth("cmt4odhgn0000wokk8fbwr6ro");
   ok("Program-failure rehearsal: Program pointing at a REHEARSAL game is diagnosed as CRITICAL, not a crash", healthWithInvalidProgram.presentation.status === "CRITICAL", healthWithInvalidProgram.presentation);
   const scorebugWithInvalidProgram = await fetch(`${HOST}/broadcast/game/${game.id}/scorebug`);
   ok("Program-failure rehearsal: the browser source itself still 404s cleanly rather than crashing", scorebugWithInvalidProgram.status === 404);
   const programApiWithInvalidProgram = await fetch(`${HOST}/api/broadcast/program`).then((r) => r.json());
   ok("Program-failure rehearsal: the public Program API reports null rather than leaking the rehearsal game", programApiWithInvalidProgram.program === null);
-  await clearProgram(ACTOR_ID);
-  await setPreview(null, ACTOR_ID);
+  await clearProgram(ACTOR_ID, ORGANIZATION_ID);
+  await setPreview(null, ACTOR_ID, ORGANIZATION_ID);
 
   // --- Public API isolation (new G.20 surface, same discipline as every graphics route) ---
   const publicGameApi = await fetch(`${HOST}/api/v1/games/${fixture.id}`);
@@ -249,7 +250,7 @@ async function main() {
   await prisma.gameStarter.deleteMany({ where: { gameId: game.id } });
   await prisma.game.delete({ where: { id: game.id } });
   await prisma.fixture.delete({ where: { id: fixture.id } });
-  await prisma.$transaction(async (tx) => { await recalculateStandings(tx, SEASON_ID); });
+  await prisma.$transaction(async (tx) => { await recalculateStandings(tx, "cmt4odhgn0000wokk8fbwr6ro", SEASON_ID); });
   console.log("=== Rehearsal fully cleaned up. ===");
 
   const postFinalGames = await prisma.game.count({ where: { status: "FINAL" } });
@@ -259,9 +260,9 @@ async function main() {
   ok("Real production standings totals unchanged", JSON.stringify(postStandingsSum) === JSON.stringify(preStandingsSum));
   ok("Rehearsal residue is 0 after cleanup", postResidue === 0);
 
-  const finalHealth = await buildSystemHealth();
+  const finalHealth = await buildSystemHealth("cmt4odhgn0000wokk8fbwr6ro");
   ok("Diagnostics returns to overall HEALTHY after full cleanup", finalHealth.overallStatus === "HEALTHY", finalHealth.overallStatus);
-  const finalPresentationState = await getBroadcastPresentationState();
+  const finalPresentationState = await getBroadcastPresentationState(ORGANIZATION_ID);
   ok("Presentation state Program is empty after cleanup", finalPresentationState.program === null);
 }
 

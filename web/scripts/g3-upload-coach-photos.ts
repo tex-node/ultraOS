@@ -2,8 +2,10 @@ import { readFileSync } from "node:fs";
 import { MediaAssetPurpose, MediaVisibility } from "../src/generated/prisma/enums";
 import { assignPrimaryMediaAsset, uploadMediaAsset } from "../src/lib/media-storage";
 import { prisma } from "../src/lib/prisma";
+import { withOrganizationContext } from "../src/lib/tenant-context";
 
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";
+const ORGANIZATION_ID = "cmt4odhgn0000wokk8fbwr6ro"; // Neon Ultra Basketball League
 const ASSET_DIR = "/opt/ultraleagueos/shared/scripts/track-g3/coaches";
 
 const coaches = [
@@ -22,16 +24,20 @@ async function main() {
     const bytes = readFileSync(`${ASSET_DIR}/${c.file}`);
     const mime = c.type === "jpg" || c.type === "jpeg" ? "image/jpeg" : "image/png";
     const file = new File([bytes], c.file, { type: mime });
-    const asset = await uploadMediaAsset({
-      file,
-      purpose: MediaAssetPurpose.COACH_PROFILE_PHOTO,
-      uploadedById: ACTOR_ID,
-      visibility: MediaVisibility.PUBLIC,
-      title: `${c.name} coach photo`,
-      altText: `${c.name}`,
+    await withOrganizationContext(ORGANIZATION_ID, async (tx) => {
+      const asset = await uploadMediaAsset({
+        tx,
+        organizationId: ORGANIZATION_ID,
+        file,
+        purpose: MediaAssetPurpose.COACH_PROFILE_PHOTO,
+        uploadedById: ACTOR_ID,
+        visibility: MediaVisibility.PUBLIC,
+        title: `${c.name} coach photo`,
+        altText: `${c.name}`,
+      });
+      await assignPrimaryMediaAsset(tx, ORGANIZATION_ID, { entityId: c.staffId, entityType: "Staff", purpose: MediaAssetPurpose.COACH_PROFILE_PHOTO }, asset.id, ACTOR_ID);
+      console.log(`${c.name}: assetId=${asset.id}`);
     });
-    await assignPrimaryMediaAsset({ entityId: c.staffId, entityType: "Staff", purpose: MediaAssetPurpose.COACH_PROFILE_PHOTO }, asset.id, ACTOR_ID);
-    console.log(`${c.name}: assetId=${asset.id}`);
   }
 }
 

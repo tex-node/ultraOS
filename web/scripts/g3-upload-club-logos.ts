@@ -2,8 +2,10 @@ import { readFileSync } from "node:fs";
 import { MediaAssetPurpose, MediaVisibility } from "../src/generated/prisma/enums";
 import { assignPrimaryMediaAsset, uploadMediaAsset } from "../src/lib/media-storage";
 import { prisma } from "../src/lib/prisma";
+import { withOrganizationContext } from "../src/lib/tenant-context";
 
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";
+const ORGANIZATION_ID = "cmt4odhgn0000wokk8fbwr6ro"; // Neon Ultra Basketball League
 const ASSET_DIR = "/opt/ultraleagueos/shared/scripts/track-g3/clubs";
 
 const clubs = [
@@ -21,16 +23,20 @@ async function main() {
   for (const c of clubs) {
     const bytes = readFileSync(`${ASSET_DIR}/${c.file}`);
     const file = new File([bytes], c.file, { type: "image/png" });
-    const asset = await uploadMediaAsset({
-      file,
-      purpose: MediaAssetPurpose.CLUB_LOGO,
-      uploadedById: ACTOR_ID,
-      visibility: MediaVisibility.PUBLIC,
-      title: `${c.code} official logo`,
-      altText: `${c.code} club logo`,
+    await withOrganizationContext(ORGANIZATION_ID, async (tx) => {
+      const asset = await uploadMediaAsset({
+        tx,
+        organizationId: ORGANIZATION_ID,
+        file,
+        purpose: MediaAssetPurpose.CLUB_LOGO,
+        uploadedById: ACTOR_ID,
+        visibility: MediaVisibility.PUBLIC,
+        title: `${c.code} official logo`,
+        altText: `${c.code} club logo`,
+      });
+      await assignPrimaryMediaAsset(tx, ORGANIZATION_ID, { entityId: c.clubId, entityType: "Club", purpose: MediaAssetPurpose.CLUB_LOGO }, asset.id, ACTOR_ID);
+      console.log(`${c.code}: assetId=${asset.id} url=${asset.publicUrl}`);
     });
-    await assignPrimaryMediaAsset({ entityId: c.clubId, entityType: "Club", purpose: MediaAssetPurpose.CLUB_LOGO }, asset.id, ACTOR_ID);
-    console.log(`${c.code}: assetId=${asset.id} url=${asset.publicUrl}`);
   }
 }
 

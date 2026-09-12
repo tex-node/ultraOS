@@ -1,6 +1,10 @@
 import { missingPlayerProfileFields, updateAdminOfflineIntakePlayerProfile } from "../src/lib/admin-offline-intake";
 import { prisma } from "../src/lib/prisma";
 
+// Phase 1 Stage 5.5B: admin-offline-intake.ts functions now require an explicit
+// organizationId - this historical one-off script always meant Neon Ultra.
+const NEON_ULTRA_ORGANIZATION_ID = "cmt4odhgn0000wokk8fbwr6ro";
+
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";
 const INTAKE_ID = "cmsoqoyl80004gckkmzpwjcll";
 
@@ -9,7 +13,7 @@ function feetInchesToCm(feet: number, inches: number) {
 }
 
 async function main() {
-  const updated = await updateAdminOfflineIntakePlayerProfile(
+  const updated = await updateAdminOfflineIntakePlayerProfile(NEON_ULTRA_ORGANIZATION_ID, 
     INTAKE_ID,
     { dateOfBirth: "2010-08-12", heightCm: feetInchesToCm(5, 8), position: "Guard", weightKg: 45 },
     ACTOR_ID,

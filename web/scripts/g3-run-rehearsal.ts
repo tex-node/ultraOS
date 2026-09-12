@@ -26,18 +26,18 @@ function assertNoLeak(publicState: Awaited<ReturnType<typeof publicDraftEventSta
 }
 
 async function runOne(divisionId: string, subjectType: AllocationSubjectType, label: string) {
-  const allocation = await reserveNextAllocation({ draftEventId: DRAFT_EVENT_ID, divisionId, subjectType, userId: ACTOR_ID });
+  const allocation = await reserveNextAllocation({ organizationId: "cmt4odhgn0000wokk8fbwr6ro",  draftEventId: DRAFT_EVENT_ID, divisionId, subjectType, userId: ACTOR_ID });
   console.log(`RESERVE ${label}: allocation=${allocation.id}`);
   const stateAfterReserve = await publicDraftEventState(DRAFT_EVENT_ID);
   assertNoLeak(stateAfterReserve, allocation.id);
 
-  await markAllocationRevealing(allocation.id, ACTOR_ID);
-  await revealAllocation(allocation.id, ACTOR_ID);
+  await markAllocationRevealing("cmt4odhgn0000wokk8fbwr6ro", allocation.id, ACTOR_ID);
+  await revealAllocation("cmt4odhgn0000wokk8fbwr6ro", allocation.id, ACTOR_ID);
   const stateAfterReveal = await publicDraftEventState(DRAFT_EVENT_ID);
   const revealedAlloc = stateAfterReveal!.allocations.find((a) => a.id === allocation.id);
   console.log(`  REVEAL ${label}: ${JSON.stringify(revealedAlloc)}`);
 
-  await confirmAllocation(allocation.id, ACTOR_ID);
+  await confirmAllocation("cmt4odhgn0000wokk8fbwr6ro", allocation.id, ACTOR_ID);
   console.log(`  CONFIRM ${label}: done`);
   return allocation.id;
 }

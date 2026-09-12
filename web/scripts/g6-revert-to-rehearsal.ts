@@ -10,7 +10,7 @@ const liveAllocationIds = ["cmsmxrc370009eskk29qnzlmt", "cmsmxu3l7000deskkhu5z61
 
 async function main() {
   for (const id of liveAllocationIds) {
-    await correctAllocation(id, ACTOR_ID, REASON);
+    await correctAllocation("cmt4odhgn0000wokk8fbwr6ro", id, ACTOR_ID, REASON);
     console.log("Corrected:", id);
   }
 
