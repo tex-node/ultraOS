@@ -1972,6 +1972,11 @@ model RegistrationForm {
   maxTeamSize         Int?
   requiresConsent     Boolean                  @default(false)
   confirmationMessage String?
+  // All-female team competition (R2): the sports this form collects rosters for,
+  // and per-sport roster/rules configuration (JSON). Additive; existing forms
+  // default to no sports configured.
+  sports              RegistrationSport[]
+  sportConfig         Json?
   fields              RegistrationField[]
   submissions         RegistrationSubmission[]
   recordOrigin        RecordOrigin             @default(PRODUCTION)
@@ -2063,30 +2068,59 @@ model RegistrationSubmission {
 // @@unique([organizationId, id]); any future link write must be application-level
 // assertSameOrganization-guarded. Nothing auto-internalizes an Athlete in v1.
 model RegistrationParticipant {
-  id             String                      @id @default(cuid())
-  organizationId String                      @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
-  organization   Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  submissionId   String
-  submission     RegistrationSubmission      @relation(fields: [organizationId, submissionId], references: [organizationId, id], onDelete: Cascade)
-  role           RegistrationParticipantRole @default(PARTICIPANT)
-  fullName       String
-  dateOfBirth    DateTime?
-  gender         String?
-  email          String?
-  phone          String?
-  category       String?
-  clubOrSchool   String?
-  jerseyNumber   Int?
-  answers        Json?
-  athleteId      String?
-  athlete        Athlete?                    @relation(fields: [athleteId], references: [id], onDelete: SetNull)
-  sortOrder      Int                         @default(0)
-  recordOrigin   RecordOrigin                @default(PRODUCTION)
-  createdAt      DateTime                    @default(now())
-  updatedAt      DateTime                    @updatedAt
+  id               String                         @id @default(cuid())
+  organizationId   String                         @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization     Organization                   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  submissionId     String
+  submission       RegistrationSubmission         @relation(fields: [organizationId, submissionId], references: [organizationId, id], onDelete: Cascade)
+  role             RegistrationParticipantRole    @default(PARTICIPANT)
+  fullName         String
+  dateOfBirth      DateTime?
+  gender           String?
+  email            String?
+  phone            String?
+  category         String?
+  clubOrSchool     String?
+  jerseyNumber     Int?
+  answers          Json?
+  athleteId        String?
+  athlete          Athlete?                       @relation(fields: [athleteId], references: [id], onDelete: SetNull)
+  sortOrder        Int                            @default(0)
+  sportMemberships RegistrationParticipantSport[]
+  recordOrigin     RecordOrigin                   @default(PRODUCTION)
+  createdAt        DateTime                       @default(now())
+  updatedAt        DateTime                       @updatedAt
 
   @@unique([organizationId, id])
   @@index([organizationId, submissionId, sortOrder])
+}
+
+// All-female team competition (R2). The sport a child is registered for, kept
+// as a membership row so ONE RegistrationParticipant (the child) can hold both a
+// Volleyball and a Flag Race assignment without duplicating the person.
+// Per-sport roster metadata (order/position/captain) lives here, not on the person.
+enum RegistrationSport {
+  VOLLEYBALL
+  FLAG_RACE
+}
+
+model RegistrationParticipantSport {
+  id             String                  @id @default(cuid())
+  organizationId String                  @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  participantId  String
+  participant    RegistrationParticipant @relation(fields: [organizationId, participantId], references: [organizationId, id], onDelete: Cascade)
+  sport          RegistrationSport
+  rosterOrder    Int                     @default(0)
+  position       String?
+  isCaptain      Boolean                 @default(false)
+  recordOrigin   RecordOrigin            @default(PRODUCTION)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, participantId, sport])
+  @@index([organizationId, sport, rosterOrder])
 }
 
 // Post-event retrospective data - deliberately separate from the pre-event Runbook
@@ -4048,17 +4082,17 @@ enum OrganizationStatus {
 }
 
 model Organization {
-  id                        String                     @id @default(cuid())
+  id                        String                         @id @default(cuid())
   name                      String
-  slug                      String                     @unique
-  status                    OrganizationStatus         @default(ACTIVE)
+  slug                      String                         @unique
+  status                    OrganizationStatus             @default(ACTIVE)
   // Phase 1 Stage 5.4A: wired up in public-ids.ts. PublicIdCounter's sequence allocation is
   // tenant-local (each org allocates 1, 2, 3... independently, never advancing another org's
   // counter) - the formatted external id's platform-wide uniqueness now rests entirely on no two
   // organizations ever sharing a prefix, which is why both are @unique here. Do not let a new
   // organization reuse an existing prefix.
-  idPrefixAthlete           String                     @unique @default("UBA")
-  idPrefixStaff             String                     @unique @default("UBS")
+  idPrefixAthlete           String                         @unique @default("UBA")
+  idPrefixStaff             String                         @unique @default("UBS")
   roleAssignments           UserRoleAssignment[]
   competitions              Competition[]
   divisions                 Division[]
@@ -4107,6 +4141,7 @@ model Organization {
   registrationFields        RegistrationField[]
   registrationSubmissions   RegistrationSubmission[]
   registrationParticipants  RegistrationParticipant[]
+  participantSports         RegistrationParticipantSport[]
   eventDebriefs             EventDebrief[]
   eventVendorReviews        EventVendorReview[]
   eventVolunteerReviews     EventVolunteerReview[]
@@ -4170,8 +4205,8 @@ model Organization {
   visionSpatialSummarys     VisionSpatialSummary[]
   courtSpecifications       CourtSpecification[]
   visionTrajectoryArtifacts VisionTrajectoryArtifact[]
-  createdAt                 DateTime                   @default(now())
-  updatedAt                 DateTime                   @updatedAt
+  createdAt                 DateTime                       @default(now())
+  updatedAt                 DateTime                       @updatedAt
 
   @@index([status])
 }
