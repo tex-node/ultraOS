@@ -1073,3 +1073,2580 @@ Append new entries below using this structure:
 - No official Club colour was invented.
 - Official Club logos were not modified.
 - `TryOutsPlayers.xlsx` was not modified.
+
+> **Backfill note (2026-08-23)**: the five entries below (Tracks G.19, G.20, G.21, G.22,
+> and Phase 1 Stages 0-5.2A) were reconstructed after the fact from `documentation/`
+> content, migration file header comments, and git history — this log was not updated
+> live during those sessions. They are as accurate as the surviving written record
+> allows, but unlike every entry above and below, they were not written contemporaneously
+> and may omit detail that only existed in-session. Individual git commits do not exist
+> for most of this work: nearly all of it (Track G through the AI vision foundation) was
+> squashed into one commit, `fbccbcb`, on 2026-08-21, and Phase 1 Stages 0 through 5.2A
+> were never committed to git at all — deployed directly to production via file sync,
+> consistent with this project's actual release mechanism (see the Stage 5.2B-1 entry
+> below).
+
+### 2026-08-20 - Track G.19: Live Broadcast Presentation Layer (backfilled)
+
+**Objective**
+
+- Build the live in-game presentation and broadcast graphics layer: real-time
+  narrative/momentum analytics, a full suite of unauthenticated OBS/vMix browser-source
+  graphics, and the broadcast control panel that drives them.
+
+**Completed**
+
+- Added Live Game Story (`src/lib/live-game-story.ts`, `buildLiveGameStory()`), reusing
+  the existing `classifyGameStory()` engine rather than building a second classifier.
+- Added Live Game Pulse (`src/lib/live-game-pulse.ts`, `computeGamePulse()`) — a pure
+  reducer over a new `scoringChronology` field added to Live Snapshot V2.
+- Added ten dedicated browser-source graphics pages under
+  `/broadcast/game/[gameId]/*` (scorebug, player-spotlight, leader, team-comparison,
+  record-watch, milestone, game-story, ultra-time, four-point-moment, final) plus
+  migrated the pre-existing `scorebug` route onto the same rules.
+- Added the Broadcast Control Panel (`/broadcast/control`) and
+  `src/lib/broadcast-presentation-state.ts` for on-air graphic selection, persisted in
+  `SystemSetting` rather than in memory.
+- Added Graphics Suggestions (`src/lib/broadcast-suggestions.ts`,
+  `buildGraphicSuggestions()`) — pure, ephemeral, no database writes.
+- Extracted `LiveGameHero` from the public `/live` page so an authenticated rehearsal
+  preview renders the identical component, and extended the Commentator Command Center
+  with Story/Pulse/Suggestions.
+- Added `TransparentBody` so every broadcast graphics route composites correctly over
+  OBS/vMix browser sources.
+
+**Decisions**
+
+- Broadcast/on-air state lives in the database (`SystemSetting`), not process memory, so
+  it survives a service restart without operator intervention.
+- Every broadcast graphics route is gated by the same production/rehearsal isolation
+  mechanism (`productionPresentationFixtureWhere()` / `loadProductionGraphicModel()`) so
+  a REHEARSAL-origin game can never appear on a live public or broadcast surface.
+
+**Verification**
+
+- A defect found by the G.18 rehearsal — the `/live` fixture-discovery query had no
+  isolation from non-PRODUCTION `Fixture.recordOrigin`, so a REHEARSAL game could appear
+  as a live production game — was fixed by adding `productionPresentationFixtureWhere()`
+  to the query, then re-verified against real production HTTP: a REHEARSAL-origin LIVE
+  game no longer appears on `/live`.
+- G.19's own rehearsal found and fixed a lead-change undercounting bug in
+  `computeGamePulse()` (it only compared each point to the immediately-prior point,
+  missing TIE-to-lead transitions) via a `lastNonTieLeader` tracker, with a regression
+  test added.
+- Confirmed over real HTTP against the deployed server: REHEARSAL-origin games 404 on
+  `scorebug`/`clock`/broadcast-tooling-API while PRODUCTION games return 200; broadcast
+  presentation state survives a service restart with a byte-identical `program` value;
+  transparency verified via `getComputedStyle(document.body).backgroundColor` =
+  `rgba(0,0,0,0)` on every graphics route.
+
+**Known issues**
+
+- None recorded in the surviving documentation for this track specifically.
+
+**Next step**
+
+- Track G.20: the public live data API and broadcast observability/resilience layer.
+
+### 2026-08-21 - Track G.20: Public Live Data API and Broadcast Resilience (backfilled)
+
+**Objective**
+
+- Ship the first stable, versioned public HTTP API for Ultra League OS data, and build
+  the observability and recovery guarantees the broadcast system needs to run
+  unattended during a live event.
+
+**Completed**
+
+- Added `/api/v1/*`: `/live`, `/games/{id}`, `/snapshot`, `/box-score`, `/events`,
+  `/players/{ultraAthleteId}`, `/clubs/{shortName}`, `/seasons/{active|id}/standings`,
+  `/seasons/.../leaders` — with rate limiting, CORS allowlisting, capability tiers
+  (`BOX_SCORE_ONLY` / `EVENT_LEVEL` / `FULL_ULTRA`), and a standard error envelope.
+  Public identifiers only (`ultraAthleteId`, `shortName`, `Fixture.id`) — never
+  internal database ids.
+- Added `/broadcast/diagnostics` and `src/lib/system-health.ts` /
+  `system-health-loader.ts`, judging System / Game Data / Reconciliation /
+  Presentation / Browser Sources / Public sections as HEALTHY / WARNING / CRITICAL /
+  UNKNOWN, plus a "Live system health" strip on `/gameday` using the same
+  `buildSystemHealth()` call. Diagnostics reads Program-state validity but never
+  auto-repairs it.
+- Added the live-data freshness/staleness model: FRESH (≤30s), DELAYED (30-120s),
+  STALE (>120s), NOT_APPLICABLE when not live.
+- Added `scripts/g20-rehearsal.ts` and `scripts/g20-load-test.ts` for end-to-end
+  rehearsal and load testing.
+- Documented the read-only third-party consumption contract
+  (`EXTERNAL_GRAPHICS_DATA_CONTRACT.md`) and per-graphic OBS/vMix setup.
+
+**Decisions**
+
+- API versioning: breaking changes require a new `/api/v2/` namespace; once shipped,
+  v1 fields are stable.
+- Rate limit is in-memory, 120 requests/minute/IP, scoped to `/api/v1/*` only.
+- All API v1 routes are `force-dynamic` with no caching, and every response carries
+  `generatedAt`/`dataUpdatedAt` timestamps.
+
+**Verification**
+
+- The G.20 multi-consumer rehearsal ran diagnostics and public API pollers
+  simultaneously and reconfirmed Program state survives a service restart.
+- `FULL_PRODUCTION_REHEARSAL.md` records a 24-check rehearsal, all passed: baseline
+  diagnostics, full event set, diagnostics isolation, a stale-data case (a backdated
+  200-second-old event correctly reported CRITICAL/STALE), a score-reconciliation
+  mismatch and its resolution, a Program-failure case (pointing at a REHEARSAL fixture
+  correctly returned CRITICAL with a clean 404 and no data leak), public API isolation,
+  a 26-concurrent multi-consumer load test with zero 5xx responses, game finalization,
+  post-final correction propagation, cleanup, and unchanged production invariants.
+- `g20-load-test.ts` measured concurrency 10/25/50 with zero errors at every tier;
+  p95 latency 364ms / 583ms / 982ms respectively.
+
+**Known issues**
+
+- A literal network partition of a single consumer was reasoned about structurally,
+  not fault-injected — explicitly disclosed as untested.
+
+**Next step**
+
+- Track G.21: the AI vision foundation, built on top of this track's canonical
+  game-truth and live-data layers.
+
+### 2026-08-21 - Track G.21: AI Vision and Player Intelligence Foundation (backfilled)
+
+**Objective**
+
+- Build the foundational data model and architecture for computer-vision analysis of
+  game video, strictly observational and layered on top of the existing canonical
+  game-truth stack.
+
+**Completed**
+
+- Added the schema foundation (`20260821080000_g21_ai_vision_foundation`, purely
+  additive): 7 new enums, one new `MediaAssetPurpose` value (`GAME_VIDEO`), and 8 new
+  tables — `GameVideo`, `VideoTimelineAnchor`, `CourtCalibration`, `VisionModel`,
+  `VisionAnalysisRun`, `VisionTrack`, `VisionObservation`, `VisionEventMatch`,
+  `VisionSpatialSummary`.
+- Added a video registry reusing the existing `MediaAsset` system rather than a second
+  storage mechanism (`GameVideo`).
+- Added video-to-game-clock timeline sync (`VideoTimelineAnchor`,
+  `video-timeline.ts`, unit-tested) and court calibration via homography
+  (`CourtCalibration`, `court-homography.ts`, `court-zones.ts`).
+- Added the observation/track/analysis-run data model
+  (`VisionObservation`/`VisionTrack`/`VisionAnalysisRun`/`VisionModel`) and player
+  identity resolution from team/jersey/lineup context only — never facial recognition.
+- Added deterministic-confidence matching of vision observations to canonical
+  `GameEvent`s, precision/recall/F1 evaluation logic (`vision-evaluation.ts`), and a
+  human review workflow/UI at `/vision/games/[fixtureId]`.
+- Added an offline proof-of-concept entry point, `scripts/vision-analyze.ts`.
+
+**Decisions**
+
+- Hard architectural boundary, stated as "the one rule everything else follows": AI
+  observes, humans/the canonical game system verify, derived intelligence may use
+  both. Vision code can never write `Fixture.homeScore`/`awayScore`, `GameEvent`'s
+  canonical `x`/`y`/`courtZone`, `PlayerStat`, `TeamStat`, `Standing`, `Player`
+  identity, or `SeasonClub`/coach assignment.
+- That boundary is enforced structurally, not just by convention:
+  `capability-separation.test.ts` fails the build if any file under `src/lib/vision/`
+  references `dataCapability`/`GameDataCapability`/`BOX_SCORE_ONLY`/`FULL_ULTRA` or
+  writes to `PlayerStat`/`TeamStat`/`Standing`.
+- No facial recognition or face embeddings anywhere; any future biometric identity
+  work requires its own product/legal/privacy review before code is written. Vision
+  routes require `vision:manage` (SUPER_ADMIN/LEAGUE_OPERATOR only); no public route
+  reads vision tables; video defaults to `MediaVisibility.PRIVATE`.
+- High-frequency trajectory data is designed to live outside Postgres — a design
+  decision recorded but not implemented this track.
+
+**Verification**
+
+- Built and unit-tested (60+ tests) entirely against synthetic data. The rehearsal
+  runbook status is explicitly `BLOCKED_NO_REAL_VIDEO`, confirmed via direct database
+  checks that zero real `GameVideo`/`VisionAnalysisRun`/`CourtSpecification(OFFICIAL)`
+  rows exist — the user confirmed no real Ultra game video or official court
+  dimensions were available yet. `scripts/vision-analyze.ts` honestly reports this
+  blocked status rather than fabricating a result.
+
+**Known issues**
+
+- No real inference, no worker process, and no real video exist yet — explicitly
+  named as out of scope for this track (`VISION_WORKER_ARCHITECTURE.md`).
+
+**Next step**
+
+- Track G.22: real, unit-tested measurement functions and an official court-geometry
+  layer, built on top of this foundation.
+
+### 2026-08-21 - Track G.22: Empirical Validation and Ultra Court Intelligence (backfilled)
+
+**Objective**
+
+- Add real measurement and evaluation functions on top of G.21's vision foundation,
+  plus an official court-geometry layer, so vision output can eventually be judged
+  against ground truth rather than only architecturally scoped.
+
+**Completed**
+
+- Added the schema layer (`20260821100000_g22_court_intelligence`, purely additive):
+  4 new enums, new columns on `CourtCalibration`/`Game`/`GameVideo`/
+  `VisionEventMatch`/`VisionObservation`, and 2 new tables — `CourtSpecification` and
+  `VisionTrajectoryArtifact`.
+- Added `CourtSpecification` (venue-scoped, DRAFT/OFFICIAL gated) as the physical
+  ground-truth layer G.21's calibration work was blocked on.
+- Added real, unit-tested measurement functions: `detection-metrics.ts` (player
+  detection precision/recall/F1), `tracking-metrics.ts` (multi-object tracking
+  switches/fragmentations), `spatial-metrics.ts` (quality-labeled derived spatial
+  metrics), `four-point-spatial-rule.ts` (four-point zone qualification), and
+  `calibration-quality.ts` (HIGH/MEDIUM/LOW/FAILED calibration classification).
+- Added real video ingest probing via an `ffprobe` wrapper (`media-probe.ts`) and an
+  ingest-status state machine.
+- Added trajectory filtering and an object-storage artifact reference row
+  (`VisionTrajectoryArtifact`, `trajectory-filtering.ts`).
+- Added a failure-categorization taxonomy to the existing vision review action, and a
+  privacy-safe evaluation dataset export
+  (`buildEvaluationDatasetExport()`, `/api/vision/games/[gameVideoId]/export`) that
+  emits only public-safe ids, never faces, frame images, or raw internal ids.
+- Extended `capability-separation.test.ts` with a second check scanning for
+  biometric-pattern regressions.
+
+**Decisions**
+
+- Court geometry must be explicitly marked OFFICIAL (not DRAFT) before any spatial
+  qualification treats it as ground truth — a draft court spec is always
+  `GEOMETRY_UNAVAILABLE`, never a silent guess.
+- Model governance for this track is a documented rule plus the existing audit trail,
+  not new machinery.
+- Clip preview/generation was scoped architecturally but explicitly not built this
+  track.
+
+**Verification**
+
+- Same as G.21: built and unit-tested against synthetic data; the empirical rehearsal
+  runbook status is explicitly `BLOCKED_NO_REAL_VIDEO`, confirmed via direct database
+  checks (zero real video/analysis-run/official-court-spec rows), with no real Ultra
+  video or official court dimensions available at the time.
+- The extended `capability-separation.test.ts` biometric-pattern check passes cleanly.
+
+**Known issues**
+
+- Every measurement and evaluation function in this track remains unproven against
+  real game video — explicitly disclosed as blocked, not silently assumed working.
+
+**Next step**
+
+- Resume vision work once real Ultra game video and official court dimensions are
+  available; until then, focus shifts to Phase 1 (multi-tenancy).
+
+### 2026-08-22/23 - Phase 1 Stages 0-5.2A: Multi-Tenancy Foundation (backfilled)
+
+**Objective**
+
+- Retrofit real organization-based tenant isolation onto what was originally a
+  single-tenant application for Neon Ultra Basketball League, so the same platform
+  can later host additional leagues without a separate deployment, using Postgres
+  Row-Level Security as the enforcement mechanism and a shared single database.
+
+**Completed**
+
+- **Stage 0** (`20260822093000_phase1_stage0_organization`): added the `Organization`
+  model and `OrganizationStatus` enum, and an `organizationId` column on
+  `UserRoleAssignment` (replacing its old 2-column unique index with a 3-column one).
+  Purely additive; no `Organization` row created yet.
+- **Stage 1** (`20260822180000_phase1_stage1_organization_id_columns`): added a
+  nullable, default-less `organizationId TEXT` column to all 104 tenant-scoped tables
+  (every model except `User`, `UserRoleAssignment`, `Sport`,
+  `TrainingMetricDefinition`, and `Organization` itself).
+- **Stage 2** (`scripts/phase1-stage2-backfill-organization.ts`): created the one real
+  Organization row (Neon Ultra Basketball League, slug `neon-ultra`) and backfilled
+  every one of the 104 tenant tables' existing rows to its id.
+- **Stage 3** (`20260822190000_phase1_stage3_organization_not_null_fk`): made
+  `organizationId` `NOT NULL` with a foreign key to `Organization(id)` on all 104
+  tables, with a temporary database-level default of Neon Ultra's id so every
+  existing, not-yet-org-aware code path kept compiling and working unchanged.
+- **Stage 3b** (`20260823060000_phase1_stage3b_unique_constraint_rewrites`): rewrote 6
+  of 8 inventoried unique constraints to be organization-scoped (`Athlete.email`,
+  `Club.name`/`shortName`, `Competition.name`/`slug`, `Vendor.name`,
+  `NoveltyTeam.name`, `Venue.name`+`city`); deliberately deferred
+  `Athlete.ultraAthleteId`, `Staff.ultraStaffId`, and `SystemSetting.key` to Stage 5.4
+  due to real call-site dependencies.
+- **Stage 4a** (`20260823070000_phase1_stage4a_row_level_security`): enabled and
+  forced Row-Level Security on all 104 tenant tables with a `tenant_isolation` policy
+  comparing `organizationId` against `current_setting('app.current_org_id')`, falling
+  back to Neon Ultra's id when unset. A deliberate no-op at the time, since the app
+  still connected as a superuser.
+- **Stage 4b**: created the restricted `ultraos_app` Postgres role
+  (`NOSUPERUSER NOBYPASSRLS`) and cut the live application over to it, making RLS
+  genuinely enforced for the first time rather than merely present. Kept the
+  privileged `ultraos` role, now used only for migrations via a separate
+  `migrate.env`.
+- **Stage 5.1**: added `resolveActiveOrganizationId()`/`withOrganizationContext()` in
+  `src/lib/tenant-context.ts` (the latter using a transaction-scoped
+  `set_config('app.current_org_id', $1, true)`), and backfilled all 594 pre-existing
+  `UserRoleAssignment` rows (previously `organizationId = NULL`, "platform-level" by
+  Stage 0's design but in practice all real Neon Ultra grants) to Neon Ultra's id.
+- **Stage 5.2A**: converted the highest-risk authenticated write paths to real
+  tenant scoping — game-day scoring, the statistician console, check-in, fixtures,
+  the shared `media-storage.ts` layer, and operations — plus fixed two anonymous-user
+  500s into clean login redirects. A whole-repository re-scan (not just `src/`) found
+  and fixed ripple-effect callers living in `scripts/`. Full detail recorded in
+  `documentation/architecture/PHASE1_STAGE5_2A_TENANCY_SCAN.md`.
+
+**Decisions**
+
+- Organization-rooted tenant model, Postgres Row-Level Security for enforcement, one
+  shared database/deployment rather than a separate deployment per league.
+- Split the schema rollout into small, independently verifiable stages (add column →
+  backfill → constrain → RLS → restricted role → application code) rather than one
+  large migration, matching this project's established migration discipline.
+- The Stage 3 database-level default to Neon Ultra's id is a deliberate, disclosed
+  bridge, not a permanent design choice — it must be removed (Stage 5.5) before a
+  second real organization is ever onboarded.
+- Any signature change to a shared function requires a repository-wide grep,
+  including `scripts/`, not a `src/`-scoped one — this exact class of mistake caused
+  missed call sites twice during Stage 5.2A.
+
+**Verification**
+
+- Every migration's own header comment records that it was generated via a live,
+  read-only `prisma migrate diff` against production and reviewed before being
+  applied.
+- Stage 4a's RLS mechanism was rehearsed end-to-end against a fresh production
+  restore before being applied to production: no session variable set falls back to
+  Neon Ultra's data (identical to pre-Stage-4a behavior); a session variable set to a
+  nonexistent org sees zero rows; a genuine second organization's session sees only
+  its own data; a cross-org insert is rejected.
+- Stage 5.2A's media cross-org denial was verified with a real throwaway second
+  organization on staging: a cross-org `assignPrimaryMediaAsset` was denied with a
+  clean error, and cleaned up afterward with zero residue.
+- `tsc`, lint, tests, and production build passed at each stage's close.
+
+**Known issues**
+
+- `ultraAthleteId`, `ultraStaffId`, `SystemSetting.key`, and `PublicIdCounter` remain
+  globally-scoped, deliberately deferred to Stage 5.4.
+- The Stage 3 database-level default bridge must be removed in Stage 5.5 before a
+  second organization exists.
+- Public application tenant resolution (`/apply`) was still bridged to hardcoded Neon
+  Ultra at the close of Stage 5.2A — recorded as
+  `PUBLIC_APPLICATION_TENANT_RESOLUTION: DEFERRED_TO_5.2B-1` and solved in the
+  following session (see the Stage 5.2B-1 entry below).
+- 25 live application files and 1 partially-converted file
+  (`src/app/coaches/actions.ts`) remained unconverted at the close of Stage 5.2A,
+  named individually in `PHASE1_STAGE5_2A_TENANCY_SCAN.md`; 44 historical one-off
+  `scripts/g*.ts` files were deliberately left unconverted as completed historical
+  operations with zero live risk.
+
+**Next step**
+
+- Stage 5.2B-1: solve public tenant acquisition before participant provisioning, then
+  continue through 5.2B-2/3/4, 5.2C, 5.2D, and Stage 5.4-5.6 (see the entry below).
+
+### 2026-08-23 - Phase 1 Stage 4c and Stage 5.2B-1: Public Tenant Acquisition
+
+**Objective**
+
+- Close the `UserRoleAssignment` row-level-security gap found while verifying Stage
+  5.2B-1's cross-tenant provisioning guards, then solve public tenant acquisition for
+  the `/apply` flow so participant provisioning has a trustworthy target organization.
+
+**Completed**
+
+- Discovered `UserRoleAssignment` had zero RLS policy coverage despite carrying
+  `organizationId` since Stage 0 — it was excluded from Stage 4a's 104-table rollout
+  as "already handled separately," which was never actually true. Found via empirical
+  cross-org rehearsal, not code review: `Athlete`/`Staff` correctly denied a cross-org
+  create; `UserRoleAssignment` silently allowed it.
+- Added Stage 4c
+  (`prisma/migrations/20260823080000_phase1_stage4c_userroleassignment_rls`): RLS
+  policy allowing `organizationId IS NULL` (platform-level grants; this column is
+  nullable, unlike the 104 NOT-NULL tenant tables) OR a match against the same
+  Neon-Ultra-fallback pattern used everywhere else. Rehearsed on `ultraos_staging`
+  connected as the actual restricted role, then deployed standalone to production
+  ahead of the rest of 5.2B-1.
+- Restructured `/apply` to `/apply/[organizationSlug]/...`. Added
+  `resolveActiveOrganizationBySlug()`/`OrganizationNotFoundError` to
+  `src/lib/tenant-context.ts`. The resolved slug reaches `submitApplication` as a
+  Next.js-encrypted bound argument, never a hidden form field, so the client can
+  never supply or tamper with the target organization. Legacy `/apply` (no slug) is
+  now a plain redirect to `/apply/neon-ultra`, replacing the old Stage 3a DB-default
+  fallback.
+- Established the rule that once an `Application` row exists, every downstream step
+  reads `application.organizationId` — never the current session/admin's org.
+  Converted `src/lib/participant-internalization.ts` accordingly: the provisioning
+  transaction runs inside `withOrganizationContext(application.organizationId, ...)`,
+  and every `User` role grant, `Athlete`/`Player`/`Staff` create, and audit log entry
+  is stamped with `application.organizationId`.
+- Converted ripple dependents: `src/lib/r2.ts`'s `uploadProfilePhoto` now takes an
+  explicit `organizationId` (removed the old hardcoded-Neon-Ultra helper);
+  `src/lib/application-intake.ts`'s `getClosedApplicationTypes` takes an explicit
+  `organizationId`; `src/app/applications/page.tsx` resolves org from session.
+- Deployed to production via direct file sync (this repo has no git-based release
+  flow on the server); rebuilt and restarted the real production process, the
+  systemd unit `ultraos-web.service` (port 4110).
+
+**Decisions**
+
+- Public tenant acquisition uses a server-controlled route slug, not a hostname or
+  invite token, matching the current single-URL, N-league architecture.
+- Provisioning provenance always follows `Application.organizationId`, never
+  session/admin org — a person may belong to one league and apply to another.
+- The Stage 4c RLS fix shipped standalone, ahead of the rest of 5.2B-1, since it
+  closed a live, unpatched tenant-isolation gap with zero app-code dependency.
+
+**Verification**
+
+- `tsc --noEmit`, `npm run lint` (0 errors), `npm test` (454/454), and
+  `npm run build`: Passed, locally and on the server.
+- Cross-org rehearsal against `ultraos_staging`, connected as the actual restricted
+  role (not the bypassing superuser): `Athlete`, `Staff`, and (post-fix)
+  `UserRoleAssignment` cross-org creates all denied; same-org and platform-level
+  (null-org) `UserRoleAssignment` creates still succeed. All rehearsal data cleaned
+  up — zero residue left on staging.
+- Production smoke test post-deploy: `/apply` → 307 → `/apply/neon-ultra`,
+  `/apply/neon-ultra` → 200, `/apply/neon-ultra/player` → 200,
+  `/apply/not-a-real-league` → 404, adjacent pages (`/applications`, `/check-in`,
+  `/media`) unaffected, zero errors in `journalctl` for `ultraos-web.service`.
+- Production row counts unchanged pre/post-deploy: `UserRoleAssignment` 594,
+  `Athlete` 219, `Application` 342, `Organization` 1.
+- `CROSS_ORG_APPLICATION_READ`/`MUTATION` rest on Stage 4a's already-proven RLS
+  policy pattern (confirmed present via `pg_policies` on the `Application` table),
+  not a fresh dedicated rehearsal — a planned rehearsal for that specific table was
+  not run this session.
+
+**Known issues**
+
+- `src/lib/admin-offline-intake.ts` is a related-but-separate provisioning path
+  (admin-side, not applicant-submitted) — explicitly not touched this stage.
+- A mid-deploy mistake restarted an unrelated pm2-managed application
+  (`raivstream-web`, a different project sharing this host) before the real
+  UltraLeagueOS process was correctly identified. No UltraLeagueOS impact, but the
+  host runs several unrelated apps and process identity should be verified by
+  working directory, not by name, before any future restart.
+- This log has a gap between 2026-08-09 and 2026-08-23: the G.19-G.22 tracks and
+  Phase 1 Stages 0 through 5.2A are not recorded here. They are documented in
+  `documentation/architecture/` (see `PHASE1_STAGE5_2A_TENANCY_SCAN.md` and
+  `PHASE1_STAGE5_2B1_PUBLIC_TENANT_ACQUISITION.md`) but have not been backfilled
+  into this file.
+
+**Next step**
+
+- Phase 1 Stage 5.2B-2: club/season/competition/venue administration, continuing
+  the sequence recorded in `documentation/architecture/PHASE1_STAGE5_2A_TENANCY_SCAN.md`.
+
+### 2026-09-02/03 - Phase 1 Stages 5.2B-1A and 5.4A: Closing 5.2B-1 for Real
+
+**Objective**
+
+- Replace the raw-table-probe rehearsal from Stage 5.2B-1 with a proof through the
+  actual operator CLI, then resolve the hard blocker that proof surfaced
+  (`PublicIdCounter` was never genuinely tenant-scoped) so Stage 5.2B-1 could be
+  closed as fully PASS rather than conditionally accepted.
+
+**Completed**
+
+- Added permanent `--application-id`/`--organization-id` selectors to
+  `internalizeApprovedApplications`/`scripts/participants-internalize.ts` —
+  composable, either alone or together; selection under a resolved
+  `organizationId` runs inside `withOrganizationContext`; omitting both preserves
+  the exact pre-existing broad unscoped scan.
+- Fixed the recurring `ultraos_staging` password friction permanently: a durable
+  credential in a new `/opt/ultraleagueos/shared/staging-maintenance.env` (mode
+  600), role attributes reverified unchanged (`NOSUPERUSER`, `NOBYPASSRLS`).
+- Ran the real Org B proof through the actual CLI: dry-run showed exactly 1
+  candidate; `--apply` on a disposable PLAYER application failed cleanly on
+  `PublicIdCounter`'s row-level-security policy, with a confirmed atomic
+  rollback; `--apply` on a disposable VENDOR application (a type that never
+  touches `PublicIdCounter`) succeeded end-to-end.
+- That PLAYER failure, not previously known, led to Stage 5.4A: made
+  `PublicIdCounter` genuinely tenant-scoped, not merely RLS-compatible.
+  `namespace` was the bare primary key; `organizationId` existed on the table
+  since Stage 1 but allocation code never used it, so every organization shared
+  and advanced the same global `ATHLETE`/`STAFF` sequence.
+- Replaced the key with `@@unique([organizationId, namespace])` (hand-authored
+  migration preserving every existing `nextValue` exactly). Made
+  `Organization.idPrefixAthlete`/`idPrefixStaff` (existing, never-wired-up
+  columns) `@unique` at the database level — platform-wide external-id
+  uniqueness now rests on distinct per-org prefixes rather than a shared
+  counter; `Athlete.ultraAthleteId`/`Staff.ultraStaffId` stay bare global
+  `@unique`, deliberately unchanged.
+- Rewrote `src/lib/public-ids.ts`: `allocatePublicId(tx, organizationId,
+  namespace)` keeps the same atomic raw-SQL `INSERT ... ON CONFLICT ... DO
+  UPDATE ... RETURNING` pattern (kept for concurrency-safety), now keyed on the
+  real tenant pair, then looks up the calling organization's own prefix to
+  format the result.
+- Whole-repository scan and conversion of every allocation-side caller: both
+  provisioning paths, `admin-offline-intake.ts` (minimal compile-keeping fix,
+  not a full conversion), 5 historical one-off scripts, and one initially-missed
+  direct test caller of `formatPublicId` (its own signature also changed).
+
+**Decisions**
+
+- Global platform-wide uniqueness of public IDs is preserved by requiring
+  distinct organization prefixes (enforced at the database level), while making
+  sequence allocation itself tenant-local — not by making
+  `ultraAthleteId`/`ultraStaffId` composite-unique, which stays deferred pending
+  a full audit of their real call-site dependencies.
+- The selector patch and the `PublicIdCounter` fix were each scoped narrowly on
+  purpose — neither pulls the rest of Stage 5.4
+  (`ultraAthleteId`/`ultraStaffId`/`SystemSetting.key`) forward.
+
+**Verification**
+
+- Whole-repository scan: 52 files reference the public-ID system; 16 are
+  allocation-side and were converted; the rest are read-only display consumers,
+  unaffected.
+- Rehearsed on `ultraos_staging`, connected as the actual restricted role, using
+  the real `ensureAthletePublicId`/`allocatePublicId` implementation (not raw
+  SQL simulation): independent sequences proven both directions and both
+  namespaces; prefix ownership proven separately from sequence ownership;
+  10/10 unique ids under same-org concurrency with exact counter advancement;
+  zero interference under cross-org concurrent allocation; RLS confirmed to
+  hide each org's counter row from the other and deny a cross-org mutation; the
+  previously-blocked Org B PLAYER application internalized successfully
+  end-to-end through the real CLI, and an Org B COACH application proved the
+  same for Staff.
+- Neon Ultra's 81 pre-existing `ultraAthleteId` values and 9 pre-existing
+  `ultraStaffId` values checksum-verified byte-for-byte identical before the
+  migration, after the migration, after the full staging rehearsal, and after
+  production deployment.
+- `prisma validate`, `prisma generate`, `tsc`, lint, and 455 tests (up from 454
+  - one new regression test proving `formatPublicId` uses the given prefix, not
+  a hardcoded one) all passed; production build passed locally and on the
+  server.
+- All rehearsal data (organizations, users, applications, athletes, players,
+  staff, role assignments, audit logs, counter rows, a disposable season and
+  competition) deleted afterward; a privileged-role query confirmed zero
+  residue on staging both times.
+- Deployed to production: backup, migration, code sync, `prisma generate`,
+  build, service restart, smoke test, and a full invariant check (row counts
+  plus both identifier checksums) all passing.
+
+**Known issues**
+
+- `ultraAthleteId`, `ultraStaffId`, and `SystemSetting.key` remain globally
+  scoped, deliberately deferred to a later Stage 5.4 - unlike
+  `PublicIdCounter`, none of the three has yet demonstrated itself to be a
+  blocker.
+- `admin-offline-intake.ts` remains a related-but-separate, not-yet-scoped
+  provisioning path.
+
+**Next step**
+
+- Phase 1 Stage 5.2B-2: club/season/competition/venue administration.
+
+## 2026-09-06 — Phase 1 Stage 5.2D public/API read tenancy resumed
+
+Resumed from `documentation/architecture/HANDOVER_STAGE5_2D_IN_PROGRESS.md`.
+
+**Current status**
+
+- Stage 5.2D remains in progress and is not deployed.
+- Public/API read conversion work is locally present and TypeScript currently passes.
+- Added `documentation/architecture/PHASE1_STAGE5_2D_PUBLIC_API_READ_TENANCY.md` as an in-progress architecture report.
+
+**Locally converted public/API surfaces**
+
+- Public pages now use explicit public organization context for list/default Neon Ultra public-site reads.
+- Public detail/share/token pages use resource/token bootstrap followed by `withOrganizationContext`.
+- Public API routes under `api/v1`, `api/share`, `api/public`, `api/games`, `api/broadcast`, `api/content`, `api/draft-events`, and `api/sponsor-impressions` have been converted or classified for the Stage 5.2D public-read boundary.
+
+**Important findings**
+
+- `api/v1/clubs/[publicId]` cannot treat `Club.shortName` as globally unique. `Club.shortName` is unique per organization, so short-name public lookup is only safe inside an explicit public organization context.
+- Pattern B resource bootstrap fails closed for non-Neon organizations under the temporary RLS fallback because the first bare lookup still defaults to Neon Ultra before an organization context can be set. This is a capability gap deferred to Stage 5.5, not a cross-tenant leak.
+- `/data-readiness/export` remains a real authorization problem confirmed by code inspection and staging proof: `hasPermission` checks only role names, `LEAGUE_OPERATOR` has `data:readiness`, and the export calls bare `auditRealData()`. A non-Neon org operator can be authorized by role name while the diagnostic resolves through the Neon Ultra fallback.
+
+**Verification**
+
+- `npm run db:validate`: PASS.
+- `npm run db:generate`: PASS.
+- `npx tsc --noEmit -p .`: PASS.
+- `npm run lint`: PASS with 7 warnings only.
+- `npm test`: PASS, 455/455.
+- `NODE_OPTIONS=--max-old-space-size=4096 npm run build`: PASS with the existing Turbopack/NFT trace warning through the media asset file route.
+- Staging restricted-role proof: PASS. The connection was `ultraos_staging` with `rolsuper=false` and `rolbypassrls=false`.
+- Rolled-back disposable Org B proof: Org B club visible inside Org B context, invisible from Neon Ultra context, invisible from bare context. This confirms Pattern B fails closed for non-Neon resources under the temporary RLS fallback.
+- Data-readiness authorization proof: PASS for the defect. A disposable Org B `LEAGUE_OPERATOR` grant exists inside its own org context, and the deployed staging `hasPermission(["LEAGUE_OPERATOR"], "data:readiness")` returns `true`. A FAN role returns `false`.
+- Staging residue check after rollback: 0 disposable orgs, users, clubs, and role assignments.
+
+**Final local-only result for this session**
+
+- Stage 5.2D public/API surface inventory: PASS.
+- Unclassified live call sites: 0.
+- Pattern D converted routes do not depend on unset RLS fallback for tenant-owned reads after explicit Neon Ultra organization resolution.
+- `/data-readiness/export` platform-admin gate: FAILED.
+- Stage status: BLOCKED_PENDING_SECURITY_DECISION.
+- Production deployment: NOT_ATTEMPTED.
+
+**Do not close or deploy Stage 5.2D until**
+
+- Data-readiness export access is fixed or formally blocked by platform-admin-only authorization.
+- Pattern B's non-Neon public-detail limitation is either accepted as a documented Stage 5.5 bridge limitation or a different bootstrap mechanism is implemented.
+- Full local verification and production invariant checks have passed.
+
+## 2026-09-07 — Phase 1 Stage 5.2D closed and deployed
+
+Resumed Stage 5.2D to resolve the confirmed platform-global diagnostic authorization blocker, complete staging proof, and deploy after the full gate passed.
+
+**Completed**
+
+- Fixed `/data-readiness` and `/data-readiness/export` with a platform-level authorization boundary instead of tenant-scoping the diagnostic.
+- Added `src/lib/platform-permissions.ts` with `userHasPlatformPermission(userId, permission, db)`. The helper authorizes only active persisted `UserRoleAssignment` rows where `organizationId IS NULL`; organization-scoped roles no longer satisfy platform-global diagnostic access.
+- Added `roleGrantsPermission()` to `src/lib/permissions.ts` so the persisted-grant check can reuse the existing role-to-permission matrix without passing through session role names.
+- Added `requirePlatformPermission()` in `src/lib/authorization.ts`, using a lazy Prisma import so existing auth tests do not require `DATABASE_URL` at import time.
+- Converted `src/app/data-readiness/page.tsx` and `src/app/data-readiness/export/route.ts` to require platform permission before calling the platform-global `auditRealData()` path.
+- Added regression tests for the platform permission boundary: org-scoped `LEAGUE_OPERATOR` denied, null-org `LEAGUE_OPERATOR` allowed, no grant denied, mixed org-scoped plus null-org qualifying grant allowed, null-org `FAN` denied, revoked qualifying grant denied.
+- Updated `documentation/architecture/PHASE1_STAGE5_2D_PUBLIC_API_READ_TENANCY.md` from blocked/in-progress to closed/deployed.
+
+**Local verification**
+
+- `npm run db:validate`: PASS.
+- `npm run db:generate`: PASS.
+- `npx tsc --noEmit -p .`: PASS.
+- `npm run lint`: PASS with 7 pre-existing warnings.
+- `npm test`: PASS, 461/461.
+- `NODE_OPTIONS=--max-old-space-size=4096 npm run build`: PASS with the existing Turbopack/NFT trace warning through the media asset file route.
+
+**Staging**
+
+- Created and verified backup: `/var/backups/ultraleagueos-staging/stage5_2d_platform_auth_20260906T043433Z.dump`.
+- Fixed a staging-only runtime credential mismatch in `/opt/ultraos-staging/shared/web.env`; the previous file was preserved as `/opt/ultraos-staging/shared/web.env.before-stage5_2d_runtime_fix_<timestamp>`.
+- Deployed the Stage 5.2D build to the isolated staging web service `ultraos-staging-web.service` on port 4120.
+- Proved the real route behavior through NextAuth and HTTP:
+  - Org-scoped `LEAGUE_OPERATOR`: `/data-readiness/export` returned 403.
+  - Null-organization `LEAGUE_OPERATOR`: `/data-readiness/export` returned 200.
+  - No grant: 403.
+  - Org-scoped grant plus null-organization `SUPER_ADMIN`: 200.
+  - Null-organization `FAN`: 403.
+- Created disposable Org B public-surface sentinel data and verified Neon Ultra public list/detail/API/share routes did not reveal it. Direct Org B IDs failed closed with 404 or no marker leakage.
+- Cleaned up all disposable staging organizations, users, grants, clubs, seasons, athletes, players, events, fixtures, and standings. Privileged residue checks returned zero.
+
+**Production**
+
+- Created and verified backup: `/var/backups/ultraleagueos-production/stage5_2d_platform_auth_20260907T021814Z.dump`.
+- No Prisma migration was required or run.
+- Deployed to the production systemd service `ultraos-web.service` on port 4110; no pm2 process was used.
+- Production build passed with the same existing Turbopack/NFT warning.
+- Smoke tests passed:
+  - local `/login`: 200.
+  - local `/public`: 200.
+  - local `/api/v1/live`: 200.
+  - local unauthenticated `/data-readiness/export`: 403.
+  - public `https://app.neonultra.ng/login`: 200.
+  - public `https://app.neonultra.ng/public`: 200.
+- Production pre/post-deploy invariants were unchanged:
+  - `Application=342`, `Athlete=219`, `Player=219`, `Staff=19`, `Club=8`, `SeasonClub=8`, `Fixture=12`, `Game=12`, `User=390`, `UserRoleAssignment=594`, `Organization=1`.
+  - Athlete ID checksum stayed `3979b39ac8d1e2082bf118f1e901fdc2`.
+  - Staff ID checksum stayed `d089ad58cb353172f34b36abc669542d`.
+  - `platformReadinessGrants=0`; therefore no production user currently has access to the platform-global readiness diagnostic until an explicit null-organization grant is provisioned.
+- Production journal showed no application error after restart. Warnings remain: one systemd control-group stop warning and the existing PostgreSQL client deprecation warning.
+
+**Final Stage 5.2D status**
+
+```text
+STAGE_5_2D: CLOSED
+PUBLIC_SURFACE_INVENTORY: PASS
+UNCLASSIFIED_LIVE_CALL_SITES: 0
+DATA_READINESS_EXPORT_PLATFORM_ADMIN_GATE: VERIFIED
+ORG_SCOPED_LEAGUE_OPERATOR_GLOBAL_EXPORT: DENIED
+PLATFORM_QUALIFYING_GRANT_GLOBAL_EXPORT: ALLOWED
+LEGACY_ROUTES_DEPEND_ON_UNSET_RLS_FALLBACK: NO
+ORG_B_PUBLIC_REHEARSAL: PASS
+STAGING_RESIDUE: 0
+PRODUCTION_DEPLOYMENT: COMPLETE
+PRODUCTION_INVARIANTS: UNCHANGED
+```
+
+**Known future work**
+
+- Stage 5.5 still needs the real tenant bootstrap mechanism; Pattern B public detail routes currently fail closed for non-Neon organizations under the temporary Neon Ultra unset-RLS fallback.
+- `Club.shortName` remains tenant-local and should not be treated as a platform-global public identifier.
+- Provisioning any production null-organization platform readiness grant requires an explicit platform-administration policy decision.
+- Existing npm audit/engine warnings, the Turbopack/NFT trace warning, and the PostgreSQL client deprecation warning remain backlog items.
+
+## 2026-09-07 — Phase 1 Stage 5.5 investigation started
+
+Resumed from the Stage 5.5 prompt: tenant bootstrap, public routing, and RLS fallback elimination. The prompt explicitly required investigation and architecture review before any RLS policy change, schema migration, staging rehearsal, or production deployment.
+
+**Completed**
+
+- Confirmed repository root: `C:/UltraLeagueOS`.
+- Confirmed branch: `main`.
+- Preserved the existing dirty working tree from previous Phase 1 work; no application code was modified in this pass.
+- Read the current tenant/bootstrap foundation:
+  - `web/prisma/schema.prisma`
+  - `web/src/lib/tenant-context.ts`
+  - `web/src/lib/authorization.ts`
+  - `web/src/lib/platform-permissions.ts`
+  - `web/src/lib/permissions.ts`
+  - Stage 4a and 4c RLS migrations
+  - Stage 5.2A, 5.2B-1, 5.4A, and 5.2D architecture reports
+- Created `documentation/architecture/PHASE1_STAGE5_5_TENANT_BOOTSTRAP_RLS_FALLBACK_ELIMINATION.md`.
+
+**Findings**
+
+- `Organization` is the global bootstrap root. It has `slug @unique`, `status`, and unique public ID prefixes; it has no alias/custom-domain/public-eligibility model beyond `status`.
+- Standard Stage 4a tenant RLS still uses the Neon Ultra fallback expression on 104 tenant tables.
+- `UserRoleAssignment` has its Stage 4c special nullable-org policy and still includes the Neon Ultra fallback for non-null org-scoped grants.
+- `schema.prisma` still has 104 tenant models with `organizationId` DB defaults to Neon Ultra. DB default removal is not safe until live tenant creates are audited separately.
+- The existing `PublicIdAlias` table is not a safe bootstrap locator in its current form because it is tenant-owned, RLS-protected, fallback-scoped, and unused by public routing.
+- `/apply/[organizationSlug]` is the only current public organization-slug route family and is safe.
+- Legacy Neon Ultra public routes remain safe as explicit `resolveDefaultPublicOrganization()` plus `withOrganizationContext()` routes.
+- Resource-derived public routes and token-derived public routes still need architecture before fallback removal:
+  - public club, fixture, event, share, and media-asset routes seed from tenant-owned tables;
+  - public ticket/order pages seed from tenant-owned `Ticket`/`Order` rows;
+  - `scripts/vision-analyze.ts` also derives organization from a tenant-owned `GameVideo`.
+
+**Verification**
+
+- `npm run db:validate`: PASS.
+- `npx tsc --noEmit -p .`: PASS.
+- `npm test`: PASS, 461/461.
+
+**Decision**
+
+- Do not remove the RLS fallback yet.
+- Do not remove the `organizationId` DB defaults yet.
+- Do not add a bootstrap locator without review.
+- Proposed smallest architecture for review:
+  - use organization-slug public routes for normal multi-tenant browsing;
+  - keep legacy `/public/*` as explicit Neon Ultra aliases;
+  - add a minimal global `PublicResourceLocator` only for token/resource URLs that cannot carry an organization slug.
+
+**Interim status**
+
+```text
+STAGE_5_5: BLOCKED_PENDING_BOOTSTRAP_DESIGN_REVIEW
+TENANT_BOOTSTRAP_ARCHITECTURE: PARTIAL
+PUBLIC_MULTI_TENANT_ROUTING: NOT_YET_IMPLEMENTED
+RESOURCE_DERIVED_BOOTSTRAP: BOOTSTRAP_REQUIRED
+TOKEN_DERIVED_BOOTSTRAP: BOOTSTRAP_REQUIRED
+ORDINARY_TENANT_RLS_FALLBACK: RETAINED
+TENANT_ORGANIZATION_ID_DB_DEFAULT: RETAINED
+RLS_POLICY_NEON_ULTRA_UUID_REFERENCES: 105
+UNCLASSIFIED_LIVE_FALLBACK_DEPENDENCIES: 0
+BLOCKING_UNKNOWN: 0
+STAGING_BACKUP: NOT_RUN
+FALLBACK_DISABLED_REHEARSAL: NOT_RUN
+PRODUCTION_DEPLOYMENT: NOT_ATTEMPTED
+```
+
+## 2026-09-07 — Phase 1 Stage 5.5A local bootstrap locator implementation
+
+Resumed from the Stage 5.5A prompt to implement the approved smallest global
+tenant bootstrap locator foundation for live public resource/token routes.
+
+**Completed locally**
+
+- Created `documentation/architecture/PHASE1_STAGE5_5A_GLOBAL_TENANT_BOOTSTRAP_LOCATOR.md`
+  with the required route/caller bootstrap matrix, threat model, lifecycle
+  notes, conversion list, and current gate.
+- Added global bootstrap models to `web/prisma/schema.prisma`:
+  `PublicResourceLocator`, `PublicTokenLocator`, `PublicResourceLocatorType`,
+  `PublicTokenLocatorType`, and `PublicLocatorStatus`.
+- Added migration
+  `web/prisma/migrations/20260907111500_phase1_stage5_5a_bootstrap_locators/migration.sql`.
+- Added `web/src/lib/public-locators.ts` for exact locator resolution, token
+  hashing, locator upserts, and locator/resource consistency checks.
+- Added `web/scripts/public-locators-backfill.ts` and
+  `npm run public-locators:backfill`. The script is dry-run by default and
+  requires `--apply` for writes.
+- Converted public token-derived bootstrap:
+  `/public/tickets/[code]`, `/public/orders/[code]`, and
+  `createWalletOrder(ticketCode)`.
+- Converted public resource-derived bootstrap:
+  `/public/events/[id]`, `reserveZone(eventId)`, `/public/fixtures/[id]`,
+  `/public/clubs/[id]`, share pages, share PNG APIs, and
+  `/media/assets/[assetId]/file`.
+- Added locator creation hooks for club, fixture, event, media asset, ticket,
+  order, application approval, participant internalization, imports, and the
+  existing admin offline-intake bridge path.
+
+**Verification**
+
+- `npx prisma format`: PASS.
+- `npm run db:validate`: PASS.
+- `npm run db:generate`: PASS.
+- `npx tsc --noEmit -p .`: PASS.
+- `npm test`: PASS, 466/466.
+- `npm run lint`: PASS with the same 7 pre-existing warnings.
+- `NODE_OPTIONS=--max-old-space-size=4096 npm run build`: PASS with the existing
+  Turbopack/NFT warning through the media asset file route.
+- Focused scan for remaining bare public resource/token seed reads in converted
+  public/share/media route families: PASS.
+
+**Not attempted**
+
+- Staging backup, migration, backfill, Org B proof, token tampering rehearsal,
+  staging cleanup, production backup, production migration, production backfill,
+  production deploy, and production smoke.
+
+**Current status**
+
+```text
+STAGE_5_5: IN_PROGRESS
+STAGE_5_5A: BLOCKED_PENDING_STAGING_PROOF
+RLS_FALLBACK_REMOVAL: NOT_ATTEMPTED_BY_DESIGN
+ORGANIZATION_ID_DB_DEFAULT_REMOVAL: NOT_ATTEMPTED_BY_DESIGN
+RESOURCE_DERIVED_BOOTSTRAP: LOCAL_IMPLEMENTED
+TOKEN_DERIVED_BOOTSTRAP: LOCAL_IMPLEMENTED
+LOCAL_VERIFICATION: PASS
+PRODUCTION_DEPLOYMENT: NOT_ATTEMPTED
+```
+
+## 2026-09-08 — Phase 1 Stage 5.5A staging boundary attempt
+
+Resumed Stage 5.5A at the staging proof boundary. No production work was
+attempted.
+
+**Staging verification**
+
+- Confirmed staging service: `ultraos-staging-web.service`.
+- Confirmed active staging path:
+  `/opt/ultraos-staging/current/web` →
+  `/opt/ultraos-staging/releases/20260726-223640/web`.
+- Confirmed staging runtime database credential targets `ultraos_staging` as
+  role `ultraos_staging` with `rolsuper=false` and `rolbypassrls=false`.
+- Confirmed privileged maintenance path can target `ultraos_staging` as role
+  `ultraos` with `rolsuper=true` and `rolbypassrls=true`.
+- Confirmed staging `/login` returned HTTP 200 locally on port 4120.
+
+**Backup and inventory**
+
+- Took and verified staging backup:
+  `/var/backups/ultraleagueos-staging/stage5_5a_bootstrap_20260908-020202.dump`.
+- Backup size: `820909` bytes.
+- `pg_restore --list` TOC entries: `1219`.
+- Pre-migration locator source inventory:
+  - Club: 8 eligible / 0 collisions.
+  - Fixture: 12 eligible / 0 collisions.
+  - Event: 1 eligible / 0 collisions.
+  - MediaAsset: 17 eligible / 0 collisions.
+  - Athlete: 219 eligible / 0 collisions.
+  - Ticket.code: 0 eligible / 0 collisions.
+  - Order.collectionCode: 0 eligible / 0 collisions.
+- No raw ticket/order token values were printed.
+
+**Local script hardening**
+
+- Tightened `web/scripts/public-locators-backfill.ts` to report existing,
+  matching, missing, mismatched, expected insert, and expected update locator
+  counts so post-apply dry runs can prove idempotency.
+- Reran `npx tsc --noEmit -p .`: PASS.
+
+**Staging migration blocker**
+
+- Prepared new staging release at
+  `/opt/ultraos-staging/releases/20260908-030506`.
+- Did not switch the active `current` symlink.
+- Attempted `npx prisma migrate deploy` against `ultraos_staging`.
+- Prisma stopped before the Stage 5.5A locator migration because it tried to
+  apply historical migration
+  `20260823070000_phase1_stage4a_row_level_security`.
+- Failure:
+  `ERROR: policy "tenant_isolation" for table "Competition" already exists`
+  (`42710`).
+- Diagnosis: staging contains Stage 4a RLS schema objects but does not record
+  Stage 4a as applied in `_prisma_migrations`; Stage 4c and Stage 5.4A effects
+  are also visible but not recorded as applied.
+- The failed migration-table row created by this attempt was marked rolled back.
+- Post-cleanup migration-history check:
+  - `PublicResourceLocator`: not present.
+  - `PublicTokenLocator`: not present.
+  - Rolled-back row:
+    `20260823070000_phase1_stage4a_row_level_security`.
+  - Missing Phase 1 migration-history rows:
+    `20260823080000_phase1_stage4c_userroleassignment_rls`,
+    `20260902220000_phase1_stage5_4a_tenant_scoped_public_ids`,
+    `20260903120000_phase1_stage5_4b_seasonclub_tenant_fk`,
+    `20260904060000_phase1_stage5_2b3_draft_tenant_fk`,
+    `20260905060000_phase1_stage5_2b4_vendor_event_reservation_tenant_fk`,
+    and `20260907111500_phase1_stage5_5a_bootstrap_locators`.
+- `PublicResourceLocator` and `PublicTokenLocator` were not created.
+- No backfill, Org B proof, token rehearsal, staging service restart, or
+  production deploy was attempted.
+
+**Current status**
+
+```text
+STAGE_5_5: IN_PROGRESS
+STAGE_5_5A: BLOCKED_PENDING_STAGING_MIGRATION_HISTORY_REPAIR
+STAGING_BACKUP: VERIFIED
+STAGING_SOURCE_INVENTORY: PASS
+BACKFILL_COLLISIONS: 0
+STAGING_MIGRATION: BLOCKED_BY_HISTORICAL_MIGRATION_METADATA_DRIFT
+LOCATOR_SCHEMA_CHANGE_APPLIED: NO
+STAGING_BACKFILL: NOT_ATTEMPTED
+ORG_B_CAPABILITY: NOT_ATTEMPTED
+PRODUCTION_DEPLOYMENT: NOT_ATTEMPTED
+RLS_FALLBACK_REMOVAL: NOT_ATTEMPTED_BY_DESIGN
+ORGANIZATION_ID_DB_DEFAULT_REMOVAL: NOT_ATTEMPTED_BY_DESIGN
+READY_FOR_STAGE_5_5B: NO
+BLOCKING_UNKNOWN: 1
+```
+
+### Handover for next agent — Stage 5.5A migration-history repair
+
+This is the current authoritative continuation point.
+
+**Do not do these until the staging gate passes**
+
+- Do not deploy production.
+- Do not restart production.
+- Do not switch staging `current` to
+  `/opt/ultraos-staging/releases/20260908-030506`.
+- Do not run locator backfill.
+- Do not start Stage 5.5B.
+- Do not disable the Neon Ultra RLS fallback.
+- Do not remove tenant `organizationId` database defaults.
+- Do not manually apply the locator migration as a workaround unless a migration-history repair plan has been reviewed.
+
+**Current local code state**
+
+- Local implementation for Stage 5.5A exists in the working tree.
+- Important files:
+  - `web/prisma/schema.prisma`
+  - `web/prisma/migrations/20260907111500_phase1_stage5_5a_bootstrap_locators/migration.sql`
+  - `web/src/lib/public-locators.ts`
+  - `web/scripts/public-locators-backfill.ts`
+  - converted public routes under `web/src/app/public`, `web/src/app/api/share`, and `web/src/app/media/assets`.
+- `web/scripts/public-locators-backfill.ts` was strengthened after the first local verification pass; after that change only `npx tsc --noEmit -p .` was rerun and passed.
+- Full local verification from before the script hardening was:
+  - Prisma format: PASS.
+  - Prisma validate: PASS.
+  - Prisma generate: PASS.
+  - TypeScript: PASS.
+  - Tests: 466/466 PASS.
+  - Lint: PASS with 7 pre-existing warnings.
+  - Build: PASS with known media-storage Turbopack/NFT warning.
+- Before any later deploy, rerun the full local gate because the backfill script changed after the previous full gate.
+
+**Current staging state**
+
+- Active staging release remains:
+  `/opt/ultraos-staging/releases/20260726-223640`.
+- Prepared but inactive release:
+  `/opt/ultraos-staging/releases/20260908-030506`.
+- Staging service remains active:
+  `ultraos-staging-web.service`.
+- Staging DB is:
+  `ultraos_staging`.
+- Staging runtime role is:
+  `ultraos_staging`, `NOSUPERUSER`, `NOBYPASSRLS`.
+- Staging maintenance role is:
+  `ultraos`, `SUPERUSER`, `BYPASSRLS`.
+- Verified staging backup exists:
+  `/var/backups/ultraleagueos-staging/stage5_5a_bootstrap_20260908-020202.dump`.
+- Backup verification:
+  - size `820909` bytes.
+  - `pg_restore --list` TOC entries `1219`.
+- Locator tables are not present on staging:
+  - `PublicResourceLocator`: absent.
+  - `PublicTokenLocator`: absent.
+- Business data was not changed by the failed migration attempt.
+
+**Exact blocker**
+
+`npx prisma migrate deploy` against `ultraos_staging` stopped before the Stage 5.5A locator migration. Prisma attempted to apply:
+
+```text
+20260823070000_phase1_stage4a_row_level_security
+```
+
+and failed with:
+
+```text
+ERROR: policy "tenant_isolation" for table "Competition" already exists
+PostgreSQL code: 42710
+```
+
+The failed row created by that attempt was marked rolled back in `_prisma_migrations`.
+
+**Exact migration-history gap to repair**
+
+After cleanup:
+
+```text
+ROLLED_BACK:
+  20260823070000_phase1_stage4a_row_level_security
+
+MISSING FROM _prisma_migrations:
+  20260823080000_phase1_stage4c_userroleassignment_rls
+  20260902220000_phase1_stage5_4a_tenant_scoped_public_ids
+  20260903120000_phase1_stage5_4b_seasonclub_tenant_fk
+  20260904060000_phase1_stage5_2b3_draft_tenant_fk
+  20260905060000_phase1_stage5_2b4_vendor_event_reservation_tenant_fk
+  20260907111500_phase1_stage5_5a_bootstrap_locators
+```
+
+Known existing schema effects:
+
+- Stage 4a tenant RLS policies exist.
+- Stage 4c `UserRoleAssignment` nullable-org RLS policy exists.
+- Stage 5.4A `PublicIdAlias` table exists.
+- Stage 5.5A locator tables do not exist.
+
+**Required next sequence**
+
+1. Re-verify staging still points to `ultraos_staging` and that the active release is still `20260726-223640`.
+2. Confirm the verified backup is still available, or take a new verified backup.
+3. Inventory each missing historical migration and prove whether its schema effects already exist.
+4. Prepare a staging migration-history repair plan. The likely repair is to mark only proven already-applied historical migrations as applied in `_prisma_migrations`; do not mark the Stage 5.5A locator migration as applied because its tables do not exist.
+5. After repair, rerun `npx prisma migrate deploy` from the staged release. Expected result: Prisma applies only `20260907111500_phase1_stage5_5a_bootstrap_locators`.
+6. Verify locator tables, constraints, indexes, grants, no tenant RLS, and no Neon Ultra default on locator tables.
+7. Run `npm run public-locators:backfill` dry-run.
+8. If collisions remain 0, run `npm run public-locators:backfill -- --apply`.
+9. Rerun dry-run and require `expectedInserts: 0` / `expectedUpdates: 0`.
+10. Build the staged release with `NODE_OPTIONS=--max-old-space-size=4096`.
+11. Only then switch staging `current`, restart `ultraos-staging-web.service`, and run the full Org A/Org B locator bootstrap, token, tampering, metadata, media visibility, creation-hook, rollback, concurrent-context, and cleanup proofs required by Stage 5.5A.
+12. Production is allowed only if every staging gate passes.
+
+**Useful commands and paths**
+
+- SSH host alias: `raivstream`.
+- Staging service:
+  `systemctl status ultraos-staging-web.service --no-pager`.
+- Current staging release:
+  `readlink -f /opt/ultraos-staging/current`.
+- Staging app path:
+  `/opt/ultraos-staging/current/web`.
+- Inactive Stage 5.5A staged release:
+  `/opt/ultraos-staging/releases/20260908-030506/web`.
+- Staging runtime env:
+  `/opt/ultraos-staging/shared/web.env`.
+- Privileged migration env source:
+  `/opt/ultraleagueos/shared/migrate.env`; when used for staging, derive a URL with path `/ultraos_staging` and do not print credentials.
+- Production service if and only if later authorized:
+  `ultraos-web.service`.
+
+**Current status for continuation**
+
+```text
+STAGE_5_5: IN_PROGRESS
+STAGE_5_5A: BLOCKED_PENDING_STAGING_MIGRATION_HISTORY_REPAIR
+HANDOVER_READY: YES
+PRODUCTION_DEPLOYMENT: NOT_ATTEMPTED
+READY_FOR_STAGE_5_5B: NO
+```
+
+## 2026-09-08 — Stage 5.5A staging migration/backfill continuation
+
+Completed:
+
+- Verified staging/prod separation:
+  - staging: `/opt/ultraos-staging/current/web`, `ultraos-staging-web.service`, port 4120;
+  - production: `/opt/ultraleagueos/current/web`, `ultraos-web.service`, port 4110.
+- Verified staging runtime DB auth against `ultraos_staging`; runtime role is
+  non-superuser and non-BYPASSRLS.
+- Took and verified staging backup:
+  `/opt/ultraos-staging/backups/stage55a_ultraos_staging_20260908T081504Z.dump`
+  (`821648` bytes, `1234` TOC entries, SHA-256
+  `6351880254b59f06ed7cc8a35d4abff4491ad8333fb5096283c776d2ad1a8093`).
+- Repaired staging Prisma migration history for already-applied historical
+  migrations, then applied
+  `20260907111500_phase1_stage5_5a_bootstrap_locators`.
+- Ran locator backfill dry-run/apply/idempotency:
+  - `PublicResourceLocator`: 257 rows;
+  - `PublicTokenLocator`: 0 baseline rows;
+  - collisions: 0;
+  - resource mismatches: 0.
+- Built staging release `/opt/ultraos-staging/releases/20260908-030506` with
+  `NODE_OPTIONS=--max-old-space-size=4096`; only the known media-storage NFT
+  warning appeared.
+- Switched staging `current` to the new release and restarted only
+  `ultraos-staging-web.service`.
+- Ran bounded disposable Org B proof for resource locator bootstrap, token
+  locator bootstrap, authoritative reread, fail-closed unknown/altered/wrong-type
+  token, inactive locator, and public route smoke for club/event/fixture/ticket/
+  order/media. Cleanup returned Stage 5.5A residue to zero.
+- Local verification:
+  - Prisma validate: PASS;
+  - Prisma generate: PASS;
+  - TypeScript: PASS;
+  - lint: PASS with the same seven warnings;
+  - tests: 466/466 PASS;
+  - local build was interrupted after TypeScript while collecting page data
+    because staging build had already completed successfully.
+
+Production was not touched beyond read-only service/current-path checks.
+
+Current status:
+
+```text
+STAGE_5_5: IN_PROGRESS
+STAGE_5_5A: BLOCKED_PENDING_FULL_STAGING_GATE_PROOF
+FINAL_STAGE_5_5A_STATUS: BLOCKED
+READY_FOR_STAGE_5_5B: NO
+PRODUCTION_DEPLOYMENT: NOT_ATTEMPTED
+```
+
+Remaining before production: full live creation-hook proof, atomic rollback
+proof, import/provisioning locator creation proof, full metadata and media
+visibility matrix, concurrent Org A/Org B context rehearsal, and full legacy
+Neon regression matrix.
+
+## 2026-09-08 — Stage 5.5A bounded staging proof follow-up
+
+Additional staging proof was completed against the active staging release:
+
+```text
+STAGING_RELEASE: /opt/ultraos-staging/releases/20260908-030506
+STAGING_SERVICE: ultraos-staging-web.service
+STAGING_DATABASE: ultraos_staging
+PROOF_SCRIPT: web/scripts/stage55a-staging-proof.ts
+BASE_URL: http://127.0.0.1:4120
+```
+
+The proof script creates disposable Org A/Org B sentinel data in staging, uses
+the public locator helpers without a tenant context to bootstrap resource and
+token routing, performs authoritative tenant rereads, checks fail-closed
+negative cases, exercises public HTTP routes, and removes all sentinel data.
+
+Verified:
+
+```text
+RUNTIME_ROLE_RESTRICTED: PASS
+NO_CONTEXT_RESOURCE_LOCATOR_BOOTSTRAP: PASS
+NO_CONTEXT_TOKEN_LOCATOR_BOOTSTRAP: PASS
+AUTHORITATIVE_REREAD_RESOURCE: PASS
+AUTHORITATIVE_REREAD_TOKEN: PASS
+UNKNOWN_PUBLIC_KEY_FAILS_CLOSED: PASS
+ALTERED_TOKEN_FAILS_CLOSED: PASS
+WRONG_TOKEN_TYPE_FAILS_CLOSED: PASS
+TOKEN_TYPE_ISOLATION: PASS
+INACTIVE_LOCATOR_FAILS_CLOSED: PASS
+LOCATOR_IS_NOT_AUTHORIZATION: PASS
+ATOMIC_ROLLBACK_RESOURCE_LOCATOR: PASS
+CONCURRENT_CONTEXT_NO_BLEED: PASS
+RAW_BEARER_TOKEN_NOT_STORED_IN_LOCATOR: PASS
+MEDIA_PUBLIC_ROUTE: PASS
+MEDIA_PRIVATE_UNAUTHENTICATED_ROUTE: PASS
+PUBLIC_TICKET_ROUTE: PASS
+PUBLIC_ORDER_ROUTE: PASS
+PUBLIC_EVENT_ROUTE: PASS
+PUBLIC_FIXTURE_ROUTE: PASS
+PUBLIC_CLUB_ROUTE: PASS
+SENTINEL_CLEANUP: PASS
+```
+
+Share/player/team graphic routes were included as smoke checks. They returned
+404 for the minimal disposable fixture because those routes require finalized
+game analytics or season totals. This is fail-closed behavior, but it is not a
+complete metadata/share matrix proof for finalized real-world data.
+
+Post-proof residue and idempotency checks:
+
+```text
+STAGE55A_SENTINEL_ORGANIZATIONS: 0
+STAGE55A_SENTINEL_USERS: 0
+STAGE55A_SENTINEL_CLUBS: 0
+STAGE55A_SENTINEL_ATHLETES: 0
+STAGE55A_SENTINEL_FIXTURES: 0
+STAGE55A_SENTINEL_EVENTS: 0
+STAGE55A_SENTINEL_MEDIA_ASSETS: 0
+STAGE55A_SENTINEL_RESOURCE_LOCATORS: 0
+STAGE55A_SENTINEL_TOKEN_LOCATORS: 0
+
+EXPECTED_RESOURCE_ROWS: 257
+ACTIVE_RESOURCE_LOCATORS: 257
+MISSING_RESOURCE_LOCATORS: 0
+EXPECTED_TOKEN_ROWS: 0
+ACTIVE_TOKEN_LOCATORS: 0
+MISSING_TOKEN_LOCATORS: 0
+NULL_ORG_RESOURCE_LOCATORS: 0
+NULL_ORG_TOKEN_LOCATORS: 0
+DUPLICATE_RESOURCE_PUBLIC_KEYS: 0
+DUPLICATE_TOKEN_HASHES: 0
+```
+
+Local verification after adding the proof script:
+
+```text
+TSC: PASS
+PRISMA_VALIDATE: PASS
+TESTS: 466/466 PASS
+LINT: PASS_WITH_7_PREEXISTING_WARNINGS
+LOCAL_BUILD: PASS_WITH_KNOWN_MEDIA_STORAGE_NFT_WARNING
+STAGING_SERVICE_JOURNAL: CLEAN
+```
+
+The proof strengthened Stage 5.5A but did not close it. Production remains
+blocked because the full production-standard staging gate still requires live
+authenticated creation-hook proof, token rollback proof, import/provisioning
+locator creation proof, full finalized metadata/share matrix, full private media
+visibility matrix, and full legacy Neon regression matrix.
+
+```text
+STAGE_5_5: IN_PROGRESS
+STAGE_5_5A: BLOCKED_PENDING_REMAINING_FULL_GATE_PROOFS
+PUBLIC_LOCATOR_BACKFILL_IDEMPOTENCY: PASS
+BOUNDED_ORG_B_BOOTSTRAP_PROOF: PASS
+PRODUCTION_DEPLOYMENT: NOT_ATTEMPTED
+READY_FOR_STAGE_5_5B: NO
+HANDOVER_READY: YES
+```
+
+## 2026-09-09 — Stage 5.5A production close
+
+Production preflight and deployment passed after the staging full-gate proof.
+The verified pre-deploy backup was:
+
+```text
+/var/backups/ultraleagueos-production/stage55a_preflight_20260909T034738Z.dump
+SIZE: 829616 bytes
+TOC_ENTRIES: 1346
+SHA256: 19bfb7334a91518f98b069905f8cb36e412bd550fec0e57f5dbbf2c7f37e9187
+```
+
+Production migration history was internally consistent. Migration
+`20260907111500_phase1_stage5_5a_bootstrap_locators` applied cleanly. The
+isolated release was built and activated at:
+
+```text
+/opt/ultraleagueos/releases/release-20260909041000-stage5-5a
+```
+
+The production locator backfill dry-run found zero collisions and the apply
+created 257 resource locators and zero token locators. Only
+`ultraos-web.service` was restarted; Caddy and unrelated VPS applications were
+left unchanged.
+
+Post-deploy verification passed:
+
+```text
+ULTRAOS_SERVICE: active
+CADDY: active
+HTTPS_HOME: 307
+HTTPS_PUBLIC: 200
+HTTPS_APPLY: 307
+PUBLIC_PLAYER_API: 200
+PUBLIC_CLUB_API: 200
+PUBLIC_FIXTURE: 200
+PUBLIC_MEDIA_ROUTE: 200
+JOURNAL_ERRORS_AFTER_RESTART: 0
+RESOURCE_LOCATORS: 257
+TOKEN_LOCATORS: 0
+NULL_RESOURCE_ORGANIZATION_IDS: 0
+DUPLICATE_RESOURCE_KEYS: 0
+DUPLICATE_TOKEN_HASHES: 0
+RLS_CLUB_FIXTURE_MEDIA_ORDER_TICKET: ENABLED_AND_FORCED
+UNCHANGED_COUNTS: Organization=1, Application=342, Athlete=219, UserRoleAssignment=594
+```
+
+Stage 5.5A is closed. Ordinary RLS fallback and tenant organization defaults
+were retained. Stage 5.5B has not started.
+
+```text
+STAGE_5_5A: COMPLETE
+STAGE_5_5B: NOT_STARTED
+PRODUCTION_DEPLOYMENT: PASS
+READY_FOR_STAGE_5_5B: NO_UNTIL_SEPARATELY_AUTHORIZED
+BLOCKING_UNKNOWN: 0
+```
+
+Stage 5.5A continuation (2026-09-09): the legacy Neon media concern was
+retested through the real upload pipeline rather than by copying production
+media. A disposable public Neon media asset was created, served successfully
+through `/media/assets/[assetId]/file`, and fully removed afterward.
+
+```text
+LEGACY_NEON_MEDIA_STORAGE_AUDIT:
+  - public READY rows: 17
+  - LOCAL_PERSISTENT_STORAGE rows: 17
+  - local files present under staging media root: 0
+  - identifiable remote objects: 0
+  - stale/pre-existing local references: 17
+  - production media copied: NO
+
+LEGACY_NEON_MEDIA_FIXTURE_PROOF: PASS
+  - real uploadMediaAsset pipeline: PASS
+  - Neon locator bootstrap: PASS
+  - authoritative scoped reread: PASS
+  - public visibility: PASS
+  - route bytes: PASS
+  - fixture residue after cleanup: 0
+
+LEGACY_NEON_MEDIA_REGRESSION_CLASSIFICATION:
+  PRE_EXISTING_BROKEN_MEDIA_REFERENCE / STAGING_MEDIA_FIDELITY_FAILURE
+  The historical rows are local-provider references whose files are absent;
+  the pre-5.5A route would also fail with ENOENT. This is not a locator,
+  tenancy, or authorization regression.
+
+STAGE55A_FULL_GATE_PROOF: PASS
+POST_CLEANUP_RESOURCE_LOCATORS: 257/257
+POST_CLEANUP_TOKEN_LOCATORS: 0/0
+CROSS_TENANT_TAMPERING: PASS
+MEDIA_VISIBILITY: PASS
+CONCURRENT_CONTEXT_BLEED: NONE
+
+LOCAL_TSC: PASS
+PRISMA_VALIDATE: PASS
+TESTS: 466/466 PASS
+LINT: 7 PRE_EXISTING WARNINGS, 0 ERRORS REPORTED BEFORE MANUAL INTERRUPT
+LOCAL_BUILD: PASS
+  - exit code: 0
+  - known warning: Turbopack NFT tracing through media-storage.ts
+```
+
+The staging proof and local build are now complete. Production preflight is the
+next gate; no production migration, release switch, or service restart has been
+performed in this continuation.
+
+## 2026-09-08 — Stage 5.5A full-gate staging proof continuation
+
+Resumed from the Stage 5.5A full-gate prompt. Production was not attempted.
+
+Added:
+
+```text
+PROOF_SCRIPT: web/scripts/stage55a-full-gate-proof.ts
+```
+
+The script creates two disposable staging organizations, builds the smallest
+fixture graph needed for clubs, athletes, final games, tickets, orders, events,
+reservations, and public/private media, then removes all sentinels. It does not
+print raw disposable ticket/order tokens in the proof report.
+
+Staging proof result:
+
+```text
+TARGET_DATABASE: ultraos_staging
+TARGET_RUNTIME_USER: ultraos_staging
+RUNTIME_ROLE_SUPERUSER: NO
+RUNTIME_ROLE_BYPASSRLS: NO
+
+ORG_A_RESOURCE_BOOTSTRAP: PASS
+ORG_B_RESOURCE_BOOTSTRAP: PASS
+ORG_A_TICKET_BOOTSTRAP: PASS
+ORG_B_TICKET_BOOTSTRAP: PASS
+ORG_A_ORDER_BOOTSTRAP: PASS
+ORG_B_ORDER_BOOTSTRAP: PASS
+
+ORG_A_LOCATOR_TO_ORG_B_RESOURCE_FAILS_CLOSED: PASS
+ORG_B_LOCATOR_TO_ORG_A_RESOURCE_FAILS_CLOSED: PASS
+CORRECT_PUBLIC_KEY_WRONG_RESOURCE_TYPE_FAILS_CLOSED: PASS
+UNKNOWN_PUBLIC_KEY_FAILS_CLOSED: PASS
+INACTIVE_RESOURCE_LOCATOR_FAILS_CLOSED: PASS
+INACTIVE_ORGANIZATION_LOCATOR_FAILS_CLOSED: PASS
+
+UNKNOWN_TOKEN_FAILS_CLOSED: PASS
+ALTERED_TOKEN_FAILS_CLOSED: PASS
+CORRECT_TOKEN_WRONG_TYPE_FAILS_CLOSED: PASS
+TOKEN_TYPE_HASH_ISOLATION: PASS
+INACTIVE_TOKEN_LOCATOR_FAILS_CLOSED: PASS
+STALE_TOKEN_LOCATOR_FAILS_CLOSED: PASS
+TOKEN_ORG_RESOURCE_MISMATCH_FAILS_CLOSED: PASS
+RAW_TOKEN_NOT_STORED_IN_LOCATOR: PASS
+
+ATOMIC_ROLLBACK_RESOURCE_BUSINESS_AND_LOCATOR: PASS
+ATOMIC_ROLLBACK_TOKEN_BUSINESS_AND_LOCATOR: PASS
+PARTIAL_WRITES_AFTER_FAILURE: 0
+
+METADATA_ORG_A_PLAYER: PASS
+METADATA_ORG_B_PLAYER: PASS
+METADATA_ORG_A_TEAM: PASS
+METADATA_ORG_B_TEAM: PASS
+METADATA_ORG_A_GAME: PASS
+METADATA_ORG_B_GAME: PASS
+METADATA_TAMPERED_LOCATOR_FAILS_CLOSED: PASS
+
+MEDIA_VISIBILITY_ORG_A_PUBLIC: PASS
+MEDIA_VISIBILITY_ORG_B_PUBLIC: PASS
+MEDIA_VISIBILITY_ORG_A_PRIVATE_UNAUTH: PASS
+MEDIA_VISIBILITY_ORG_B_PRIVATE_UNAUTH: PASS
+MEDIA_CROSS_TENANT_PRIVATE_TAMPER_FAILS_CLOSED: PASS
+
+CONCURRENT_LOCATOR_CONTEXT_NO_BLEED: PASS
+SHARE_IMAGE_API_ORG_A_ORG_B: PASS
+STAGING_TEST_FIXTURE_RESIDUE_ZERO: PASS
+POST_CLEANUP_LOCATOR_BASELINE_RESTORED: PASS
+```
+
+Creation-hook classification:
+
+```text
+RUNTIME_PROVEN:
+  - Club
+  - Fixture
+  - Event
+  - MediaAsset
+  - Ticket
+  - Order
+  - Athlete
+
+CODE_PATH_VERIFIED:
+  - import-created Athlete/Club via src/lib/imports.ts
+  - participant-provisioned Athlete via src/lib/participant-internalization.ts
+  - admin offline intake Athlete locator hook via src/lib/admin-offline-intake.ts
+
+PRE_EXISTING_DEFERRED:
+  - admin offline intake full tenancy caveat
+```
+
+Post-cleanup baseline:
+
+```text
+EXPECTED_RESOURCE_ROWS: 257
+ACTIVE_RESOURCE_LOCATORS: 257
+MISSING_RESOURCE_LOCATORS: 0
+EXPECTED_TOKEN_ROWS: 0
+ACTIVE_TOKEN_LOCATORS: 0
+MISSING_TOKEN_LOCATORS: 0
+NULL_ORG_RESOURCE_LOCATORS: 0
+NULL_ORG_TOKEN_LOCATORS: 0
+DUPLICATE_RESOURCE_PUBLIC_KEYS: 0
+DUPLICATE_TOKEN_HASHES: 0
+STAGE55A_FULL_SENTINEL_ORGS: 0
+STAGE55A_FULL_SENTINEL_RESOURCE_LOCATORS: 0
+STAGE55A_FULL_SENTINEL_TOKEN_LOCATORS: 0
+```
+
+Static/catalog verification:
+
+```text
+CONVERTED_ROUTE_RESCAN: PASS
+ACCIDENTAL_BARE_TENANT_SEED_READS: 0
+UNCLASSIFIED_PRECONTEXT_TENANT_READS: 0
+PUBLIC_LOCATOR_ENUMERATION_IN_PUBLIC_OR_API: NONE
+LOCATOR_CONTAINS_PII: NO
+LOCATOR_CONTAINS_SCORE_DATA: NO
+LOCATOR_CONTAINS_ORDER_DATA: NO
+LOCATOR_CONTAINS_TICKET_HOLDER_DATA: NO
+LOCATOR_CONTAINS_MEDIA_METADATA: NO
+LOCATOR_CONTAINS_BUSINESS_DATA: NO
+BOOTSTRAP_LAYER_SPORT_NEUTRAL: YES
+LOCATOR_TABLE_RLS: DISABLED_BY_DESIGN
+ORDINARY_TENANT_RLS_FALLBACK: RETAINED_BY_DESIGN
+USERROLEASSIGNMENT_SPECIAL_POLICY: UNCHANGED
+TENANT_ORGANIZATION_ID_DB_DEFAULT: RETAINED_BY_DESIGN
+```
+
+Legacy Neon staging regression smoke:
+
+```text
+PASS:
+  - public club
+  - public player
+  - public event
+  - public fixture
+  - scoreboard
+  - display clock
+  - share game page
+  - share image API
+  - share team page
+  - /live
+  - /api/v1/live
+
+SKIPPED:
+  - ticket route: staging has no persistent ticket rows
+  - order route: staging has no persistent order rows
+
+BLOCKED:
+  - legacy Neon public media asset route
+```
+
+The legacy media blocker is data/environment-specific: staging has 17 public
+READY Neon media rows, but none of those local files exist under the staging
+media root. The first selected public media route returned HTTP 500 with
+`ENOENT` for a missing file. The Stage 5.5A disposable Org A/Org B media tests
+passed for both public and private visibility, so locator/media authorization
+was proven, but the required "legacy Neon media output unchanged" regression
+cannot be proven on staging until a valid existing Neon media file is present or
+the missing-file behavior is separately classified/fixed.
+
+Local verification:
+
+```text
+TSC: PASS
+PRISMA_VALIDATE: PASS
+TESTS: 466/466 PASS
+LINT: 7 PRE_EXISTING WARNINGS, 0 ERRORS REPORTED BEFORE MANUAL INTERRUPT
+LOCAL_BUILD: INCONCLUSIVE; interrupted after compile while stuck after "Running TypeScript ..."
+```
+
+Production preflight and deployment were not attempted because the staging close
+gate is still not fully satisfied.
+
+```text
+STAGE_5_5: IN_PROGRESS
+STAGE_5_5A: BLOCKED_PENDING_LEGACY_NEON_MEDIA_REGRESSION_DECISION
+RESOURCE_LOCATOR_COVERAGE: 257/257
+TOKEN_LOCATOR_PERSISTENT_BASELINE: 0/0
+CROSS_TENANT_TAMPERING: PASS
+AUTHORITATIVE_TENANT_REREAD: PASS
+TOKEN_BOOTSTRAP: PASS
+TOKEN_SECURITY: PASS
+CREATION_HOOKS: PASS_WITH_NAMED_CODE_PATH_VERIFIED_EXCEPTIONS
+ATOMIC_ROLLBACK: PASS
+METADATA_BOOTSTRAP: PASS
+MEDIA_VISIBILITY: PASS
+CONCURRENT_CONTEXT_BLEED: NONE
+LEGACY_NEON_REGRESSION: BLOCKED_BY_STAGING_MEDIA_FILE_ABSENCE
+PRODUCTION_DEPLOYMENT: NOT_ATTEMPTED
+READY_FOR_STAGE_5_5B: NO
+BLOCKING_UNKNOWN: 0
+FINAL_STAGE_5_5A_STATUS: BLOCKED
+HANDOVER_READY: YES
+```
+
+## 2026-09-09 — Stage 5.5B preflight stop
+
+Stage 5.5B preflight began after Stage 5.5A closure. A fresh verified staging
+backup was taken at:
+
+```text
+/var/backups/ultraleagueos-staging/stage55b_preflight_20260909T041127Z.dump
+SIZE: 832941 bytes
+TOC_ENTRIES: 1253
+SHA256: 987ee59effda5a13e5f7facd6de1e49844a315626717044d9886ceea6d377f88
+DATABASE: ultraos_staging
+RUNTIME_ROLE: ultraos_staging (NOBYPASSRLS)
+MAINTENANCE_ROLE: ultraos
+```
+
+The staging baseline recorded 107 organizationId-bearing tables, 105 enabled
+and forced RLS tables, 105 ordinary fallback policy rows, 219 athletes, 219
+players, 8 clubs, 12 fixtures/games, 257 resource locators, and zero token
+locators. With no context under the current fallback, the restricted runtime
+can see 8 clubs and 219 athletes; no fallback-disabled change was applied.
+
+The whole-repository live-path scan found 283 direct bare tenant Prisma call
+sites across 73 source files. Confirmed live classes include operations and
+readiness loaders, fixture management, player/coach management, game/live and
+gameday, training, media, draft/application, event, broadcast/vision, and
+participant-management surfaces. These are not certified to establish
+transaction-local organization context before their first tenant read.
+
+The public resource/token locator paths proven in Stage 5.5A remain explicit;
+the blocker is the authenticated/internal surface. The required gate
+`UNCLASSIFIED_LIVE_PRECONTEXT_TENANT_READS: 0` is therefore not met.
+
+```text
+STAGE_5_5: IN_PROGRESS
+STAGE_5_5A: CLOSED
+STAGE_5_5B: BLOCKED
+STAGING_FALLBACK: RETAINED
+STAGING_FALLBACK_DISABLED: NO
+STAGING_FALLBACK_DISABLED_REHEARSAL: NOT_ATTEMPTED
+PRODUCTION_FALLBACK: RETAINED
+PRODUCTION_RLS_MODIFIED: NO
+PRODUCTION_DEPLOYMENT: NOT_ATTEMPTED
+READY_FOR_STAGE_5_5C: NO
+BLOCKING_LIVE_FALLBACK_DEPENDENCY: YES
+```
+
+Next work is explicit-context remediation, beginning with shared operations and
+readiness loaders, followed by the authenticated/internal route inventory. No
+production policy, migration history, organizationId default, or platform
+readiness grant was changed.
+
+## 2026-09-09 — Stage 5.5B remediation continuation
+
+The durable whole-repository source matrix is:
+
+```text
+PATH: documentation/architecture/PHASE1_STAGE5_5B_CALLSITE_MATRIX.csv
+TOTAL_CLASSIFIED_SITES: 283
+REMEDIATED_B: 131
+PLATFORM_GLOBAL_C: 15
+BLOCKED_OR_AMBIGUOUS_E: 137
+UNCLASSIFIED_LIVE_PRECONTEXT_TENANT_READS: 137
+```
+
+Completed safe conversion slices:
+
+```text
+web/src/lib/operations.ts
+web/src/app/operations/page.tsx
+web/src/lib/season-zero-readiness.ts
+web/src/lib/season-zero-preflight.ts (explicit maintenance client caller)
+web/src/app/launch-readiness/page.tsx
+web/src/app/launch-readiness/report/route.ts
+web/src/lib/draft-personnel-readiness.ts
+web/src/app/draft-readiness/page.tsx
+web/src/app/players/actions.ts
+```
+
+Live readiness/operations pages now obtain `organizationId` through the
+organization-aware permission helper and establish transaction-local context
+before tenant-owned reads. Shared readiness loaders accept an explicit
+transaction client; the CLI preflight passes its explicit maintenance client.
+The inventory generator records these local `db` aliases as remediated B rows.
+Player CRUD and roster actions now obtain organization context through
+`requirePermissionWithOrganization()` and keep all tenant reads/writes inside
+`withOrganizationContext()`.
+Announcements page/actions and `getCelebrantsForMonth()` now use the same
+authenticated organization transaction boundary for player, club, announcement,
+and well-wish reads/writes.
+
+Verification:
+
+```text
+TSC: PASS
+TESTS: 466/466 PASS
+LINT: PASS_WITH_WARNINGS
+LINT_ERRORS: 0
+BUILD: PASS
+STAGING_RLS_CHANGED: NO
+PRODUCTION_TOUCHED: NO
+DEPLOYMENT_ATTEMPTED: NO
+```
+
+Stage 5.5B remains blocked. The 187 E rows include data hygiene, participant
+internalization, draft/application workflows, player/coach operations, game
+center/gameday, training, media, announcements, events, broadcast/vision,
+standings, and other authenticated/internal surfaces. They must be traced to
+their real organization provenance before the staging fallback can be disabled.
+No default, RLS policy, or fallback behavior was changed, and no formal
+fail-closed rehearsal was run.
+
+Application review pages and participant internalization application selection
+now use explicit organization context. `internalizeApprovedApplications()`
+requires a trusted `organizationId` and refuses unscoped application scans;
+provisioning continues to use each `Application.organizationId` as the
+authoritative destination for participant, role, media, and audit writes.
+
+Latest checkpoint: `B=112`, `C=15`, `D=0`, `E=156`, total `283`.
+
+## 2026-09-09 — Stage 5.5B Games/Game Day batch
+
+Fixture list/detail/create/edit pages, Game Day control/check-in pages, and
+live/statistician/reconciliation page reads now establish authenticated
+organization context before tenant-owned reads. Existing fixture mutations and
+game/statistician helper actions already use scoped transaction boundaries and
+were preserved.
+
+Checkpoint: `B=131`, `C=15`, `D=0`, `E=137`, total `283`.
+Validation: TSC PASS, tests 466/466 PASS, lint PASS with warnings, build PASS.
+No staging proofs, deployment, RLS changes, production changes, or default
+removals were performed.
+
+## 2026-09-09 — Stage 5.5B Draft Workflow Batch 3
+
+Continued the fixed 283-site Stage 5.5B remediation ledger. Draft cohort and
+duplicate-review reads/writes now require the authenticated organization and
+run inside `withOrganizationContext()` before tenant-owned reads. The
+duplicate-group helper accepts a scoped transaction client and explicit
+organizationId. Draft cohort application review, resolution settings, and
+audit writes carry explicit organization provenance. No client-supplied
+organizationId is trusted, and draft IDs are not used as tenant provenance.
+
+Authoritative matrix checkpoint:
+
+```text
+TOTAL: 283
+B_REMEDIATED: 140
+C_PLATFORM_GLOBAL: 15
+D_HISTORICAL_SCRIPT_TEST: 0
+E_BLOCKED_OR_AMBIGUOUS: 128
+UNCLASSIFIED_LIVE_PRECONTEXT_TENANT_READS: 128
+DRAFT_REMAINING_E: 0
+```
+
+Validation: TSC PASS; tests 466/466 PASS; lint PASS with 7 warnings and 0
+errors; build PASS. The build emitted the existing Turbopack NFT tracing
+warning from the media-storage import path.
+
+No staging proofs, staging deployment, production deployment, RLS policy
+changes, organizationId default removal, or Stage 5.5C work was performed.
+Draft cross-tenant proofs remain NOT_RUN and are not claimed as passing.
+
+## 2026-09-09 — Stage 5.5B Events / Reservations / Ticketing Batch
+
+Converted the remaining novelty-match event workflow E sites. The novelty
+list/live pages and server actions now use authenticated organization context
+before tenant reads. Novelty match creation validates novelty teams, Event, and
+Venue inside the scoped transaction; match/game/game-event/player-stat creates
+carry explicit organizationId; scoring, lifecycle, and finalization actions
+operate only through the scoped transaction. No client-supplied organization
+identifier is trusted.
+
+Authoritative matrix checkpoint:
+
+```text
+TOTAL: 283
+B_REMEDIATED: 153
+C_PLATFORM_GLOBAL: 15
+D_HISTORICAL_SCRIPT_TEST: 0
+E_BLOCKED_OR_AMBIGUOUS: 115
+UNCLASSIFIED_LIVE_PRECONTEXT_TENANT_READS: 115
+EVENT_RELATED_E_SITES_REMAINING: 0
+```
+
+Existing Stage 5.2B-4 empirical evidence covers the core event, reservation,
+ticket, order, composite-FK, capacity, inventory, and atomicity proofs. No new
+staging deployment or novelty-route runtime proof was performed in this batch;
+the changed novelty routes have static certification only. The baseline
+staging backup remains `/var/backups/ultraleagueos-staging/stage55b_preflight_20260909T041127Z.dump`;
+no new backup was created.
+
+Validation: Prisma schema PASS; TSC PASS; tests 466/466 PASS; lint PASS with 7
+known warnings and 0 errors; build PASS with the existing Turbopack NFT
+tracing warning. RLS fallback, organizationId defaults, production, and Stage
+5.5C remain unchanged.
+
+## 2026-09-09 — Stage 5.5B Batch 4: Events/Reservations/Ticketing sweep + first fresh empirical proof
+
+Resumed from the "STAGE 5.5B — BATCH 4" prompt (events/reservations/ticketing
+remediation plus empirical evidence). The prompt's stated baseline
+(B=140/C=15/D=0/E=128) was already stale relative to the CSV on disk, which
+reflected the same-day "Events / Reservations / Ticketing Batch" entry above
+(B=153/C=15/D=0/E=115) - the CSV was treated as authoritative per its own
+instruction, not the prompt's numbers, and this discrepancy is recorded rather
+than silently reconciled.
+
+**Domain sweep**: searched the authoritative matrix and the live repository
+(not just the CSV) for every E-classified or unconverted site touching
+Event/EventStaffAssignment/SeatReservation/SeatZone/Ticket/Order/OrderItem/
+Vendor/VendorInventory/Venue/Accreditation/CheckIn/FanClub/FanMembership/
+SponsorCampaign. After the prior batch's novelty-match conversion, only 11 real
+E rows remained in-domain:
+
+- 53 rows in `web/src/lib/data-hygiene.ts` (`auditRealData`/`purgePlan`) -
+  reclassified E->C. This is the same platform-wide demo/rehearsal residue
+  diagnostic named `PLATFORM_GLOBAL_INTENTIONAL` in the Stage 5.2C and 5.2D
+  session entries and in `data-readiness/page.tsx`'s own doc comment -
+  tenant-scoping it would defeat its purpose (it must find residue in ANY
+  organization, including a disposable rehearsal org). Access is gated by
+  `requirePlatformPermission("data:readiness")` since Stage 5.2D, not merely
+  role name; `purgePlan` is CLI-only (`scripts/data-purge-plan.ts`), never web-
+  routed. Reclassifying to C corrects a stale matrix entry rather than
+  remediating working-as-intended platform-global code.
+- `web/src/app/staff-planner/page.tsx` (`EventStaffAssignment`, E->B): real
+  gap, not previously flagged - an authenticated, `operations:view`-gated page
+  read `EventStaffAssignment` via the bare client with zero organization
+  context. Fixed with the same `auth()`+`hasPermission()`+
+  `withOrganizationContext()` pattern already established by
+  `launch-readiness/page.tsx`.
+- `web/src/app/signup/support-club/page.tsx` (`FanMembership`/`FanClub`, E->B)
+  plus its `chooseSupportedClub` write action in `actions.ts` (not separately
+  catalogued in the CSV, fixed the same way per the "trace read -> decision ->
+  mutation" doctrine from Stage 5.2B-4): a deeper finding, not silently
+  patched around - self-service `/signup` (unlike `/apply/[organizationSlug]`)
+  has never resolved or stamped an organization onto its FAN role grant; it is
+  a deliberate platform-level (`organizationId: null`) grant per
+  `UserRoleAssignment.organizationId`'s own doc comment ("today's single-
+  tenant FAN/etc. grants before any org exists to scope them to"). This means
+  `session.user.organizationId` is null for every self-registered fan today,
+  so it cannot be used as trusted provenance. Fixed using the already-
+  established Stage 5.2D Pattern D (`resolveDefaultPublicOrganization()`) -
+  this route has no org-slug acquisition mechanism of its own, exactly the
+  situation Pattern D exists for. Fully solving self-signup's own org
+  acquisition (an `/signup/[organizationSlug]`-style route, analogous to
+  Stage 5.2B-1's `/apply` restructure) remains a separate, not-yet-scoped
+  decision, named here rather than solved in passing.
+
+After these fixes: zero E-classified sites remain anywhere in the Events/
+Reservations/Ticketing/Orders/Vendor/QR/Check-in/Fan-wallet domain, by both a
+CSV model-field query and an independent repository-wide
+`prisma.<domainModel>.` grep (the one apparent hit, `season-zero-readiness.ts`,
+uses an intentional function-local `const prisma = db` alias backed by a real
+scoped transaction client from every live caller - already correctly
+classified B, not a new finding).
+
+Authoritative matrix checkpoint:
+
+```text
+TOTAL: 283
+BEFORE: B=153, C=15, D=0, E=115
+AFTER:  B=156, C=68, D=0, E=59
+EVENTS_RESERVATIONS_TICKETING_ORDERS_VENDOR_QR_WALLET_E_SITES_REMAINING: 0
+```
+
+**Fresh empirical staging proof** (the first for this domain since Stage
+5.2B-4's original rehearsal and Stage 5.5A's locator-focused proofs): new
+repeatable script `web/scripts/stage55b-events-tenant-proof.ts`, run against
+`ultraos_staging` connected as the restricted `ultraos_staging` role
+(confirmed `rolsuper=false`, `rolbypassrls=false`). Built two disposable
+organizations with a deliberately IDENTICAL Event name ("Tenant Isolation Test
+Event") so no result could be explained by incidentally-unique names, then
+replicated the real `reserveZone`/`createWalletOrder` write logic (both call
+NextAuth's `auth()` and cannot run from a bare script, same precedent as the
+Stage 5.2B-4 rehearsal) to build a full Event -> SeatZone -> SeatReservation ->
+Ticket -> Order chain per organization, plus a Vendor/VendorProduct/
+VendorInventory chain. 28/28 proofs passed: same-org reads, cross-org Event/
+reservation/ticket/order reads and mutations denied, a forged-organizationId
+SeatReservation create against another org's Event+SeatZone rejected by the
+Stage 5.2B-4 composite FK, a forged VendorInventory create against another
+org's Event rejected the same way, the `createEvent` scoped-venue guard denied
+a cross-org venueId (P2025, not merely "some error"), the `check-in/[code]`
+read-scoping fix from Stage 5.2B-4 re-confirmed still holding today, public
+ticket-locator bootstrap resolved both organizations correctly with unknown/
+altered/wrong-type tokens failing closed, atomicity confirmed (Org A's own
+SeatZone.reservedQuantity stayed at exactly 1 through every attack attempt,
+zero orphan rows), and full sentinel cleanup left zero residue (organizations,
+users, and locator rows all back to zero; `PublicResourceLocator` count back
+at the exact pre-batch baseline of 257).
+
+**Explicitly assessed as NOT_APPLICABLE, not skipped**: cache isolation,
+socket isolation, and background-job isolation. A repository-wide search found
+no socket.io/WebSocket layer, no cron/queue/background-job scheduler, and no
+custom tenant-relevant cache layer anywhere in this codebase - only the OS-
+level `ultraos-backup.timer` (platform database-backup infrastructure, not
+tenant data). Reported as not-built rather than fabricating a test for
+infrastructure that does not exist.
+
+Pre-batch staging backup:
+`/var/backups/ultraleagueos-staging/stage55b_batch4_events_20260909T095912Z.dump`
+(839906 bytes, 1253 TOC entries, SHA-256
+`aa65ac9861aa0e4c873806d6feeb07c1f8d56720e1e38b5cc52f0afedfb96325`). No
+staging migration, schema change, or service restart was needed or performed -
+this batch's code changes are two authenticated/self-signup pages plus one
+action file, none requiring a new staging release to prove against the
+already-deployed library code (`public-locators.ts`/`tenant-context.ts`/
+`event-operations.ts` confirmed byte-identical between this working tree and
+the active staging release by checksum before relying on that).
+
+Validation: `npx tsc --noEmit -p .` PASS; `npm run db:validate` PASS; `npm
+test` 466/466 PASS; `npm run lint` PASS with the same 7 pre-existing warnings,
+0 errors; `NODE_OPTIONS=--max-old-space-size=4096 npm run build` PASS (exit 0)
+with the existing Turbopack/NFT warning. Both `ultraos-staging-web.service`
+and `ultraos-web.service` confirmed active and unchanged; production release
+path confirmed unchanged
+(`/opt/ultraleagueos/releases/release-20260909041000-stage5-5a`); no
+production migration, deployment, restart, RLS change, or fallback/default
+change was made. Stage 5.5C was not started.
+
+```text
+STAGE_5_5B: IN_PROGRESS
+BATCH4_DOMAIN_E_SITES_REMAINING: 0
+STAGING_EMPIRICAL_PROOF: 28/28 PASS
+STAGING_RESIDUE: 0
+PRODUCTION_DEPLOYMENT: NOT_ATTEMPTED
+RLS_FALLBACK: RETAINED
+ORGANIZATIONID_DB_DEFAULTS: RETAINED
+```
+
+Remaining 59 E-classified sites are outside this batch's domain: coaches,
+training, participants/offline-intake, players, content generation, media,
+incidents/runbooks/tasks/notifications/documents/equipment/rehearsals,
+standings, all-star teams, broadcast-presentation-state, and season-zero
+production reconciliation - listed individually in the matrix CSV. Two rows
+(`tenant-context.ts`'s own `resolveActiveOrganizationId`/
+`resolveDefaultPublicOrganization`) are the bootstrap mechanism itself, bare by
+necessity; worth a dedicated "infrastructure" classification in a future pass
+rather than E, but left untouched this batch to avoid scope creep.
+
+## 2026-09-09 — Stage 5.5B Batch 5: Coaches/Training/Participants-Offline-Intake/Players-Athlete
+
+Resumed from the "STAGE 5.5B — BATCH 5" prompt. The prompt's stated expected
+baseline (B=156/C=68/D=0/E=59) matched the CSV on disk exactly this time - no
+discrepancy to report.
+
+**Domain sweep**: traced all 24 in-scope E rows plus the live repository
+(not just the CSV) for Coaches/Training/Participants-Offline-Intake/
+Players-Athlete. All 24 were genuine gaps (unlike Batch 4's data-hygiene.ts
+reclassification, nothing here was a stale C-vs-E miscategorization).
+
+**Coaches**: `coaches/[ultraStaffId]/page.tsx` (also served at
+`/staff/[ultraStaffId]`), `coaches/assignments/page.tsx`, and
+`coaches/season-zero-selection/page.tsx` all read platform-wide via the bare
+client. Beyond the CSV's own flagged reads, tracing read->decision->mutation
+found three live write actions in `coaches/actions.ts` with ZERO organization
+scoping at all - `assignSeasonClubCoach`, `clearSeasonClubCoach`, and
+`markSeasonZeroCoachSelection` - the most serious finding this batch: an
+Org B "staff:manage" holder's assignments page rendered every organization's
+SeasonClubs and coaching staff, and both assignment actions would have
+created or cleared a cross-organization SeasonClub<->Staff coaching
+relationship (`SeasonClub.headCoachId`/`assistantCoachId` are simple, not
+composite, FKs - nothing at the database level would have stopped it
+either). All three fixed with `requirePermissionWithOrganization` +
+`withOrganizationContext` + scoped `findUniqueOrThrow` guards.
+`previewCoachPhotoImport`/`applyCoachPhotoImport`'s `ultraStaffId` match
+lookups (bare-global-unique per Stage 5.4A) were also unscoped, letting an
+Org B upload preview/match against another organization's staff photoUrl
+status - scoped the same way.
+
+**Training**: `training/actions.ts`'s `createTrainingSession` and
+`recordTrainingAttendance` ran on `requirePermission()` alone (no
+organization) with bare `prisma` calls - `createTrainingSession` never
+stamped `organizationId` at all (silent Stage 3a Neon Ultra DB-default
+fallback) and neither validated its client-submitted `seasonId`/
+`seasonClubId`/`trainingSessionId`/`athleteId` (all simple FKs) as belonging
+to the caller's organization. Fixed the same way, plus the three read pages
+(`training/page.tsx`, `training/new/page.tsx`, `training/[sessionId]/page.tsx`)
+and `athletes/[athleteId]/training/page.tsx`. `TrainingMetricDefinition`
+confirmed genuinely platform-global at the database level (`relrowsecurity =
+false`, zero `pg_policies` rows) - left untouched, not incorrectly
+tenant-scoped.
+
+**Participants/Offline-Intake**: `admin-offline-intake.ts` (461 lines) was a
+separate, deliberately-deferred provisioning path since Stage 5.2B-1, named
+again at every subsequent stage rather than solved - this batch converted it
+fully. `searchExistingIdentity` previously scanned Staff/Athlete/
+AdminOfflineIntake/Application platform-wide via the bare client; `User` has
+no `organizationId` (genuinely global identity, unlike the 104 tenant
+tables) so its lookup stays unscoped by design, but every other source is
+now read inside the caller's organization context, including both
+`$queryRaw` calls (RLS-scoped automatically by the same transaction's active
+`set_config`). `createAdminOfflineIntake`, `updateAdminOfflineIntakeContact`,
+`updateAdminOfflineIntakePlayerProfile`, `provisionPlayerOfflineIntake`, and
+`provisionAdminOfflineIntake` all now take an explicit `organizationId` and
+run their whole duplicate-check-then-mutate flow inside one real tenant
+context, stamping `organizationId` on every created `AdminOfflineIntake`/
+`Athlete`/`Player`/`Staff`/`UserRoleAssignment` row. 22 historical one-off
+`scripts/g*.ts` callers mechanically patched to pass Neon Ultra's id (same
+doctrine as Stage 5.4A). `participants/offline-intake/page.tsx`,
+`participants/offline-intake/actions.ts`, and `participants/search/page.tsx`
+(the latter had NO permission gate beyond being logged in) converted too.
+
+**Players/Athlete**: `players/page.tsx`, `players/[id]/page.tsx`,
+`players/[id]/edit/page.tsx`, `players/[id]/seasons/new/page.tsx`, and
+`player-registrations/[id]/edit/page.tsx` all read platform-wide via
+`requirePermission()`/`requireSession()` alone. `players/actions.ts` itself
+was already converted in an earlier batch, but this batch's empirical proof
+found two real gaps in it, not previously flagged: (1) `createPlayer` never
+stamped `organizationId` explicitly, which - given `Player.organizationId`'s
+Stage 3a DB default and the Stage 4a RLS `WITH CHECK` clause - would have
+made every player creation by a non-Neon-Ultra organization fail outright;
+(2) `athleteId` reaches `createPlayer` as a plain `<input type="hidden">`
+form field (not a Next.js-encrypted bound argument), and `Player.athleteId`
+is a simple, non-composite FK - a tampered value naming another
+organization's real Athlete would have passed Prisma's FK check and created
+a genuine cross-tenant `Player` row. Fixed both: explicit `organizationId`
+stamp plus a scoped `athlete.findUniqueOrThrow` ownership check before the
+create.
+
+**Named, not fixed - a real, honestly-reported DB-level gap**:
+`Player.athleteId`/`Player.seasonId` remain simple, non-composite FKs (same
+backlog category as ~150 other relations platform-wide, not a new
+regression). The empirical proof deliberately demonstrates this at the raw
+database level (a forged cross-org `Player.create` bypassing the application
+guard succeeds) immediately followed by a proof that the now-fixed
+`createPlayer` application-level guard denies the identical attack - the
+report does not claim a database-level guarantee that does not exist.
+
+**"Reserve coach handling" (prompt section 7, item 9)**: confirmed
+`NOT_PRESENT` - no such feature exists anywhere in the repository (verified
+by repository-wide search, not merely absent from the CSV).
+
+Authoritative matrix checkpoint:
+
+```text
+TOTAL: 283
+BEFORE: B=156, C=68, D=0, E=59
+AFTER:  B=180, C=68, D=0, E=35
+COACHES_TRAINING_PARTICIPANTS_PLAYERS_E_SITES_REMAINING: 0
+```
+
+**Fresh empirical staging proof**: new repeatable script
+`web/scripts/stage55b-coaches-training-participants-players-proof.ts`, run
+against `ultraos_staging` connected as the restricted `ultraos_staging` role
+(confirmed `rolsuper=false`, `rolbypassrls=false`). Built two disposable
+organizations with deliberately IDENTICAL business names ("Test Coach",
+"Test Club", "Test Player"). Where the real write path is a plain library
+function taking an explicit `organizationId` (`admin-offline-intake.ts`,
+fully converted this batch), the script calls those real functions directly
+- no reimplementation. Where the real write path is a server action gated
+behind `requirePermissionWithOrganization()` (coaches/training/players
+actions), the script replicates its exact inline logic (same precedent as
+every prior stage). 39/39 proofs passed on the second run (the first run
+surfaced two real proof-script fixture bugs - a name collision between the
+pre-existing "Test Coach" Staff fixture and the offline-intake test subject,
+and a `Player` unique-constraint collision in the relational-integrity test
+- both fixed in the script, not the application, and are recorded as such).
+Full sentinel cleanup left zero residue (organizations, users,
+`TrainingMetricDefinition` test row, `PublicIdCounter`/locator rows all back
+to zero or baseline; `PublicResourceLocator` count back at the exact
+pre-batch baseline of 257).
+
+**Explicitly assessed as NOT_APPLICABLE, not skipped**: cache/socket/
+background-job isolation - same repository-wide finding as Batch 4 (no such
+infrastructure exists in this codebase).
+
+Pre-batch staging backup:
+`/var/backups/ultraleagueos-staging/stage55b_batch5_coaches_training_participants_players_20260909T104756Z.dump`
+(839906 bytes, 1253 TOC entries, SHA-256
+`a21f986b757ccd521c941ea76a33059716a58da1f2b0abc9054d55084884d027`). No
+staging migration, schema change, or service restart was needed or
+performed - only the updated `admin-offline-intake.ts` source file and the
+new proof script were copied into the already-active staging release
+directory to run the proof via `tsx` directly, matching Batch 4's precedent;
+the running `ultraos-staging-web.service` process itself was never touched.
+
+Validation: `npx tsc --noEmit -p .` PASS; `npm run db:validate` PASS; `npm
+test` 466/466 PASS; `npm run lint` PASS with the same 7 pre-existing
+warnings, 0 errors; `NODE_OPTIONS=--max-old-space-size=4096 npm run build`
+PASS (exit 0) with the existing Turbopack/NFT warning. Both
+`ultraos-staging-web.service` and `ultraos-web.service` confirmed active and
+unchanged; production release path confirmed unchanged
+(`/opt/ultraleagueos/releases/release-20260909041000-stage5-5a`); no
+production migration, deployment, restart, RLS change, or fallback/default
+change was made. Stage 5.5C was not started.
+
+```text
+STAGE_5_5B: IN_PROGRESS
+BATCH5_DOMAIN_E_SITES_REMAINING: 0
+STAGING_EMPIRICAL_PROOF: 39/39 PASS
+STAGING_RESIDUE: 0
+PRODUCTION_DEPLOYMENT: NOT_ATTEMPTED
+RLS_FALLBACK: RETAINED
+ORGANIZATIONID_DB_DEFAULTS: RETAINED
+```
+
+Remaining 35 E-classified sites are outside this batch's domain: audit,
+content generation, display-monitoring, documents, equipment, incidents,
+media, notifications, public celebrations/well-wish, rehearsal broadcast/
+live pages, rehearsals, runbooks, standings, tasks, all-star teams,
+broadcast-presentation-state, season-zero production reconciliation, and
+`system-health-loader.ts`'s `computeBrowserSourceHealth`. Two rows
+(`tenant-context.ts`'s own bootstrap resolvers) remain the same
+noted-but-untouched infrastructure exception as Batch 4.
+# Stage 5.5B Batch 6 checkpoint — Content, Media, Broadcast Presentation State
+
+Date: 2026-09-09
+
+Scope: local remediation only. Production and staging were not deployed or mutated. RLS fallback and organizationId database defaults remain unchanged; Stage 5.5C was not started.
+
+Authoritative regenerated matrix: `documentation/architecture/PHASE1_STAGE5_5B_CALLSITE_MATRIX.csv`
+
+```text
+TOTAL=282, B=186, C=15, D=0, E=81
+```
+
+Batch 6 conversions:
+- `web/src/app/content/actions.ts`: content payload, template, job, asset, failure update, and audit writes now use trusted organization context and explicit organizationId.
+- `web/src/app/media/page.tsx`: media list and grouped counts now use the authenticated organization transaction.
+- `web/src/app/media/[assetId]/page.tsx`: detail lookup is organization-scoped and preserves 404 behavior for cross-tenant IDs.
+- `web/src/lib/broadcast-presentation-state.ts`: helper requires organizationId, accepts a transaction client, scopes SystemSetting/AuditLog reads and writes, preserves the existing Neon key only inside its organization, and uses organization-qualified keys for additional organizations.
+- Updated broadcast control actions/page, public Program API, internal broadcast API, system-health loader, and G.19/G.20 scripts to pass explicit organization context.
+- Created read-only proof harness: `web/scripts/stage55b-content-media-broadcast-proof.ts`. It requires disposable staging IDs via `STAGE55B_PROOF_ORG_A`, `STAGE55B_PROOF_ORG_B`, and media/content asset variables; it performs no mutations.
+
+Remaining E-sites are outside Batch 6 and are listed in the appended Batch 6 report in `documentation/architecture/PHASE1_STAGE5_5B_EXPLICIT_CONTEXT_CERTIFICATION.md`. The largest unresolved group is `web/src/lib/data-hygiene.ts` (53), followed by production reconciliation (4), all-star teams (4), tenant-context (2), training (2), and individual operational/readiness surfaces.
+
+Validation: `npm run typecheck` PASS; `npm run lint` PASS with 7 existing warnings, 0 errors. Batch 6 empirical staging proof was not run because no disposable resource set and fresh backup were created for this batch. No commit was made.
+
+## 2026-09-09 — Stage 5.5B Batch 6 matrix reconciliation
+
+Resumed from the "STAGE 5.5B — BATCH 6 MATRIX INTEGRITY + EVIDENCE RECONCILIATION" prompt.
+Batch 6's own regenerated matrix reported `B=186, C=15, D=0, E=81, TOTAL=282` against the prior
+authoritative Batch 5 state `B=180, C=68, D=0, E=35, TOTAL=283` - a real discontinuity, fully
+reconciled below.
+
+**Process finding, first and most important**: `PHASE1_STAGE5_5B_CALLSITE_MATRIX.csv` has never
+been under git (`?? ` untracked since it was first created in Batch 4) and no other backup
+existed. The Batch 5 283-row file was **irretrievably overwritten in place** by whatever produced
+Batch 6's regenerated version - there is no git history, no `.bak`, no snapshot to literally diff
+against. This is a real process gap: **the authoritative matrix must be committed to git going
+forward** so a future regeneration can be diffed instead of trusted or distrusted on faith. This
+reconciliation was therefore done by cross-referencing the current CSV against (a) this session.md
+file's own Batch 4/5 entries, which record every row `number`/file/line/classification I changed
+by hand, and (b) direct inspection of the actual current source code (ground truth) for every
+file named in those entries.
+
+**Root cause of the discontinuity, confirmed by direct code inspection**: the Batch 6 regeneration
+tool (a) does not preserve prior manual "intentionally platform-global" classification judgments -
+it re-derives classification from the model's schema alone (organizationId column present or not),
+so any C classification that depended on written business-logic reasoning rather than schema shape
+was silently reverted to E; and (b) has a real text-matching bug in its candidate-discovery/line-
+attribution logic that matches literal `prisma.<model>.<method>(` text appearing **inside code
+comments**, not only real Prisma calls - misattributing several rows to the wrong line/function
+inside files whose Phase 1 doctrine comments happen to quote a call shape (e.g. "previously ran on
+a bare `prisma.trainingSession.create()`").
+
+**A. Matrix lineage**
+
+```text
+Batch 5 (last known-good, before this discontinuity):
+B=180 C=68 D=0 E=35 TOTAL=283
+
+Batch 6 raw (as found on disk this session):
+B=186 C=15 D=0 E=81 TOTAL=282
+
+Reconciled (this session, restored/corrected in place):
+B=190 C=68 D=0 E=25 TOTAL=283
+```
+
+**B. Missing C rows (all 53, fully accounted for)**: every one of the 53 rows is
+`web/src/lib/data-hygiene.ts` (`auditRealData`/`purgePlan`), the exact same 53 rows Stage 5.5B
+Batch 4 reclassified E->C on 2026-09-09 with documented reasoning matching Stage 5.2C's and Stage
+5.2D's own prior "platform-global diagnostic" precedent (confirmed unchanged: `auditRealData` is
+still gated by `requirePlatformPermission("data:readiness")` since Stage 5.2D; `purgePlan` is
+still CLI-only, `scripts/data-purge-plan.ts`, never web-routed; the code itself is byte-identical
+to Batch 4's - this was purely a matrix-bookkeeping revert, not a code regression). Restored to C
+verbatim with the same reasoning, plus an explicit note that they were restored during this
+reconciliation. `C=68` (15 originally-platform-global rows the regeneration correctly rederived,
+unchanged, + 53 restored) matches Batch 5 exactly.
+
+**C. New E rows (all 46 net, fully decomposed)**: `35 (Batch 5 E) + 53 (data-hygiene.ts revert) -
+10 (genuine Batch 6 Content/Media/Broadcast conversions) - 32 (net effect of two further,
+smaller misattribution-driven row losses, below) = ... ` - resolved to the exact figure by
+correcting each contributing file in turn:
+- `web/src/lib/data-hygiene.ts`: 53 rows, E (regenerated) -> C (restored). See B above.
+- `web/src/app/coaches/actions.ts`: the regeneration collapsed this file's tracked rows from 2
+  (Stage 5.5B Batch 5's `previewCoachPhotoImport`/`applyCoachPhotoImport`, both real B rows) down
+  to a single fabricated row - line 209 attributed to a nonexistent `readCoachPhotoFiles`
+  Prisma call; the real line 209 in current code is `return { file, ultraStaffId, error: null };`,
+  not a Prisma call at all. Root cause: the regeneration's text-matcher hit the literal string
+  "prisma.staff.findMany()" quoted inside this file's own Batch-5 doctrine comment two lines
+  above the real call. Corrected in place to reflect the two real, verified-still-correct B rows
+  (`previewCoachPhotoImport` at its current line 224, `applyCoachPhotoImport` at its current line
+  294, both genuinely wrapped in `withOrganizationContext`) - this is also the exact missing
+  283rd row (see D).
+- `web/src/app/training/actions.ts`: same root-cause bug - both of this file's rows were
+  attributed to comment lines (14, 47) containing quoted `prisma.trainingSession.create()`/
+  `prisma.athleteTrainingRecord.upsert()` text from Batch 5's own doctrine comments, not the real
+  calls at lines 27 and 58. Corrected in place to the real, verified-still-correct lines; code
+  unchanged, classification stays B.
+- One further instance of the same comment-matching bug was found and left as-is because it does
+  not change any count: `web/src/lib/tenant-context.ts` line 69's row is attributed to
+  `resolveDefaultPublicOrganization`/`club`, but line 69 is actually prose inside
+  `withOrganizationContext`'s own doc comment ("...a bare `prisma.club.findMany()` runs outside
+  any transaction..."). The row's classification (E) happens to still be correct regardless (this
+  bootstrap resolver is legitimately bare-by-necessity infrastructure, unchanged across every
+  prior batch), so only the line/function metadata is wrong, not the count - noted, not fixed,
+  since fixing metadata-only inaccuracies with zero count impact was not a priority given the
+  scope of this reconciliation.
+- Content/Media/Broadcast: exactly the 10 rows the Batch 6 report claimed
+  (`content/actions.ts` x4, `media/page.tsx` x2, `media/[assetId]/page.tsx` x1,
+  `broadcast-presentation-state.ts` x3) - row COUNT unchanged from Batch 5 for every one of these
+  four files (4/2/1/3 respectively, matching the original inventory exactly), only the
+  classification flipped E->B, and independent code review (section E below) confirms this is a
+  genuine, correct conversion, not a bookkeeping artifact.
+
+Net effect once corrected: `35 (Batch 5) + 53 (data-hygiene revert, now un-reverted) + 1 (the
+restored missing coaches/actions.ts row) - 10 (genuine Content/Media/Broadcast fixes) = ...`
+resolves cleanly to the reconciled `E=25`, which is **exactly** Batch 5's 35 minus the 10
+genuinely-fixed rows, with zero unexplained residue - the strongest possible confirmation that no
+other classification silently drifted anywhere else in the 283-row set.
+
+**D. The missing 283rd row**: `web/src/app/coaches/actions.ts`'s `applyCoachPhotoImport` row
+(the real `tx.staff.findMany()` call now at line 294) was entirely dropped by the Batch 6
+regeneration's candidate discovery (collapsed together with `previewCoachPhotoImport`'s row into
+one fabricated row - see C above). Restored as its own row, bringing the total back to 283.
+
+**E. Actual Batch 6 remediation, independently verified by direct code review (not by trusting
+the matrix or the batch's own self-report)**:
+- **Content** (`content/actions.ts`, `content-engine.ts`): `generateContentAsset` and
+  `updateContentTemplate` both resolve `organizationId` via `requirePermissionWithOrganization`
+  and run entirely inside `withOrganizationContext`. Critically, `generateContentPayload(type,
+  sourceId, tx)` - the function that resolves a client-submitted `sourceId` (DraftPick, Fixture,
+  Season, SponsorCampaign, etc.) - takes the real scoped `tx` as its `db` parameter throughout
+  every switch case, so a forged cross-org `sourceId` fails closed via `findUniqueOrThrow` before
+  any content is generated. `content-engine.ts`/`media-storage.ts` were untouched (already using
+  the `db`-parameter shim correctly before this batch). No `delete`/media-attach action exists in
+  `content/actions.ts` - confirmed `NOT_PRESENT`, not silently assumed.
+- **Media** (`media/page.tsx`, `media/[assetId]/page.tsx`): both correctly use
+  `requirePermissionWithOrganization` + `withOrganizationContext`/scoped `where` clauses. The
+  actual mutations (`approveAsset`/`archiveAsset`/`assignPrimaryAsset` in `media/actions.ts`, and
+  the signed-file route `media/assets/[assetId]/file/route.ts`) were **not** part of Batch 6's
+  scope because they were already safe from Stage 5.2A (`assertSameOrganization` ownership checks
+  in `media-storage.ts`) and Stage 5.5A (locator-based file route) respectively - confirmed by
+  direct inspection, not merely assumed absent from Batch 6's report. No literal "delete" media
+  action exists (only "archive", which sets status) - `NOT_PRESENT`, not silently assumed.
+- **Broadcast Presentation State** (`broadcast-presentation-state.ts`): the most structurally
+  interesting of the three. Persisted via `SystemSetting`, whose `key` column is a bare **global**
+  `@unique` (never organizationId-scoped, a known Stage 5.4A-deferred limitation) - mitigated by
+  deriving the storage key as `broadcast:presentation-state:<organizationId>` per organization,
+  with the original bare `broadcast:presentation-state` key preserved as Neon Ultra's own
+  continuing key (a genuine migration-compatibility bridge, not a workaround) via a `key IN
+  (scopedKey, bareKey)` lookup that is *also* filtered by `organizationId` in the same WHERE
+  clause and further RLS-scoped by the caller's own `tx`. `getBroadcastPresentationState`/
+  `setPreview`/`takeToProgram`/`clearProgram` all require an explicit `organizationId`; the three
+  mutating functions additionally accept an optional `db` and internally call a shared
+  `inOrganization()` helper that opens `withOrganizationContext` itself when no `tx` is supplied -
+  but `getBroadcastPresentationState` does **not** have that same safety net; calling it with only
+  `organizationId` (omitting the second, optional `tx` argument) silently defaults to the bare
+  `prisma` client and therefore the Neon Ultra RLS fallback. Every real caller in the app
+  (`broadcast/control/page.tsx`, `api/broadcast/program/route.ts`, `api/v1/broadcast/games/[id]/
+  route.ts`, `system-health-loader.ts`) was checked individually and all four correctly supply a
+  scoped `tx` - so this is not a live vulnerability today, but it is a real, named footgun for any
+  future caller and is recommended as a small hardening item (give
+  `getBroadcastPresentationState` the same `inOrganization`-style auto-wrap as its three siblings,
+  or make `db` required). The public `/api/broadcast/program` route correctly uses
+  `resolveDefaultPublicOrganization()` (Pattern D), never a client-selectable organization.
+  `broadcast/control/actions.ts`'s `gameId`/`graphicType`/`subjectId` reach `setPreviewAction` as
+  Next.js-encrypted bound server-action arguments (`.bind(null, fixture.game!.id, ...)`), not
+  plain hidden form fields, so they cannot be client-tampered the way Stage 5.5B Batch 5's
+  `createPlayer`/`athleteId` bug could be - though `setPreview` itself still does not verify the
+  submitted `gameId` belongs to the caller's organization before persisting it; downstream reads
+  (`api/broadcast/program`, the operator's own `StateCard`) are always themselves scoped, so a
+  bad/foreign gameId shows as "not found" rather than leaking data - named as a minor hardening
+  opportunity, not fixed this session (out of the reconciliation's scope).
+
+**F. Empirical evidence, accurately labeled**: Batch 6's own proof harness
+(`web/scripts/stage55b-content-media-broadcast-proof.ts`) is genuinely read-only and requires
+external `STAGE55B_PROOF_ORG_A`/`STAGE55B_PROOF_ORG_B`/media-asset environment variables that were
+never set for it - it was **never actually executed**, matching its own report ("Batch 6
+empirical staging proof was not run"). This reconciliation built and ran a new, real **mutation**
+proof, `web/scripts/stage55b-content-media-broadcast-mutation-proof.ts`, against `ultraos_staging`
+connected as the restricted role (`rolsuper=false`, `rolbypassrls=false`, reverified). 23/23 PASS
+on the second run (the first run surfaced two proof-script bugs, not app bugs - two
+`getBroadcastPresentationState(organizationId)` calls omitted the `tx` argument, hitting the exact
+footgun named in E above; fixed in the script by supplying a scoped `tx`, matching what every real
+caller already does). Notably proves the specific DB-behavior question this reconciliation raised
+about `SystemSetting.key`'s bare-global-unique nature: a raw `systemSetting.upsert()` under Org
+B's context, targeting Org A's real, known key string, **fails outright** ("new row violates
+row-level security policy (USING expression)") rather than silently updating Org A's row - RLS's
+interaction with Postgres's `ON CONFLICT` machinery fails closed here, empirically confirmed
+rather than assumed. Full coverage: Content template cross-org update denial + atomicity,
+`generateContentPayload` forged-sourceId denial (a real `Fixture`, not a placeholder), Media
+read-isolation + `approveMediaAsset`/`archiveMediaAsset` cross-org denial + atomicity, Broadcast
+same-org read/write + cross-org read isolation + the `SystemSetting.key` DB-level attack + `clearProgram`
+cross-context isolation. Full sentinel cleanup: zero residue, `PublicResourceLocator` count back
+at the exact 257 baseline.
+
+**G. Remaining E-sites (corrected authoritative matrix, 25 total)**: audit, display-monitoring,
+documents, equipment, incidents, notifications, public celebrations/well-wish, rehearsal
+broadcast/live pages, rehearsals, runbooks, standings, tasks, all-star-teams.ts (x4), season-zero-
+production-reconciliation.ts (x4), system-health-loader.ts's `computeBrowserSourceHealth`, and
+`tenant-context.ts`'s own two bootstrap resolvers (bare by necessity, not yet given their own
+"infrastructure" classification bucket) - identical in substance to Batch 5's own remaining-25
+list (35 minus the 10 Content/Media/Broadcast rows), confirming no other row silently drifted.
+
+**H. Quality gates**: `npx tsc --noEmit -p .` PASS; `npm run db:validate` PASS; `npm test`
+466/466 PASS; `npm run lint` PASS with **6** warnings, 0 errors - and this is now explained, not
+just restated: Batch 6's own restructuring of `broadcast/control/page.tsx` (destructuring only
+`{ games, state }` from its `withOrganizationContext` call instead of the previous unscoped
+`fixtures` variable) incidentally fixed the pre-existing `'fixtures' is assigned a value but never
+used` warning as a side effect of the real conversion work - confirmed by direct inspection, not
+assumed. The true baseline is genuinely 6 now (verified: the other 6 pre-existing warnings are
+byte-identical to every prior batch's list); Batch 6's "6 existing warnings" claim was accurate,
+not a suppressed regression. `NODE_OPTIONS=--max-old-space-size=4096 npm run build` PASS (exit 0).
+
+**I. Safety**: production database untouched, production application untouched, no production
+migration, no production restart, no production data modification. RLS fallback RETAINED,
+organizationId DB defaults RETAINED. Stage 5.5C NOT started. Both `ultraos-staging-web.service`
+and `ultraos-web.service` confirmed active throughout; production release path confirmed
+unchanged (`/opt/ultraleagueos/releases/release-20260909041000-stage5-5a`). Pre-reconciliation
+staging backup: `/var/backups/ultraleagueos-staging/stage55b_batch6_reconciliation_20260909T133255Z.dump`
+(839906 bytes, 1253 TOC entries, SHA-256
+`29638b0f7c04cfc85ad9b82cb54f4f945a7978ae8cb8124a203a42ec7f74c94e`).
+
+```text
+STAGE_5_5B: IN_PROGRESS
+BATCH_6_MATRIX_DISCONTINUITY: FULLY_RECONCILED
+BATCH_6_CODE_INDEPENDENTLY_VERIFIED: PASS (with one named non-blocking hardening item)
+BATCH_6_EMPIRICAL_MUTATION_PROOF: 23/23 PASS (new, real - the batch's own proof never ran)
+CORRECTED_MATRIX: B=190 C=68 D=0 E=25 TOTAL=283
+STAGING_RESIDUE: 0
+PRODUCTION_DEPLOYMENT: NOT_ATTEMPTED
+RLS_FALLBACK: RETAINED
+ORGANIZATIONID_DB_DEFAULTS: RETAINED
+PROCESS_RECOMMENDATION: commit PHASE1_STAGE5_5B_CALLSITE_MATRIX.csv to git so future
+  regenerations can be diffed instead of trusted or distrusted on faith
+```
+
+Stage 5.5C remains not started; Batch 7 should resume from the corrected 25-row E list above.
+
+## 2026-09-11 — Stage 5.5B Batch 7: final E-list remediation (audit, operations surfaces, all-star, Season Zero reconciliation, bootstrap reclassification)
+
+Resumed from the Batch 6 reconciliation's corrected 25-row E list
+(`B=190 C=68 D=0 E=25 TOTAL=283`). Local remediation only: no staging
+deployment, no production touch, no RLS policy change, no `organizationId`
+default removal, Stage 5.5C not started.
+
+**Reclassifications (3 rows; not code changes)**
+
+- Row 279 `system-health-loader.ts:113` E->B: matrix false positive. The
+  attributed line is prose inside `buildSystemHealth`'s own doc comment
+  quoting a historical `prisma.fixture.findFirst`; the real read at line 145
+  has run inside `withOrganizationContext` since Stage 5.2C.
+- Row 280 `tenant-context.ts:11` E->C: `resolveActiveOrganizationId` reads
+  `UserRoleAssignment` bare because it is the bootstrap resolver that
+  establishes which organization a signed-in user belongs to, before any
+  tenant context can exist. Reclassified as platform-global infrastructure,
+  matching the Batch 6 recommendation to give the bootstrap resolvers their
+  own non-E class.
+- Row 282 `tenant-context.ts:69` E->C: matrix false positive. The attributed
+  line is again doc-comment prose; the real `resolveDefaultPublicOrganization`
+  delegates to `resolveActiveOrganizationBySlug`, which reads the
+  platform-global `Organization` table.
+
+**Genuine conversions (22 rows)**
+
+Pages now establish explicit authenticated organization context before their
+first tenant read via `auth()` + `hasPermission()` + inline
+"Organization context required" + `withOrganizationContext`, matching the
+`launch-readiness` precedent:
+
+- `audit/page.tsx` (converted to `requirePermissionWithOrganization`).
+- `display-monitoring/page.tsx`, `documents/page.tsx`, `equipment/page.tsx`,
+  `incidents/page.tsx`, `notifications/page.tsx`, `rehearsals/page.tsx`,
+  `tasks/page.tsx`.
+- `runbooks/page.tsx` (both `operationalChecklist` and `runbook` reads in one
+  scoped `Promise.all`).
+- `rehearsal/broadcast/[fixtureId]/page.tsx` and
+  `rehearsal/live/[fixtureId]/page.tsx`: fixture read and
+  `buildLivePresentationModelForGame` now run inside one scoped transaction.
+- `standings/page.tsx`: the flagged row was a type-only
+  `Awaited<ReturnType<typeof prisma.standing.findMany>>`; replaced with
+  `Prisma.StandingGetPayload<...>` so no bare-client text remains (the actual
+  read was already scoped).
+- `public/celebrations/actions.ts`: `submitWellWish` replaced its bare
+  announcement seed read with the Stage 5.2D Pattern D
+  `resolveDefaultPublicOrganization()` + `withOrganizationContext`.
+
+Library functions now take an explicit scoped `db`/`organizationId`:
+
+- `all-star-teams.ts`: `getAllStarTeams(db)` / `getAllStarCandidatePool(db)`
+  accept the scoped transaction client; `getAllStarCandidatePool` threads it
+  into `getAllStarTeams`. This batch also found and closed a write-path gap
+  the matrix never catalogued (the matcher only sees `prisma.<model>.` calls,
+  not `prisma.$transaction`): `addAllStarRosterMember`, `updateAllStarPlayer`,
+  `lockAllStarRoster`, and `unlockAllStarRoster` previously ran on the bare
+  client with no organization context, so a non-Neon-Uni `staff:manage`
+  holder could have mutated Neon Ultra's all-star `SystemSetting` rows through
+  the RLS fallback. They now require `organizationId`, run in
+  `withOrganizationContext`, and stamp `organizationId` on their audit rows.
+  `participants/all-star-roster/page.tsx` and its four server actions were
+  updated accordingly.
+- `season-zero-production-reconciliation.ts`:
+  `seasonZeroProductionReconciliation(db, organizationId)` and
+  `duplicateCandidatesForApplication(applicationId, db, organizationId)` take
+  explicit scoped arguments; `saveSeasonZeroPlayerResolution` and
+  `applySeasonZeroPlayerApproval` now require `organizationId` and run in
+  `withOrganizationContext`, stamping `organizationId` on their
+  `SystemSetting` and `AuditLog` writes. Its two pages and the
+  `recordSeasonZeroPlayerResolutionAction` action were converted to
+  `requirePermissionWithOrganization("data:readiness")`, matching the sibling
+  `data-quality/duplicates` page.
+
+**Named limitation, not fixed**: `SystemSetting.key` remains bare
+`@unique` (Stage 5.4A-deferred). All-star keys therefore remain a single
+platform-global namespace; the all-star feature is effectively Neon-Ultra-only
+under the current bare keys, and a second organization fails closed
+(`findUniqueOrThrow` throws) rather than colliding or leaking. Org-qualified
+all-star keys, analogous to `broadcast-presentation-state.ts`'s
+`...:<organizationId>` bridge, are a future item.
+
+**Authoritative matrix checkpoint**
+
+```text
+TOTAL: 283
+BEFORE: B=190, C=68, D=0, E=25
+AFTER:  B=213, C=70, D=0, E=0
+UNCLASSIFIED_LIVE_PRECONTEXT_TENANT_READS: 0
+```
+
+`PHASE1_STAGE5_5B_CALLSITE_MATRIX.csv` was rewritten in place preserving its
+original LF-only, no-BOM encoding. Per Batch 6's own process recommendation,
+this file still needs to be committed to git so future regenerations can be
+diffed rather than trusted on faith.
+
+**Validation**
+
+```text
+PRISMA_VALIDATE: PASS
+TSC: PASS
+LINT: PASS, 6 pre-existing warnings, 0 errors
+TESTS: 466/466 PASS
+BUILD: PASS (exit 0) with the known media-storage Turbopack/NFT warning
+STAGING_RLS_CHANGED: NO
+PRODUCTION_TOUCHED: NO
+DEPLOYMENT_ATTEMPTED: NO
+```
+
+**Empirical evidence**: no new staging proof was run in this batch — the
+changes are local-only and the matrix now contains zero E rows. Runtime proof
+for these surfaces remains pending, and Batch 7 should not be read as having
+proved them against staging. The next step is to decide whether the whole
+283-row set is now eligible for a fallback-disabled staging rehearsal, or
+whether the remaining deferred items (`SystemSetting.key`,
+`ultraAthleteId`, `ultraStaffId`, `admin-offline-intake`) must be closed
+first.
+
+```text
+STAGE_5_5B: IN_PROGRESS
+BATCH7_E_SITES_REMAINING: 0
+MATRIX_E_ROWS_TOTAL: 0
+STAGING_EMPIRICAL_PROOF: NOT_RUN_THIS_BATCH
+STAGING_RESIDUE: N/A
+PRODUCTION_DEPLOYMENT: NOT_ATTEMPTED
+RLS_FALLBACK: RETAINED
+ORGANIZATIONID_DB_DEFAULTS: RETAINED
+STAGE_5_5C: NOT_STARTED
+```
+
+## 2026-09-12 - Stage 5.5B Batch 7 empirical tenant-isolation proof
+
+**Objective**
+
+- Empirically prove the 21 genuine Batch 7 conversions committed in `a8c4404`
+  against staging as the restricted role; do not start Stage 5.5C.
+
+**Completed**
+
+- Added `web/scripts/stage55b-batch7-empirical-proof.ts` and
+  `web/scripts/stage55b-batch7-cleanup.ts`.
+- Ran the proof against `ultraos_staging` as role `ultraos_staging`
+  (`rolsuper=false`, `rolbypassrls=false`) after a verified backup.
+- Backed up staging first:
+  `/var/backups/ultraleagueos-staging/stage55b_batch7_empirical_20260912T010308Z.dump`
+  (839874 bytes, SHA-256 `f42666d9bf8bdd3d3ce1ba1bc575519d050f611bfee7d8edc7ec87ec3829f0db`,
+  1253 TOC entries).
+- Result: 74 assertions, 72 PASS, 0 FAIL, 2 BLOCKED, zero residue; locator
+  baseline 257/0 unchanged.
+- Preserved the proof report at
+  `documentation/architecture/PHASE1_STAGE5_5B_BATCH7_EMPIRICAL_PROOF.md` and
+  promoted the 21 rows to `PROVEN` in the matrix `verification` column.
+- Restored the two Batch 7 library files copied into the staging release to their
+  original SHA-256 values and removed the copied scripts; the staging service was
+  never restarted.
+
+**Decisions**
+
+- The two BLOCKED cases (same-org writes against real all-star slugs and the real
+  Season Zero cohort Applications) are data-safety exclusions, not failures. No
+  same-org test was fabricated against real records.
+- Batch 7 is a CONDITIONAL PASS and must be re-proven after the Batch 7 code is
+  actually deployed in a controlled release.
+
+**Verification**
+
+- `npm run db:validate`: PASS.
+- `npx tsc --noEmit -p .`: PASS.
+- `npm test`: 466/466 PASS.
+- `npm run lint`: 6 pre-existing warnings, 0 errors.
+- `NODE_OPTIONS=--max-old-space-size=4096 npm run build`: PASS.
+- Classifier dry-run: 283 rows, B=213/C=70/D=0/E=0 (matches the committed matrix).
+
+**Known issues**
+
+- The named `Player.athleteId`/`Player.seasonId` simple-FK relational gap remains
+  open and out of Batch 7 scope.
+- RLS fallback and tenant-table `organizationId` defaults remain intentionally
+  retained.
+
+**Next step**
+
+- Decide whether to commit the proof scripts as regression tooling; then conduct
+  a separate Stage 5.5C readiness review. Do not start Stage 5.5C automatically.
+
+## 2026-09-12 - Event Registration v1 (R1): sport-neutral foundation and migration-history repair
+
+**Objective**
+
+- Begin a new parallel workstream (Event Registration v1) separate from Stage
+  5.5C: a sport-neutral, organization-scoped event registration foundation that
+  does not disturb the existing basketball tenancy hardening.
+
+**Completed**
+
+- Read-only discovery of Event/Application/signup/public-route and tenancy/RLS
+  conventions; produced an architecture assessment distinguishing reusable
+  models from basketball-specific ones.
+- Decisions accepted: reuse `Event` (with required `venueId`/`seasonId`), add
+  nullable org-scoped `Event.slug`, public route
+  `/events/[organizationSlug]/[eventSlug]/register`, keep `Application` for
+  platform-role applications only, and add four tenant-owned models
+  (`RegistrationForm`, `RegistrationField`, `RegistrationSubmission`,
+  `RegistrationParticipant`) with `sportConfig` JSON, `recordOrigin`, composite
+  tenant FKs, and org-scoped reference numbers. No new `event:registration:manage`
+  permission.
+- **Commit `5766a05`** (tenancy baseline): committed the pre-registration tenancy
+  schema in `schema.prisma` (previously uncommitted since the git repo predates the
+  Phase 1 tenancy work).
+- **Commit `1f8edf9`** (R1): registration schema additions in `schema.prisma`
+  plus migrations `20260912120000_event_registration_v1_foundation` and
+  `20260912120100_event_registration_v1_rls`.
+- **Commit `14023ca`**: restored the pre-R1 tenancy migration history (12
+  untracked Stage 0-5.5A migration directories) so a fresh clone can replay the
+  chain.
+
+**Decisions**
+
+- Registration is a separate model family from `Application`; do not reuse role
+  provisioning.
+- Registration form is 1:1 per event (`@@unique([organizationId, eventId])`).
+- `athleteId` stays a simple non-composite FK (Athlete lacks
+  `@@unique([organizationId, id])`) and is never an authorization boundary.
+- RLS fallback and tenant-table `organizationId` defaults remain retained.
+
+**Verification**
+
+- Prisma validate/generate, TypeScript, lint, tests, production build all passed
+  at each commit. Migration-history chain re-counted from committed files.
+
+**Known issues**
+
+- R1 migrations were authored but not applied to any database.
+- The git repo's migration history had been missing the tenancy chain until
+  `14023ca`.
+
+**Next step**
+
+- R2: the all-female Volleyball + Flag Race team competition.
+
+## 2026-09-12 - Event Registration v2 (R2): all-female team competition, seeds, and admin builder
+
+**Objective**
+
+- Extend the R1 foundation to one all-female children's competition registered
+  by team, covering both Volleyball and Flag Race rosters, without duplicating
+  registration systems.
+
+**Completed**
+
+- Confirmed representation mapping and closed schema gaps: `DRAFT` submission
+  status, per-child guardian consent fields, and volleyball active/substitute
+  flag.
+- **Commit `4b96b35`**: `RegistrationSport` enum, `RegistrationParticipantSport`
+  join (one child -> multiple sport memberships, no duplicated people),
+  `RegistrationForm.sports`/`sportConfig`; migrations
+  `20260912130000_team_competition_sport_rosters` and
+  `..._rls`.
+- **Commit `7c23d08`**: migration
+  `20260912140000_team_competition_draft_consent_active`; rule core in
+  `src/lib/registration/` (normalization, zod-validated `sportConfig`,
+  reference generation with P2002 retry, submission validation) plus 15 unit
+  tests.
+- **Commit `c20b31d`**: public route `/events/[organizationSlug]/[eventSlug]/register`
+  with bound server action and server-stamped provenance; admin review flow
+  `/registrations`, `/registrations/[id]`, `/registrations/export` gated by the
+  existing `event:manage` permission.
+- **Commit `d1dfb1d`**: reusable sport-config presets and the admin form builder
+  `/events/[id]/registration` (structured controls, cross-field validation),
+  plus the idempotent dry-run-by-default seed
+  `scripts/registration-sport-config-seed.ts`
+  (`npm run registration:seed-sport-config`).
+- **Commit `8fb451d`**: staging migration/backup/drift-check runbook
+  (`documentation/architecture/STAGE_EVENT_REGISTRATION_STAGING_MIGRATION_RUNBOOK.md`).
+
+**Decisions**
+
+- Team registration is the submission; rosters are per-sport memberships;
+  dual participation is configurable via `sportConfig`.
+- Roster limits, age bands, gender, consent, and order requirements live in
+  validated `sportConfig` data, not code assumptions.
+- Admin uses the existing `event:manage` permission; no new permission added.
+
+**Verification**
+
+- Prisma validate/generate, TypeScript, lint (0 errors; 6 pre-existing
+  warnings), tests **485/485**, production build PASS at the head commit.
+- Staging read-only inspection (2026-09-12): `ultraos_staging` is missing the
+  registration schema — `Event.slug` absent and all five registration tables
+  absent; `_prisma_migrations` ends at
+  `20260907111500_phase1_stage5_5a_bootstrap_locators`; the seed dry-run failed
+  with Prisma `P2022` (`Event.slug` does not exist).
+- Staging backup taken and verified:
+  `/var/backups/ultraleagueos-staging/event_registration_premigration_20260912T141144Z.dump`
+  (839874 bytes, SHA-256
+  `378de7f9baa2088c02e6c34a84fd722bf7f7044378dd5b63d9e3b2eb0d359229`, 1253 TOC
+  entries).
+- `prisma migrate status` against staging: exactly the five R1/R2 migrations
+  pending, no failed-migration warning. Read-only drift diff (live staging ->
+  `schema.prisma`) contained only the R1/R2 delta (7 enums, 5 tables, 16 indexes
+  + `Event_organizationId_slug_key`, 14 FKs, `Event.slug`) with 0
+  `DROP`/`TRUNCATE`/`DELETE`, plus the known 104 `organizationId SET DEFAULT`
+  and 5 `RenameIndex` Prisma noise.
+
+**Known issues**
+
+- The R1/R2 migrations are **not applied to staging** (or anywhere); they require
+  the separately approved `prisma migrate deploy` step. The seed cannot run until
+  then.
+- A residual rolled-back `_prisma_migrations` row for
+  `20260823070000_phase1_stage4a_row_level_security` exists but did not block
+  `migrate status`.
+- No suitable all-female competition event exists in staging; creating one (with
+  the required Venue + Season) and a slug is a separate approved action.
+- `session.md` and other pre-existing working-tree changes remain uncommitted
+  (intentionally excluded from the focused commits).
+- Stage 5.5C remains unstarted; the registration workstream does not alter the
+  RLS fallback or tenant defaults.
+
+**Next step**
+
+- Await approval to run `prisma migrate deploy` on staging (backup verified,
+  status/drift reviewed), then post-migration validation, then an approved
+  all-female event/form target for the seed. Do not apply any migration or create
+  any event/form without explicit approval.
