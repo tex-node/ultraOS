@@ -1,547 +1,435 @@
 # Ultra Sports League Operating System
 
-## Project Status Report
+## Project Report
 
-**Report date:** June 15, 2026  
-**Target event:** Ultra Basketball Season Zero, August 15, 2026  
-**Live prototype:** https://app.neonultra.ng  
-**Repository:** https://github.com/tex-node/ultraOS
+**Report date:** September 2, 2026  
+**Primary league:** Neon Ultra Basketball League  
+**Target operating event:** Season Zero  
+**Production URL:** https://app.neonultra.ng  
+**Repository:** https://github.com/tex-node/ultraOS  
+**Local workspace:** `C:\UltraLeagueOS`  
+**Latest verified engineering record reviewed:** `session.md`, through August 23, 2026  
+**Multi-sport planning baseline:** September 13, 2026
 
 ## Executive Summary
 
-Ultra Sports League Operating System currently has a deployed, interactive frontend
-prototype covering the principal league administration, game-day, player, club,
-draft, standings, match-report, and fan experiences.
+Ultra Sports League Operating System has moved from an interactive UI prototype into a real full-stack league operations platform. The system now includes PostgreSQL persistence, Prisma schema/migrations, authentication, multi-role authorization, application intake, participant internalization, permanent Athlete and Club identity models, SeasonClub registrations, draft preparation, live scoring, standings, public pages, event operations, media handling, content generation, broadcast surfaces, documentation, and a multi-tenancy foundation.
 
-The prototype is suitable for interface review, workflow demonstrations, stakeholder
-feedback, and visual validation. It is not yet suitable for operating Season Zero
-because its data is held in browser memory and sample constants. Authentication,
-authorization, PostgreSQL persistence, Prisma models, server APIs, multi-user
-synchronization, audit history, and automated standings updates have not yet been
-implemented.
+The public production app has been deployed at `https://app.neonultra.ng`. A separate isolated staging environment exists on the VPS under `/opt/ultraos-staging`, with its own database, service, backups, and media/import directories.
 
-The critical next phase is to retain the approved interface while replacing mock
-state with a secure full-stack application.
+The most important current blocker for the full Draft Day rehearsal is not a code issue: approved coaches still require explicit administrator Season Zero selection and division classification before Staff provisioning and coach pool creation can safely continue.
 
-## Status Definitions
+## Current System Status
 
-| Status | Meaning |
+| Area | Status |
 | --- | --- |
-| Developed | Implemented and available in the deployed prototype |
-| Prototype only | Interactive in the browser but not persisted or server-enforced |
-| Not developed | No working implementation exists |
-| Suggested | Recommended enhancement outside or beyond the current implementation |
-
-## Features Developed
-
-### 1. Application Shell And Visual System
-
-**Status: Developed**
-
-- Dark-mode-first sports operations interface
-- Ultra Basketball branding and Season Zero presentation
-- Neon accent palette for clubs, alerts, live status, and statistics
-- Collapsible left navigation
-- Dashboard layout for desktop and tablet-sized screens
-- Reusable cards, badges, club marks, tables, charts, filters, and navigation controls
-- Full-screen scoreboard presentation
-- Responsive grids and scrollable operational panels
-
-### 2. Login Experience
-
-**Status: Prototype only**
-
-- Login screen with email and password fields
-- Role selector for Admin, Coach, and Scout demonstrations
-- Access System action that enters the dashboard
-- Season Zero and role-based access messaging
-
-The form does not authenticate against a user database. Passwords are not validated,
-sessions are not created, and selected roles do not restrict access.
-
-### 3. League Dashboard
-
-**Status: Developed with mock data**
-
-- Active season summary
-- Total club count
-- Registered player count
-- Upcoming fixture count
-- Live-game count
-- Draft status
-- Operational alert list
-- League table preview
-- Upcoming fixture preview
-- Navigation to live games, fixtures, and standings
-
-### 4. Club Directory And Club Profiles
-
-**Status: Prototype only**
-
-- Eight sample clubs:
-  - Vortex
-  - Apex
-  - Flux
-  - Surge
-  - Nova
-  - Halo
-  - Ember
-  - Eclipse
-- Club cards with color, abbreviation, city, coach, roster, and fan information
-- Club detail screen
-- Club overview, roster, fixtures, and results tabs
-- Club performance summaries and staff presentation
-- Navigation between club directory and individual club profiles
-
-There is no create, edit, archive, staff-assignment, or database-backed roster
-management.
-
-### 5. Player Directory And Player Profiles
-
-**Status: Prototype only**
-
-- Searchable player directory
-- Gender filter
-- Position filter
-- Draft-eligibility filter
-- Player status, club, position, height, and statistics display
-- Player profile navigation
-- Player overview and performance views
-- Performance trend chart
-- Game statistics and profile information presentation
-
-Player registration, verification, photo upload, status updates, club assignment, and
-record persistence are not implemented.
-
-### 6. Draft Room
-
-**Status: Prototype only**
-
-- Draft countdown timer
-- Start and pause timer controls
-- Timer reset
-- Current round and pick display
-- Draft pool
-- Player selection
-- Draft-player interaction
-- Drafted-player state within the current browser session
-- Draft board
-- Pick progression
-- Club roster count presentation
+| Production deployment | Deployed |
+| Staging environment | Active and isolated |
+| Authentication | Implemented |
+| Google OAuth | Implemented, provider/session verification still noted |
+| Multi-role authorization | Implemented |
+| Fan signup | Implemented |
+| Role-specific applications | Implemented |
+| Admin application review | Implemented |
+| Application export and bulk email | Implemented |
+| Permanent Athlete model | Implemented |
+| Permanent Club + SeasonClub model | Implemented |
+| Selected Season Zero player cohort | Internalized on staging |
+| Season Zero real clubs | Created on staging |
+| Club logos | Ingested on staging through MediaAsset |
+| Coach onboarding | Blocked by human selection gate |
+| Draft rehearsal | Not yet run |
+| Multi-tenancy | Foundation implemented through Stage 5.2B-1 |
+| AI vision | Architecture and validation foundation exists; real-video validation pending |
 
-The draft does not use a database transaction, separate men's and women's drafts,
-authenticated permissions, duplicate-pick constraints, or permanent roster updates.
+## Major Architecture Decisions
 
-### 7. Fixture Presentation
+### Athlete vs Player
 
-**Status: Developed with mock data**
+`Athlete` is the permanent human identity. `Player` is the athlete's season-specific registration. This preserves career history when an athlete changes clubs, divisions, or seasons.
 
-- Upcoming fixtures
-- Completed fixtures and scores
-- Home and away clubs
-- Fixture dates and times
-- Venues
-- Fixture status labels
-
-Fixture creation, editing, cancellation, venue assignment, event assignment, and
-server-side scheduling are not implemented.
-
-### 8. Live Game Center
+### Club vs SeasonClub
 
-**Status: Prototype only**
+`Club` is the permanent brand identity. `SeasonClub` is the club's participation in a specific season and division. Competitive records use `SeasonClub`; branding and long-term history use `Club`.
 
-- Home and away score display
-- Add one, two, or three points
-- Game countdown clock
-- Pause and resume control
-- Period advancement
-- Manual game-event actions
-- In-session event feed
-- Team identification and live status
+### Sport, Competition, Division
 
-The game state exists only in the current browser. There is no recovery after refresh,
-multi-operator conflict protection, score correction confirmation, player-stat entry,
-database event log, final-result confirmation, or standings update.
-
-### 9. Scoreboard Display
-
-**Status: Prototype only**
+The platform added `Sport`, `Competition`, and `Division` early so Season Zero can be basketball-first without hardcoding the system into basketball-only assumptions.
 
-- Projector-friendly full-screen layout
-- Club marks and names
-- Home and away scores
-- Countdown timer
-- Period and match status
-- Sponsor placeholder
-- Next fixture placeholder
-
-The scoreboard runs from its own local sample state and is not synchronized with the
-Live Game Center.
-
-### 10. League Standings
-
-**Status: Developed with mock data**
-
-- Ranked league table
-- Games played
-- Wins and losses
-- Points for and against
-- Point difference
-- League points
-- Club-specific visual accents
-
-The required ranking and recalculation rules are not yet executed from completed game
-records.
-
-### 11. Match Report
-
-**Status: Developed with mock data**
-
-- Final score and winner presentation
-- Match venue and date
-- MVP summary
-- Team statistics
-- Top scorers
-- Game timeline
-- Coach notes
-- Scout notes
-- Export PDF button presentation
-
-Reports are not generated from game data, the export action is not implemented, and
-authorization does not protect private notes.
-
-### 12. Fan Club Experience
-
-**Status: Prototype only**
-
-- Club selector
-- Fan club profile and membership count
-- Fan captain display
-- Join Fan Club button presentation
-- Upcoming fan events
-- Social channel placeholders
-- Player-of-the-game voting interaction
-- In-session vote feedback and sample result bars
-
-Membership and voting are not persisted. Duplicate voting, eligibility rules, user
-identity, and live vote aggregation are not implemented.
-
-### 13. Deployment And Operations
-
-**Status: Developed**
-
-- Public deployment at `https://app.neonultra.ng`
-- Valid Let's Encrypt TLS certificate
-- Caddy static file hosting
-- Single-page application fallback routing
-- Compressed responses
-- Immutable caching for versioned assets
-- Security response headers
-- Timestamped release directory:
-  `/opt/ultraleagueos-ui/releases/20260615-020000`
-- Non-destructive `current` release symlink
-- Caddy configuration backup before deployment
-- Source and deployment configuration stored in GitHub
-- Browser smoke test of login and dashboard
-- Persistent engineering log in `session.md`
-
-## Features Yet To Be Developed
-
-### Critical Season Zero Platform Work
-
-These items are required before the system can operate a real league.
-
-#### Full-Stack Application Foundation
-
-- Next.js application scaffold
-- Strict TypeScript configuration
-- PostgreSQL database
-- Complete Prisma schema
-- Prisma migrations
-- Seed process for Season Zero, clubs, players, staff, venues, and fixtures
-- Environment configuration and secrets management
-- Production application server and health checks
-- Database backup and restoration procedure
-
-#### Authentication And Authorization
-
-- NextAuth or Clerk integration
-- Login and logout backed by real identities
-- Password or identity-provider security
-- User invitation and account provisioning
-- Required roles:
-  - `SUPER_ADMIN`
-  - `LEAGUE_OPERATOR`
-  - `TEAM_MANAGER`
-  - `COACH`
-  - `SCOUT`
-  - `FAN`
-- Server-enforced role permissions
-- Club-scoped access for team managers and staff
-- Protected routes and APIs
-- Session expiry and account disabling
-- Security audit log
-
-#### Season Administration
-
-- Create, edit, activate, complete, and archive seasons
-- Enforce a single active season where appropriate
-- Division configuration
-- Season date and status validation
-- Season-specific clubs, fixtures, drafts, and standings
-
-#### Club And Staff Management
-
-- Club create, edit, and archive workflows
-- Men's and women's division support
-- Logo storage or managed image URLs
-- Staff create and edit workflows
-- Coach, assistant coach, scout, team manager, and fan captain assignments
-- Club-specific access control
-- Roster limits and validation
-
-#### Player Registration
-
-- Player registration form
-- Player edit and archive workflows
-- Verification process
-- Draft-eligibility workflow
-- Player photo storage
-- Emergency-contact protection
-- Duplicate player detection
-- Club assignment after draft
-- Availability and injury notes
-- Registration export
-
-#### Draft Operations
-
-- Draft creation by season and division
-- Eligible-player pool generated from database records
-- Configurable club order
-- Manual next-team control
-- Round and pick-number tracking
-- Transactional player drafting
-- Duplicate drafting prevention
-- Automatic player status and club updates
-- Persistent draft board
-- Draft pause and recovery
-- Draft audit trail
-- Roster count and roster-limit enforcement
-
-#### Fixtures, Events, And Venues
-
-- Venue CRUD
-- Event CRUD
-- Fixture CRUD
-- Home and away validation
-- Division validation
-- Scheduling conflict detection
-- Fixture status transitions
-- Cancellation and rescheduling
-- Calendar and list views
-
-#### Live Game Operations
-
-- Persistent Game and GameEvent records
-- Start, pause, resume, and end-game APIs
-- Authoritative server clock
-- Score additions and confirmed corrections
-- Manual player-stat entry
-- Fouls, rebounds, assists, steals, blocks, turnovers, timeouts, and substitutions
-- Operator audit history
-- Refresh and network-loss recovery
-- Concurrent operator conflict handling
-- Final-result confirmation
-- Winner calculation
-- Atomic fixture, game, statistics, and standings updates
-
-#### Standings Engine
-
-- Win equals three league points
-- Loss equals zero league points
-- Recalculation after every confirmed final result
-- Ranking by:
-  1. League points
-  2. Wins
-  3. Point difference
-  4. Points for
-  5. Club name
-- Division-specific tables
-- Correction and replay support
-- Automated tests for tie-break behavior
-
-#### Real-Time Scoreboard
-
-- Shared game state between operator and display
-- Two-second polling or WebSocket/server-sent event updates
-- Public scoreboard URL using a real game ID
-- Connection status and stale-data warning
-- Overtime support
-- Operator-controlled sponsor and next-fixture content
-
-#### Public Match Center
-
-- Public fixture list
-- Public result list
-- Public standings
-- Public club profiles
-- Public player profiles with privacy controls
-- Public match pages
-- Live and completed match reports
-- Shareable URLs and metadata
-
-#### Fan And Scout Modules
-
-- Fan accounts and club following
-- Fan club membership persistence
-- One vote per eligible user and game
-- Configurable voting window
-- Vote totals and winner calculation
-- Scout note creation and editing
-- Scout player ratings
-- Shortlists
-- Authorization for private scout and coach notes
-
-#### Testing And Operational Readiness
-
-- Unit tests
-- API and database integration tests
-- Role-permission tests
-- End-to-end tests for the complete demo workflow
-- Draft integrity tests
-- Score and standings tests
-- Browser and responsive tests
-- Load test for live-game updates
-- Monitoring, structured logs, and alerts
-- Error tracking
-- Database backup verification
-- Deployment and rollback automation
-- Game-day operating runbook
-- User acceptance testing
-
-## Suggested Features
-
-### Priority Recommendations Before Season Zero
-
-1. **Game-day recovery mode**  
-   Persist every operator action and make a live game recoverable on another device.
-
-2. **Operational audit trail**  
-   Record who changed scores, fixtures, player status, draft picks, and final results.
-
-3. **Scheduling conflict detection**  
-   Prevent double-booking clubs, venues, or operators.
-
-4. **Roster compliance dashboard**  
-   Highlight minimum roster, maximum roster, eligibility, injury, and registration
-   issues before game day.
-
-5. **Data export**  
-   Export fixtures, rosters, results, standings, and player statistics to CSV and PDF.
-
-6. **Stale scoreboard warning**  
-   Show the last update time and a visible connection warning on public displays.
-
-7. **Correction workflow**  
-   Permit authorized result corrections with reason, approval, and automatic standings
-   recalculation.
-
-8. **Game-day checklist**  
-   Track venue readiness, teams checked in, roster confirmation, officials, scoreboard,
-   and result confirmation.
-
-### Recommended Post-MVP Enhancements
-
-- Email and in-app notifications
-- Team availability submissions with approval history
-- Injury and suspension management
-- Official/referee assignments
-- Configurable competition rules
-- Overtime and forfeiture workflows
-- Player and team season leaders
-- Advanced statistics and shot charts
-- Public news and announcements
-- Sponsor content management
-- Media gallery and highlight links
-- Mobile-first operator mode
-- Offline-capable scorekeeping with later synchronization
-- QR codes for public match and roster pages
-- Multi-season historical archive
-- API access for media and partner integrations
-- Accessibility audit and keyboard-first operation
-- Localization and configurable timezone support
-
-### Explicitly Deferred Features
-
-These should remain outside the Season Zero MVP unless priorities change:
-
-- AI video tracking
-- Automated stat detection
-- Automated video analytics
-- Ticketing
-- Payment processing
-- Player transfer marketplace
-- Complex sponsorship marketplace
-
-## Delivery Recommendation
-
-### Phase 1: Operational Core
-
-- Next.js, PostgreSQL, Prisma, authentication, and RBAC
-- Season, club, staff, player, venue, and fixture management
-- Seed data and deployment pipeline
-
-### Phase 2: Game-Day Core
-
-- Persistent live scoring
-- Game events and player statistics
-- Real-time scoreboard
-- Final-result transaction
-- Standings engine
-
-### Phase 3: Draft And Public Experience
-
-- Persistent draft room
-- Public fixtures, standings, clubs, players, and match pages
-- Match reports
-
-### Phase 4: Fan, Scout, And Readiness
-
-- Fan membership and MVP voting
-- Scout notes and shortlists
-- End-to-end tests, monitoring, backups, and game-day runbook
-
-## Current Readiness Assessment
-
-| Area | Readiness |
-| --- | --- |
-| Visual design and workflow demonstration | High |
-| Stakeholder review | High |
-| Public prototype availability | High |
-| Real authentication and authorization | Not ready |
-| Persistent league administration | Not ready |
-| Real draft operation | Not ready |
-| Real live-game operation | Not ready |
-| Real-time public scoreboard | Not ready |
-| Standings integrity | Not ready |
-| Season Zero production operation | Not ready |
-
-## Known Technical Risks
-
-- The current application is a Vite React prototype rather than the required Next.js
-  full-stack application.
-- All league and game data is currently hardcoded or browser-local.
-- The live game and scoreboard use separate state and can diverge.
-- The production dependency audit reports a high-severity advisory for the pinned
-  React Router version, although the current prototype does not import it.
-- The generated JavaScript bundle is approximately 623 KB before gzip.
-- No automated test suite currently protects UI behavior.
-- No production database, backup, monitoring, or recovery process exists.
-
-## Conclusion
-
-The project has a strong and deployable product prototype that demonstrates the
-intended user experience across most major modules. Development should now shift from
-adding more mock screens to implementing the secure operational core. Authentication,
-database integrity, live-game persistence, scoreboard synchronization, and standings
-calculation are the highest-priority requirements for the August 15, 2026 launch.
+### Fixture vs Game
+
+`Fixture` represents the scheduled match. `Game` represents the live or played instance. This keeps postponements, cancellations, reschedules, and live scoring cleaner.
+
+### User and Roles
+
+`User` is the login identity. Role-specific capabilities are represented through multi-role assignments rather than one limiting role field. Every authenticated user retains fan capabilities by default.
+
+### Organization Tenancy
+
+The platform is being retrofitted for organization-based multi-tenancy, using PostgreSQL Row-Level Security and `organizationId` scoping across tenant-owned tables.
+
+## Multi-Sport Direction
+
+The platform is extending from basketball-first into a multi-sport league operating system covering volleyball, tennis, football, cricket, and other sports. The target model, migration sequence, and capability matrix are defined in `documentation/architecture/MULTI_SPORT_ARCHITECTURE.md`; staged delivery is tracked in `documentation/MULTI_SPORT_ROADMAP.md`. That architecture document is the single agreed reference until superseded.
+
+Three foundational decisions are fixed for the design:
+
+1. **Competing entities.** Individual sports (for example tennis) compete as individuals or teams of people; Clubs are not standard in those sports. The model therefore introduces an explicit Entrant abstraction rather than forcing every sport to reuse `SeasonClub`.
+2. **Statistics.** One flexible, metric-and-definition stat model is used for all sports, rather than per-sport stat tables.
+3. **Sport definitions.** A code registry of sport definitions is the authority, with database-backed configuration overriding declared defaults.
+
+No schema work may begin until the multi-sport design document is reviewed and accepted as the single agreed reference.
+
+## Repository Hygiene Note
+
+Unrelated product documents that did not describe the league operating system were removed from the repository on September 13, 2026: the root `NORTH_STAR.md`, `VISION.md`, and `PRODUCT_PHILOSOPHY.md` (a separate AI-storytelling product), and the `documentation/reference/` set describing an unrelated show-rundown/production-planning product. The repository now describes one product.
+
+## Completed Work
+
+### 1. Initial UI Prototype
+
+- Built the original dark-mode Ultra Basketball UI.
+- Added dashboard, clubs, players, draft, fixtures, live scoring, scoreboard, standings, match reports, and public-style views.
+- Deployed the early UI to `https://app.neonultra.ng`.
+- Preserved existing VPS files and Caddy sites during deployment.
+
+### 2. Full-Stack Foundation
+
+- Added Next.js/TypeScript application structure under `web`.
+- Added Prisma and PostgreSQL.
+- Added seed/system setup.
+- Added authentication and authorization foundations.
+- Added server-enforced permission checks.
+- Added protected admin routes and public routes.
+
+### 3. Authentication and Applications
+
+- Added login, signup, and forgot-password entry points.
+- Renamed fan signup entry points to simpler public "Signup" language.
+- Added public fan signup at `/signup`.
+- Added participant application hub at `/apply`.
+- Added role-specific application flows for player, coach, scout, official, vendor, media, and volunteer.
+- Enforced unique email to reduce duplicate accounts.
+- Added Google signup/sign-in support.
+- Added multi-role user model support through `UserRoleAssignment`.
+- Added My Account-style account capability planning and profile linkage.
+
+### 4. Application Review, Export, and Email
+
+- Added admin review pages for applications.
+- Added application category summaries.
+- Added counts by application status and category.
+- Added player gender counts and similar operational summaries.
+- Added Excel export for player, coach, vendor, and scout data.
+- Added bulk email capability.
+- Added email status filtering: all, approved, rejected, submitted.
+- Added personalized email tag replacement for recipient names.
+- Improved bulk email behavior so one invalid recipient does not hide the status of the rest of the batch.
+
+### 5. Player Application Improvements
+
+- Updated player form fields and mandatory markers.
+- Added gender dropdown.
+- Added height and wingspan in feet.
+- Added Nigerian state/city selection.
+- Added position dropdown.
+- Added academy/team field.
+- Added profile picture upload with description: basketball picture or profile photo.
+- Added two optional text fields for YouTube/Facebook previous appearance or reels links.
+- Added upload validation protection against script injection and invalid image uploads.
+
+### 6. Staff, Coach, Scout, and Media Uploads
+
+- Added profile photo upload support for player, coach, and scout application pages.
+- Added coach form descriptions for experience and division examples.
+- Added Staff-to-User linkage support.
+- Added media validation for JPG, PNG, and WebP uploads.
+- Rejected unsafe formats such as SVG/script uploads.
+- Preserved old media history when primary media is replaced.
+
+### 7. Tier 1 League Operations
+
+- Implemented or scaffolded the core Tier 1 modules: Clubs CRUD, Athletes and Players CRUD, Draft Room, Fixture management, Live Game Center, Scoreboard display, Standings recalculation, and public club, fixture, player, and standings pages.
+- Ensured operational screens use `SeasonClub` for competitive participation.
+
+### 8. Event Operations Module
+
+- Added event operations concepts and models for seat zones, reservations, tickets, QR flow, fan check-in, vendors, vendor products, inventory, orders, order items, promo codes, and sponsor campaign concepts.
+- Kept individual seat mapping, payments, ticketing expansion, and advanced commerce workflows out of the early operational scope.
+
+### 9. Content Engine
+
+- Added template-driven content generation without AI generation.
+- Added content templates, content assets, and content jobs.
+- Supported draft announcements, fixture announcements, result announcements, MVP announcements, standings updates, and sponsor reports.
+- Added export support for text, HTML, PNG graphic data, and PDF-oriented workflows.
+- Added graphic data API concepts for later use by Canva, Photoshop templates, LED displays, and social graphics.
+
+### 10. Phase 1.5 Hardening
+
+- Added audit logging concepts and implementation paths for critical actions.
+- Added backup/restore procedures and staging backup discipline.
+- Added operations dashboard concepts for live games, finalization queues, roster gaps, officials gaps, fixture conflicts, and standings errors.
+
+### 11. Documentation Framework
+
+- Created the `documentation/` structure for long-term publishing.
+- Added documentation standards, templates, roadmap, index, glossary, manuals, reference sections, runbooks, training, knowledge base, diagrams, screenshots, and assets folders.
+- Established documentation compatibility goals for GitHub, MkDocs, Docusaurus, GitBook, PDF, and DOCX export.
+- Added canonical terminology including Athlete, Player, Club, SeasonClub, DraftEvent, Fixture, Game, Standing, Application, Staff, Vendor, Fan Club, Competition, Division, Sport, Ultra Athlete ID, and Ultra Staff ID.
+
+### 12. Season Zero Data Quality and Participant Internalization
+
+- Added duplicate detection and duplicate resolution workflow.
+- Added tryout metadata preview/import workflow.
+- Added safeguards against inferring identities from email alone.
+- Added controlled internalization flow: Application, User, Athlete, Player, Ultra Athlete ID, and User roles.
+- Internalized the selected Season Zero player cohort on staging.
+- Preserved all application records as permanent intake history.
+- Corrected Rachel John's position to power forward during cleanup.
+
+### 13. Season Zero Clubs and Logos
+
+- Validated authoritative club logos from `C:\UltraLeagueOS\assets\clubs`.
+- Verified file existence, size, SHA-256, PNG signatures, MIME type, readability, and media pipeline compatibility.
+- Created 8 real permanent Clubs and 8 SeasonClubs on staging: APEX, SURGE, VORTEX, FLUX, EMBER, HALO, ECLIPSE, and NOVA.
+- Ingested 8 official club logos through `MediaAsset`.
+- Generated 16 display variants.
+- Kept official club colours as `NULL` because they were not formally approved.
+- Added null-safe UI fallbacks so pending colours do not break public pages, scoreboard, or draft display.
+
+### 14. Draft Personnel and Media Readiness
+
+- Added `/draft-readiness` as a read-only admin readiness dashboard.
+- Verified Season Zero player group counts:
+
+| Group | Count |
+| --- | ---: |
+| Men's Squad Group 1 | 7/7 |
+| Men's Squad Group 2 | 7/7 |
+| Men's Squad Group 3 | 7/7 |
+| Men's Squad Group 4 | 7/7 |
+| Women's Squad Group 1 | 5/5 |
+| Women's Squad Group 2 | 5/5 |
+| Women's Squad Group 3 | 5/5 |
+| Women's Squad Group 4 | 2/5 |
+| Secondary draft | 13 |
+
+- Confirmed Women's Group 4 shortfall is an accepted warning, not an automatic blocker.
+- Verified coach onboarding is blocked until administrators explicitly select Season Zero coaches.
+
+### 15. Broadcast and Live Presentation
+
+- Added live broadcast presentation layer work across G.19 and G.20 tracks.
+- Added public live data API and broadcast resilience work.
+- Added broadcast command center, browser source setup, diagnostics, presentation state, graphics data contract, and external graphics data contract documentation.
+- Added live game story, live game pulse, live snapshot, and canonical statistics documentation.
+- Preserved the rule that live presentation facts must trace back to structured system records and not unverified generated text.
+
+### 16. AI Vision and Court Intelligence Foundation
+
+- Added architecture for AI vision and player intelligence while keeping AI-driven production features outside the immediate Season Zero operational path.
+- Added court calibration, court specification, vision observations, event matching, trajectory artifacts, and empirical validation foundations.
+- Added metrics for detection, tracking, spatial quality, four-point spatial rules, and calibration quality.
+- Added privacy-safe evaluation export patterns.
+- Explicitly recorded that real video validation remains blocked until real Ultra game video and official court geometry are available.
+
+### 17. Multi-Tenancy Foundation
+
+- Added `Organization` and organization-scoped role assignments.
+- Added `organizationId` columns to tenant-scoped tables.
+- Backfilled Neon Ultra Basketball League as the first organization.
+- Enabled and forced Row-Level Security across tenant tables.
+- Created restricted application database role for enforced RLS.
+- Added tenant context helpers.
+- Converted high-risk authenticated write paths to tenant context.
+- Added public tenant acquisition via `/apply/[organizationSlug]`.
+- Changed application provenance so downstream provisioning uses `Application.organizationId`, not the current session alone.
+- Fixed `UserRoleAssignment` RLS coverage gap.
+- Converted application review, export, bulk email, and live approval provisioning paths to organization-aware data access.
+
+## Current Verified Season Zero Staging Baseline
+
+| Metric | Value |
+| --- | ---: |
+| Applications | 341 |
+| Approved applications | 225 |
+| Approved coach applications | 8 |
+| Coach applications pending Season Zero selection | 8 |
+| Coaches explicitly selected | 0 |
+| Permanent Clubs | 8 |
+| SeasonClubs | 8 |
+| Men's SeasonClubs | 4 |
+| Women's SeasonClubs | 4 |
+| Club logos | 8 |
+| Club logo variants | 16 |
+| Selected Players | 58 |
+| MAIN_DRAFT Players | 45 |
+| SECONDARY_DRAFT Players | 13 |
+| Selected Player SeasonClub assignments | 0 |
+| Official Draft allocations | 0 |
+| Staff records | 0 |
+| Player legacy photos | 58 |
+| Player MediaAsset-backed photos | 0 |
+
+## Environments
+
+### Production
+
+- URL: `https://app.neonultra.ng`
+- VPS deployment path: `/opt/ultraleagueos`
+- Production systemd unit: `ultraos-web.service`
+- Production port: `4110`
+- Caddy is used for HTTPS and routing.
+- Existing unrelated VPS applications and Caddy entries must always be preserved.
+
+### Staging
+
+- VPS path: `/opt/ultraos-staging`
+- App path: `/opt/ultraos-staging/current`
+- Database: `ultraos_staging`
+- Service: `ultraos-staging-web.service`
+- Port: `127.0.0.1:4120`
+- Shared imports: `/opt/ultraos-staging/shared/imports`
+- Shared media: `/opt/ultraos-staging/shared/media`
+- Backups: `/opt/ultraos-staging/shared/backups`
+
+## Important Backups Recorded
+
+| Date | Purpose | File | SHA-256 |
+| --- | --- | --- | --- |
+| 2026-08-09 | Before Track C club onboarding | `/opt/ultraos-staging/shared/backups/track-c-before-clubs-20260809T114810Z.dump` | `e1f4047c6ea7231ae894d9fe65c1370052e75d7ba0ac682de9e736addef13b91` |
+| 2026-08-09 | Before Track D coach onboarding | `/opt/ultraos-staging/shared/backups/ultraos_staging_track_d_pre_coach_onboarding_20260809T123035Z.dump` | `06f6e6c2cd013ee5685cd42f20ba95d8747f7485ec64a41448044ba3c2510d94` |
+
+## Outstanding Work
+
+### Immediate Human Decisions
+
+1. Classify all 8 approved coach applications as Season Zero selected, not selected, or pending.
+2. Assign explicit men's or women's draft division classification for selected coaches.
+3. Confirm whether all selected coaches should be provisioned as permanent Staff.
+4. Provide or confirm coach photographs after Staff profiles exist.
+5. Confirm official club colours before marking club branding complete.
+
+### Immediate Engineering Work
+
+1. Continue Track D after coach selections are made.
+2. Provision selected coaches into Staff with Ultra Staff IDs.
+3. Create men's and women's draft coach pool entries.
+4. Verify coach presentation payloads.
+5. Convert selected player legacy photo URLs into primary `MediaAsset` usages or explicitly accept legacy-photo mode for rehearsal.
+6. Complete authenticated browser verification for protected staging pages.
+7. Reach `READY_FOR_FULL_DRAFT_REHEARSAL`.
+
+### Draft Day Work
+
+1. Run the full Draft Day rehearsal in a later authorized phase.
+2. Verify rehearsal mode never writes official `Player.seasonClubId`.
+3. Verify rehearsal mode never assigns coaches to `SeasonClub`.
+4. Verify reset preserves Clubs, SeasonClubs, Players, Staff, DraftSquads, and MediaAssets.
+5. Verify LIVE mode still supports official assignments without running a real live draft prematurely.
+6. Prepare recovery procedures for projector/display/browser refresh.
+
+### Season Zero Operations Work
+
+1. Finalize fixtures and venue schedule.
+2. Confirm scorer, official, event director, and check-in staffing.
+3. Capture jersey numbers before first game.
+4. Run live scoring dry runs.
+5. Verify standings recalculation after finalized games.
+6. Confirm public match center, scoreboard, and standings pages under realistic traffic.
+7. Prepare event-day runbooks and manual score sheets.
+
+### Multi-Tenancy Remaining Work
+
+1. Continue Phase 1 Stage 5.2B-2 for club, season, competition, and venue administration.
+2. Convert remaining admin/write paths to explicit organization context.
+3. Resolve `PublicIdCounter`, `ultraAthleteId`, `ultraStaffId`, and `SystemSetting.key` organization-scoping in Stage 5.4.
+4. Remove the Stage 3 database-level Neon Ultra default bridge before any second real organization is onboarded.
+5. Rehearse second-organization application intake and provisioning end to end.
+
+### Media and Storage Remaining Work
+
+1. Decide whether staging and production should continue local persistent media or move all media to Cloudflare R2.
+2. Bulk import coach photos after Staff provisioning.
+3. Bulk normalize player photos into MediaAsset-backed profile photos.
+4. Add replacement-conflict review for all bulk media imports.
+5. Define long-term media retention and archival rules.
+
+### Authentication and Account Work
+
+1. Complete live Google OAuth verification if not already operational for all target users.
+2. Complete email verification policy.
+3. Complete password reset email delivery policy.
+4. Confirm admin onboarding and emergency access procedure.
+5. Continue preventing duplicate accounts through email identity enforcement.
+
+### Commerce and Fan Operations Remaining Work
+
+1. Complete payment provider decision.
+2. Connect reservations, concessions, merchandise, and ticketing to a real payment flow when authorized.
+3. Add operational refund/cancellation policies.
+4. Expand fan club membership workflows.
+5. Build sponsor reporting dashboards after real event activity exists.
+
+### Broadcast and Public API Remaining Work
+
+1. Run broadcast surfaces against real live games.
+2. Verify external graphics consumers with actual production timing.
+3. Confirm rate limits, cache policy, CORS policy, and public data safety under load.
+4. Add more operator recovery runbooks.
+
+### AI Vision Remaining Work
+
+1. Obtain real Ultra game video.
+2. Obtain official court dimensions and mark official court geometry.
+3. Run empirical validation against real footage.
+4. Keep AI-generated content and AI-driven stats out of official workflows until validated.
+5. Maintain public-safety and privacy constraints for all exports.
+
+### Documentation Remaining Work
+
+1. Expand Administrator Guide.
+2. Expand Operations Handbook.
+3. Expand Technical Manual.
+4. Expand Quick Start Guide.
+5. Expand Training Curriculum.
+6. Expand Developer Guide.
+7. Expand API Reference.
+8. Expand Governance Manual.
+9. Expand Knowledge Base.
+10. Add screenshots and diagrams following the established standards.
+
+## Known Risks
+
+- Coach onboarding cannot proceed safely without human selection.
+- Player photos currently exist as legacy URLs, not primary MediaAsset-backed profile photos.
+- Club colours are intentionally pending and should not be guessed.
+- Multi-tenancy still has known deferred work before onboarding a second real organization.
+- Real game-day load, broadcast consumption, and scoring workflows still require live rehearsal.
+- AI vision functionality is not production-proven against real Ultra video.
+- The VPS hosts other apps, so future deployment/restart commands must verify working directory and service identity before acting.
+- The git working tree contains many modified and untracked files; future commits should be scoped carefully.
+- The engine layer (rule sets, event types, statistics, standings) remains basketball-shaped; multi-sport schema work must not begin until `documentation/architecture/MULTI_SPORT_ARCHITECTURE.md` is accepted as the single agreed reference.
+
+## Recommended Next Sequence
+
+1. Administrator reviews `/coaches/season-zero-selection`.
+2. Administrator marks selected Season Zero coaches and records decision reasons.
+3. Administrator supplies explicit MEN/WOMEN division classification for selected coaches.
+4. Engineering resumes Track D coach Staff provisioning and coach pool creation.
+5. Engineering converts or verifies player and coach media readiness.
+6. Engineering reruns `/draft-readiness` and formal Track D gate.
+7. If ready, authorize Track E full Draft Day rehearsal.
+8. After successful rehearsal, finalize operational runbooks and Season Zero event-day checklist.
+
+## Safety Notes
+
+- Do not assign players to Clubs or SeasonClubs before the official draft allocation.
+- Do not assign coaches to Clubs or SeasonClubs before the official draft allocation.
+- Do not infer coach selection from approved application status.
+- Do not infer identities from email alone where duplicate review requires human classification.
+- Do not modify official club logos.
+- Do not invent official club colours.
+- Do not run the full draft rehearsal until explicitly authorized.
+- Preserve production Caddy entries and unrelated VPS applications during every deployment.
