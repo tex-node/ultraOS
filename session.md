@@ -3795,3 +3795,44 @@ STAGE_5_5C: NOT_STARTED
   (inactive).
 - Route integration/`getRegistrationHost()` switch and HTTP end-to-end
   verification still pending a successful deploy.
+
+---
+
+## Stage — DB-backed registration host (in-memory adapter retired)
+
+**Commits**
+
+- `getRegistrationHost()` now always returns the database-backed
+  `UltraLeagueOsRegistrationHost`; the `REGISTRATION_PERSISTENCE` selection is
+  removed.
+- `adapters/in-memory.ts` deleted; its unique regression coverage moved to the
+  DB-backed contract.
+
+**Changes**
+
+- `adapters/index.ts`: DB-only factory; no `memory` kind and no shared in-memory
+  instance.
+- `adapters/in-memory.ts`: deleted.
+- `adapters/host.test.ts`: asserts the factory returns the DB adapter and that the
+  adapter exposes the full `RegistrationHost` surface. Dynamic import is used so
+  the placeholder `DATABASE_URL` is set before the adapter (and Prisma client)
+  loads.
+- `adapters/db-contract.test.ts`: added the WITHDRAWN/REJECTED resubmission
+  regression (DRAFT was already covered); disposable org cleaned up in `finally`.
+- Comments in `host.ts` / `ultra-league-os.ts` and the integration plan/module
+  structure updated.
+
+**Verification (2026-09-12)**
+
+- `tsc` PASS; lint 0 errors / 6 warnings; production build PASS.
+- `npm test` (no DB): 487 pass / 1 skipped (DB contract) / 0 fail.
+- `REGISTRATION_HOST_DB=1 npm test` (restricted `ultraos_staging` role via a local
+  tunnel to `127.0.0.1:55411`): **488/488 pass, 0 fail, 0 skipped**.
+- Staging residue 0: disposable orgs 0; submissions/participants/sports 0;
+  Organization=1; Event=2.
+
+**Decisions**
+
+- The DB adapter is the only registration host. Routes continue to call the
+  DB-backed `service.ts`, which is exactly what the adapter delegates to, so
+  behavior is unchanged.

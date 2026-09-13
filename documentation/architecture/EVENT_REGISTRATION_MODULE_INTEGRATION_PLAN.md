@@ -1,7 +1,8 @@
 # Event Registration Module — Integration Plan (Option B)
 
-Status: Independent module implemented. Staging R1/R2 migrations **applied and verified**
-(2026-09-12); DB-backed adapter contract passes. Not integrated into routes; not deployed.
+Status: Deployed to staging and verified over HTTP (2026-09-12); R1/R2 migrations
+applied. The module is DB-backed: `getRegistrationHost()` returns the Ultra League
+OS adapter and the in-memory adapter has been retired.
 
 ## Defects found during this work
 
@@ -33,14 +34,14 @@ web/src/lib/registration/
 ├── reference.ts                # opaque reference numbers + retry
 ├── service.ts                  # Ultra League OS (Prisma) service
 └── adapters/
-    ├── in-memory.ts            # no-DB adapter (local/dev/tests)
-    ├── ultra-league-os.ts      # Prisma adapter delegating to service.ts
-    ├── index.ts                # getRegistrationHost() factory
-    └── host.test.ts            # adapter conformance tests
+    ├── ultra-league-os.ts      # Prisma adapter delegating to service.ts (sole adapter)
+    ├── index.ts                # getRegistrationHost() factory (DB-backed)
+    ├── host.test.ts            # adapter surface test
+    └── db-contract.test.ts     # DB-backed adapter contract + duplicate regression
 ```
 
-`getRegistrationHost("memory" | "ultraos")`, or `REGISTRATION_PERSISTENCE=memory`
-env, selects the adapter. Default is `ultraos` so production behavior is unchanged.
+`getRegistrationHost()` always returns the database-backed Ultra League OS adapter.
+The in-memory adapter and the `REGISTRATION_PERSISTENCE` switch have been removed.
 
 ## 1. Files that can be merged directly
 
@@ -51,11 +52,11 @@ integration-ready. The domain/rules (`sport-config*`, `validation`,
 Prisma models with no schema change. The public route, review pages, and admin
 builder already consume this layer.
 
-## 2. Local adapter to be replaced
+## 2. Local adapter retired
 
-`adapters/in-memory.ts` is the **development/test-only** adapter. It is never
-used when `REGISTRATION_PERSISTENCE` is unset (default `ultraos`). At integration
-it is retained solely for fast tests; no runtime path depends on it.
+`adapters/in-memory.ts` was the development/test-only adapter. It has been
+deleted: `getRegistrationHost()` now always returns the database-backed Ultra
+League OS adapter, and the `REGISTRATION_PERSISTENCE=memory` selection is gone.
 
 ## 3. Reused Prisma models
 
@@ -82,9 +83,8 @@ segment removes the conflict without changing organization/event scoping.
 
 No synthetic IDs are introduced in the Ultra League OS adapter. It passes through
 `Organization.id`, `Event.id`, `RegistrationForm.id`, and generated
-`RegistrationSubmission.referenceNumber`. The in-memory adapter uses `mem-<n>`
-ids **only** in tests and never crosses the boundary; no mapping is required on
-merge.
+`RegistrationSubmission.referenceNumber`. No synthetic ids and no mapping are
+introduced at the boundary.
 
 ## 6. R1/R2 migration handling
 
@@ -103,9 +103,9 @@ an approved all-female event. No production target.
 
 ## 8. Retiring the independent path
 
-Once the Ultra League OS adapter is verified, delete or keep the in-memory
-adapter as test-only tooling; `getRegistrationHost` continues to default to
-`ultraos`. No data migration or removal of the shared schema is involved.
+Done: the Ultra League OS adapter is verified and deployed, the in-memory adapter
+is deleted, and `getRegistrationHost()` always returns the database-backed
+adapter. No data migration or removal of the shared schema is involved.
 
 ## Regression requirements
 
@@ -117,15 +117,15 @@ during integration:
   to submit again**, subject to the normal validation and active-registration
   rules. A `PENDING`/`UNDER_REVIEW`/`APPROVED`/`WAITLISTED` registration for the
   same child in the same event still blocks a duplicate.
-- Enforced in both adapters: `adapters/in-memory.ts` (skips inactive statuses) and
-  `service.ts` `existingMatchKeysForEvent` (`submission.status notIn DRAFT,
-  WITHDRAWN, REJECTED`). Regression tests live in
-  `src/lib/registration/adapters/host.test.ts`.
+- Enforced in the database adapter's `service.ts` `existingMatchKeysForEvent`
+  (`submission.status notIn DRAFT, WITHDRAWN, REJECTED`). Regression tests live in
+  `src/lib/registration/adapters/db-contract.test.ts` (`REGISTRATION_HOST_DB=1`).
 
 ## Not in scope here
 
 - Staging R1/R2 migrations were applied and verified 2026-09-12; production was
-  never accessed. No deploy/push. Route integration is still pending (see
-  `STAGE_EVENT_REGISTRATION_STAGING_MIGRATION_RUNBOOK.md` "Execution results").
+  never accessed and nothing was pushed. The public route
+  `/register/[organizationSlug]/[eventSlug]` and the admin routes are wired to the
+  DB-backed layer and deployed to staging.
 - Event-detail "Registration setup" navigation link: still a documented
   follow-up (not required for module usability).

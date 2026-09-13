@@ -30,9 +30,9 @@ function validTeam(suffix = "") {
   return { teamName: `Falcons ${suffix}`.trim(), participants };
 }
 
-// The same contract the in-memory adapter passes, now exercised against the real
-// Ultra League OS adapter on a migrated staging database. Creates a disposable
-// organization + event + open form and removes everything in a finally block.
+// The DB-backed adapter contract, exercised against the real Ultra League OS
+// adapter on a migrated database. Creates a disposable organization + event +
+// open form and removes everything in a finally block.
 test("Ultra League OS adapter: full team-registration contract", { skip: !ENABLED }, async () => {
   const { prisma } = await import("@/lib/prisma");
   const { withOrganizationContext } = await import("@/lib/tenant-context");
@@ -99,6 +99,18 @@ test("Ultra League OS adapter: full team-registration contract", { skip: !ENABLE
     assert.equal((await host.listSubmissions({ organizationId: `${org.id}-other` })).length, 0);
     assert.equal((await host.getSubmission({ organizationId: org.id, id: submitted.id }))?.id, submitted.id);
     assert.equal(await host.getSubmission({ organizationId: `${org.id}-other`, id: submitted.id }), null);
+
+    // Regression: WITHDRAWN and REJECTED registrations do not block a new
+    // submission for the same children; only ACTIVE registrations do.
+    const withdrawn = await host.saveRegistrationSubmission({ organizationId: org.id, eventId: ids.eventId, formId: ids.formId, mode: "SUBMIT", team: validTeam("W") });
+    await withOrganizationContext(org.id, (tx) => tx.registrationSubmission.update({ where: { id: withdrawn.id }, data: { status: RegistrationSubmissionStatus.WITHDRAWN } }));
+    const withdrawnAgain = await host.saveRegistrationSubmission({ organizationId: org.id, eventId: ids.eventId, formId: ids.formId, mode: "SUBMIT", team: validTeam("W") });
+    assert.equal(withdrawnAgain.status, RegistrationSubmissionStatus.PENDING);
+
+    const rejected = await host.saveRegistrationSubmission({ organizationId: org.id, eventId: ids.eventId, formId: ids.formId, mode: "SUBMIT", team: validTeam("R") });
+    await withOrganizationContext(org.id, (tx) => tx.registrationSubmission.update({ where: { id: rejected.id }, data: { status: RegistrationSubmissionStatus.REJECTED } }));
+    const rejectedAgain = await host.saveRegistrationSubmission({ organizationId: org.id, eventId: ids.eventId, formId: ids.formId, mode: "SUBMIT", team: validTeam("R") });
+    assert.equal(rejectedAgain.status, RegistrationSubmissionStatus.PENDING);
   } finally {
     await withOrganizationContext(org.id, async (tx) => {
       await tx.registrationParticipantSport.deleteMany({ where: { organizationId: org.id } });

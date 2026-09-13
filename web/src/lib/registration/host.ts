@@ -3,9 +3,8 @@ import type { SportConfig } from "./sport-config";
 import type { TeamSubmissionInput } from "./validation";
 
 // The narrow service boundary the registration experience talks to. UI/actions
-// depend on this port, never on Prisma or the Ultra League OS service directly,
-// so the module can run against an in-memory adapter now and the Ultra League OS
-// adapter after the R1/R2 migrations are applied.
+// depend on this port, never on Prisma or the Ultra League OS service directly.
+// getRegistrationHost() returns the database-backed Ultra League OS adapter.
 
 export type RegistrationEvent = {
   id: string;

@@ -6,7 +6,8 @@ import { createTeamRegistration, getRegistration, listRegistrations } from "../s
 // Ultra League OS adapter: delegates to the existing tenant-scoped service
 // layer. Every read/write runs inside withOrganizationContext(), so the same
 // organization/event isolation applies. Requires the R1/R2 migrations to be
-// applied to the target database (unlike the in-memory adapter).
+// applied to the target database; this is the sole adapter returned by
+// getRegistrationHost().
 export class UltraLeagueOsRegistrationHost implements RegistrationHost {
   async getEvent({ organizationId, slug }: { organizationId: string; slug: string }): Promise<RegistrationEvent | null> {
     return withOrganizationContext(organizationId, async (tx) => {
