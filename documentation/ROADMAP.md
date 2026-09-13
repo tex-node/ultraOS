@@ -36,3 +36,5 @@ last_updated: YYYY-MM-DD
 - Add screenshots after UI flows stabilize.
 - Add API reference pages once public and operational APIs are finalized.
 
+> This file tracks the **documentation publication** roadmap. Product delivery, including the extension to volleyball, tennis, football, and cricket, is tracked separately in [Multi-Sport Roadmap](MULTI_SPORT_ROADMAP.md).
+

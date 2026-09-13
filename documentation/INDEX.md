@@ -41,6 +41,12 @@ Current documentation framework version: `docs-0.1`
 - Training: role-based training modules.
 - Assets: reusable logos, document images, and source attachments.
 
+## Architecture and Product Direction
+
+- [Multi-Sport Architecture](architecture/MULTI_SPORT_ARCHITECTURE.md): target model, capability matrix, and migration sequence. Single agreed reference.
+- [Multi-Sport Roadmap](MULTI_SPORT_ROADMAP.md): phased delivery plan and progress tracker.
+- [Phase 1 Tenancy Architecture](architecture/PHASE1_STAGE5_4B_RELATIONAL_INTEGRITY.md): RLS and composite-FK patterns every new table must follow.
+
 ## Last Updated
 
 `YYYY-MM-DD`
