@@ -1,7 +1,7 @@
 ---
 title: Multi-Sport Roadmap
 status: Active
-version: multi-sport-0.1
+version: multi-sport-1.0
 last_updated: 2026-09-13
 ---
 
@@ -31,7 +31,7 @@ This roadmap guides delivery of the multi-sport architecture defined in `documen
 
 | Gate | Decision | Status | Notes |
 | --- | --- | --- | --- |
-| G0 | Architecture doc accepted as single agreed reference | `In review` | Requires the five acceptance criteria in the architecture, Section 12. |
+| G0 | Architecture doc accepted as single agreed reference | `Done` | Accepted 2026-09-13; all five acceptance criteria met. |
 | G1 | Basketball definition parity proven (Stage 1) | `Not started` | No behaviour change permitted. |
 | G2 | Entrant backfill parity proven (Stage 2) | `Not started` | One TEAM Entrant per SeasonClub. |
 | G3 | Stat projection parity proven (Stage 3) | `Not started` | Legacy stat reads byte-for-byte identical. |
@@ -118,7 +118,7 @@ This roadmap guides delivery of the multi-sport architecture defined in `documen
 
 | ID | Workstream | Deliverable | Phase | Status | Depends on | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| A0 | Architecture | Multi-sport architecture doc accepted | 0 | `In review` | — | Awaiting G0 sign-off |
+| A0 | Architecture | Multi-sport architecture doc accepted | 0 | `Done` | — | Gate G0 met 2026-09-13 |
 | A1 | Architecture | Multi-sport roadmap published | 0 | `Done` | — | This document |
 | H1 | Hygiene | Remove unrelated product docs | 0 | `Done` | — | Raivstream + rundown/planner docs removed |
 | D1 | Decision | Entrant abstraction confirmed | 0 | `Done` | — | Individual sports supported |
@@ -171,15 +171,17 @@ These run alongside every phase and are not optional.
 | Season Zero protection | Basketball parity verified before stage completion | Parity report |
 | Public contracts | Existing payloads remain valid; additions are versioned | Contract tests |
 
-## 7. Open questions and owners
+## 7. Resolved questions and owners
 
-| # | Question | Owner | Status |
-| --- | --- | --- | --- |
-| Q1 | Football/cricket fixture-generation scope for first pilot | TBD | Open |
-| Q2 | Tennis competition shape (bracket vs round-robin) | TBD | Open |
-| Q3 | Cricket ball-by-ball event granularity | TBD | Open |
-| Q4 | Volleyball standings: match points vs set/point ratio | TBD | Open |
-| Q5 | Deprecated definition-version retention policy | TBD | Open |
+All questions resolved 2026-09-13. Full decisions and rationale are in `documentation/architecture/MULTI_SPORT_ARCHITECTURE.md`, Section 9.
+
+| # | Question | Decision | Status | Owner |
+| --- | --- | --- | --- | --- |
+| Q1 | Football/cricket fixture-generation scope | Round-robin in Phase 8; knockout and group-stage in Phase 9; single `FixtureGenerator` interface | `Resolved` | Engineering Lead |
+| Q2 | Tennis competition shape | Round-robin league first; single-elimination bracket in Phase 9 | `Resolved` | Engineering Lead |
+| Q3 | Cricket ball-by-ball event granularity | Ball-by-ball ledger + innings/over projections | `Resolved` | Engineering Lead |
+| Q4 | Volleyball standings basis | Match points primary; tiebreak set ratio, then point ratio | `Resolved` | Engineering Lead |
+| Q5 | Deprecated definition-version retention | Immutable versions; referenced retained indefinitely; unreferenced 24 months then archived | `Resolved` | Engineering Lead |
 
 ## 8. Change control
 

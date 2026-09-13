@@ -78,7 +78,7 @@ Three foundational decisions are fixed for the design:
 2. **Statistics.** One flexible, metric-and-definition stat model is used for all sports, rather than per-sport stat tables.
 3. **Sport definitions.** A code registry of sport definitions is the authority, with database-backed configuration overriding declared defaults.
 
-No schema work may begin until the multi-sport design document is reviewed and accepted as the single agreed reference.
+`documentation/architecture/MULTI_SPORT_ARCHITECTURE.md` was accepted as the single agreed reference on September 13, 2026 (Gate G0). The five open questions (fixture generation, tennis format, cricket granularity, volleyball standings basis, definition-version retention) are resolved in its Section 9. Stage 1 of the migration sequence is now unblocked; progress is tracked in `documentation/MULTI_SPORT_ROADMAP.md`.
 
 ## Repository Hygiene Note
 
@@ -410,7 +410,7 @@ Unrelated product documents that did not describe the league operating system we
 - AI vision functionality is not production-proven against real Ultra video.
 - The VPS hosts other apps, so future deployment/restart commands must verify working directory and service identity before acting.
 - The git working tree contains many modified and untracked files; future commits should be scoped carefully.
-- The engine layer (rule sets, event types, statistics, standings) remains basketball-shaped; multi-sport schema work must not begin until `documentation/architecture/MULTI_SPORT_ARCHITECTURE.md` is accepted as the single agreed reference.
+- The engine layer (rule sets, event types, statistics, standings) remains basketball-shaped; multi-sport implementation proceeds only through the additive stages of the accepted `documentation/architecture/MULTI_SPORT_ARCHITECTURE.md`, beginning with Stage 1 (sport catalog), and must preserve Season Zero basketball parity at every stage.
 
 ## Recommended Next Sequence
 

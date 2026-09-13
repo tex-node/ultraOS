@@ -1,7 +1,7 @@
 ---
 title: Multi-Sport Architecture
-status: Proposed — pending acceptance as the single agreed reference
-version: multi-sport-0.1
+status: Accepted — single agreed reference (2026-09-13)
+version: multi-sport-1.0
 last_updated: 2026-09-13
 ---
 
@@ -11,7 +11,7 @@ last_updated: 2026-09-13
 
 UltraLeagueOS began as a basketball-only operating system for the Neon Ultra Basketball League. This document defines how the platform extends to volleyball, tennis, football (association), cricket, and future sports without branching the product or forking the data model per sport.
 
-This is a **design-only** document. No schema, migration, or runtime work begins until this document is accepted as the single agreed reference (see [Section 12](#12-acceptance-criteria-for-this-document)).
+This document is accepted as the **single agreed reference** as of 2026-09-13 (see [Section 12](#12-acceptance-criteria-for-this-document)). It is design-first: implementation proceeds through the additive stages in Section 7 and the [Multi-Sport Roadmap](../MULTI_SPORT_ROADMAP.md), and this document governs unless formally superseded.
 
 Scope:
 
@@ -297,13 +297,24 @@ Rollback: every stage keeps its predecessor readable. A failed stage is rolled b
 - **No cross-sport coupling.** Adding a sport must not require editing another sport's module or the engine.
 - **Public contract stability.** Existing public/broadcast payloads remain valid; multi-sport payloads are additive and versioned.
 
-## 9. Open questions
+## 9. Resolved questions (decision log)
 
-1. **Football/cricket schedule generation.** Leagues, cups, and group stages need distinct fixture-generation strategies. Confirm which are in scope for the first non-basketball pilot.
-2. **Tennis bracket model.** Single-elimination draws versus round-robin tables; a bracket is a `Competition` structure variant. Confirm the first tennis competition shape.
-3. **Cricket ball-by-ball storage volume.** Decide event granularity (ball-level ledger versus aggregated overs) before Stage 6.
-4. **Volleyball set-based points.** Confirm whether the league table uses match points or set/point ratios as primary.
-5. **Definition versioning policy.** Confirm how long deprecated definition versions are retained for historical games.
+All open questions are resolved as of 2026-09-13. These decisions are binding for the phases named.
+
+| # | Question | Decision | Applies from | Owner |
+| --- | --- | --- | --- | --- |
+| Q1 | Football/cricket fixture-generation scope | Phase 8 (volleyball pilot) implements **round-robin only** (single and double). Phase 9 adds **knockout** (single elimination) and **group-stage-plus-knockout**. All generation sits behind one `FixtureGenerator` interface with modes `ROUND_ROBIN`, `KNOCKOUT`, `GROUP_STAGE`. No football/cricket schedule formats before Phase 9. | Phase 8 | Engineering Lead |
+| Q2 | Tennis competition shape | First tennis competition is a **round-robin league table** (singles and doubles), best-of-3 sets with best-of-5 configurable for finals. Singles use `INDIVIDUAL` Entrants, doubles use `PAIR`. **Single-elimination bracket** is a follow-on Phase 9 structure, not part of the first tennis definition. | Phase 9 | Engineering Lead |
+| Q3 | Cricket ball-by-ball granularity | Store a **ball-by-ball ledger** as `GameEvent` rows with `typeKey` + `data` (runs off bat, extra type, dismissal, batter, bowler). Retain dot balls (they affect balls faced and economy). Materialize `OverSummary` and `InningsSummary` projections for performance and net run rate. Warn above 1,000 events per game. | Phase 9 | Engineering Lead |
+| Q4 | Volleyball standings basis | **Match points are primary**: 3–0 and 3–1 wins = 3; 3–2 win = 2; 3–2 loss = 1; other loss = 0. Tiebreak by **set ratio**, then **point ratio**. Stored as `Standing.leaguePoints` plus `StandingMetric` rows for sets and points. | Phase 8 | Engineering Lead |
+| Q5 | Deprecated definition-version retention | Published sport definition versions are **immutable**; changes create a new version. A version referenced by any snapshotted game is retained **indefinitely**. Unreferenced superseded versions are retained **24 months**, then archived to cold storage; never hard-deleted. | Phase 1 | Engineering Lead |
+
+Rationale summary:
+
+- **Q1/Q2** minimise new engine surface for the first pilot and reuse the Entrant and standings models immediately; bracket/knockout advancement is deferred to a dedicated structure so it does not complicate the pilot.
+- **Q3** delivery-level truth is required for correct individual cricket statistics and net run rate; aggregated-only storage cannot recover it.
+- **Q4** adopts the standard international match-points model, which maps cleanly onto the generic standings model.
+- **Q5** guarantees historical games stay explicable while bounding storage growth.
 
 ## 10. Risks
 
@@ -321,12 +332,14 @@ Rollback: every stage keeps its predecessor readable. A failed stage is rolled b
 
 ## 12. Acceptance criteria for this document
 
-This architecture becomes the **single agreed reference** when, and only when:
+All criteria were met on 2026-09-13, granting Gate G0. This document is the **single agreed reference**.
 
-1. D1, D2, and D3 are confirmed as fixed.
-2. The target model in Section 5 is reviewed and accepted.
-3. The capability matrix in Section 6 is signed off for at least basketball, volleyball, and one additional sport.
-4. The migration sequence in Section 7 is accepted as the delivery order.
-5. The open questions in Section 9 have owners assigned.
+| # | Criterion | Status |
+| --- | --- | --- |
+| 1 | D1, D2, and D3 confirmed as fixed | Met — 2026-09-13 |
+| 2 | Target model in Section 5 reviewed and accepted | Met — 2026-09-13 |
+| 3 | Capability matrix in Section 6 signed off (basketball, volleyball, plus football, cricket, and tennis) | Met — 2026-09-13 |
+| 4 | Migration sequence in Section 7 accepted as the delivery order | Met — 2026-09-13 |
+| 5 | Open questions resolved with owners (Section 9) | Met — 2026-09-13 |
 
-Until all five are met, no schema, migration, or engine change may begin. Progress is tracked in `documentation/MULTI_SPORT_ROADMAP.md`.
+Changes to D1–D3 require re-acceptance (a new Gate G0 review) before dependent phases continue. All other changes follow the change control in `documentation/MULTI_SPORT_ROADMAP.md`. Implementation proceeds only through the additive stages in Section 7.
