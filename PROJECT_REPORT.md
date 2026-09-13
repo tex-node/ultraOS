@@ -70,7 +70,7 @@ The platform is being retrofitted for organization-based multi-tenancy, using Po
 
 ## Multi-Sport Direction
 
-The platform is extending from basketball-first into a multi-sport league operating system covering volleyball, tennis, football, cricket, and other sports. The target model, migration sequence, and capability matrix are defined in `documentation/architecture/MULTI_SPORT_ARCHITECTURE.md`; staged delivery is tracked in `documentation/MULTI_SPORT_ROADMAP.md`. That architecture document is the single agreed reference until superseded.
+The platform is extending from basketball-first into a multi-sport league operating system covering volleyball, tennis, football, cricket, and other sports. The target model, migration sequence, and capability matrix are defined in `documentation/architecture/MULTI_SPORT_ARCHITECTURE.md`; engine delivery is tracked in `documentation/MULTI_SPORT_ROADMAP.md`; the user-facing product plan (tournament onboarding, teams and players onboarding, scheduling, match capture, and stats presentation, with usability standards) is tracked in `documentation/PRODUCT_ROADMAP.md`. The architecture document is the single agreed reference until superseded.
 
 Three foundational decisions are fixed for the design:
 
