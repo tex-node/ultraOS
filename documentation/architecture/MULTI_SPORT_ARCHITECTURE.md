@@ -162,6 +162,8 @@ Rules:
 - `Entrant` is the FK target for `Fixture` sides, `GameEvent` team attribution, `Standing`, and team-scoped metrics.
 - Individual sports never require a `Club`. `Club` and `SeasonClub` remain valid and unchanged for team sports.
 
+Implementation: pure helpers in `web/src/lib/entrant.ts`; schema + RLS in migration `20260913100000_entrant_abstraction`; idempotent backfill in `web/scripts/entrant-backfill.ts` and read-only parity verification in `web/scripts/entrant-parity-check.ts`.
+
 ### 5.3 Competition structure and capability modules
 
 - `Competition`/`Season`/`Division` remain the hierarchy. A `SportDefinition` supplies structure, not the hierarchy.

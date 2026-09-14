@@ -30,6 +30,8 @@
     "data:purge-demo": "tsx scripts/data-purge-plan.ts --demo",
     "data:purge-rehearsal": "tsx scripts/data-purge-plan.ts --rehearsal",
     "public-locators:backfill": "tsx scripts/public-locators-backfill.ts",
+    "entrant:backfill": "tsx scripts/entrant-backfill.ts",
+    "entrant:parity-check": "tsx scripts/entrant-parity-check.ts",
     "vision:analyze": "tsx scripts/vision-analyze.ts",
     "db:studio": "prisma studio",
     "db:backup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-database.ps1",

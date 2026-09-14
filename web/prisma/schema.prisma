@@ -724,6 +724,7 @@ model Competition {
   isActive         Boolean           @default(true)
   divisions        Division[]
   seasons          Season[]
+  entrants         Entrant[]
   contentTemplates ContentTemplate[]
   systemSettings   SystemSetting[]
   createdAt        DateTime          @default(now())
@@ -735,6 +736,9 @@ model Competition {
   // own generated types referenced sportId_name/sportId_slug).
   @@unique([organizationId, name])
   @@unique([organizationId, slug])
+  // Multi-sport Stage 2: backs Entrant.competitionId's composite FK - see Division's identical
+  // Stage 5.4B addition for the full reasoning.
+  @@unique([organizationId, id])
   @@index([sportId, isActive])
 }
 
@@ -753,6 +757,7 @@ model Division {
   draftSquads           DraftSquad[]
   draftAllocations      DraftAllocation[]
   draftCoachPoolEntries DraftCoachPoolEntry[]
+  entrants              Entrant[]
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
@@ -790,6 +795,7 @@ model Season {
   trainingSessions      TrainingSession[]
   ruleSets              RuleSet[]
   courtSpecifications   CourtSpecification[]
+  entrants              Entrant[]
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 
@@ -887,12 +893,103 @@ model SeasonClub {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
+  // Multi-sport Stage 2: a SeasonClub is represented as exactly one TEAM Entrant.
+  entrant          Entrant?
+
   @@unique([seasonId, clubId, divisionId])
   // Phase 1 Stage 5.2B-3: backs DraftAllocation.seasonClubId's and DraftPick.seasonClubId's
   // composite FK - see Division's identical Stage 5.4B addition for the full reasoning.
   @@unique([organizationId, id])
   @@index([seasonId, divisionId, status])
   @@index([clubId])
+}
+
+enum EntrantType {
+  TEAM
+  INDIVIDUAL
+  PAIR
+  RELAY
+}
+
+enum EntrantStatus {
+  ACTIVE
+  INACTIVE
+  WITHDRAWN
+}
+
+enum EntrantMemberRole {
+  PLAYER
+  CAPTAIN
+  PARTNER
+  COACH
+  MANAGER
+}
+
+// Multi-sport Stage 2 (S2.1/S2.2): the competing unit in a Competition/Season/Division. A team
+// sport is represented by one TEAM Entrant wrapping its SeasonClub; individual sports create
+// INDIVIDUAL, PAIR, or RELAY Entrants backed by EntrantMember rows. Fixtures, games, standings,
+// and team-level statistics reference Entrant so every sport shares one scheduling/results model.
+//
+// seasonClubId is nullable (null for individual entrants) and uniquely enforced where present,
+// which yields exactly one TEAM Entrant per SeasonClub. It is a simple FK with an application-level
+// same-organization guard, mirroring the documented Athlete exception (Athlete lacks
+// @@unique([organizationId, id])); the required organizationId/competitionId/seasonId/divisionId
+// links are composite FKs so the database itself rejects a cross-organization reference.
+model Entrant {
+  id             String        @id @default(cuid())
+  organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  competitionId  String
+  competition    Competition   @relation(fields: [organizationId, competitionId], references: [organizationId, id], onDelete: Restrict)
+  seasonId       String
+  season         Season        @relation(fields: [organizationId, seasonId], references: [organizationId, id], onDelete: Cascade)
+  divisionId     String
+  division       Division      @relation(fields: [organizationId, divisionId], references: [organizationId, id], onDelete: Restrict)
+  type           EntrantType
+  name           String
+  shortName      String?
+  logoUrl        String?
+  primaryColor   String?
+  secondaryColor String?
+  seasonClubId   String?
+  seasonClub     SeasonClub?   @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
+  status         EntrantStatus @default(ACTIVE)
+  seed           Int?
+  members        EntrantMember[]
+  homeFixtures   Fixture[]     @relation("HomeEntrant")
+  awayFixtures   Fixture[]     @relation("AwayEntrant")
+  wonFixtures    Fixture[]     @relation("WinnerEntrant")
+  gameEvents     GameEvent[]
+  standings      Standing[]
+  teamStats      TeamStat[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([seasonClubId])
+  @@unique([organizationId, id])
+  @@index([seasonId, divisionId, status])
+  @@index([organizationId, competitionId])
+}
+
+// A person on an Entrant: a roster player, captain, partner, coach, or manager. athleteId is a
+// simple FK (Athlete lacks @@unique([organizationId, id])); any write must assert the athlete
+// belongs to the same organization at the application layer.
+model EntrantMember {
+  id             String            @id @default(cuid())
+  organizationId String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  entrantId      String
+  entrant        Entrant           @relation(fields: [organizationId, entrantId], references: [organizationId, id], onDelete: Cascade)
+  athleteId      String
+  athlete        Athlete           @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  role           EntrantMemberRole @default(PLAYER)
+  order          Int?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([organizationId, entrantId, athleteId])
+  @@unique([organizationId, id])
+  @@index([organizationId, entrantId, order])
 }
 
 model Athlete {
@@ -930,6 +1027,7 @@ model Athlete {
   registrationParticipants RegistrationParticipant[]
   trainingRecords          AthleteTrainingRecord[]
   scoutReports             ScoutReport[]
+  entrantMembers            EntrantMember[]
   recordOrigin             RecordOrigin              @default(PRODUCTION)
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
@@ -2879,6 +2977,15 @@ model Fixture {
   awayScore          Int               @default(0)
   winnerSeasonClubId String?
   winnerSeasonClub   SeasonClub?       @relation("WinnerSeasonClub", fields: [winnerSeasonClubId], references: [id], onDelete: SetNull)
+  // Multi-sport Stage 2: entrant-side references, populated by the SeasonClub->Entrant backfill.
+  // Nullable and additive; the legacy SeasonClub columns remain the source of truth until later
+  // stages migrate read paths. Simple FKs with application-level same-organization guards.
+  homeEntrantId      String?
+  homeEntrant        Entrant?          @relation("HomeEntrant", fields: [homeEntrantId], references: [id], onDelete: SetNull)
+  awayEntrantId      String?
+  awayEntrant        Entrant?          @relation("AwayEntrant", fields: [awayEntrantId], references: [id], onDelete: SetNull)
+  winnerEntrantId    String?
+  winnerEntrant      Entrant?          @relation("WinnerEntrant", fields: [winnerEntrantId], references: [id], onDelete: SetNull)
   game               Game?
   officials          FixtureOfficial[]
   media              AthleteMedia[]
@@ -3081,6 +3188,9 @@ model GameEvent {
   // attributable to either side and must not be forced onto one.
   seasonClubId                 String?
   seasonClub                   SeasonClub?                   @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
+  // Multi-sport Stage 2: entrant attribution, populated by the backfill; nullable and additive.
+  entrantId                    String?
+  entrant                      Entrant?                      @relation(fields: [entrantId], references: [id], onDelete: SetNull)
   playerId                     String?
   player                       Player?                       @relation("GameEventPlayer", fields: [playerId], references: [id], onDelete: SetNull)
   // Who was fouled - optional. Some fouls (technicals, unclear contact) don't have a
@@ -3259,6 +3369,9 @@ model TeamStat {
   game                         Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
   seasonClubId                 String
   seasonClub                   SeasonClub   @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
+  // Multi-sport Stage 2: entrant identity, populated by the backfill; nullable and additive.
+  entrantId                    String?
+  entrant                      Entrant?     @relation(fields: [entrantId], references: [id], onDelete: SetNull)
   points                       Int          @default(0)
   rebounds                     Int          @default(0)
   assists                      Int          @default(0)
@@ -3301,6 +3414,9 @@ model Standing {
   season          Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   seasonClubId    String       @unique
   seasonClub      SeasonClub   @relation(fields: [seasonClubId], references: [id], onDelete: Cascade)
+  // Multi-sport Stage 2: entrant identity, populated by the backfill; nullable and additive.
+  entrantId       String?
+  entrant         Entrant?     @relation(fields: [entrantId], references: [id], onDelete: SetNull)
   played          Int          @default(0)
   won             Int          @default(0)
   lost            Int          @default(0)
@@ -4243,6 +4359,8 @@ model Organization {
   courtSpecifications       CourtSpecification[]
   visionTrajectoryArtifacts VisionTrajectoryArtifact[]
   sportDefinitionOverrides  SportDefinitionOverride[]
+  entrants                  Entrant[]
+  entrantMembers            EntrantMember[]
   createdAt                 DateTime                       @default(now())
   updatedAt                 DateTime                       @updatedAt
 

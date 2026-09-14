@@ -132,10 +132,10 @@ For the user-facing product plan (onboarding, scheduling, capture, and statistic
 | S1.4 | Resolution | Definition resolver used by consumers | 1 | `Done` | S1.2 | Consumed by the `/competitions` tournament onboarding flow |
 | S1.5 | Verification | Basketball parity evidence | 1 | `Done` | S1.2–S1.4 | Unit parity tests + registry consumed by onboarding |
 | S1.6 | Validation | Validator registry + `SportConstraint` handling | 1 | `Done` | S1.2 | Registry + basketball/volleyball/football constraints; tests |
-| S2.1 | Schema | `Entrant`, `EntrantMember` + RLS | 2 | `Not started` | G1 | — |
-| S2.2 | Schema | Nullable `entrantId` on dependent tables | 2 | `Not started` | S2.1 | Additive |
-| S2.3 | Backfill | One TEAM Entrant per SeasonClub | 2 | `Not started` | S2.2 | Idempotent |
-| S2.4 | Verification | Entrant parity evidence | 2 | `Not started` | S2.3 | Gate G2 |
+| S2.1 | Schema | `Entrant`, `EntrantMember` + RLS | 2 | `Done` | G1 | Migration authored (not applied); domain helpers + tests |
+| S2.2 | Schema | Nullable `entrantId` on dependent tables | 2 | `Done` | S2.1 | Fixture (home/away/winner), GameEvent, Standing, TeamStat |
+| S2.3 | Backfill | One TEAM Entrant per SeasonClub | 2 | `In progress` | S2.2 | `scripts/entrant-backfill.ts` authored; not run |
+| S2.4 | Verification | Entrant parity evidence | 2 | `In progress` | S2.3 | `scripts/entrant-parity-check.ts` authored; not run |
 | S3.1 | Schema | `SportMetricDefinition`, `GameMetricValue` | 3 | `Not started` | G2 | — |
 | S3.2 | Domain | Basketball metric definitions | 3 | `Not started` | S3.1 | From box-score fields |
 | S3.3 | Projection | `PlayerStat`/`TeamStat` compatibility projection | 3 | `Not started` | S3.2 | Cache, not truth |
