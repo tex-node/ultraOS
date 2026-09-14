@@ -53,7 +53,7 @@ For the user-facing product plan (onboarding, scheduling, capture, and statistic
 ### Phase 1 — Sport catalog and definition registry (Stage 1)
 
 - **Entry:** G0.
-- **Deliverables:** `web/src/lib/sports/` registry; basketball definition module; `SportDefinitionOverride` model + RLS + composite FKs; resolution function used by all future consumers.
+- **Deliverables:** `web/src/lib/sports/` registry; basketball definition module; validator registry and `SportConstraint` handling; `SportDefinitionOverride` model + RLS + composite FKs; resolution function used by all future consumers.
 - **Exit:** G1 — resolving basketball through the registry reproduces every existing rule value and capability flag.
 - **Backfill:** none (registry only); optional override rows.
 
@@ -131,6 +131,7 @@ For the user-facing product plan (onboarding, scheduling, capture, and statistic
 | S1.3 | Schema | `SportDefinitionOverride` + RLS + composite FK | 1 | `Not started` | G0 | Unblocked once registry parity is proven |
 | S1.4 | Resolution | Definition resolver used by consumers | 1 | `In progress` | S1.2 | Resolver + summaries in registry; app consumers next |
 | S1.5 | Verification | Basketball parity evidence | 1 | `In progress` | S1.2–S1.4 | Unit parity tests landed; Gate G1 pending Stage 1 completion |
+| S1.6 | Validation | Validator registry + `SportConstraint` handling | 1 | `Not started` | S1.2 | Adopted from FIBA benchmark |
 | S2.1 | Schema | `Entrant`, `EntrantMember` + RLS | 2 | `Not started` | G1 | — |
 | S2.2 | Schema | Nullable `entrantId` on dependent tables | 2 | `Not started` | S2.1 | Additive |
 | S2.3 | Backfill | One TEAM Entrant per SeasonClub | 2 | `Not started` | S2.2 | Idempotent |

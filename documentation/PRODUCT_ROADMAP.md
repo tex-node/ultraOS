@@ -187,7 +187,10 @@ Deliverables:
 - Sport-aware capture console driven by the event catalog (basketball and volleyball first; football, cricket, tennis in P6).
 - Clock and period/set/innings control with pause/resume and corrections.
 - Player attribution with fast selection and lineup awareness.
+- **Substitution holding bay:** select incoming bench players and auto-swap the outgoing player.
+- **Actions under review:** flag an action during play and resolve it at the next break without disturbing the live clock.
 - Undo/correction with a reason and a full audit trail — never destructive.
+- Entry-time validation from the sport's constraints (see `documentation/architecture/MULTI_SPORT_ARCHITECTURE.md`, Section 5.11).
 - Offline-tolerant queueing with sync and visible connection status.
 - Scorer and independent statistician paths with reconciliation where applicable.
 
@@ -219,6 +222,7 @@ Deliverables:
 - Team and player season statistics with leaders and filters.
 - Public pages: tournament, teams, players, fixtures, results, standings.
 - Broadcast/live presentation fed by verified structured data only.
+- Official scoresheet export and completion of the **FIBA parity checklist** for basketball (`documentation/architecture/FIBA_BENCHMARK.md`).
 - Exports (PDF/CSV) for schedules, results, and statistics.
 
 Usability acceptance:
@@ -227,6 +231,7 @@ Usability acceptance:
 - A fan can find any team, player, or match within three taps from the tournament page.
 - No stat is shown that cannot be traced to captured data.
 - Public pages are fast and readable on a phone.
+- The basketball parity checklist passes, or each remaining gap is explicitly recorded as deferred with an owner.
 
 Depends on: P4; engine Stages 3, 5 (statistics, standings).
 
@@ -299,12 +304,15 @@ Usability acceptance:
 | P4.5 | Undo/correction with audit trail | P4 | `In progress` | — |
 | P4.6 | Offline-tolerant queueing and sync | P4 | `Not started` | P4.2 |
 | P4.7 | Scorer/statistician reconciliation | P4 | `In progress` | — |
+| P4.8 | Actions-under-review workflow | P4 | `Not started` | P4.2 |
+| P4.9 | Substitution holding bay | P4 | `Not started` | P4.2 |
 | P5.1 | Automatic standings per sport | P5 | `In progress` | Engine S5 |
 | P5.2 | Match center and match report | P5 | `In progress` | — |
 | P5.3 | Team/player season stats and leaders | P5 | `In progress` | Engine S3 |
 | P5.4 | Public tournament/team/player/fixture pages | P5 | `In progress` | P5.1 |
 | P5.5 | Broadcast/live presentation from verified data | P5 | `In progress` | P5.2 |
 | P5.6 | PDF/CSV exports | P5 | `In progress` | — |
+| P5.7 | Official scoresheet + FIBA parity checklist | P5 | `Not started` | P5.2 |
 | P6.1 | Volleyball pilot end-to-end | P6 | `Not started` | P1-P5, Engine S8 |
 | P6.2 | Football end-to-end | P6 | `Not started` | P6.1 |
 | P6.3 | Cricket end-to-end | P6 | `Not started` | P6.1 |

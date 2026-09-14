@@ -1,7 +1,7 @@
 ---
 title: Multi-Sport Architecture
 status: Accepted — single agreed reference (2026-09-13)
-version: multi-sport-1.0
+version: multi-sport-1.1
 last_updated: 2026-09-13
 ---
 
@@ -94,19 +94,24 @@ A resolved `SportDefinition` is the single object every sport-aware component re
 ```ts
 type SportDefinition = {
   key: string;                 // "BASKETBALL", "VOLLEYBALL", "TENNIS", "FOOTBALL", "CRICKET"
+  slug: string;                // "basketball" — matches the Sport catalog slug
   name: string;
   version: number;             // definition version, snapshotted per game
-  entity: "TEAM" | "INDIVIDUAL" | "PAIR" | "RELAY";
+  entities: ("TEAM" | "INDIVIDUAL" | "PAIR" | "RELAY")[]; // tennis = ["INDIVIDUAL","PAIR"]
   structure: StructureSpec;    // periods/sets/innings, durations, clock behaviour
   scoring: ScoringSpec;        // score units, multipliers, win condition
   events: SportEventDefinition[];
   metrics: SportMetricDefinition[];
   standings: StandingsSpec;
-  roster: RosterSpec;
+  roster?: RosterSpec;         // required for TEAM sports; absent for individuals
   surface?: SurfaceSpec;       // court/pitch/field geometry, when relevant
   capabilities: CapabilityKey[]; // draft, shotClock, ultraTime, fourPoint, innings, rotation, vision, ...
+  rules?: SportRuleValue[];    // resolved rule values (snapshotted per game)
+  constraints: SportConstraint[]; // entry-time validation / eligibility rules
 };
 ```
+
+This shape is implemented in `web/src/lib/sports/types.ts`; the registry and definitions live beside it in `web/src/lib/sports/`.
 
 Persistence:
 
@@ -251,6 +256,26 @@ Examples:
 
 Draft, shot clock, Ultra Time, four-point, innings, and rotation are capability modules, not core assumptions. A cricket organization never sees a draft; a tennis event never sees a shot clock.
 
+### 5.11 Validation and constraints
+
+Validation happens at entry, before an event is accepted, and is declared per sport rather than hardcoded. This was adopted from the FIBA benchmark (`documentation/architecture/FIBA_BENCHMARK.md`).
+
+- A `SportConstraint` declares a check that applies to a context (EVENT, LINEUP, PERIOD_TRANSITION, SUBMISSION) with a severity of `BLOCK` or `WARN`, and the definition version it belongs to.
+- A code-registered **validator registry** implements each constraint key; the sport definition only references keys. Validators are resolved from the match's frozen definition version, exactly like rules.
+- The engine validates that an event's type exists and its actors are eligible; it does not encode the sport's meaning. Scoring, eligibility, and sequencing rules are supplied by validators.
+- Constraints that cannot be decided from rules alone (for example association-football offside, cricket DLS targets) are `WARN` and advisory at most, never `BLOCK`, until a validated data source exists.
+
+Examples:
+
+| Sport | Constraint | Severity |
+| --- | --- | --- |
+| Basketball | Player may not be active with five fouls | BLOCK |
+| Basketball | Scoring event requires an eligible active player | BLOCK |
+| Volleyball | Rotation order must follow the service rotation | BLOCK |
+| Football | A player with a red card may not re-enter | BLOCK |
+| Cricket | Innings cannot exceed overs limit (unless all out) | BLOCK |
+| Football | Offside suspicion | WARN (deferred) |
+
 ## 6. Capability matrix
 
 | Dimension | Basketball | Volleyball | Tennis | Football | Cricket |
@@ -275,7 +300,7 @@ Every stage is additive-only, dual-read, backfill, then deprecate. Each stage is
 | Stage | Name | Adds | Backfill | Exit criteria |
 | --- | --- | --- | --- | --- |
 | 0 | Acceptance | Nothing (documentation only) | — | This document accepted; schema frozen |
-| 1 | Sport catalog | `SportDefinitionOverride`; `sportId` on rule/definition-referencing tables | Basketball definition registered with no behaviour change | Registry resolves basketball identically to today |
+| 1 | Sport catalog | `SportDefinitionOverride`; validator registry; `sportId` on rule/definition-referencing tables | Basketball definition registered with no behaviour change | Registry resolves basketball identically to today |
 | 2 | Entrant | `Entrant`, `EntrantMember`; nullable `entrantId` on `Fixture`, `GameEvent`, `Standing`, `TeamStat` | One `TEAM` Entrant per existing `SeasonClub` | Basketball fixtures/games resolve Entrants identically |
 | 3 | Generic stats | `SportMetricDefinition`, `GameMetricValue` | Backfill Basketball `PlayerStat`/`TeamStat` into metric values | Projection reproduces legacy stat reads exactly |
 | 4 | Rules | `sportId` + `RuleValue`/`config` on `RuleSet`; snapshot JSON | Backfill existing `RuleSet` rows | Snapshot round-trips existing games |
