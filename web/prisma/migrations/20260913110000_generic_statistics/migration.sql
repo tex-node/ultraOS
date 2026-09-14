@@ -102,3 +102,16 @@ ALTER TABLE "GameMetricValue" ADD CONSTRAINT "GameMetricValue_entrantId_fkey" FO
 
 -- AddForeignKey
 ALTER TABLE "GameMetricValue" ADD CONSTRAINT "GameMetricValue_sourceEventId_fkey" FOREIGN KEY ("sourceEventId") REFERENCES "GameEvent"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- Restricted-role grants for the new GLOBAL catalog table (no RLS; no default privileges exist, so
+-- each new table must grant explicitly, mirroring Stage 5.5A). GameMetricValue is tenant-owned and
+-- is granted by 20260913110100_generic_statistics_rls.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ultraos_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "SportMetricDefinition" TO ultraos_app;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ultraos_staging') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "SportMetricDefinition" TO ultraos_staging;
+  END IF;
+END $$;

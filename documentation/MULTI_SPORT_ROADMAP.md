@@ -13,6 +13,8 @@ This roadmap guides delivery of the multi-sport architecture defined in `documen
 
 For the user-facing product plan (onboarding, scheduling, capture, and statistics presentation), see `documentation/PRODUCT_ROADMAP.md`. The two roadmaps must stay aligned: product phases depend on engine stages, and the architecture document wins on any conflict.
 
+Applying the engine migrations and backfills to staging is governed by `documentation/architecture/MULTI_SPORT_STAGING_MIGRATION_BACKFILL_RUNBOOK.md` (planning only until approved).
+
 - One phase maps to one architecture migration stage where practical.
 - A phase starts only when its **entry gate** is met.
 - A phase is `Done` only when its **exit criteria** are verified (tests, parity checks, documented evidence), not when code is written.

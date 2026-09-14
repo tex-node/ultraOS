@@ -45,3 +45,15 @@ CREATE UNIQUE INDEX "SportEventDefinition_sportId_key_key" ON "SportEventDefinit
 
 -- AddForeignKey
 ALTER TABLE "SportEventDefinition" ADD CONSTRAINT "SportEventDefinition_sportId_fkey" FOREIGN KEY ("sportId") REFERENCES "Sport"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Restricted-role grants for the new GLOBAL catalog table (no RLS; no default privileges exist, so
+-- each new table must grant explicitly, mirroring Stage 5.5A).
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ultraos_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "SportEventDefinition" TO ultraos_app;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ultraos_staging') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "SportEventDefinition" TO ultraos_staging;
+  END IF;
+END $$;

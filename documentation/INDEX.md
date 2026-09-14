@@ -47,6 +47,7 @@ Current documentation framework version: `docs-0.1`
 - [FIBA Benchmark](architecture/FIBA_BENCHMARK.md): comparison against FIBA Organizer/LiveStats and the external plan, with the basketball parity checklist.
 - [Product Roadmap](PRODUCT_ROADMAP.md): user-facing phases (tournament onboarding → participants → scheduling → capture → stats) with usability standards.
 - [Multi-Sport Roadmap](MULTI_SPORT_ROADMAP.md): engine and schema delivery plan and progress tracker.
+- [Multi-Sport Staging Migration & Backfill Runbook](architecture/MULTI_SPORT_STAGING_MIGRATION_BACKFILL_RUNBOOK.md): staged migration + backfill + parity procedure (planning only).
 - [Phase 1 Tenancy Architecture](architecture/PHASE1_STAGE5_4B_RELATIONAL_INTEGRITY.md): RLS and composite-FK patterns every new table must follow.
 
 ## Last Updated
