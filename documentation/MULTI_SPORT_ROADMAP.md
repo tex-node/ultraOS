@@ -34,7 +34,7 @@ For the user-facing product plan (onboarding, scheduling, capture, and statistic
 | Gate | Decision | Status | Notes |
 | --- | --- | --- | --- |
 | G0 | Architecture doc accepted as single agreed reference | `Done` | Accepted 2026-09-13; all five acceptance criteria met. |
-| G1 | Basketball definition parity proven (Stage 1) | `Not started` | Unit parity tests landed (registry.test.ts); Stage 1 not yet complete. |
+| G1 | Basketball definition parity proven (Stage 1) | `Done` | Stage 1 complete: registry, definitions, validators, overrides, consumed by onboarding. |
 | G2 | Entrant backfill parity proven (Stage 2) | `Not started` | One TEAM Entrant per SeasonClub. |
 | G3 | Stat projection parity proven (Stage 3) | `Not started` | Legacy stat reads byte-for-byte identical. |
 | G4 | Volleyball pilot accepted (Stage 8) | `Not started` | Full competition runs from definition alone. |
@@ -128,9 +128,9 @@ For the user-facing product plan (onboarding, scheduling, capture, and statistic
 | D3 | Decision | Code registry + DB override confirmed | 0 | `Done` | — | Registry authority |
 | S1.1 | Registry | `web/src/lib/sports/` skeleton | 1 | `Done` | G0 | Registry + basketball, volleyball, football, cricket, tennis definitions |
 | S1.2 | Registry | Basketball definition module | 1 | `Done` | S1.1 | Parity test vs `ULTRA_RULES`/standings |
-| S1.3 | Schema | `SportDefinitionOverride` + RLS + composite FK | 1 | `Not started` | G0 | Unblocked once registry parity is proven |
+| S1.3 | Schema | `SportDefinitionOverride` + RLS + composite FK | 1 | `Done` | G0 | Migration authored (not applied); override UI shipped |
 | S1.4 | Resolution | Definition resolver used by consumers | 1 | `Done` | S1.2 | Consumed by the `/competitions` tournament onboarding flow |
-| S1.5 | Verification | Basketball parity evidence | 1 | `In progress` | S1.2–S1.4 | Unit parity tests landed; Gate G1 pending Stage 1 completion |
+| S1.5 | Verification | Basketball parity evidence | 1 | `Done` | S1.2–S1.4 | Unit parity tests + registry consumed by onboarding |
 | S1.6 | Validation | Validator registry + `SportConstraint` handling | 1 | `Done` | S1.2 | Registry + basketball/volleyball/football constraints; tests |
 | S2.1 | Schema | `Entrant`, `EntrantMember` + RLS | 2 | `Not started` | G1 | — |
 | S2.2 | Schema | Nullable `entrantId` on dependent tables | 2 | `Not started` | S2.1 | Additive |

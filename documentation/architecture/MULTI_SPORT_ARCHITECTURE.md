@@ -116,7 +116,7 @@ This shape is implemented in `web/src/lib/sports/types.ts`; the registry and def
 Persistence:
 
 - Registry modules: `web/src/lib/sports/registry.ts` + `basketball.ts`, `volleyball.ts`, `tennis.ts`, `football.ts`, `cricket.ts`.
-- DB override: new `SportDefinitionOverride` table (`organizationId`, `sportId`, `version`, `config Json`, `isActive`), validated against the registry's schema before write.
+- DB override: `SportDefinitionOverride` table (`organizationId`, `sportId`, `version`, `config Json`, `isActive`), validated against the registry's schema before write. Resolution lives in `web/src/lib/sports/sport-override-store.ts`; a missing or invalid override falls back to the registered definition. Only declared rule values and default divisions are overridable; other fields require a new definition version.
 - Existing `Sport` model stays the catalog identity (`schema.prisma:676`); the definition is the behaviour attached to it.
 
 ### 5.2 Entrant abstraction (D1)

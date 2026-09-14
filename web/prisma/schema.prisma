@@ -680,8 +680,36 @@ model Sport {
   isActive     Boolean       @default(true)
   competitions Competition[]
   clubs        Club[]
+  definitionOverrides SportDefinitionOverride[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+}
+
+// Multi-sport Stage 1 (S1.3): organization-scoped customization of a sport definition. The code
+// registry (web/src/lib/sports) is the authority; this table stores only validated overrides
+// (rule values and default divisions), which the resolver applies in memory on top of the
+// registered definition. Sport is a global catalog with no organizationId and no RLS, so sportId
+// is a plain FK; organizationId is the tenant scope (RLS + composite FK conventions from
+// PHASE1_STAGE5_4B_RELATIONAL_INTEGRITY.md apply to organizationId as usual).
+//
+// Versioned and append-on-write: saving a change deactivates the current active row and inserts a
+// new one with version = max + 1, preserving history. Exactly one row per (organizationId, sportId)
+// is expected to be active at a time, but that is an application invariant, not a unique constraint,
+// so a future scheduler could stage a future-dated override without conflict.
+model SportDefinitionOverride {
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  sportId        String
+  sport          Sport        @relation(fields: [sportId], references: [id], onDelete: Restrict)
+  version        Int          @default(1)
+  config         Json
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, sportId, version])
+  @@index([organizationId, sportId, isActive])
 }
 
 model Competition {
@@ -4214,6 +4242,7 @@ model Organization {
   visionSpatialSummarys     VisionSpatialSummary[]
   courtSpecifications       CourtSpecification[]
   visionTrajectoryArtifacts VisionTrajectoryArtifact[]
+  sportDefinitionOverrides  SportDefinitionOverride[]
   createdAt                 DateTime                       @default(now())
   updatedAt                 DateTime                       @updatedAt
 

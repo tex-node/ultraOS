@@ -129,6 +129,9 @@ export default async function CompetitionDetailPage({ params }: { params: Promis
         <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
           <h2 className="text-lg font-semibold">Next steps</h2>
           <div className="mt-4 flex flex-wrap gap-3">
+            <Link href={`/competitions/${competition.id}/sport-rules`} className="rounded-lg border border-emerald-400/40 px-4 py-2 text-sm text-emerald-200 hover:border-emerald-400">
+              Sport rules
+            </Link>
             <Link href="/clubs" className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:border-white/25">
               Manage teams
             </Link>
