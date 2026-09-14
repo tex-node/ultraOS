@@ -149,9 +149,9 @@ For the user-facing product plan (onboarding, scheduling, capture, and statistic
 | S6.1 | Schema | `typeKey` + `data` on `GameEvent` | 6 | `Done` | G2 | Migration authored (not applied); `event-catalog.ts` + tests |
 | S6.2 | Catalog | `SportEventDefinition` per sport | 6 | `Done` | S6.1 | Registry events + catalog sync script |
 | S6.3 | UI | Scorer renders from catalog | 6 | `Not started` | S6.2 | Catalog available; scorer console migration pending |
-| S7.1 | Schema | Registration `sportId` FKs | 7 | `Not started` | G2 | — |
-| S7.2 | Backfill | Map `RegistrationSport` enum to `Sport` | 7 | `Not started` | S7.1 | — |
-| S7.3 | Domain | Definition-driven `SportConfig` | 7 | `Not started` | S7.1 | Presets generalize |
+| S7.1 | Schema | Registration `sportId` FKs | 7 | `Done` | G2 | Migration authored (not applied); `sportId` FK + `sportIds` mirror |
+| S7.2 | Backfill | Map `RegistrationSport` enum to `Sport` | 7 | `In progress` | S7.1 | `registration-sport-unify-backfill.ts` authored; not run |
+| S7.3 | Domain | Definition-driven `SportConfig` | 7 | `In progress` | S7.1 | `configuredSports` bridge shipped; config schema generalization deferred |
 | S8.1 | Definition | Volleyball definition module | 8 | `Not started` | G1–G3, P6, P7 | — |
 | S8.2 | Product | Volleyball competition end-to-end | 8 | `Not started` | S8.1 | Gate G4 |
 | S9.1 | Definition | Football definition | 9 | `Not started` | G4 | — |

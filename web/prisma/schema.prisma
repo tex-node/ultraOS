@@ -685,6 +685,7 @@ model Sport {
   eventDefinitions  SportEventDefinition[]
   ruleSets          RuleSet[]
   gameRuleSnapshots GameRuleSnapshot[]
+  registrationParticipantSports RegistrationParticipantSport[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
@@ -2110,6 +2111,9 @@ model RegistrationForm {
   // and per-sport roster/rules configuration (JSON). Additive; existing forms
   // default to no sports configured.
   sports              RegistrationSport[]
+  // Multi-sport Stage 7 (S7.1): additive, definition-linked sport identity. `sportIds` mirrors
+  // `sports` against the global Sport catalog; the enum array remains authoritative until cleanup.
+  sportIds            String[]                 @default([])
   sportConfig         Json?
   fields              RegistrationField[]
   submissions         RegistrationSubmission[]
@@ -2250,6 +2254,10 @@ model RegistrationParticipantSport {
   participantId  String
   participant    RegistrationParticipant @relation(fields: [organizationId, participantId], references: [organizationId, id], onDelete: Cascade)
   sport          RegistrationSport
+  // Multi-sport Stage 7 (S7.1): the Sport catalog link. Additive/nullable; the enum `sport` above
+  // remains authoritative until the enum is retired in a later cleanup stage.
+  sportId        String?
+  sportCatalog   Sport?                  @relation(fields: [sportId], references: [id], onDelete: Restrict)
   rosterOrder    Int                     @default(0)
   position       String?
   isCaptain      Boolean                 @default(false)
@@ -2262,6 +2270,7 @@ model RegistrationParticipantSport {
   @@unique([organizationId, id])
   @@unique([organizationId, participantId, sport])
   @@index([organizationId, sport, rosterOrder])
+  @@index([organizationId, sportId])
 }
 
 // Post-event retrospective data - deliberately separate from the pre-event Runbook

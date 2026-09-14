@@ -257,6 +257,8 @@ Implementation: `RuleSet.sportId` + `RuleSet.config` (a flat rule-key map) and `
 - `SportConfig` (`web/src/lib/registration/sport-config.ts`) generalizes from two hardcoded sports to a definition-driven roster/eligibility schema. The existing all-female Volleyball + Flag Race preset becomes one preset among many.
 - Player application fields (positions, wingspan, `application-config.ts:155`) become sport-declared attributes rendered from the definition.
 
+Implementation: `RegistrationParticipantSport.sportId` (FK to `Sport`) and `RegistrationForm.sportIds` (mirror). The enum→registry bridge and definition-driven view live in `web/src/lib/registration/sport-identity.ts` (`configuredSports`); backfill in `scripts/registration-sport-unify-backfill.ts`, verification in `scripts/registration-sport-unify-parity-check.ts`. The stored `SportConfig` schema itself is generalized in a later step.
+
 ### 5.9 Playing surface
 
 - Replace basketball-only `CourtSpecification` usage with a `SurfaceSpec` declared by the sport definition (court, pitch, field) plus a per-venue surface instance.
