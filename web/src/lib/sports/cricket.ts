@@ -63,4 +63,7 @@ export const CRICKET: SportDefinition = {
   },
   surface: { type: "PITCH" },
   capabilities: ["INNINGS", "SUBSTITUTIONS"],
+  constraints: [
+    { key: "SCORING_EVENT_REQUIRES_ACTOR", label: "Scoring events must name a player or entrant", context: "EVENT", severity: "BLOCK" },
+  ],
 };

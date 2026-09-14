@@ -74,6 +74,19 @@ export type SportRuleValue = {
   label?: string;
 };
 
+export type ConstraintContext = "EVENT" | "LINEUP" | "PERIOD_TRANSITION" | "SUBMISSION";
+export type ConstraintSeverity = "BLOCK" | "WARN";
+
+// Entry-time validation declared per sport. `key` references a code-registered validator in
+// validators.ts; the engine only knows that the constraint applies, not what it means.
+// BLOCK prevents the action; WARN records an issue but allows it.
+export type SportConstraint = {
+  key: string;
+  label: string;
+  context: ConstraintContext;
+  severity: ConstraintSeverity;
+};
+
 export type StandingsOutcome = "WIN" | "DRAW" | "LOSS" | "NO_RESULT" | "TIE";
 
 export type StandingsPrimaryPoints =
@@ -132,4 +145,5 @@ export type SportDefinition = {
   surface?: SurfaceSpec;
   capabilities: CapabilityKey[];
   rules?: SportRuleValue[];
+  constraints: SportConstraint[];
 };

@@ -14,6 +14,7 @@ import { VOLLEYBALL } from "./volleyball";
 import { FOOTBALL } from "./football";
 import { CRICKET } from "./cricket";
 import { TENNIS } from "./tennis";
+import { isKnownValidator } from "./validators";
 
 export const SPORT_DEFINITIONS = {
   BASKETBALL,
@@ -111,6 +112,27 @@ export function validateSportDefinition(definition: SportDefinition): string[] {
       if (!eventKeys.has(eventKey)) {
         issues.push(`metric "${scopedKey}" derives from unknown event "${eventKey}"`);
       }
+    }
+  }
+
+  const validContexts = new Set(["EVENT", "LINEUP", "PERIOD_TRANSITION", "SUBMISSION"]);
+  const validSeverities = new Set(["BLOCK", "WARN"]);
+  const seenConstraints = new Set<string>();
+  for (const constraint of definition.constraints) {
+    if (!constraint.key) {
+      issues.push("constraint missing key");
+      continue;
+    }
+    if (seenConstraints.has(constraint.key)) issues.push(`duplicate constraint "${constraint.key}"`);
+    seenConstraints.add(constraint.key);
+    if (!isKnownValidator(constraint.key)) {
+      issues.push(`constraint "${constraint.key}" has no registered validator`);
+    }
+    if (!validContexts.has(constraint.context)) {
+      issues.push(`constraint "${constraint.key}" has invalid context "${constraint.context}"`);
+    }
+    if (!validSeverities.has(constraint.severity)) {
+      issues.push(`constraint "${constraint.key}" has invalid severity "${constraint.severity}"`);
     }
   }
 

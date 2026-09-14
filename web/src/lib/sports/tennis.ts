@@ -55,4 +55,7 @@ export const TENNIS: SportDefinition = {
   },
   surface: { type: "COURT", lengthM: 23.77, widthM: 10.97 },
   capabilities: [],
+  constraints: [
+    { key: "SCORING_EVENT_REQUIRES_ACTOR", label: "Scoring events must name a player or entrant", context: "EVENT", severity: "BLOCK" },
+  ],
 };

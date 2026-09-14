@@ -65,4 +65,9 @@ export const VOLLEYBALL: SportDefinition = {
   },
   surface: { type: "COURT", lengthM: 18, widthM: 9 },
   capabilities: ["SUBSTITUTIONS", "ROTATION"],
+  constraints: [
+    { key: "SCORING_EVENT_REQUIRES_ACTOR", label: "Scoring events must name a player or entrant", context: "EVENT", severity: "BLOCK" },
+    { key: "VOLLEYBALL_ROTATION_ORDER", label: "Service rotation order must be preserved", context: "LINEUP", severity: "BLOCK" },
+    { key: "VOLLEYBALL_MAX_SUBSTITUTIONS", label: "Substitution limit per set", context: "EVENT", severity: "BLOCK" },
+  ],
 };

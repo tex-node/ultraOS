@@ -84,4 +84,9 @@ export const BASKETBALL: SportDefinition = {
     { key: "FOUR_POINT_BASE_VALUE", value: 4, label: "Four-point shot value" },
     { key: "MANDATORY_SUBSTITUTION_POLICY", value: "AT_LEAST_ONE_PER_HALF", label: "Mandatory substitution policy" },
   ],
+  constraints: [
+    { key: "SCORING_EVENT_REQUIRES_ACTOR", label: "Scoring events must name a player or entrant", context: "EVENT", severity: "BLOCK" },
+    { key: "BASKETBALL_ACTIVE_PLAYER_REQUIRED", label: "Only active players may record events", context: "EVENT", severity: "BLOCK" },
+    { key: "BASKETBALL_PLAYER_FOUL_LIMIT", label: "A player with five fouls may not be active", context: "LINEUP", severity: "BLOCK" },
+  ],
 };
