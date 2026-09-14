@@ -35,6 +35,8 @@
     "metrics:sync-definitions": "tsx scripts/sport-metric-definitions-sync.ts",
     "metrics:backfill": "tsx scripts/game-metric-backfill.ts",
     "metrics:parity-check": "tsx scripts/game-metric-parity-check.ts",
+    "rules:backfill": "tsx scripts/ruleset-sport-backfill.ts",
+    "rules:parity-check": "tsx scripts/rules-parity-check.ts",
     "vision:analyze": "tsx scripts/vision-analyze.ts",
     "db:studio": "prisma studio",
     "db:backup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-database.ps1",

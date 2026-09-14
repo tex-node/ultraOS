@@ -682,6 +682,8 @@ model Sport {
   clubs        Club[]
   definitionOverrides SportDefinitionOverride[]
   metricDefinitions SportMetricDefinition[]
+  ruleSets          RuleSet[]
+  gameRuleSnapshots GameRuleSnapshot[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
@@ -3098,6 +3100,13 @@ model RuleSet {
   isActive       Boolean      @default(true)
   seasonId       String?
   season         Season?      @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  // Multi-sport Stage 4 (S4.1): the sport this rule set belongs to, and its validated rule values
+  // keyed by the sport definition's declared rule keys. Nullable/additive - the legacy basketball
+  // columns below remain authoritative until read paths are migrated. `config` shape:
+  //   { "<RULE_KEY>": number | string | boolean, ... }
+  sportId        String?
+  sport          Sport?       @relation(fields: [sportId], references: [id], onDelete: SetNull)
+  config         Json?
 
   periodCount             Int @default(2)
   periodDurationSeconds   Int @default(600)
@@ -3138,6 +3147,13 @@ model GameRuleSnapshot {
   ruleSet        RuleSet?     @relation(fields: [ruleSetId], references: [id], onDelete: SetNull)
   ruleSetName    String
   ruleSetVersion Int
+  // Multi-sport Stage 4 (S4.2): the frozen sport definition version and its resolved rule values,
+  // captured at snapshot time so a played game remains explicable even if the definition changes.
+  // Nullable/additive; the legacy basketball columns below remain and are still authoritative.
+  sportId           String?
+  sport             Sport?  @relation(fields: [sportId], references: [id], onDelete: SetNull)
+  definitionVersion Int?
+  ruleValues        Json?
 
   periodCount             Int
   periodDurationSeconds   Int

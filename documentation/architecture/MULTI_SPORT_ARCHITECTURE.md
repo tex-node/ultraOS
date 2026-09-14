@@ -245,6 +245,8 @@ Examples:
 - `GameRuleSnapshot` stays the immutable per-game copy; it freezes the resolved definition version and rule values as JSON, while continuing to expose the legacy basketball fields for existing games.
 - Legacy basketball columns remain until the compatibility projection is retired.
 
+Implementation: `RuleSet.sportId` + `RuleSet.config` (a flat rule-key map) and `GameRuleSnapshot.sportId`/`definitionVersion`/`ruleValues`. Resolution and validation live in `web/src/lib/sports/rule-values.ts`; backfill in `scripts/ruleset-sport-backfill.ts`; verification in `scripts/rules-parity-check.ts`.
+
 ### 5.8 Registration and roster
 
 - Unify sport identity: replace `RegistrationSport` (`schema.prisma:2109`) usage with `sportId` FKs to `Sport`. Additive path: add nullable `sportId` to `RegistrationParticipantSport` and form config, backfill from the enum, then enforce.
