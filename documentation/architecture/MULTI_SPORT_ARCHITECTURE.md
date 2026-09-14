@@ -179,6 +179,8 @@ Keep the universal event ledger; make the vocabulary data-driven.
 - Retain the legacy `eventType GameEventType?` and basketball-specific fields (`basePointValue`, `multiplier`, `isUltraTime`, `isFourPointAttempt`, shot coordinates) for Season Zero compatibility. New sports use `typeKey` + `data` only.
 - A `SportEventDefinition` declares for each event: key, label, category, whether it scores, its value expression, and the metrics it produces. The scorer console renders from this catalog.
 
+Implementation: `GameEvent.typeKey` + `GameEvent.data`; catalog in `SportEventDefinition` (global, registry-derived). Mapping/lookup primitives live in `web/src/lib/sports/event-catalog.ts` (with the legacy `GameEventType` → key map); the catalog is materialized by `scripts/sport-event-definitions-sync.ts`, events are backfilled by `scripts/game-event-typekey-backfill.ts`, and verified by `scripts/game-event-typekey-parity-check.ts`.
+
 ### 5.5 Generic statistics (D2)
 
 New models:

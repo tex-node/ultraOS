@@ -146,9 +146,9 @@ For the user-facing product plan (onboarding, scheduling, capture, and statistic
 | S5.1 | Schema | Standings outcomes + `StandingMetric` + Entrant FK | 5 | `Done` | G3 | Migration authored (not applied); entrantId added in Stage 2 |
 | S5.2 | Domain | `StandingsEngine` + per-sport strategy | 5 | `Done` | S5.1 | `standings.ts` + tests (football/volleyball/cricket) |
 | S5.3 | Verification | Basketball standings parity | 5 | `In progress` | S5.2 | Unit parity passes; `standings-parity-check.ts` authored, not run |
-| S6.1 | Schema | `typeKey` + `data` on `GameEvent` | 6 | `Not started` | G2 | — |
-| S6.2 | Catalog | `SportEventDefinition` per sport | 6 | `Not started` | S6.1 | — |
-| S6.3 | UI | Scorer renders from catalog | 6 | `Not started` | S6.2 | Basketball unchanged |
+| S6.1 | Schema | `typeKey` + `data` on `GameEvent` | 6 | `Done` | G2 | Migration authored (not applied); `event-catalog.ts` + tests |
+| S6.2 | Catalog | `SportEventDefinition` per sport | 6 | `Done` | S6.1 | Registry events + catalog sync script |
+| S6.3 | UI | Scorer renders from catalog | 6 | `Not started` | S6.2 | Catalog available; scorer console migration pending |
 | S7.1 | Schema | Registration `sportId` FKs | 7 | `Not started` | G2 | — |
 | S7.2 | Backfill | Map `RegistrationSport` enum to `Sport` | 7 | `Not started` | S7.1 | — |
 | S7.3 | Domain | Definition-driven `SportConfig` | 7 | `Not started` | S7.1 | Presets generalize |

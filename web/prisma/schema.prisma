@@ -682,6 +682,7 @@ model Sport {
   clubs        Club[]
   definitionOverrides SportDefinitionOverride[]
   metricDefinitions SportMetricDefinition[]
+  eventDefinitions  SportEventDefinition[]
   ruleSets          RuleSet[]
   gameRuleSnapshots GameRuleSnapshot[]
   createdAt    DateTime      @default(now())
@@ -3219,6 +3220,11 @@ model GameEvent {
   fouledPlayer                 Player?                       @relation("GameEventFouledPlayer", fields: [fouledPlayerId], references: [id], onDelete: SetNull)
   foulType                     FoulType?
   eventType                    GameEventType
+  // Multi-sport Stage 6 (S6.1): the sport-definition event key (SportEventDefinition.key) and an
+  // opaque sport-specific payload. Nullable/additive; the legacy `eventType` enum remains for
+  // Season Zero compatibility and is mapped to `typeKey` by the backfill.
+  typeKey                      String?
+  data                         Json?
   points                       Int?
   // Shot provenance for Ultra Time: basePointValue is the shot actually taken (1-4),
   // multiplier is 1 normally or 2 during Ultra Time (final minute of the final half).
@@ -3471,6 +3477,28 @@ model SportMetricDefinition {
   // Same key may exist for PLAYER and ENTRANT (e.g. "points"), so uniqueness is scoped by subject.
   @@unique([sportId, subject, key])
   @@index([sportId, subject, sortOrder])
+}
+
+// Multi-sport Stage 6 (S6.2): the catalog of events a sport can record, synced from the code
+// registry (SportDefinition.events). GLOBAL like Sport and SportMetricDefinition - registry-derived
+// reference data with no organizationId and no RLS. The scorer console renders from this catalog,
+// and GameEvent.typeKey references SportEventDefinition.key.
+model SportEventDefinition {
+  id              String   @id @default(cuid())
+  sportId         String
+  sport           Sport    @relation(fields: [sportId], references: [id], onDelete: Restrict)
+  key             String
+  label           String
+  category        String
+  scores          Boolean  @default(false)
+  pointValues     Int[]    @default([])
+  producesMetrics String[] @default([])
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([sportId, key])
+  @@index([sportId, sortOrder])
 }
 
 // Multi-sport Stage 3 (S3.1): one measured statistic for a Game, keyed by subject (player or
