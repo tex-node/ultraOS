@@ -156,9 +156,10 @@ Applying the engine migrations and backfills to staging is governed by `document
 | S7.3 | Domain | Definition-driven `SportConfig` | 7 | `In progress` | S7.1 | `configuredSports` bridge shipped; config schema generalization deferred |
 | S8.1 | Definition | Volleyball definition module | 8 | `Done` | G1–G3, P6, P7 | Rules, capture plan, sport-aware standings |
 | S8.2 | Product | Volleyball competition end-to-end | 8 | `In progress` | S8.1 | Runtime standings sport-aware; capture UI + applied schema pending (Gate G4) |
-| S9.1 | Definition | Football definition | 9 | `Not started` | G4 | — |
-| S9.2 | Definition | Cricket definition | 9 | `Not started` | G4 | Ball-by-ball decision first |
-| S9.3 | Definition | Tennis definition | 9 | `Not started` | G4 | Bracket vs round-robin |
+| S9.1 | Definition | Football definition | 9 | `Done` | G4 | Definition + rules; draws/GD standings covered by tests |
+| S9.2 | Definition | Cricket definition | 9 | `Done` | G4 | Definition + rules; ball-by-ball ledger + NRR covered by tests |
+| S9.3 | Definition | Tennis definition | 9 | `Done` | G4 | INDIVIDUAL/PAIR; round-robin first; set-ratio standings covered |
+| S9.4 | Domain | Fixture generator (round-robin / knockout / group-stage) | 9 | `Done` | S9.1 | `fixtures.ts` + tests (Q1 formats) |
 | S10.1 | Cleanup | Retire compatibility projection | 10 | `Deferred` | G3–G5 | Only after sign-off |
 | S10.2 | Cleanup | Retire legacy event/rule columns | 10 | `Deferred` | G6 | Irreversible; backup first |
 

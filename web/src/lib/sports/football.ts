@@ -63,6 +63,11 @@ export const FOOTBALL: SportDefinition = {
   surface: { type: "PITCH", lengthM: 105, widthM: 68 },
   defaultDivisions: ["Men's", "Women's"],
   capabilities: ["SUBSTITUTIONS", "EXTRA_TIME", "PENALTIES"],
+  rules: [
+    { key: "SUBSTITUTION_LIMIT", value: 5, label: "Substitutions per match" },
+    { key: "EXTRA_TIME_ENABLED", value: true, label: "Extra time in knockout matches" },
+    { key: "PENALTIES_ENABLED", value: true, label: "Penalty shootout in knockout matches" },
+  ],
   constraints: [
     { key: "SCORING_EVENT_REQUIRES_ACTOR", label: "Scoring events must name a player or entrant", context: "EVENT", severity: "BLOCK" },
     { key: "FOOTBALL_SENT_OFF_PLAYER", label: "A sent-off player may not take further part", context: "LINEUP", severity: "BLOCK" },

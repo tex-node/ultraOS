@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BASKETBALL } from "@/lib/sports/basketball";
+import { TENNIS } from "@/lib/sports/tennis";
 import { VOLLEYBALL } from "@/lib/sports/volleyball";
 import { computeSeasonStandings } from "@/lib/sports/standings";
 import { calculateStandings } from "@/lib/standings";
@@ -34,6 +35,26 @@ test("volleyball season standings award match points by set score", () => {
   );
   assert.equal(byId.get("a")!.entrantId, "e-a");
   assert.ok(Math.abs((byId.get("a")!.secondary.SET_RATIO ?? 0) - 6) < 1e-9);
+});
+
+test("tennis season standings use wins and set ratio", () => {
+  const teams = [
+    { seasonClubId: "a", name: "Alpha", entrantId: "e-a" },
+    { seasonClubId: "b", name: "Beta", entrantId: "e-b" },
+  ];
+  // Fixture scores are SETS WON (best-of-three).
+  const fixtures = [
+    { homeSeasonClubId: "a", awaySeasonClubId: "b", homeScore: 2, awayScore: 0 },
+    { homeSeasonClubId: "b", awaySeasonClubId: "a", homeScore: 2, awayScore: 1 },
+  ];
+
+  const rows = computeSeasonStandings(TENNIS, teams, fixtures);
+  const byId = new Map(rows.map((row) => [row.seasonClubId, row]));
+  assert.equal(byId.get("a")!.leaguePoints, 1);
+  assert.equal(byId.get("b")!.leaguePoints, 1);
+  // Set ratio breaks the tie: a 3-2, b 2-3.
+  assert.equal(rows[0].seasonClubId, "a");
+  assert.ok(Math.abs((byId.get("a")!.secondary.SET_RATIO ?? 0) - 1.5) < 1e-9);
 });
 
 test("basketball season standings are parity-equal to the legacy engine", () => {

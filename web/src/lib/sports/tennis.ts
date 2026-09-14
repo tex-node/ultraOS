@@ -56,6 +56,11 @@ export const TENNIS: SportDefinition = {
   surface: { type: "COURT", lengthM: 23.77, widthM: 10.97 },
   defaultDivisions: ["Singles", "Doubles"],
   capabilities: [],
+  rules: [
+    { key: "SETS_TO_WIN", value: 3, label: "Sets needed to win the match" },
+    { key: "GAMES_PER_SET", value: 6, label: "Games per set" },
+    { key: "TIEBREAK_ENABLED", value: true, label: "Tiebreak at 6-6" },
+  ],
   constraints: [
     { key: "SCORING_EVENT_REQUIRES_ACTOR", label: "Scoring events must name a player or entrant", context: "EVENT", severity: "BLOCK" },
   ],

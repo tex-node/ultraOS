@@ -64,6 +64,11 @@ export const CRICKET: SportDefinition = {
   surface: { type: "PITCH" },
   defaultDivisions: ["Men's", "Women's"],
   capabilities: ["INNINGS", "SUBSTITUTIONS"],
+  rules: [
+    { key: "OVERS_PER_INNINGS", value: 20, label: "Overs per innings" },
+    { key: "BALL_BY_BALL", value: true, label: "Capture every delivery" },
+    { key: "DLS_ENABLED", value: false, label: "Duckworth-Lewis-Stern adjustments" },
+  ],
   constraints: [
     { key: "SCORING_EVENT_REQUIRES_ACTOR", label: "Scoring events must name a player or entrant", context: "EVENT", severity: "BLOCK" },
   ],

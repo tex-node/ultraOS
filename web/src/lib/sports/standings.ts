@@ -286,14 +286,14 @@ export type ComputedStandingRow = Omit<StandingRow, "entrantId"> & {
   entrantId: string | null;
 };
 
-// For sports whose primary score unit is sets (volleyball), the fixture score is sets won, so the
-// engine's set-based match points and set ratio can be computed. Other sports carry no secondary
-// metrics at this stage.
+// For sports decided over periods/sets (volleyball, tennis), the fixture score is periods/sets won,
+// so the engine's set-based match points and set ratio can be computed. Other sports carry no
+// secondary metrics at this stage.
 function secondaryForFixture(
   definition: SportDefinition,
   fixture: SeasonStandingFixture,
 ): StandingsResult["secondary"] {
-  if (definition.standings.primaryPoints.model === "VOLLEYBALL_SETS") {
+  if (definition.scoring.winCondition === "BEST_OF_PERIODS") {
     return {
       home: { SETS_WON: fixture.homeScore, SETS_LOST: fixture.awayScore },
       away: { SETS_WON: fixture.awayScore, SETS_LOST: fixture.homeScore },
