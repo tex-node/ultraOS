@@ -9,7 +9,7 @@ import { prisma } from "../src/lib/prisma";
 import { effectiveRuleSnapshot, scoreShot } from "../src/lib/ultra-scoring-engine";
 import { buildLivePresentationModelForGame } from "../src/lib/live-game-snapshot-v2";
 import { buildSystemHealth } from "../src/lib/system-health-loader";
-import { recalculateStandings } from "../src/lib/standings";
+import { recalculateStandings } from "../src/lib/standings-recalculate";
 import { setPreview, takeToProgram, clearProgram, getBroadcastPresentationState } from "../src/lib/broadcast-presentation-state";
 import { derivePlayerStats, deriveTeamStats, emptyPlayerStats, emptyTeamStats, type DerivableEvent } from "../src/lib/event-derived-stats";
 

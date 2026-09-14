@@ -18,7 +18,7 @@ import {
   shotStatDeltas,
   type ShotStatDeltas,
 } from "@/lib/ultra-scoring-engine";
-import { recalculateStandings } from "@/lib/standings";
+import { recalculateStandings } from "@/lib/standings-recalculate";
 import type { Prisma } from "@/generated/prisma/client";
 
 function assertGameIsMutable(status: string, fixtureStatus: string) {

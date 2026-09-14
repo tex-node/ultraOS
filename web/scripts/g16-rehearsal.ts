@@ -19,7 +19,7 @@ import {
 import { reconcileGameScore } from "../src/lib/reconciliation";
 import { derivePlayerStats, deriveTeamStats, deriveTeamScore, emptyPlayerStats, emptyTeamStats, type DerivableEvent } from "../src/lib/event-derived-stats";
 import { deriveLineup, validateSubstitution } from "../src/lib/lineup";
-import { recalculateStandings } from "../src/lib/standings";
+import { recalculateStandings } from "../src/lib/standings-recalculate";
 import { loadSeasonPlayerTotals } from "../src/lib/analytics/game-analytics";
 import { remainingClockSeconds } from "../src/lib/game-clock";
 

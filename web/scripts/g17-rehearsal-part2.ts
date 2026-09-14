@@ -6,7 +6,7 @@ import { prisma } from "../src/lib/prisma";
 import { effectiveRuleSnapshot, scoreShot } from "../src/lib/ultra-scoring-engine";
 import { derivePlayerStats, deriveTeamStats, emptyPlayerStats, emptyTeamStats, type DerivableEvent } from "../src/lib/event-derived-stats";
 import { verifyTeamMinutes, type SubstitutionWithClock } from "../src/lib/lineup-stints";
-import { recalculateStandings } from "../src/lib/standings";
+import { recalculateStandings } from "../src/lib/standings-recalculate";
 import { loadSeasonPlayerTotals } from "../src/lib/analytics/game-analytics";
 import { buildLiveGameSnapshotV2 } from "../src/lib/live-game-snapshot-v2";
 import { remainingClockSeconds } from "../src/lib/game-clock";

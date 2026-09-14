@@ -19,7 +19,7 @@ import { effectiveRuleSnapshot, scoreShot } from "../src/lib/ultra-scoring-engin
 import { buildLivePresentationModelForGame } from "../src/lib/live-game-snapshot-v2";
 import { loadSeasonGameCores } from "../src/lib/analytics/game-analytics";
 import { buildPlayerSingleGameRecords } from "../src/lib/analytics/records";
-import { recalculateStandings } from "../src/lib/standings";
+import { recalculateStandings } from "../src/lib/standings-recalculate";
 import { remainingClockSeconds } from "../src/lib/game-clock";
 import { derivePlayerStats, deriveTeamStats, emptyPlayerStats, emptyTeamStats, type DerivableEvent } from "../src/lib/event-derived-stats";
 

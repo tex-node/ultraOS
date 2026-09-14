@@ -22,17 +22,16 @@ export async function loadActiveSportOverride(
   });
 }
 
-export async function resolveSportDefinitionForOrganization(
+// Applies an organization's active override to a code-registered definition. Safe to call inside an
+// existing transaction (unlike resolveSportDefinitionForOrganization); falls back to the registered
+// definition when no valid override exists.
+export async function resolveSportDefinitionForSportInTx(
+  tx: Prisma.TransactionClient,
   organizationId: string,
-  sportKeyOrSlug: string,
+  sport: { id: string; slug: string },
 ): Promise<SportDefinition> {
-  const base = requireSportDefinition(sportKeyOrSlug);
-  const override = await withOrganizationContext(organizationId, (tx) =>
-    tx.sportDefinitionOverride.findFirst({
-      where: { organizationId, sport: { slug: base.slug }, isActive: true },
-      orderBy: { version: "desc" },
-    }),
-  );
+  const base = requireSportDefinition(sport.slug);
+  const override = await loadActiveSportOverride(tx, organizationId, sport.id);
   if (!override) return base;
   try {
     const config = parseSportOverride(override.config);
@@ -41,4 +40,16 @@ export async function resolveSportDefinitionForOrganization(
   } catch {
     return base;
   }
+}
+
+export async function resolveSportDefinitionForOrganization(
+  organizationId: string,
+  sportKeyOrSlug: string,
+): Promise<SportDefinition> {
+  const base = requireSportDefinition(sportKeyOrSlug);
+  return withOrganizationContext(organizationId, async (tx) => {
+    const sport = await tx.sport.findUnique({ where: { slug: base.slug }, select: { id: true, slug: true } });
+    if (!sport) return base;
+    return resolveSportDefinitionForSportInTx(tx, organizationId, sport);
+  });
 }

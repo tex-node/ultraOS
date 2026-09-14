@@ -15,7 +15,7 @@ import {
   StatDataSource, VideoSourceType,
 } from "../src/generated/prisma/enums";
 import { loadGameCore, loadSeasonGameCores, loadSeasonPlayerTotals } from "../src/lib/analytics/game-analytics";
-import { recalculateStandings } from "../src/lib/standings";
+import { recalculateStandings } from "../src/lib/standings-recalculate";
 import { getFixtureVisionWorkspaceData, getVisionDashboardData, listGameVideosForFixture, registerGameVideoFromExistingAsset } from "../src/lib/vision/vision-loader";
 import { prisma } from "../src/lib/prisma";
 import { withOrganizationContext } from "../src/lib/tenant-context";

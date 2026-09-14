@@ -10,7 +10,7 @@
 import { prisma } from "../src/lib/prisma";
 import { effectiveRuleSnapshot, scoreShot } from "../src/lib/ultra-scoring-engine";
 import { buildLivePresentationModelForGame } from "../src/lib/live-game-snapshot-v2";
-import { recalculateStandings } from "../src/lib/standings";
+import { recalculateStandings } from "../src/lib/standings-recalculate";
 import { setPreview, takeToProgram, clearProgram, getBroadcastPresentationState } from "../src/lib/broadcast-presentation-state";
 
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";

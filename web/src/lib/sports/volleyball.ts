@@ -66,6 +66,13 @@ export const VOLLEYBALL: SportDefinition = {
   surface: { type: "COURT", lengthM: 18, widthM: 9 },
   defaultDivisions: ["Men's", "Women's"],
   capabilities: ["SUBSTITUTIONS", "ROTATION"],
+  rules: [
+    { key: "SETS_TO_WIN", value: 3, label: "Sets needed to win the match" },
+    { key: "POINTS_TO_WIN_SET", value: 25, label: "Points to win a set" },
+    { key: "DECIDING_SET_POINTS", value: 15, label: "Points in the deciding set" },
+    { key: "WIN_BY", value: 2, label: "Win a set by" },
+    { key: "SUBSTITUTION_LIMIT_PER_SET", value: 6, label: "Substitutions per set" },
+  ],
   constraints: [
     { key: "SCORING_EVENT_REQUIRES_ACTOR", label: "Scoring events must name a player or entrant", context: "EVENT", severity: "BLOCK" },
     { key: "VOLLEYBALL_ROTATION_ORDER", label: "Service rotation order must be preserved", context: "LINEUP", severity: "BLOCK" },

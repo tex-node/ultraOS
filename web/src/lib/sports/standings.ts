@@ -268,3 +268,59 @@ export function compareStandingRows(definition: SportDefinition, a: StandingRow,
   }
   return a.name.localeCompare(b.name);
 }
+
+// Runtime (persistable) shape keyed by SeasonClub for team sports. The competing unit in the engine
+// is the seasonClubId; entrantId is carried alongside once Stage 2 has populated it.
+export type SeasonStandingTeam = { seasonClubId: string; name: string; entrantId?: string | null };
+
+export type SeasonStandingFixture = {
+  homeSeasonClubId: string;
+  awaySeasonClubId: string;
+  homeScore: number;
+  awayScore: number;
+  winnerSeasonClubId?: string | null;
+};
+
+export type ComputedStandingRow = Omit<StandingRow, "entrantId"> & {
+  seasonClubId: string;
+  entrantId: string | null;
+};
+
+// For sports whose primary score unit is sets (volleyball), the fixture score is sets won, so the
+// engine's set-based match points and set ratio can be computed. Other sports carry no secondary
+// metrics at this stage.
+function secondaryForFixture(
+  definition: SportDefinition,
+  fixture: SeasonStandingFixture,
+): StandingsResult["secondary"] {
+  if (definition.standings.primaryPoints.model === "VOLLEYBALL_SETS") {
+    return {
+      home: { SETS_WON: fixture.homeScore, SETS_LOST: fixture.awayScore },
+      away: { SETS_WON: fixture.awayScore, SETS_LOST: fixture.homeScore },
+    };
+  }
+  return undefined;
+}
+
+export function computeSeasonStandings(
+  definition: SportDefinition,
+  teams: SeasonStandingTeam[],
+  fixtures: SeasonStandingFixture[],
+): ComputedStandingRow[] {
+  const entrants: StandingsEntrant[] = teams.map((team) => ({ entrantId: team.seasonClubId, name: team.name }));
+  const results: StandingsResult[] = fixtures.map((fixture) => ({
+    homeEntrantId: fixture.homeSeasonClubId,
+    awayEntrantId: fixture.awaySeasonClubId,
+    homeScore: fixture.homeScore,
+    awayScore: fixture.awayScore,
+    secondary: secondaryForFixture(definition, fixture),
+  }));
+
+  const rows = computeStandings(definition, entrants, results);
+  const teamBySeasonClub = new Map(teams.map((team) => [team.seasonClubId, team]));
+  return rows.map((row) => ({
+    ...row,
+    seasonClubId: row.entrantId,
+    entrantId: teamBySeasonClub.get(row.entrantId)?.entrantId ?? null,
+  }));
+}

@@ -6,7 +6,7 @@
 
 import { prisma } from "../src/lib/prisma";
 import { importGameResult, type GameResultImportInput, type ImportPlayerLine } from "../src/lib/game-result-import";
-import { recalculateStandings } from "../src/lib/standings";
+import { recalculateStandings } from "../src/lib/standings-recalculate";
 
 const ACTOR_ID = "cmqgct5pb000020kkm0aqtes2";
 

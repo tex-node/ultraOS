@@ -179,7 +179,7 @@ Keep the universal event ledger; make the vocabulary data-driven.
 - Retain the legacy `eventType GameEventType?` and basketball-specific fields (`basePointValue`, `multiplier`, `isUltraTime`, `isFourPointAttempt`, shot coordinates) for Season Zero compatibility. New sports use `typeKey` + `data` only.
 - A `SportEventDefinition` declares for each event: key, label, category, whether it scores, its value expression, and the metrics it produces. The scorer console renders from this catalog.
 
-Implementation: `GameEvent.typeKey` + `GameEvent.data`; catalog in `SportEventDefinition` (global, registry-derived). Mapping/lookup primitives live in `web/src/lib/sports/event-catalog.ts` (with the legacy `GameEventType` → key map); the catalog is materialized by `scripts/sport-event-definitions-sync.ts`, events are backfilled by `scripts/game-event-typekey-backfill.ts`, and verified by `scripts/game-event-typekey-parity-check.ts`.
+Implementation: `GameEvent.typeKey` + `GameEvent.data`; catalog in `SportEventDefinition` (global, registry-derived). Mapping/lookup primitives live in `web/src/lib/sports/event-catalog.ts` (with the legacy `GameEventType` → key map); the catalog is materialized by `scripts/sport-event-definitions-sync.ts`, events are backfilled by `scripts/game-event-typekey-backfill.ts`, and verified by `scripts/game-event-typekey-parity-check.ts`. A catalog-driven console layout is provided by `web/src/lib/sports/capture-plan.ts`.
 
 ### 5.5 Generic statistics (D2)
 
@@ -241,7 +241,7 @@ Examples:
 | Cricket | W/L/D/NR | W=2, D/NR=1 | net run rate | — |
 | Tennis | W/L | table or bracket | sets/games ratio | head-to-head |
 
-Implementation: outcomes (`drawn`/`ties`/`noResult`), `rank`, and `rankTiebreak` on `Standing`; sport-specific values in `StandingMetric`. The engine is `web/src/lib/sports/standings.ts` (`computeStandings`/`rankStandingRows`), verified against the legacy basketball engine in `standings.test.ts`; backfill in `scripts/standings-generalize-backfill.ts` and verification in `scripts/standings-parity-check.ts`.
+Implementation: outcomes (`drawn`/`ties`/`noResult`), `rank`, and `rankTiebreak` on `Standing`; sport-specific values in `StandingMetric`. The engine is `web/src/lib/sports/standings.ts` (`computeStandings`/`rankStandingRows`/`computeSeasonStandings`), verified against the legacy basketball engine in `standings.test.ts`; runtime recalculation is sport-aware (`web/src/lib/standings-recalculate.ts`, called on game finalization); backfill in `scripts/standings-generalize-backfill.ts` and verification in `scripts/standings-parity-check.ts`.
 
 ### 5.7 Rule sets
 
