@@ -681,6 +681,7 @@ model Sport {
   competitions Competition[]
   clubs        Club[]
   definitionOverrides SportDefinitionOverride[]
+  metricDefinitions SportMetricDefinition[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
@@ -962,6 +963,7 @@ model Entrant {
   gameEvents     GameEvent[]
   standings      Standing[]
   teamStats      TeamStat[]
+  metricValues   GameMetricValue[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -1082,6 +1084,7 @@ model Player {
   visionTrackCandidate       VisionTrack[]           @relation("VisionTrackPlayerCandidate")
   visionObservationCandidate VisionObservation[]     @relation("VisionObservationPlayerCandidate")
   visionSpatialSummaries     VisionSpatialSummary[]
+  metricValues               GameMetricValue[]
   createdAt                  DateTime                @default(now())
   updatedAt                  DateTime                @updatedAt
 
@@ -3069,6 +3072,7 @@ model Game {
   statisticsVerifiedAt       DateTime?
   statisticsVerifiedById     String?
   gameVideos                 GameVideo[]
+  metricValues               GameMetricValue[]
   // G.22 Part VIII: which basket the HOME team attacks in period 1 - the one piece of game
   // setup this system never previously captured, needed to interpret any court coordinate
   // spatially (which half is "backcourt" vs "frontcourt" for a given team/period). Nullable and
@@ -3257,6 +3261,7 @@ model GameEvent {
   // existing here is never itself a promotion into x/y/courtZone above - that stays a distinct,
   // explicitly human-audited action outside this track's scope.
   visionEventMatches VisionEventMatch[]
+  metricValues       GameMetricValue[]
 
   @@index([gameId, createdAt])
   @@index([gameId, sequenceNumber])
@@ -3404,6 +3409,91 @@ model TeamStat {
   statSource                   StatDataSource?
 
   @@unique([gameId, seasonClubId])
+}
+
+enum StatValueType {
+  COUNT
+  DURATION
+  DECIMAL
+  PERCENTAGE
+}
+
+enum StatSubjectType {
+  PLAYER
+  ENTRANT
+}
+
+enum StatAggregation {
+  SUM
+  MAX
+  MIN
+  AVERAGE
+  RATIO
+}
+
+// Multi-sport Stage 3 (S3.1): the catalog of statistics a sport can capture, synced from the code
+// registry (web/src/lib/sports/*.ts, SportDefinition.metrics). Deliberately GLOBAL like Sport - it
+// is registry-derived reference data, not tenant-owned, so it carries no organizationId and no RLS.
+// Per-organization metric customization is intentionally not supported yet; adding it later means a
+// tenant-scoped override table, not columns here.
+model SportMetricDefinition {
+  id                   String                @id @default(cuid())
+  sportId              String
+  sport                Sport                 @relation(fields: [sportId], references: [id], onDelete: Restrict)
+  key                  String
+  label                String
+  valueType            StatValueType
+  subject              StatSubjectType
+  aggregation          StatAggregation
+  category             String?
+  derivedFromEventKeys String[]              @default([])
+  sortOrder            Int                   @default(0)
+  gameValues           GameMetricValue[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  // Same key may exist for PLAYER and ENTRANT (e.g. "points"), so uniqueness is scoped by subject.
+  @@unique([sportId, subject, key])
+  @@index([sportId, subject, sortOrder])
+}
+
+// Multi-sport Stage 3 (S3.1): one measured statistic for a Game, keyed by subject (player or
+// entrant) and metric definition. Tenant-owned (RLS). `subjectKey` is a never-null discriminator
+// ("PLAYER:<id>" / "ENTRANT:<id>") so the uniqueness constraint is reliable despite the nullable
+// playerId/entrantId FKs. `period` is 0 for a whole-game value (the current basketball projection)
+// and otherwise the period it applies to. `sourceEventId`/`statSource` carry provenance exactly
+// like PlayerStat/TeamStat; a ledger-derived value points back at the event it came from.
+//
+// This table is additive. The existing PlayerStat/TeamStat tables remain the basketball read model
+// until later stages migrate reads; the compatibility projection (scripts/game-metric-backfill.ts)
+// materializes legacy stats into this generic form, and scripts/game-metric-parity-check.ts proves
+// the two agree.
+model GameMetricValue {
+  id                 String                @id @default(cuid())
+  organizationId     String                @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  gameId             String
+  game               Game                  @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  metricDefinitionId String
+  metricDefinition   SportMetricDefinition @relation(fields: [metricDefinitionId], references: [id], onDelete: Restrict)
+  subjectType        StatSubjectType
+  subjectKey         String
+  playerId           String?
+  player             Player?               @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  entrantId          String?
+  entrant            Entrant?              @relation(fields: [entrantId], references: [id], onDelete: SetNull)
+  period             Int                   @default(0)
+  value              Decimal               @db.Decimal(12, 3)
+  sourceEventId      String?
+  sourceEvent        GameEvent?            @relation(fields: [sourceEventId], references: [id], onDelete: SetNull)
+  statSource         StatDataSource?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@unique([organizationId, gameId, metricDefinitionId, subjectKey, period])
+  @@index([organizationId, gameId, subjectType])
+  @@index([organizationId, gameId, playerId])
+  @@index([organizationId, gameId, entrantId])
 }
 
 model Standing {
@@ -4361,6 +4451,7 @@ model Organization {
   sportDefinitionOverrides  SportDefinitionOverride[]
   entrants                  Entrant[]
   entrantMembers            EntrantMember[]
+  gameMetricValues          GameMetricValue[]
   createdAt                 DateTime                       @default(now())
   updatedAt                 DateTime                       @updatedAt
 

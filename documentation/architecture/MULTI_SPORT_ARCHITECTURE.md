@@ -220,6 +220,8 @@ model GameMetricValue {
 - For `ULTRA_NATIVE_EVENTS` games, metric values are reproducible from the ledger via `derivedFromEventKeys`; the projection is a cache, not a source of truth.
 - The `StatDataSource` provenance vocabulary (`schema.prisma:190`) is reused unchanged.
 
+Implementation: `SportMetricDefinition` is a global, registry-derived catalog (no `organizationId`, no RLS, like `Sport`); `GameMetricValue` is tenant-owned. Mapping primitives live in `web/src/lib/sports/metric-values.ts`; the catalog is materialized by `scripts/sport-metric-definitions-sync.ts`, the compatibility projection by `scripts/game-metric-backfill.ts`, and Gate G3 verification by `scripts/game-metric-parity-check.ts`.
+
 ### 5.6 Standings
 
 - `Standing` references `Entrant` (generalized from `SeasonClub`, `schema.prisma:3268`).

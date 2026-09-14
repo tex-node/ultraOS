@@ -136,10 +136,10 @@ For the user-facing product plan (onboarding, scheduling, capture, and statistic
 | S2.2 | Schema | Nullable `entrantId` on dependent tables | 2 | `Done` | S2.1 | Fixture (home/away/winner), GameEvent, Standing, TeamStat |
 | S2.3 | Backfill | One TEAM Entrant per SeasonClub | 2 | `In progress` | S2.2 | `scripts/entrant-backfill.ts` authored; not run |
 | S2.4 | Verification | Entrant parity evidence | 2 | `In progress` | S2.3 | `scripts/entrant-parity-check.ts` authored; not run |
-| S3.1 | Schema | `SportMetricDefinition`, `GameMetricValue` | 3 | `Not started` | G2 | — |
-| S3.2 | Domain | Basketball metric definitions | 3 | `Not started` | S3.1 | From box-score fields |
-| S3.3 | Projection | `PlayerStat`/`TeamStat` compatibility projection | 3 | `Not started` | S3.2 | Cache, not truth |
-| S3.4 | Verification | Stat parity across real games | 3 | `Not started` | S3.3 | Gate G3 |
+| S3.1 | Schema | `SportMetricDefinition`, `GameMetricValue` | 3 | `Done` | G2 | Migration authored (not applied); catalog global, values tenant-owned |
+| S3.2 | Domain | Basketball metric definitions | 3 | `Done` | S3.1 | In registry; sync script materializes catalog |
+| S3.3 | Projection | `PlayerStat`/`TeamStat` compatibility projection | 3 | `In progress` | S3.2 | `metric-values.ts` + `game-metric-backfill.ts` authored; not run |
+| S3.4 | Verification | Stat parity across real games | 3 | `In progress` | S3.3 | `game-metric-parity-check.ts` authored; not run |
 | S4.1 | Schema | Rules `sportId` + `RuleValue`/`config` | 4 | `Not started` | G3 | — |
 | S4.2 | Schema | Snapshot JSON on `GameRuleSnapshot` | 4 | `Not started` | S4.1 | Freeze definition version |
 | S4.3 | Backfill | Map existing `RuleSet` rows | 4 | `Not started` | S4.1 | — |
