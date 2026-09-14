@@ -160,8 +160,8 @@ Applying the engine migrations and backfills to staging is governed by `document
 | S9.2 | Definition | Cricket definition | 9 | `Done` | G4 | Definition + rules; ball-by-ball ledger + NRR covered by tests |
 | S9.3 | Definition | Tennis definition | 9 | `Done` | G4 | INDIVIDUAL/PAIR; round-robin first; set-ratio standings covered |
 | S9.4 | Domain | Fixture generator (round-robin / knockout / group-stage) | 9 | `Done` | S9.1 | `fixtures.ts` + tests (Q1 formats) |
-| S10.1 | Cleanup | Retire compatibility projection | 10 | `Deferred` | G3–G5 | Only after sign-off |
-| S10.2 | Cleanup | Retire legacy event/rule columns | 10 | `Deferred` | G6 | Irreversible; backup first |
+| S10.1 | Cleanup | Retire compatibility projection | 10 | `Deferred` | G3–G5 | Plan: `architecture/STAGE10_LEGACY_DECOMMISSION_PLAN.md`; gates unmet |
+| S10.2 | Cleanup | Retire legacy event/rule columns | 10 | `Deferred` | G6 | Irreversible; backup + audit first (plan doc) |
 
 ## 6. Cross-cutting workstreams
 
