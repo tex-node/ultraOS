@@ -34,7 +34,7 @@ For the user-facing product plan (onboarding, scheduling, capture, and statistic
 | Gate | Decision | Status | Notes |
 | --- | --- | --- | --- |
 | G0 | Architecture doc accepted as single agreed reference | `Done` | Accepted 2026-09-13; all five acceptance criteria met. |
-| G1 | Basketball definition parity proven (Stage 1) | `Not started` | No behaviour change permitted. |
+| G1 | Basketball definition parity proven (Stage 1) | `Not started` | Unit parity tests landed (registry.test.ts); Stage 1 not yet complete. |
 | G2 | Entrant backfill parity proven (Stage 2) | `Not started` | One TEAM Entrant per SeasonClub. |
 | G3 | Stat projection parity proven (Stage 3) | `Not started` | Legacy stat reads byte-for-byte identical. |
 | G4 | Volleyball pilot accepted (Stage 8) | `Not started` | Full competition runs from definition alone. |
@@ -126,11 +126,11 @@ For the user-facing product plan (onboarding, scheduling, capture, and statistic
 | D1 | Decision | Entrant abstraction confirmed | 0 | `Done` | — | Individual sports supported |
 | D2 | Decision | Generic metric model confirmed | 0 | `Done` | — | No per-sport stat tables |
 | D3 | Decision | Code registry + DB override confirmed | 0 | `Done` | — | Registry authority |
-| S1.1 | Registry | `web/src/lib/sports/` skeleton | 1 | `Not started` | G0 | — |
-| S1.2 | Registry | Basketball definition module | 1 | `Not started` | S1.1 | Must match current rules |
-| S1.3 | Schema | `SportDefinitionOverride` + RLS + composite FK | 1 | `Not started` | G0 | Follow Stage 5.4B |
-| S1.4 | Resolution | Definition resolver used by consumers | 1 | `Not started` | S1.2 | — |
-| S1.5 | Verification | Basketball parity evidence | 1 | `Not started` | S1.2–S1.4 | Gate G1 |
+| S1.1 | Registry | `web/src/lib/sports/` skeleton | 1 | `Done` | G0 | Registry + basketball, volleyball, football, cricket, tennis definitions |
+| S1.2 | Registry | Basketball definition module | 1 | `Done` | S1.1 | Parity test vs `ULTRA_RULES`/standings |
+| S1.3 | Schema | `SportDefinitionOverride` + RLS + composite FK | 1 | `Not started` | G0 | Unblocked once registry parity is proven |
+| S1.4 | Resolution | Definition resolver used by consumers | 1 | `In progress` | S1.2 | Resolver + summaries in registry; app consumers next |
+| S1.5 | Verification | Basketball parity evidence | 1 | `In progress` | S1.2–S1.4 | Unit parity tests landed; Gate G1 pending Stage 1 completion |
 | S2.1 | Schema | `Entrant`, `EntrantMember` + RLS | 2 | `Not started` | G1 | — |
 | S2.2 | Schema | Nullable `entrantId` on dependent tables | 2 | `Not started` | S2.1 | Additive |
 | S2.3 | Backfill | One TEAM Entrant per SeasonClub | 2 | `Not started` | S2.2 | Idempotent |

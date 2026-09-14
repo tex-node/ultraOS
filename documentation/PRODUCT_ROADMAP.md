@@ -276,7 +276,7 @@ Usability acceptance:
 | --- | --- | --- | --- | --- |
 | P0.1 | Accounts, auth, roles, tenancy | P0 | `Done` | — |
 | P0.2 | Admin shell and navigation | P0 | `Done` | — |
-| P1.1 | Sport picker from definition registry | P1 | `Not started` | Engine S1 |
+| P1.1 | Sport picker from definition registry | P1 | `In progress` | Engine S1 |
 | P1.2 | Format templates with plain-language summaries | P1 | `Not started` | P1.1 |
 | P1.3 | Guided tournament/competition/season/division setup | P1 | `In progress` | P1.1 |
 | P1.4 | Venue setup and reuse | P1 | `In progress` | — |
