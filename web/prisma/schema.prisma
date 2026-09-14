@@ -3525,14 +3525,41 @@ model Standing {
   entrant         Entrant?     @relation(fields: [entrantId], references: [id], onDelete: SetNull)
   played          Int          @default(0)
   won             Int          @default(0)
+  // Multi-sport Stage 5 (S5.1): outcomes beyond win/loss, plus a stored rank and the tiebreak key
+  // that decided it. Additive/defaulted; basketball leaves drawn/ties/noResult at 0 and rank null
+  // until the backfill computes it.
+  drawn           Int          @default(0)
+  ties            Int          @default(0)
+  noResult        Int          @default(0)
   lost            Int          @default(0)
   pointsFor       Int          @default(0)
   pointsAgainst   Int          @default(0)
   pointDifference Int          @default(0)
   leaguePoints    Int          @default(0)
+  rank            Int?
+  rankTiebreak    String?
+  metrics         StandingMetric[]
   updatedAt       DateTime     @updatedAt
 
   @@index([seasonId, leaguePoints, won, pointDifference, pointsFor])
+}
+
+// Multi-sport Stage 5 (S5.1): sport-specific standings values that do not fit the standard columns,
+// such as net run rate (cricket) or set/point ratio (volleyball). Tenant-owned (RLS). One row per
+// (standing, metricKey).
+model StandingMetric {
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  standingId     String
+  standing       Standing     @relation(fields: [standingId], references: [id], onDelete: Cascade)
+  metricKey      String
+  value          Decimal      @db.Decimal(12, 4)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([standingId, metricKey])
+  @@index([organizationId, metricKey])
 }
 
 // Exhibition/novelty teams (e.g. All-Star squads) - durable across events, deliberately
@@ -4468,6 +4495,7 @@ model Organization {
   entrants                  Entrant[]
   entrantMembers            EntrantMember[]
   gameMetricValues          GameMetricValue[]
+  standingMetrics           StandingMetric[]
   createdAt                 DateTime                       @default(now())
   updatedAt                 DateTime                       @updatedAt
 

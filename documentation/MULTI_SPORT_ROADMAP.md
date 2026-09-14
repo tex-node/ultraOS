@@ -143,9 +143,9 @@ For the user-facing product plan (onboarding, scheduling, capture, and statistic
 | S4.1 | Schema | Rules `sportId` + `RuleValue`/`config` | 4 | `Done` | G3 | Migration authored (not applied); `rule-values.ts` + tests |
 | S4.2 | Schema | Snapshot JSON on `GameRuleSnapshot` | 4 | `Done` | S4.1 | `sportId`/`definitionVersion`/`ruleValues` added |
 | S4.3 | Backfill | Map existing `RuleSet` rows | 4 | `In progress` | S4.1 | `ruleset-sport-backfill.ts` authored; not run |
-| S5.1 | Schema | Standings outcomes + `StandingMetric` + Entrant FK | 5 | `Not started` | G3 | — |
-| S5.2 | Domain | `StandingsEngine` + per-sport strategy | 5 | `Not started` | S5.1 | — |
-| S5.3 | Verification | Basketball standings parity | 5 | `Not started` | S5.2 | — |
+| S5.1 | Schema | Standings outcomes + `StandingMetric` + Entrant FK | 5 | `Done` | G3 | Migration authored (not applied); entrantId added in Stage 2 |
+| S5.2 | Domain | `StandingsEngine` + per-sport strategy | 5 | `Done` | S5.1 | `standings.ts` + tests (football/volleyball/cricket) |
+| S5.3 | Verification | Basketball standings parity | 5 | `In progress` | S5.2 | Unit parity passes; `standings-parity-check.ts` authored, not run |
 | S6.1 | Schema | `typeKey` + `data` on `GameEvent` | 6 | `Not started` | G2 | — |
 | S6.2 | Catalog | `SportEventDefinition` per sport | 6 | `Not started` | S6.1 | — |
 | S6.3 | UI | Scorer renders from catalog | 6 | `Not started` | S6.2 | Basketball unchanged |

@@ -239,6 +239,8 @@ Examples:
 | Cricket | W/L/D/NR | W=2, D/NR=1 | net run rate | — |
 | Tennis | W/L | table or bracket | sets/games ratio | head-to-head |
 
+Implementation: outcomes (`drawn`/`ties`/`noResult`), `rank`, and `rankTiebreak` on `Standing`; sport-specific values in `StandingMetric`. The engine is `web/src/lib/sports/standings.ts` (`computeStandings`/`rankStandingRows`), verified against the legacy basketball engine in `standings.test.ts`; backfill in `scripts/standings-generalize-backfill.ts` and verification in `scripts/standings-parity-check.ts`.
+
 ### 5.7 Rule sets
 
 - `RuleSet` gains `sportId` and a normalized `RuleValue[]` (keyed by a `RuleDefinition`), or a validated `config Json` for simple cases. Both resolve through the sport definition.
