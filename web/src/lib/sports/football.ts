@@ -61,6 +61,7 @@ export const FOOTBALL: SportDefinition = {
     positions: ["Goalkeeper", "Defender", "Midfielder", "Forward"],
   },
   surface: { type: "PITCH", lengthM: 105, widthM: 68 },
+  defaultDivisions: ["Men's", "Women's"],
   capabilities: ["SUBSTITUTIONS", "EXTRA_TIME", "PENALTIES"],
   constraints: [
     { key: "SCORING_EVENT_REQUIRES_ACTOR", label: "Scoring events must name a player or entrant", context: "EVENT", severity: "BLOCK" },

@@ -62,6 +62,7 @@ export const CRICKET: SportDefinition = {
     positions: ["Batter", "Bowler", "All-rounder", "Wicket-keeper"],
   },
   surface: { type: "PITCH" },
+  defaultDivisions: ["Men's", "Women's"],
   capabilities: ["INNINGS", "SUBSTITUTIONS"],
   constraints: [
     { key: "SCORING_EVENT_REQUIRES_ACTOR", label: "Scoring events must name a player or entrant", context: "EVENT", severity: "BLOCK" },

@@ -143,6 +143,7 @@ export type SportDefinition = {
   standings: StandingsSpec;
   roster?: RosterSpec;
   surface?: SurfaceSpec;
+  defaultDivisions?: string[];
   capabilities: CapabilityKey[];
   rules?: SportRuleValue[];
   constraints: SportConstraint[];

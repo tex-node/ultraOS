@@ -149,6 +149,7 @@ export type SportSummary = {
   structureSummary: string;
   winConditionSummary: string;
   formatSummary: string;
+  defaultDivisions: string[];
   capabilities: CapabilityKey[];
 };
 
@@ -228,6 +229,7 @@ export function describeSport(definition: SportDefinition): SportSummary {
     structureSummary,
     winConditionSummary,
     formatSummary: `${structureSummary} · ${winConditionSummary}`,
+    defaultDivisions: definition.defaultDivisions ?? [],
     capabilities: definition.capabilities,
   };
 }

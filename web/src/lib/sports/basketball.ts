@@ -77,6 +77,7 @@ export const BASKETBALL: SportDefinition = {
     positions: ["Point guard", "Shooting guard", "Small forward", "Power forward", "Center"],
   },
   surface: { type: "COURT", lengthM: 28, widthM: 15 },
+  defaultDivisions: ["Men's", "Women's"],
   capabilities: ["DRAFT", "SHOT_CLOCK", "ULTRA_TIME", "FOUR_POINT", "SUBSTITUTIONS", "SURFACE_VISION"],
   rules: [
     { key: "ULTRA_TIME_THRESHOLD_SECONDS", value: 60, label: "Ultra Time starts at" },

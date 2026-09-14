@@ -281,11 +281,11 @@ Usability acceptance:
 | --- | --- | --- | --- | --- |
 | P0.1 | Accounts, auth, roles, tenancy | P0 | `Done` | — |
 | P0.2 | Admin shell and navigation | P0 | `Done` | — |
-| P1.1 | Sport picker from definition registry | P1 | `In progress` | Engine S1 |
-| P1.2 | Format templates with plain-language summaries | P1 | `Not started` | P1.1 |
-| P1.3 | Guided tournament/competition/season/division setup | P1 | `In progress` | P1.1 |
+| P1.1 | Sport picker from definition registry | P1 | `Done` | Engine S1 |
+| P1.2 | Format templates with plain-language summaries | P1 | `In progress` | P1.1 |
+| P1.3 | Guided tournament/competition/season/division setup | P1 | `Done` | P1.1 |
 | P1.4 | Venue setup and reuse | P1 | `In progress` | — |
-| P1.5 | Tournament readiness dashboard | P1 | `Not started` | P1.3 |
+| P1.5 | Tournament readiness dashboard | P1 | `Done` | P1.3 |
 | P2.1 | Public registration links (individual + team) | P2 | `In progress` | P1.3 |
 | P2.2 | Team onboarding wizard (identity → roster → review) | P2 | `In progress` | — |
 | P2.3 | Participant search, invite, create with duplicate handling | P2 | `In progress` | — |

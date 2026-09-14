@@ -2,6 +2,7 @@ import type { UserRole } from "@/generated/prisma/enums";
 
 export type Permission =
   | "season:manage"
+  | "competition:manage"
   | "club:manage"
   | "player:manage"
   | "staff:manage"
@@ -83,6 +84,7 @@ export type Permission =
 const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
   SUPER_ADMIN: new Set<Permission>([
     "season:manage",
+    "competition:manage",
     "club:manage",
     "player:manage",
     "staff:manage",
@@ -149,6 +151,7 @@ const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
     "well-wish:moderate",
   ]),
   LEAGUE_OPERATOR: new Set<Permission>([
+    "competition:manage",
     "player:manage",
     "staff:manage",
     "draft:manage",

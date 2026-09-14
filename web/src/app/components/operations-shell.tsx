@@ -15,6 +15,7 @@ type NavEntry = NavLink | { label: string; links: NavLink[] };
 
 const navigation: NavEntry[] = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/competitions", label: "Competitions", adminOnly: true },
   { href: "/gameday", label: "Game Day" },
   { href: "/broadcast", label: "Broadcast" },
   {

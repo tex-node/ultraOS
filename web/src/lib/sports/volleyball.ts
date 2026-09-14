@@ -64,6 +64,7 @@ export const VOLLEYBALL: SportDefinition = {
     positions: ["Outside hitter", "Opposite hitter", "Middle blocker", "Setter", "Libero"],
   },
   surface: { type: "COURT", lengthM: 18, widthM: 9 },
+  defaultDivisions: ["Men's", "Women's"],
   capabilities: ["SUBSTITUTIONS", "ROTATION"],
   constraints: [
     { key: "SCORING_EVENT_REQUIRES_ACTOR", label: "Scoring events must name a player or entrant", context: "EVENT", severity: "BLOCK" },

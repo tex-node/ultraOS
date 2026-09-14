@@ -54,6 +54,7 @@ export const TENNIS: SportDefinition = {
     secondaryMetrics: ["SETS_WON", "SETS_LOST", "GAMES_WON", "GAMES_LOST"],
   },
   surface: { type: "COURT", lengthM: 23.77, widthM: 10.97 },
+  defaultDivisions: ["Singles", "Doubles"],
   capabilities: [],
   constraints: [
     { key: "SCORING_EVENT_REQUIRES_ACTOR", label: "Scoring events must name a player or entrant", context: "EVENT", severity: "BLOCK" },
