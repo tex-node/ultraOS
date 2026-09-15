@@ -1,8 +1,8 @@
 ---
 title: Product Roadmap
 status: Active
-version: product-0.1
-last_updated: 2026-09-13
+version: product-0.2
+last_updated: 2026-09-15
 ---
 
 # Product Roadmap
@@ -66,7 +66,7 @@ These apply to every phase and every screen.
 | P3 | Scheduling | Generate and adjust a usable schedule | `In progress` |
 | P4 | Match capture | Capture scores, time, and player data reliably | `In progress` |
 | P5 | Stats & results presentation | Publish stats, standings, and match pages | `In progress` |
-| P6 | Multi-sport expansion | The same flow works for every sport | `Not started` |
+| P6 | Multi-sport expansion | The same flow works for every sport | `In progress` |
 | P7 | Usability, offline, and scale | Intuitive, resilient, fast at real volume | `Not started` |
 
 P0-P5 are partly delivered for basketball Season Zero; the roadmap makes them complete and sport-agnostic.
@@ -277,6 +277,13 @@ Usability acceptance:
 
 ## 7. Progress tracker
 
+Reality check (2026-09-15): the engine (Stages 1–9) is implemented and applied to **staging and
+production**; all backfills/parity checks pass. The GIESM 2026 volleyball registration is **live**
+at `https://app.neonultra.ng/giesm`, and a volleyball pilot competition (clubs, fixtures, results,
+set-based standings) has been validated on staging. The remaining product gap is the **capture UI**
+(P4): live scoring is still basketball-only, so non-basketball matches can't be captured or scored
+through the app yet. Statuses below reflect this.
+
 | ID | Deliverable | Phase | Status | Depends on |
 | --- | --- | --- | --- | --- |
 | P0.1 | Accounts, auth, roles, tenancy | P0 | `Done` | — |
@@ -293,10 +300,10 @@ Usability acceptance:
 | P2.4 | Bulk roster import with validation preview | P2 | `In progress` | — |
 | P2.5 | Inline eligibility checks | P2 | `In progress` | P2.2 |
 | P2.6 | Team/player readiness states | P2 | `Not started` | P2.2 |
-| P3.1 | Round-robin schedule generator | P3 | `In progress` | P2 |
+| P3.1 | Round-robin schedule generator | P3 | `Done` | P2 |
 | P3.2 | Drag-and-drop reschedule with conflict feedback | P3 | `Not started` | P3.1 |
 | P3.3 | Venue/date availability | P3 | `In progress` | P1.4 |
-| P3.4 | Postpone/cancel/reschedule with history | P3 | `Not started` | P3.1 |
+| P3.4 | Postpone/cancel/reschedule with history | P3 | `In progress` | P3.1 |
 | P3.5 | Public schedule view | P3 | `In progress` | P3.1 |
 | P4.1 | Match-day command view | P4 | `Not started` | P3.1 |
 | P4.2 | Sport-aware capture console (basketball) | P4 | `In progress` | Engine S1 |
@@ -307,18 +314,18 @@ Usability acceptance:
 | P4.7 | Scorer/statistician reconciliation | P4 | `In progress` | — |
 | P4.8 | Actions-under-review workflow | P4 | `Not started` | P4.2 |
 | P4.9 | Substitution holding bay | P4 | `Not started` | P4.2 |
-| P5.1 | Automatic standings per sport | P5 | `In progress` | Engine S5 |
+| P5.1 | Automatic standings per sport | P5 | `Done` | Engine S5 |
 | P5.2 | Match center and match report | P5 | `In progress` | — |
 | P5.3 | Team/player season stats and leaders | P5 | `In progress` | Engine S3 |
 | P5.4 | Public tournament/team/player/fixture pages | P5 | `In progress` | P5.1 |
 | P5.5 | Broadcast/live presentation from verified data | P5 | `In progress` | P5.2 |
 | P5.6 | PDF/CSV exports | P5 | `In progress` | — |
 | P5.7 | Official scoresheet + FIBA parity checklist | P5 | `Not started` | P5.2 |
-| P6.1 | Volleyball pilot end-to-end | P6 | `Not started` | P1-P5, Engine S8 |
+| P6.1 | Volleyball pilot end-to-end | P6 | `In progress` | P1-P5, Engine S8 |
 | P6.2 | Football end-to-end | P6 | `Not started` | P6.1 |
 | P6.3 | Cricket end-to-end | P6 | `Not started` | P6.1 |
 | P6.4 | Tennis end-to-end | P6 | `Not started` | P6.1 |
-| P6.5 | Knockout and group-stage formats | P6 | `Not started` | Engine S9 |
+| P6.5 | Knockout and group-stage formats | P6 | `In progress` | Engine S9 |
 | P7.1 | Offline hardening and recovery drills | P7 | `Not started` | P4.6 |
 | P7.2 | Command palette, shortcuts, bulk ops | P7 | `Not started` | — |
 | P7.3 | Accessibility audit and fixes | P7 | `Not started` | — |
