@@ -26,7 +26,9 @@ import { requirePermissionOrRedirect } from "@/lib/authorization";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { FINAL_PERIOD, isUltraTime, periodLabel, remainingShotClockSeconds, ULTRA_RULES } from "@/lib/game-rules";
 import { getSportDefinition } from "@/lib/sports/registry";
+import { setScoringConfig } from "@/lib/sports/set-scoring";
 import { withOrganizationContext } from "@/lib/tenant-context";
+import { SetScorePanel } from "./set-score-panel";
 import { SportCapturePanel } from "./sport-capture-panel";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +51,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             take: 20,
             include: { seasonClub: { include: { club: true } }, player: { include: { athlete: true } }, fouledPlayer: { include: { athlete: true } } },
           },
+          periodScores: { orderBy: { period: "asc" } },
         },
       },
       venue: true,
@@ -65,6 +68,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
   const capabilities = new Set(definition?.capabilities ?? []);
   const hasShotClock = capabilities.has("SHOT_CLOCK");
   const isBasketball = definition?.key === "BASKETBALL";
+  const setConfig = definition ? setScoringConfig(definition) : null;
   const substitutionCheckDue = Boolean(game && game.currentPeriod >= FINAL_PERIOD && game.status !== "FINAL");
   const confirmations = substitutionCheckDue
     ? await withOrganizationContext(session.user.organizationId, (tx) => tx.auditLog.findMany({
@@ -259,6 +263,19 @@ export default async function Live({ params, searchParams }: { params: Promise<{
                 name: fixture.awaySeasonClub.club.name,
                 players: fixture.awaySeasonClub.players.map((player) => ({ id: player.id, name: `${player.athlete.firstName} ${player.athlete.lastName}` })),
               },
+            ]}
+          />
+        ) : null}
+        {setConfig && game && game.status !== "FINAL" ? (
+          <SetScorePanel
+            gameId={game.id}
+            fixtureId={fixtureId}
+            config={setConfig}
+            sets={game.periodScores.map((set) => ({ period: set.period, home: set.homeScore, away: set.awayScore }))}
+            currentPeriod={game.currentPeriod}
+            teams={[
+              { id: fixture.homeSeasonClub.id, name: fixture.homeSeasonClub.club.name },
+              { id: fixture.awaySeasonClub.id, name: fixture.awaySeasonClub.club.name },
             ]}
           />
         ) : null}

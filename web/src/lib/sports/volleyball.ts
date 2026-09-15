@@ -27,6 +27,7 @@ export const VOLLEYBALL: SportDefinition = {
     drawsAllowed: false,
   },
   events: [
+    { key: "RALLY_POINT", label: "Point", category: "SCORING", scores: true, pointValues: [1], producesMetrics: ["points"] },
     { key: "SERVE", label: "Serve", category: "SERVE", producesMetrics: ["serves"] },
     { key: "ACE", label: "Ace", category: "SERVE", scores: true, pointValues: [1], producesMetrics: ["aces", "points"] },
     { key: "KILL", label: "Kill", category: "ATTACK", scores: true, pointValues: [1], producesMetrics: ["kills", "points"] },

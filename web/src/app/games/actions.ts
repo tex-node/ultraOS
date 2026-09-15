@@ -20,6 +20,7 @@ import {
 } from "@/lib/ultra-scoring-engine";
 import { recalculateStandings } from "@/lib/standings-recalculate";
 import { getSportDefinition } from "@/lib/sports/registry";
+import { currentSetNumber, evaluateSets, setScoringConfig } from "@/lib/sports/set-scoring";
 import { hasBlockingIssue, runConstraints } from "@/lib/sports/validators";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -1267,4 +1268,135 @@ export async function recordSportEvent(gameId: string, fixtureId: string, formDa
   });
 
   revalidatePath(`/games/${fixtureId}/live`);
+}
+
+const setPointInput = z.object({
+  seasonClubId: z.string().min(1),
+  typeKey: z.string().optional(),
+  description: z.string().optional(),
+});
+
+// Set-based scoring (volleyball): a rally point increments the current set in GamePeriodScore,
+// the set winner is resolved from the sport's target/lead rules, the fixture score is kept as sets
+// won, and the match auto-finalizes (updating standings) once a side reaches sets-to-win.
+export async function recordSetPoint(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const input = setPointInput.parse(Object.fromEntries(formData.entries()));
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
+    const game = await tx.game.findUniqueOrThrow({
+      where: { id: gameId },
+      include: {
+        fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } },
+        periodScores: { orderBy: { period: "asc" } },
+      },
+    });
+    assertGameIsMutable(game.status, game.fixture.status);
+    if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
+
+    const isHome = input.seasonClubId === game.fixture.homeSeasonClubId;
+    if (!isHome && input.seasonClubId !== game.fixture.awaySeasonClubId) throw new Error("INVALID_TEAM");
+
+    const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
+    if (!definition) throw new Error("UNKNOWN_SPORT");
+    const config = setScoringConfig(definition);
+    if (!config) throw new Error("NOT_SET_SPORT");
+
+    const playedSets = game.periodScores.map((set) => ({ period: set.period, home: set.homeScore, away: set.awayScore }));
+    const period = currentSetNumber(config, playedSets);
+    const existing = game.periodScores.find((set) => set.period === period);
+    const nextHome = (existing?.homeScore ?? 0) + (isHome ? 1 : 0);
+    const nextAway = (existing?.awayScore ?? 0) + (isHome ? 0 : 1);
+
+    await tx.gamePeriodScore.upsert({
+      where: { gameId_period: { gameId, period } },
+      create: { organizationId, gameId, period, label: `SET ${period}`, homeScore: nextHome, awayScore: nextAway },
+      update: { homeScore: nextHome, awayScore: nextAway },
+    });
+
+    const sequenceNumber = game.nextEventSequence;
+    await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
+    const typeKey =
+      input.typeKey && definition.events.some((event) => event.key === input.typeKey) ? input.typeKey : "RALLY_POINT";
+    await tx.gameEvent.create({
+      data: {
+        organizationId,
+        gameId,
+        seasonClubId: input.seasonClubId,
+        eventType: "SCORE",
+        typeKey,
+        points: 1,
+        data: { sportKey: definition.key, set: period, points: 1 },
+        period,
+        clockSeconds: remainingClockSeconds(game),
+        description: input.description?.trim() || `${typeKey === "RALLY_POINT" ? "Point" : typeKey} (set ${period})`,
+        sequenceNumber,
+        source: "ULTRA_NATIVE_LIVE_SCORER",
+        createdById: session.user.id,
+      },
+    });
+
+    const nextSets = [...playedSets.filter((set) => set.period !== period), { period, home: nextHome, away: nextAway }].sort(
+      (a, b) => a.period - b.period,
+    );
+    const summary = evaluateSets(config, nextSets);
+    const setCompleted = summary.sets.find((set) => set.period === period)?.complete === true;
+
+    await tx.fixture.update({
+      where: { id: fixtureId },
+      data: { homeScore: summary.homeSetsWon, awayScore: summary.awaySetsWon },
+    });
+
+    if (summary.matchWinner) {
+      const winnerSeasonClubId =
+        summary.matchWinner === "HOME" ? game.fixture.homeSeasonClubId : game.fixture.awaySeasonClubId;
+      await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId } });
+      await tx.game.update({
+        where: { id: gameId },
+        data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null, isUltraTimeActive: false },
+      });
+      await tx.gameEvent.create({
+        data: {
+          organizationId,
+          gameId,
+          eventType: "GAME_ENDED",
+          typeKey: "GAME_ENDED",
+          period,
+          clockSeconds: 0,
+          description: `Match won ${summary.homeSetsWon}\u2013${summary.awaySetsWon}`,
+          source: "ULTRA_NATIVE_LIVE_SCORER",
+          createdById: session.user.id,
+        },
+      });
+      await recalculateStandings(tx, organizationId, game.fixture.seasonId);
+      await writeAuditLog(tx, {
+        organizationId,
+        userId: session.user.id,
+        action: "GAME_FINALIZED",
+        entityType: "Game",
+        entityId: gameId,
+        details: { fixtureId, trigger: "SET_MATCH_WON", homeSets: summary.homeSetsWon, awaySets: summary.awaySetsWon, winnerSeasonClubId },
+      });
+    } else if (setCompleted) {
+      await tx.game.update({
+        where: { id: gameId },
+        data: { currentPeriod: Math.min(config.periodCount, period + 1) },
+      });
+    }
+
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "SET_POINT_RECORDED",
+      entityType: "Game",
+      entityId: gameId,
+      details: { fixtureId, set: period, home: nextHome, away: nextAway, typeKey },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/live`);
+  revalidatePath(`/fixtures/${fixtureId}`);
+  revalidatePath("/standings");
+  revalidatePath(`/scoreboard/${gameId}`);
 }

@@ -279,10 +279,11 @@ Usability acceptance:
 
 Reality check (2026-09-15): the engine (Stages 1–9) is implemented and applied to **staging and
 production**; all backfills/parity checks pass. The GIESM 2026 volleyball registration is **live**
-at `https://app.neonultra.ng/giesm`, and a volleyball pilot competition (clubs, fixtures, results,
-set-based standings) has been validated on staging. The remaining product gap is the **capture UI**
-(P4): live scoring is still basketball-only, so non-basketball matches can't be captured or scored
-through the app yet. Statuses below reflect this.
+at `https://app.neonultra.ng/giesm`. Volleyball is now operable end-to-end through the app: onboard a
+team, generate a round-robin schedule, capture rally points (sets via `GamePeriodScore`), and the
+match auto-finalizes into standings. Remaining gaps: basketball-only scorer panels for other sports'
+specialised scoring (football goals/cards, cricket innings), drag-drop rescheduling, and offline
+capture.
 
 | ID | Deliverable | Phase | Status | Depends on |
 | --- | --- | --- | --- | --- |
@@ -307,7 +308,7 @@ through the app yet. Statuses below reflect this.
 | P3.5 | Public schedule view | P3 | `In progress` | P3.1 |
 | P4.1 | Match-day command view | P4 | `Not started` | P3.1 |
 | P4.2 | Sport-aware capture console (basketball) | P4 | `In progress` | Engine S1 |
-| P4.3 | Clock and period/set/innings control | P4 | `In progress` | — |
+| P4.3 | Clock and period/set/innings control | P4 | `Done` | — |
 | P4.4 | Player attribution and lineup awareness | P4 | `In progress` | Engine S2 |
 | P4.5 | Undo/correction with audit trail | P4 | `In progress` | — |
 | P4.6 | Offline-tolerant queueing and sync | P4 | `Not started` | P4.2 |
@@ -321,7 +322,7 @@ through the app yet. Statuses below reflect this.
 | P5.5 | Broadcast/live presentation from verified data | P5 | `In progress` | P5.2 |
 | P5.6 | PDF/CSV exports | P5 | `In progress` | — |
 | P5.7 | Official scoresheet + FIBA parity checklist | P5 | `Not started` | P5.2 |
-| P6.1 | Volleyball pilot end-to-end | P6 | `In progress` | P1-P5, Engine S8 |
+| P6.1 | Volleyball pilot end-to-end | P6 | `Done` | P1-P5, Engine S8 |
 | P6.2 | Football end-to-end | P6 | `Not started` | P6.1 |
 | P6.3 | Cricket end-to-end | P6 | `Not started` | P6.1 |
 | P6.4 | Tennis end-to-end | P6 | `Not started` | P6.1 |

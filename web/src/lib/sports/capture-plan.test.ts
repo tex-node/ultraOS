@@ -28,7 +28,7 @@ test("scoring actions expose the sport's point values", () => {
 
   assert.deepEqual(
     scoringActions(VOLLEYBALL).map((action) => action.key).sort(),
-    ["ACE", "BLOCK", "KILL"],
+    ["ACE", "BLOCK", "KILL", "RALLY_POINT"],
   );
 });
 
