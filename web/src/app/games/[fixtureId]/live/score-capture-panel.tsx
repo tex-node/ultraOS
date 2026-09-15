@@ -14,12 +14,14 @@ export function ScoreCapturePanel({
   definition,
   teams,
   battingTeamId,
+  innings,
 }: {
   gameId: string;
   fixtureId: string;
   definition: SportDefinition;
   teams: { id: string; name: string }[];
   battingTeamId?: string;
+  innings?: { period: number; overs: string; wickets: number; target: number | null };
 }) {
   const scoringModule = resolveScoringModule(definition);
   if (!scoringModule) return null;
@@ -49,6 +51,12 @@ export function ScoreCapturePanel({
         <p className="mt-0.5 text-xs text-zinc-500">
           {batting ? `${batting.name} batting.` : "Batting side unknown."} Runs are credited to the batting team for the current innings.
         </p>
+        {innings ? (
+          <p className="mt-2 text-sm text-zinc-300">
+            Innings {innings.period} · {innings.overs} overs · {innings.wickets} wicket{innings.wickets === 1 ? "" : "s"}
+            {innings.target !== null ? <span className="ml-2 text-amber-300">Target {innings.target}</span> : null}
+          </p>
+        ) : null}
         {batting ? <div className="rounded-xl border border-white/[.06] p-4">{actionButtons(batting.id)}</div> : null}
       </section>
     );

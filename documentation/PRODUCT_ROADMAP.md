@@ -285,9 +285,11 @@ match auto-finalizes into standings. Football and cricket now have specialised s
 including own goals; runs and wickets by innings) and finalization permits draws/ties where the
 sport allows them. Scoring is now a dispatched module registry (`lib/sports/scoring-modules.ts`:
 sets/goals/runs) so the console and server action have no sport-specific branching, and cricket has
-an innings engine (overs, wickets, innings-end, chase target). Remaining gaps: drag-drop
-rescheduling, offline capture, tennis (needs the individual-entrant fixture migration), and deeper
-per-sport presentation on public pages.
+an innings engine (overs, wickets, innings-end, chase target). Cricket now shows innings, overs,
+wickets, and the chase target in the console, and the tennis scoring engine
+(`lib/sports/tennis-scoring.ts`: points/games/sets/tiebreak) is implemented and tested. Remaining
+gaps: drag-drop rescheduling, offline capture, tennis fixtures (the individual-entrant fixture
+migration) before tennis is playable, and deeper per-sport presentation on public pages.
 
 | ID | Deliverable | Phase | Status | Depends on |
 | --- | --- | --- | --- | --- |
@@ -329,7 +331,7 @@ per-sport presentation on public pages.
 | P6.1 | Volleyball pilot end-to-end | P6 | `Done` | P1-P5, Engine S8 |
 | P6.2 | Football end-to-end | P6 | `In progress` | P6.1 |
 | P6.3 | Cricket end-to-end | P6 | `In progress` | P6.1 |
-| P6.4 | Tennis end-to-end | P6 | `Not started` | P6.1 |
+| P6.4 | Tennis end-to-end | P6 | `In progress` | P6.1 |
 | P6.5 | Knockout and group-stage formats | P6 | `In progress` | Engine S9 |
 | P7.1 | Offline hardening and recovery drills | P7 | `Not started` | P4.6 |
 | P7.2 | Command palette, shortcuts, bulk ops | P7 | `Not started` | — |

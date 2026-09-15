@@ -37,6 +37,23 @@ export type DeliveryOutcome = {
 
 const ILLEGAL_DELIVERY_KEYS = new Set(["EXTRAS_WIDE", "EXTRAS_NO_BALL"]);
 
+// All delivery event keys (used to count balls/wickets for presentation).
+const DELIVERY_KEYS = new Set([
+  "RUN",
+  "DOT_BALL",
+  "FOUR",
+  "SIX",
+  "WICKET",
+  "EXTRAS_WIDE",
+  "EXTRAS_NO_BALL",
+  "EXTRAS_BYE",
+  "EXTRAS_LEG_BYE",
+]);
+
+export function isDelivery(typeKey: string | null | undefined): boolean {
+  return Boolean(typeKey) && DELIVERY_KEYS.has(typeKey as string);
+}
+
 export function inningsConfig(definition: SportDefinition): InningsConfig | null {
   if (definition.structure.periodType !== "INNING") return null;
   const ruleOvers = definition.rules?.find((rule) => rule.key === "OVERS_PER_INNINGS")?.value;
@@ -54,7 +71,7 @@ export function battingSide(config: InningsConfig, period: number): "HOME" | "AW
   return period <= 1 ? "HOME" : "AWAY";
 }
 
-export function isLegalDelivery(typeKey: string | undefined): boolean {
+export function isLegalDelivery(typeKey: string | null | undefined): boolean {
   return !typeKey || !ILLEGAL_DELIVERY_KEYS.has(typeKey);
 }
 

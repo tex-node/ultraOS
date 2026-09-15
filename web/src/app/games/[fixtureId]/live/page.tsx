@@ -26,6 +26,7 @@ import { requirePermissionOrRedirect } from "@/lib/authorization";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { FINAL_PERIOD, isUltraTime, periodLabel, remainingShotClockSeconds, ULTRA_RULES } from "@/lib/game-rules";
 import { getSportDefinition } from "@/lib/sports/registry";
+import { chaseTarget, inningsConfig, isDelivery, isLegalDelivery, oversDisplay } from "@/lib/sports/innings-scoring";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { ScoreCapturePanel } from "./score-capture-panel";
 import { SportCapturePanel } from "./sport-capture-panel";
@@ -68,6 +69,23 @@ export default async function Live({ params, searchParams }: { params: Promise<{
   const hasShotClock = capabilities.has("SHOT_CLOCK");
   const isBasketball = definition?.key === "BASKETBALL";
   const battingTeamId = game && game.currentPeriod <= 1 ? fixture.homeSeasonClub.id : fixture.awaySeasonClub.id;
+
+  // Cricket innings summary for the console (overs bowled, wickets lost, chase target).
+  const inningsConfigForSport = definition ? inningsConfig(definition) : null;
+  let cricketInnings: { period: number; overs: string; wickets: number; target: number | null } | null = null;
+  if (inningsConfigForSport && game) {
+    const deliveries = await withOrganizationContext(session.user.organizationId, (tx) =>
+      tx.gameEvent.findMany({ where: { gameId: game.id, period: game.currentPeriod }, select: { typeKey: true } }),
+    );
+    const balls = deliveries.filter((event) => isDelivery(event.typeKey) && isLegalDelivery(event.typeKey)).length;
+    const wickets = deliveries.filter((event) => event.typeKey === "WICKET").length;
+    cricketInnings = {
+      period: game.currentPeriod,
+      overs: oversDisplay(balls),
+      wickets,
+      target: game.currentPeriod >= 2 ? chaseTarget(fixture.homeScore) : null,
+    };
+  }
   const substitutionCheckDue = Boolean(game && game.currentPeriod >= FINAL_PERIOD && game.status !== "FINAL");
   const confirmations = substitutionCheckDue
     ? await withOrganizationContext(session.user.organizationId, (tx) => tx.auditLog.findMany({
@@ -271,6 +289,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             fixtureId={fixtureId}
             definition={definition}
             battingTeamId={battingTeamId}
+            innings={cricketInnings ?? undefined}
             teams={[
               { id: fixture.homeSeasonClub.id, name: fixture.homeSeasonClub.club.name },
               { id: fixture.awaySeasonClub.id, name: fixture.awaySeasonClub.club.name },
