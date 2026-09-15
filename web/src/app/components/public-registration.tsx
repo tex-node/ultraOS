@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { RegistrationFormView } from "@/app/register/[organizationSlug]/[eventSlug]/registration-form";
+import { APP_NAME } from "@/lib/branding";
 import { loadPublicRegistration } from "@/lib/registration/service";
 import { parseSportConfig } from "@/lib/registration/sport-config";
 
@@ -18,8 +19,8 @@ export async function PublicRegistrationExperience({
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
-      <p className="text-xs uppercase tracking-[.24em] text-emerald-400">{ctx.form.title}</p>
-      <h1 className="mt-2 text-3xl font-semibold">{ctx.organization.name}</h1>
+      <p className="text-xs uppercase tracking-[.24em] text-emerald-400">{APP_NAME}</p>
+      <h1 className="mt-2 text-3xl font-bold text-white">{ctx.form.title}</h1>
       {ctx.form.description ? <p className="mt-3 text-zinc-400">{ctx.form.description}</p> : null}
       {!ctx.accepting ? (
         <p className="mt-6 rounded-xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-200">
