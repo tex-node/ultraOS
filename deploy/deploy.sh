@@ -5,40 +5,42 @@
 # generate + next build, optionally applies migrations, swaps the `current` symlink, restarts the
 # service, and prunes old releases. Repeatable and idempotent.
 #
-# The VPS uses the read-only deploy key via the SSH alias github.com-ultraos (see ~/.ssh/config).
+# The VPS reads the repo with a read-only deploy key via the SSH alias github.com-ultraos
+# (see ~/.ssh/config).
 #
 # Usage:
 #   deploy/deploy.sh \
 #     --app-root /opt/ultraos-staging \
 #     --service ultraos-staging-web.service \
 #     --env-file /opt/ultraos-staging/shared/web.env \
-#     [--ref origin/main] \
-#     [--migrate-db-url "postgresql://<privileged>@127.0.0.1:55411/<db>?schema=public"] \
-#     [--skip-migrate] [--keep 5]
+#     [--ref origin/main] [--migrate] [--migrate-env-file <path>] [--migrate-db-url <url>] [--keep 5]
 #
-# Notes:
-#   - Migrations run with the PRIVILEGED db url (DDL/RLS), not the app's runtime role.
-#   - --env-file is sourced for build-time env; it is never printed.
+# Migrations:
+#   Pass --migrate to run `prisma migrate deploy` for this release. The privileged DATABASE_URL is
+#   read from --migrate-env-file (default <app-root>/shared/migrate.env), or from --migrate-db-url
+#   if given. Never put the privileged URL on the command line unless you accept it in `ps`.
 set -euo pipefail
 
 APP_ROOT=""
 SERVICE=""
 ENV_FILE=""
-MIGRATE_DB_URL=""
 REF="origin/main"
-SKIP_MIGRATE=0
+RUN_MIGRATE=0
+MIGRATE_ENV_FILE=""
+MIGRATE_DB_URL=""
 KEEP=5
 REPO_URL="git@github.com-ultraos:tex-node/ultraOS.git"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --app-root)        APP_ROOT="$2"; shift 2 ;;
-    --service)         SERVICE="$2"; shift 2 ;;
-    --env-file)        ENV_FILE="$2"; shift 2 ;;
-    --migrate-db-url)  MIGRATE_DB_URL="$2"; shift 2 ;;
-    --ref)             REF="$2"; shift 2 ;;
-    --skip-migrate)    SKIP_MIGRATE=1; shift ;;
-    --keep)            KEEP="$2"; shift 2 ;;
+    --app-root)         APP_ROOT="$2"; shift 2 ;;
+    --service)          SERVICE="$2"; shift 2 ;;
+    --env-file)         ENV_FILE="$2"; shift 2 ;;
+    --ref)              REF="$2"; shift 2 ;;
+    --migrate)          RUN_MIGRATE=1; shift ;;
+    --migrate-env-file) MIGRATE_ENV_FILE="$2"; shift 2 ;;
+    --migrate-db-url)   MIGRATE_DB_URL="$2"; shift 2 ;;
+    --keep)             KEEP="$2"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -52,7 +54,7 @@ SRC="$APP_ROOT/source"
 RELEASES="$APP_ROOT/releases"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 
-echo "[deploy] app-root=$APP_ROOT service=$SERVICE ref=$REF"
+echo "[deploy] app-root=$APP_ROOT service=$SERVICE ref=$REF migrate=$RUN_MIGRATE"
 
 if [[ ! -d "$SRC/.git" ]]; then
   echo "[deploy] cloning $REPO_URL"
@@ -83,9 +85,22 @@ echo "[deploy] creating release $REL"
 mkdir -p "$REL"
 cp -a "$SRC/web" "$REL/web"
 
-if [[ "$SKIP_MIGRATE" -eq 0 && -n "$MIGRATE_DB_URL" ]]; then
+if [[ "$RUN_MIGRATE" -eq 1 ]]; then
+  TARGET_URL="$MIGRATE_DB_URL"
+  if [[ -z "$TARGET_URL" ]]; then
+    MIGRATE_ENV_FILE="${MIGRATE_ENV_FILE:-$APP_ROOT/shared/migrate.env}"
+    if [[ ! -f "$MIGRATE_ENV_FILE" ]]; then
+      echo "[deploy] --migrate set but no --migrate-db-url and $MIGRATE_ENV_FILE not found" >&2
+      exit 3
+    fi
+    TARGET_URL="$(grep '^DATABASE_URL=' "$MIGRATE_ENV_FILE" | head -1 | sed 's/^DATABASE_URL=//')"
+  fi
+  if [[ -z "$TARGET_URL" ]]; then
+    echo "[deploy] could not resolve a privileged database URL" >&2
+    exit 3
+  fi
   echo "[deploy] prisma migrate deploy"
-  ( cd "$REL/web" && DATABASE_URL="$MIGRATE_DB_URL" npx prisma migrate deploy )
+  ( cd "$REL/web" && DATABASE_URL="$TARGET_URL" npx prisma migrate deploy )
 fi
 
 OWNER="$(stat -c '%u:%g' "$APP_ROOT")"
