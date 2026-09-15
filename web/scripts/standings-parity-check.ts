@@ -1,13 +1,14 @@
 // Multi-sport Stage 5 (S5.3): read-only standings parity check.
 //
-// Recomputes standings with the generic engine from final fixtures and compares the core record
-// fields (played/won/drawn/lost/pointsFor/pointsAgainst/pointDifference/leaguePoints) against the
-// stored Standing rows. Verifies Gate G5's basketball-parity requirement. Exits non-zero on any
-// mismatch. Read-only; runs per organization through withOrganizationContext.
+// Recomputes standings with the generic season engine (computeSeasonStandings, which derives the
+// set-based secondary for sports decided over periods/sets) from final fixtures and compares the
+// core record fields against the stored Standing rows, keyed by seasonClubId. Verifies Gate G5's
+// basketball-parity requirement and validates the volleyball path. Exits non-zero on any mismatch.
+// Read-only; runs per organization through withOrganizationContext.
 import { prisma } from "../src/lib/prisma";
 import { withOrganizationContext } from "../src/lib/tenant-context";
 import { getSportDefinition } from "../src/lib/sports/registry";
-import { computeStandings } from "../src/lib/sports/standings";
+import { computeSeasonStandings } from "../src/lib/sports/standings";
 
 const CORE_FIELDS = [
   "played",
@@ -42,15 +43,13 @@ async function main() {
         const [seasonClubs, fixtures, stored] = await Promise.all([
           tx.seasonClub.findMany({
             where: { seasonId: season.id },
-            select: { id: true, clubId: true, club: { select: { name: true } }, entrant: { select: { id: true } } },
+            select: { id: true, club: { select: { name: true } }, entrant: { select: { id: true } } },
           }),
           tx.fixture.findMany({
             where: { seasonId: season.id, status: "FINAL" },
             select: {
               homeSeasonClubId: true,
               awaySeasonClubId: true,
-              homeEntrantId: true,
-              awayEntrantId: true,
               homeScore: true,
               awayScore: true,
             },
@@ -59,7 +58,6 @@ async function main() {
             where: { seasonId: season.id },
             select: {
               seasonClubId: true,
-              entrantId: true,
               played: true,
               won: true,
               drawn: true,
@@ -72,38 +70,30 @@ async function main() {
           }),
         ]);
 
-        const entrantBySeasonClub = new Map(seasonClubs.map((seasonClub) => [seasonClub.id, seasonClub.entrant?.id ?? null]));
-        const entrants = seasonClubs
-          .filter((seasonClub) => seasonClub.entrant?.id)
-          .map((seasonClub) => ({ entrantId: seasonClub.entrant!.id, name: seasonClub.club.name }));
-        if (entrants.length === 0) continue;
+        if (seasonClubs.length === 0) continue;
 
-        const results = fixtures
-          .map((fixture) => {
-            const home = fixture.homeEntrantId ?? entrantBySeasonClub.get(fixture.homeSeasonClubId) ?? null;
-            const away = fixture.awayEntrantId ?? entrantBySeasonClub.get(fixture.awaySeasonClubId) ?? null;
-            if (!home || !away) return null;
-            return {
-              homeEntrantId: home,
-              awayEntrantId: away,
-              homeScore: fixture.homeScore,
-              awayScore: fixture.awayScore,
-            };
-          })
-          .filter((value): value is NonNullable<typeof value> => value !== null);
-
-        const computed = new Map(computeStandings(definition, entrants, results).map((row) => [row.entrantId, row]));
+        const computed = new Map(
+          computeSeasonStandings(
+            definition,
+            seasonClubs.map((seasonClub) => ({
+              seasonClubId: seasonClub.id,
+              name: seasonClub.club.name,
+              entrantId: seasonClub.entrant?.id ?? null,
+            })),
+            fixtures,
+          ).map((row) => [row.seasonClubId, row]),
+        );
 
         for (const standing of stored) {
-          const entrantId = standing.entrantId ?? entrantBySeasonClub.get(standing.seasonClubId) ?? null;
-          if (!entrantId) continue;
-          const expected = computed.get(entrantId);
+          const expected = computed.get(standing.seasonClubId);
           if (!expected) continue;
           orgChecked += 1;
           for (const field of CORE_FIELDS) {
             if (standing[field] !== expected[field]) {
               orgMismatches += 1;
-              console.error(`  MISMATCH season=${season.id} entrant=${entrantId} field=${field} stored=${standing[field]} computed=${expected[field]}`);
+              console.error(
+                `  MISMATCH season=${season.id} seasonClub=${standing.seasonClubId} field=${field} stored=${standing[field]} computed=${expected[field]}`,
+              );
             }
           }
         }

@@ -39,7 +39,7 @@ Applying the engine migrations and backfills to staging is governed by `document
 | G1 | Basketball definition parity proven (Stage 1) | `Done` | Stage 1 complete: registry, definitions, validators, overrides, consumed by onboarding. |
 | G2 | Entrant backfill parity proven (Stage 2) | `Done` | Verified on staging 2026-09-15 (8 entrants); production pending. |
 | G3 | Stat projection parity proven (Stage 3) | `Done` | Verified on staging 2026-09-15 (2,200 values, 0 mismatches); production pending. |
-| G4 | Volleyball pilot accepted (Stage 8) | `Not started` | Full competition runs from definition alone. |
+| G4 | Volleyball pilot accepted (Stage 8) | `Done` | Staging pilot: 4 clubs, 6 fixtures, results + set-based standings; capture UI still basketball (S6.3). |
 | G5 | Second additional sport accepted (Stage 9) | `Not started` | Proves the engine generalizes. |
 | G6 | Legacy basketball columns retired (Stage 10) | `Not started` | Only after G3, G4, G5 and Season Zero sign-off. |
 
@@ -120,11 +120,12 @@ Applying the engine migrations and backfills to staging is governed by `document
 
 ## 5. Progress tracker
 
-Environment status: the multi-sport migrations (Stages 1.3–7) were **applied to staging on
-2026-09-15**, the backfills were run, and every parity check reported `PARITY OK` (Entrant 8;
-metrics 2,200; rules 0 rows; standings 8; events 9; registration forms 2). **Production remains
-unmigrated** — its copy of this tracker's schema-affecting rows is still pending. Staging DB backup:
-`/opt/ultraos-staging/backups/multisport_giesm_premigration_20260915T063015Z.dump`.
+Environment status: the multi-sport migrations (Stages 1.3–7) were **applied to staging and
+production on 2026-09-15**, the backfills were run on both, and every parity check reported
+`PARITY OK` (Entrant 8; metrics 2,200; rules 0 rows; standings 8 basketball + 4 volleyball pilot;
+events 9; registration forms). The GIESM 2026 volleyball registration is live at `/giesm` on both
+environments. Backups: staging `/opt/ultraos-staging/backups/multisport_giesm_premigration_20260915T063015Z.dump`;
+production `/var/backups/ultraleagueos/multisport_giesm_premigration_20260915T095941Z.dump`.
 
 | ID | Workstream | Deliverable | Phase | Status | Depends on | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -161,7 +162,7 @@ unmigrated** — its copy of this tracker's schema-affecting rows is still pendi
 | S7.2 | Backfill | Map `RegistrationSport` enum to `Sport` | 7 | `Done` | S7.1 | Staging: 2 forms mapped; `registration-sport:parity-check` PARITY OK |
 | S7.3 | Domain | Definition-driven `SportConfig` | 7 | `In progress` | S7.1 | `configuredSports` bridge shipped; config schema generalization deferred |
 | S8.1 | Definition | Volleyball definition module | 8 | `Done` | G1–G3, P6, P7 | Rules, capture plan, sport-aware standings |
-| S8.2 | Product | Volleyball competition end-to-end | 8 | `In progress` | S8.1 | Runtime standings sport-aware; capture UI + applied schema pending (Gate G4) |
+| S8.2 | Product | Volleyball competition end-to-end | 8 | `Done` | S8.1 | Staging pilot created; standings validated via parity check. Scorer console UI migration remains (S6.3) |
 | S9.1 | Definition | Football definition | 9 | `Done` | G4 | Definition + rules; draws/GD standings covered by tests |
 | S9.2 | Definition | Cricket definition | 9 | `Done` | G4 | Definition + rules; ball-by-ball ledger + NRR covered by tests |
 | S9.3 | Definition | Tennis definition | 9 | `Done` | G4 | INDIVIDUAL/PAIR; round-robin first; set-ratio standings covered |
