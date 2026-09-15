@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   const { columns, rows } = applicationExportRows(applications);
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Ultra League OS";
+  workbook.creator = "Neon Ultra Tournament Management System";
   workbook.created = new Date();
 
   const worksheet = workbook.addWorksheet("Applications");

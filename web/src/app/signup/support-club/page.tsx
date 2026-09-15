@@ -40,7 +40,7 @@ export default async function SupportClubPage({ searchParams }: { searchParams: 
   return (
     <main className="min-h-screen bg-[#050807] px-6 py-12 text-white">
       <section className="mx-auto max-w-4xl text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-400">Ultra Basketball</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-400">Neon Ultra</p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">Do you want to support a club?</h1>
         <p className="mt-4 text-sm leading-6 text-zinc-400">
           Pick one club to follow as your own — get their fan updates, and be part of their community from day one.

@@ -85,10 +85,10 @@ export function OperationsShell({ children, user }: OperationsShellProps) {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
           <div>
             <Link className="font-semibold tracking-tight" href="/dashboard">
-              Ultra Basketball
+              Neon Ultra
             </Link>
             <p className="text-[10px] uppercase tracking-[0.22em] text-emerald-400">
-              League operating system
+              Tournament management system
             </p>
           </div>
           <nav className="flex items-center gap-1">

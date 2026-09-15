@@ -19,8 +19,8 @@ const geistMono = Geist_Mono({
 // public URL" (used the same way in the QR code route).
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.AUTH_URL ?? "http://localhost:3000"),
-  title: "Ultra Basketball League OS",
-  description: "Season Zero league administration and game-day operations.",
+  title: "Neon Ultra Tournament Management System",
+  description: "Tournament administration and game-day operations.",
 };
 
 export default function RootLayout({

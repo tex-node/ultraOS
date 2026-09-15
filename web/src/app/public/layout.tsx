@@ -13,7 +13,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
     <div className="min-h-screen bg-[#050807] text-white">
       <header className="border-b border-white/[.08]">
         <div className="mx-auto max-w-7xl px-6 py-4">
-          <Link href="/public" className="font-bold">ULTRA BASKETBALL</Link>
+          <Link href="/public" className="font-bold">NEON ULTRA</Link>
           <nav className="mt-3 flex gap-4 overflow-x-auto whitespace-nowrap pb-1 text-sm text-zinc-300 [scrollbar-width:thin]">
             <Link className="shrink-0" href="/public/events">Events</Link>
             <Link className="shrink-0" href="/public/clubs">Clubs</Link>
