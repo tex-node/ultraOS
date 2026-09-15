@@ -2,9 +2,13 @@
 // PlayerStat/TeamStat rows into generic GameMetricValue rows.
 //
 // The ledger/legacy tables stay the source of truth; this writes the generic projection so the
-// multi-sport read model can be validated (Gate G3). Idempotent: upserts by the GameMetricValue
-// unique key. Requires the metric catalog to be synced first
-// (scripts/sport-metric-definitions-sync.ts) and Entrants to exist (scripts/entrant-backfill.ts).
+// multi-sport read model can be validated (Gate G3). Idempotent: rows are inserted with
+// skipDuplicates against the GameMetricValue unique key, so a re-run skips what already exists.
+// Writes are batched (createMany) rather than one upsert per value, so a full season fits well
+// inside a single interactive transaction.
+//
+// Requires the metric catalog to be synced first (scripts/sport-metric-definitions-sync.ts) and
+// Entrants to exist (scripts/entrant-backfill.ts).
 //
 // Dry-run by default. Pass --apply to write. Runs per organization through withOrganizationContext.
 //
@@ -15,12 +19,15 @@ import { prisma } from "../src/lib/prisma";
 import { withOrganizationContext } from "../src/lib/tenant-context";
 import { requireSportDefinition } from "../src/lib/sports/registry";
 import { metricEntriesFromRecord, metricSubjectKey } from "../src/lib/sports/metric-values";
-import type { StatSubject, SportDefinition } from "../src/lib/sports/types";
-import type { StatDataSource } from "../src/generated/prisma/enums";
+import type { SportDefinition } from "../src/lib/sports/types";
+import type { Prisma } from "../src/generated/prisma/client";
+import type { StatDataSource, StatSubjectType } from "../src/generated/prisma/enums";
 
 function flag(name: string): boolean {
   return process.argv.includes(`--${name}`);
 }
+
+const BATCH_SIZE = 500;
 
 async function main() {
   const apply = flag("apply");
@@ -60,9 +67,39 @@ async function main() {
         },
       });
 
+      const pending: Prisma.GameMetricValueCreateManyInput[] = [];
       let playerValues = 0;
       let entrantValues = 0;
       let skippedTeamStats = 0;
+
+      const push = (
+        sportSlug: string,
+        gameId: string,
+        subjectType: StatSubjectType,
+        subjectId: string,
+        playerId: string | null,
+        entrantId: string | null,
+        statSource: StatDataSource | null,
+        entry: { key: string; value: number },
+      ): boolean => {
+        const definitionId = definitionIdByKey.get(`${sportSlug}:${subjectType}:${entry.key}`);
+        if (!definitionId) return false;
+        if (apply) {
+          pending.push({
+            organizationId: organization.id,
+            gameId,
+            metricDefinitionId: definitionId,
+            subjectType,
+            subjectKey: metricSubjectKey(subjectType, subjectId),
+            playerId,
+            entrantId,
+            period: 0,
+            value: entry.value,
+            statSource,
+          });
+        }
+        return true;
+      };
 
       for (const game of games) {
         const sportSlug = game.fixture.division.competition.sport.slug;
@@ -73,50 +110,12 @@ async function main() {
           continue;
         }
 
-        const write = async (
-          subject: StatSubject,
-          subjectType: "PLAYER" | "ENTRANT",
-          subjectId: string,
-          playerId: string | null,
-          entrantId: string | null,
-          statSource: StatDataSource | null,
-          entry: { key: string; value: number },
-        ) => {
-          const definitionId = definitionIdByKey.get(`${sportSlug}:${subject}:${entry.key}`);
-          if (!definitionId) return;
-          if (apply) {
-            await tx.gameMetricValue.upsert({
-              where: {
-                organizationId_gameId_metricDefinitionId_subjectKey_period: {
-                  organizationId: organization.id,
-                  gameId: game.id,
-                  metricDefinitionId: definitionId,
-                  subjectKey: metricSubjectKey(subjectType, subjectId),
-                  period: 0,
-                },
-              },
-              update: { value: entry.value, statSource },
-              create: {
-                organizationId: organization.id,
-                gameId: game.id,
-                metricDefinitionId: definitionId,
-                subjectType,
-                subjectKey: metricSubjectKey(subjectType, subjectId),
-                playerId,
-                entrantId,
-                period: 0,
-                value: entry.value,
-                statSource,
-              },
-            });
-          }
-        };
-
         for (const playerStat of game.playerStats) {
           const entries = metricEntriesFromRecord(definition, "PLAYER", playerStat as Record<string, unknown>);
           for (const entry of entries) {
-            await write("PLAYER", "PLAYER", playerStat.playerId, playerStat.playerId, null, playerStat.statSource ?? null, entry);
-            playerValues += 1;
+            if (push(sportSlug, game.id, "PLAYER", playerStat.playerId, playerStat.playerId, null, playerStat.statSource ?? null, entry)) {
+              playerValues += 1;
+            }
           }
         }
 
@@ -128,9 +127,16 @@ async function main() {
           }
           const entries = metricEntriesFromRecord(definition, "ENTRANT", teamStat as Record<string, unknown>);
           for (const entry of entries) {
-            await write("ENTRANT", "ENTRANT", entrantId, null, entrantId, teamStat.statSource ?? null, entry);
-            entrantValues += 1;
+            if (push(sportSlug, game.id, "ENTRANT", entrantId, null, entrantId, teamStat.statSource ?? null, entry)) {
+              entrantValues += 1;
+            }
           }
+        }
+      }
+
+      if (apply && pending.length > 0) {
+        for (let index = 0; index < pending.length; index += BATCH_SIZE) {
+          await tx.gameMetricValue.createMany({ data: pending.slice(index, index + BATCH_SIZE), skipDuplicates: true });
         }
       }
 

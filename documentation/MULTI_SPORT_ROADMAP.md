@@ -37,8 +37,8 @@ Applying the engine migrations and backfills to staging is governed by `document
 | --- | --- | --- | --- |
 | G0 | Architecture doc accepted as single agreed reference | `Done` | Accepted 2026-09-13; all five acceptance criteria met. |
 | G1 | Basketball definition parity proven (Stage 1) | `Done` | Stage 1 complete: registry, definitions, validators, overrides, consumed by onboarding. |
-| G2 | Entrant backfill parity proven (Stage 2) | `Not started` | One TEAM Entrant per SeasonClub. |
-| G3 | Stat projection parity proven (Stage 3) | `Not started` | Legacy stat reads byte-for-byte identical. |
+| G2 | Entrant backfill parity proven (Stage 2) | `Done` | Verified on staging 2026-09-15 (8 entrants); production pending. |
+| G3 | Stat projection parity proven (Stage 3) | `Done` | Verified on staging 2026-09-15 (2,200 values, 0 mismatches); production pending. |
 | G4 | Volleyball pilot accepted (Stage 8) | `Not started` | Full competition runs from definition alone. |
 | G5 | Second additional sport accepted (Stage 9) | `Not started` | Proves the engine generalizes. |
 | G6 | Legacy basketball columns retired (Stage 10) | `Not started` | Only after G3, G4, G5 and Season Zero sign-off. |
@@ -120,6 +120,12 @@ Applying the engine migrations and backfills to staging is governed by `document
 
 ## 5. Progress tracker
 
+Environment status: the multi-sport migrations (Stages 1.3–7) were **applied to staging on
+2026-09-15**, the backfills were run, and every parity check reported `PARITY OK` (Entrant 8;
+metrics 2,200; rules 0 rows; standings 8; events 9; registration forms 2). **Production remains
+unmigrated** — its copy of this tracker's schema-affecting rows is still pending. Staging DB backup:
+`/opt/ultraos-staging/backups/multisport_giesm_premigration_20260915T063015Z.dump`.
+
 | ID | Workstream | Deliverable | Phase | Status | Depends on | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | A0 | Architecture | Multi-sport architecture doc accepted | 0 | `Done` | — | Gate G0 met 2026-09-13 |
@@ -136,23 +142,23 @@ Applying the engine migrations and backfills to staging is governed by `document
 | S1.6 | Validation | Validator registry + `SportConstraint` handling | 1 | `Done` | S1.2 | Registry + basketball/volleyball/football constraints; tests |
 | S2.1 | Schema | `Entrant`, `EntrantMember` + RLS | 2 | `Done` | G1 | Migration authored (not applied); domain helpers + tests |
 | S2.2 | Schema | Nullable `entrantId` on dependent tables | 2 | `Done` | S2.1 | Fixture (home/away/winner), GameEvent, Standing, TeamStat |
-| S2.3 | Backfill | One TEAM Entrant per SeasonClub | 2 | `In progress` | S2.2 | `scripts/entrant-backfill.ts` authored; not run |
-| S2.4 | Verification | Entrant parity evidence | 2 | `In progress` | S2.3 | `scripts/entrant-parity-check.ts` authored; not run |
+| S2.3 | Backfill | One TEAM Entrant per SeasonClub | 2 | `Done` | S2.2 | Run on staging 2026-09-15: 8 entrants + 36/9/8/24 refs |
+| S2.4 | Verification | Entrant parity evidence | 2 | `Done` | S2.3 | Staging `entrant:parity-check` PARITY OK |
 | S3.1 | Schema | `SportMetricDefinition`, `GameMetricValue` | 3 | `Done` | G2 | Migration authored (not applied); catalog global, values tenant-owned |
 | S3.2 | Domain | Basketball metric definitions | 3 | `Done` | S3.1 | In registry; sync script materializes catalog |
-| S3.3 | Projection | `PlayerStat`/`TeamStat` compatibility projection | 3 | `In progress` | S3.2 | `metric-values.ts` + `game-metric-backfill.ts` authored; not run |
-| S3.4 | Verification | Stat parity across real games | 3 | `In progress` | S3.3 | `game-metric-parity-check.ts` authored; not run |
+| S3.3 | Projection | `PlayerStat`/`TeamStat` compatibility projection | 3 | `Done` | S3.2 | Staging: 2,080 player + 120 entrant values (batched) |
+| S3.4 | Verification | Stat parity across real games | 3 | `Done` | S3.3 | Staging `metrics:parity-check` PARITY OK (2,200 values) |
 | S4.1 | Schema | Rules `sportId` + `RuleValue`/`config` | 4 | `Done` | G3 | Migration authored (not applied); `rule-values.ts` + tests |
 | S4.2 | Schema | Snapshot JSON on `GameRuleSnapshot` | 4 | `Done` | S4.1 | `sportId`/`definitionVersion`/`ruleValues` added |
-| S4.3 | Backfill | Map existing `RuleSet` rows | 4 | `In progress` | S4.1 | `ruleset-sport-backfill.ts` authored; not run |
+| S4.3 | Backfill | Map existing `RuleSet` rows | 4 | `Done` | S4.1 | Staging: no RuleSet/snapshot rows (nothing to migrate) |
 | S5.1 | Schema | Standings outcomes + `StandingMetric` + Entrant FK | 5 | `Done` | G3 | Migration authored (not applied); entrantId added in Stage 2 |
 | S5.2 | Domain | `StandingsEngine` + per-sport strategy | 5 | `Done` | S5.1 | `standings.ts` + tests (football/volleyball/cricket) |
-| S5.3 | Verification | Basketball standings parity | 5 | `In progress` | S5.2 | Unit parity passes; `standings-parity-check.ts` authored, not run |
+| S5.3 | Verification | Basketball standings parity | 5 | `Done` | S5.2 | Staging backfill + `standings:parity-check` PARITY OK (8) |
 | S6.1 | Schema | `typeKey` + `data` on `GameEvent` | 6 | `Done` | G2 | Migration authored (not applied); `event-catalog.ts` + tests |
 | S6.2 | Catalog | `SportEventDefinition` per sport | 6 | `Done` | S6.1 | Registry events + catalog sync script |
 | S6.3 | UI | Scorer renders from catalog | 6 | `Not started` | S6.2 | Catalog available; scorer console migration pending |
 | S7.1 | Schema | Registration `sportId` FKs | 7 | `Done` | G2 | Migration authored (not applied); `sportId` FK + `sportIds` mirror |
-| S7.2 | Backfill | Map `RegistrationSport` enum to `Sport` | 7 | `In progress` | S7.1 | `registration-sport-unify-backfill.ts` authored; not run |
+| S7.2 | Backfill | Map `RegistrationSport` enum to `Sport` | 7 | `Done` | S7.1 | Staging: 2 forms mapped; `registration-sport:parity-check` PARITY OK |
 | S7.3 | Domain | Definition-driven `SportConfig` | 7 | `In progress` | S7.1 | `configuredSports` bridge shipped; config schema generalization deferred |
 | S8.1 | Definition | Volleyball definition module | 8 | `Done` | G1–G3, P6, P7 | Rules, capture plan, sport-aware standings |
 | S8.2 | Product | Volleyball competition end-to-end | 8 | `In progress` | S8.1 | Runtime standings sport-aware; capture UI + applied schema pending (Gate G4) |
