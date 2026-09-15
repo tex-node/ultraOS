@@ -19,6 +19,8 @@ import {
   type ShotStatDeltas,
 } from "@/lib/ultra-scoring-engine";
 import { recalculateStandings } from "@/lib/standings-recalculate";
+import { getSportDefinition } from "@/lib/sports/registry";
+import { hasBlockingIssue, runConstraints } from "@/lib/sports/validators";
 import type { Prisma } from "@/generated/prisma/client";
 
 function assertGameIsMutable(status: string, fixtureStatus: string) {
@@ -1169,4 +1171,100 @@ export async function getGameIncidents(gameId: string) {
       resolved: resolvedIds.has(e.id),
     }))
     .reverse();
+}
+
+const sportEventInput = z.object({
+  typeKey: z.string().min(1),
+  seasonClubId: z.string().min(1),
+  playerId: z.string().optional(),
+  points: z.coerce.number().int().optional(),
+  description: z.string().optional(),
+});
+
+// Sport-agnostic capture: records an event from the sport's catalog (SportDefinition.events) with
+// the catalog key in GameEvent.typeKey. This is the catalog-driven path (multi-sport S6.3); it does
+// not mutate the fixture score, because per-sport scoring (rally points/sets/innings/goals) is
+// resolved by the sport's own scoring model, not a single generic increment. Basketball keeps its
+// dedicated scorer panels (recordScore) for points.
+export async function recordSportEvent(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const input = sportEventInput.parse(Object.fromEntries(formData.entries()));
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
+    const game = await tx.game.findUniqueOrThrow({
+      where: { id: gameId },
+      include: {
+        fixture: {
+          include: { division: { include: { competition: { include: { sport: true } } } } },
+        },
+      },
+    });
+    assertGameIsMutable(game.status, game.fixture.status);
+    if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
+
+    if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
+      throw new Error("INVALID_TEAM");
+    }
+
+    const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
+    if (!definition) throw new Error("UNKNOWN_SPORT");
+    const eventDefinition = definition.events.find((event) => event.key === input.typeKey);
+    if (!eventDefinition) throw new Error("UNKNOWN_EVENT");
+
+    const player = input.playerId
+      ? await tx.player.findFirst({
+          where: { id: input.playerId, seasonClubId: input.seasonClubId },
+          include: { athlete: true },
+        })
+      : null;
+    if (input.playerId && !player) throw new Error("INVALID_PLAYER");
+
+    // Entry-time validation from the sport's constraints (architecture §5.11).
+    const results = runConstraints(definition, "EVENT", {
+      event: { typeKey: input.typeKey, hasActor: Boolean(player) },
+      player: player ? { isActive: true } : undefined,
+    });
+    if (hasBlockingIssue(results)) {
+      throw new Error(results.find((result) => result.blocks)?.issue ?? "CONSTRAINT_BLOCKED");
+    }
+
+    const eventPoints = eventDefinition.scores
+      ? input.points ?? eventDefinition.pointValues?.[0] ?? 1
+      : null;
+    const sequenceNumber = game.nextEventSequence;
+    await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
+
+    await tx.gameEvent.create({
+      data: {
+        organizationId,
+        gameId,
+        seasonClubId: input.seasonClubId,
+        playerId: player?.id ?? null,
+        eventType: "NOTE",
+        typeKey: input.typeKey,
+        points: eventPoints,
+        data: { sportKey: definition.key, label: eventDefinition.label, points: eventPoints },
+        period: game.currentPeriod,
+        clockSeconds: remainingClockSeconds(game),
+        description:
+          input.description?.trim() ||
+          `${eventDefinition.label}${player ? ` — ${player.athlete.firstName} ${player.athlete.lastName}` : ""}`,
+        sequenceNumber,
+        source: "ULTRA_NATIVE_LIVE_SCORER",
+        createdById: session.user.id,
+      },
+    });
+
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "SPORT_EVENT_RECORDED",
+      entityType: "GameEvent",
+      entityId: gameId,
+      details: { fixtureId, sportKey: definition.key, typeKey: input.typeKey, seasonClubId: input.seasonClubId, playerId: player?.id ?? null },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/live`);
 }

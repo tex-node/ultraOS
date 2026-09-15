@@ -25,7 +25,9 @@ import { GameClock } from "../../game-clock";
 import { requirePermissionOrRedirect } from "@/lib/authorization";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { FINAL_PERIOD, isUltraTime, periodLabel, remainingShotClockSeconds, ULTRA_RULES } from "@/lib/game-rules";
+import { getSportDefinition } from "@/lib/sports/registry";
 import { withOrganizationContext } from "@/lib/tenant-context";
+import { SportCapturePanel } from "./sport-capture-panel";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -50,6 +52,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
         },
       },
       venue: true,
+      division: { include: { competition: { include: { sport: true } } } },
     },
   }));
   if (!fixture) notFound();
@@ -58,6 +61,10 @@ export default async function Live({ params, searchParams }: { params: Promise<{
   const ultraTime = game ? isUltraTime(game, remainingSeconds) : false;
   const shotClockRunning = Boolean(game?.shotClockStartedAt);
   const shotClockRemaining = game ? remainingShotClockSeconds(game) : 20;
+  const definition = getSportDefinition(fixture.division.competition.sport.slug);
+  const capabilities = new Set(definition?.capabilities ?? []);
+  const hasShotClock = capabilities.has("SHOT_CLOCK");
+  const isBasketball = definition?.key === "BASKETBALL";
   const substitutionCheckDue = Boolean(game && game.currentPeriod >= FINAL_PERIOD && game.status !== "FINAL");
   const confirmations = substitutionCheckDue
     ? await withOrganizationContext(session.user.organizationId, (tx) => tx.auditLog.findMany({
@@ -117,7 +124,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             <TeamScore name={fixture.awaySeasonClub.club.shortName} score={fixture.awayScore} />
           </div>
 
-          {game && game.status !== "FINAL" ? (
+          {hasShotClock && game && game.status !== "FINAL" ? (
             <div className="mt-4 flex items-center justify-center gap-3 rounded-xl border border-white/10 p-3">
               <span className="text-xs uppercase tracking-wider text-zinc-500">Shot clock</span>
               <span className="font-mono text-2xl font-bold">
@@ -152,7 +159,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
           ) : null}
         </section>
 
-        {substitutionCheckDue ? (
+        {isBasketball && substitutionCheckDue ? (
           <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
             <h3 className="font-semibold">Mandatory second-half substitution check</h3>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -235,6 +242,25 @@ export default async function Live({ params, searchParams }: { params: Promise<{
               </section>
             ))}
           </div>
+        ) : null}
+        {definition && game && game.status !== "FINAL" ? (
+          <SportCapturePanel
+            gameId={game.id}
+            fixtureId={fixtureId}
+            definition={definition}
+            teams={[
+              {
+                id: fixture.homeSeasonClub.id,
+                name: fixture.homeSeasonClub.club.name,
+                players: fixture.homeSeasonClub.players.map((player) => ({ id: player.id, name: `${player.athlete.firstName} ${player.athlete.lastName}` })),
+              },
+              {
+                id: fixture.awaySeasonClub.id,
+                name: fixture.awaySeasonClub.club.name,
+                players: fixture.awaySeasonClub.players.map((player) => ({ id: player.id, name: `${player.athlete.firstName} ${player.athlete.lastName}` })),
+              },
+            ]}
+          />
         ) : null}
         {game && game.status !== "NOT_STARTED" ? (
           <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
