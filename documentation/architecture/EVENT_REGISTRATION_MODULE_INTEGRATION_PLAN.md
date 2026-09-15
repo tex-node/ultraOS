@@ -127,5 +127,17 @@ during integration:
   never accessed and nothing was pushed. The public route
   `/register/[organizationSlug]/[eventSlug]` and the admin routes are wired to the
   DB-backed layer and deployed to staging.
-- Event-detail "Registration setup" navigation link: still a documented
-  follow-up (not required for module usability).
+- Event-detail "Registration setup" navigation link: **done** (2026-09-13).
+
+## Follow-ups completed after this plan
+
+- **Event-detail registration surface** (`web/src/app/events/[id]/page.tsx`): a
+  "Registration setup" action link, a "Team registration" panel showing form
+  status / public state / submission count, links to configure and review, and
+  the public registration URL (preferring a short link).
+- **Memorable public registration URL**: `/giesm` serves the GIESM 2026
+  Volleyball Championship (Volleyball + Flag Race) team registration via
+  `web/src/lib/public-short-links.ts` and `web/src/app/giesm/page.tsx`. The
+  canonical `/register/neon-ultra/giesm` remains available. The event + form are
+  created idempotently by `npm run giesm:setup -- --apply`
+  (see `documentation/GIESM_REGISTRATION_SETUP.md`).
