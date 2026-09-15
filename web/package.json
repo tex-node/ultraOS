@@ -44,6 +44,7 @@
     "events:parity-check": "tsx scripts/game-event-typekey-parity-check.ts",
     "registration-sport:backfill": "tsx scripts/registration-sport-unify-backfill.ts",
     "registration-sport:parity-check": "tsx scripts/registration-sport-unify-parity-check.ts",
+    "fixture-sides:parity-check": "tsx scripts/fixture-sides-parity-check.ts",
     "giesm:setup": "tsx scripts/giesm-setup.ts",
     "volleyball:pilot": "tsx scripts/volleyball-pilot-setup.ts",
     "vision:analyze": "tsx scripts/vision-analyze.ts",

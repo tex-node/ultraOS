@@ -49,6 +49,7 @@ Current documentation framework version: `docs-0.1`
 - [Multi-Sport Roadmap](MULTI_SPORT_ROADMAP.md): engine and schema delivery plan and progress tracker.
 - [Multi-Sport Staging Migration & Backfill Runbook](architecture/MULTI_SPORT_STAGING_MIGRATION_BACKFILL_RUNBOOK.md): staged migration + backfill + parity procedure (planning only).
 - [Stage 10 Legacy Decommission Plan](architecture/STAGE10_LEGACY_DECOMMISSION_PLAN.md): gated, non-executed plan to retire legacy basketball columns/enums.
+- [Entrant Fixture Sides Plan](architecture/ENTRANT_FIXTURE_SIDES_PLAN.md): staged plan to make fixture sides Entrant-authoritative (individual sports).
 - [GIESM 2026 Registration Setup](GIESM_REGISTRATION_SETUP.md): public `/giesm` registration page and its idempotent setup.
 - [Phase 1 Tenancy Architecture](architecture/PHASE1_STAGE5_4B_RELATIONAL_INTEGRITY.md): RLS and composite-FK patterns every new table must follow.
 
