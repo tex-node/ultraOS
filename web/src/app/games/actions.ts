@@ -20,8 +20,9 @@ import {
 } from "@/lib/ultra-scoring-engine";
 import { recalculateStandings } from "@/lib/standings-recalculate";
 import { getSportDefinition } from "@/lib/sports/registry";
+import { isLegalDelivery } from "@/lib/sports/innings-scoring";
 import { matchOutcome } from "@/lib/sports/match-result";
-import { currentSetNumber, evaluateSets, setScoringConfig } from "@/lib/sports/set-scoring";
+import { resolveScoringModule } from "@/lib/sports/scoring-modules";
 import { hasBlockingIssue, runConstraints } from "@/lib/sports/validators";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -1281,18 +1282,33 @@ export async function recordSportEvent(gameId: string, fixtureId: string, formDa
   revalidatePath(`/games/${fixtureId}/live`);
 }
 
-const setPointInput = z.object({
+const scoringInput = z.object({
   seasonClubId: z.string().min(1),
   typeKey: z.string().optional(),
+  runs: z.coerce.number().int().min(0).max(6).optional(),
+  playerId: z.string().optional(),
   description: z.string().optional(),
 });
 
-// Set-based scoring (volleyball): a rally point increments the current set in GamePeriodScore,
-// the set winner is resolved from the sport's target/lead rules, the fixture score is kept as sets
-// won, and the match auto-finalizes (updating standings) once a side reaches sets-to-win.
-export async function recordSetPoint(gameId: string, fixtureId: string, formData: FormData) {
+const CRICKET_DELIVERY_KEYS = new Set([
+  "RUN",
+  "FOUR",
+  "SIX",
+  "WICKET",
+  "DOT_BALL",
+  "EXTRAS_BYE",
+  "EXTRAS_LEG_BYE",
+  "EXTRAS_WIDE",
+  "EXTRAS_NO_BALL",
+]);
+
+// Unified sport scoring: resolve the scoring module for the sport's definition, apply the delivery,
+// and persist the outcome (fixture score, per-period score, ledger event). Finalizes and
+// recalculates standings when the module reports the match decided. Replaces the per-sport scoring
+// actions (set points / goals / runs) with one dispatched path.
+export async function recordScoringEvent(gameId: string, fixtureId: string, formData: FormData) {
   const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
-  const input = setPointInput.parse(Object.fromEntries(formData.entries()));
+  const input = scoringInput.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
@@ -1301,67 +1317,100 @@ export async function recordSetPoint(gameId: string, fixtureId: string, formData
       include: {
         fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } },
         periodScores: { orderBy: { period: "asc" } },
+        events: { select: { period: true, typeKey: true } },
       },
     });
     assertGameIsMutable(game.status, game.fixture.status);
     if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
 
-    const isHome = input.seasonClubId === game.fixture.homeSeasonClubId;
-    if (!isHome && input.seasonClubId !== game.fixture.awaySeasonClubId) throw new Error("INVALID_TEAM");
-
     const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
     if (!definition) throw new Error("UNKNOWN_SPORT");
-    const config = setScoringConfig(definition);
-    if (!config) throw new Error("NOT_SET_SPORT");
+    const scoringModule = resolveScoringModule(definition);
+    if (!scoringModule) throw new Error("NO_SCORING_MODULE");
 
-    const playedSets = game.periodScores.map((set) => ({ period: set.period, home: set.homeScore, away: set.awayScore }));
-    const period = currentSetNumber(config, playedSets);
-    const existing = game.periodScores.find((set) => set.period === period);
-    const nextHome = (existing?.homeScore ?? 0) + (isHome ? 1 : 0);
-    const nextAway = (existing?.awayScore ?? 0) + (isHome ? 0 : 1);
+    // Per-innings wickets/balls (cricket) derived from the ledger.
+    const periodWickets: Record<number, number> = {};
+    const periodBalls: Record<number, number> = {};
+    for (const event of game.events) {
+      if (event.period == null || !event.typeKey) continue;
+      if (event.typeKey === "WICKET") periodWickets[event.period] = (periodWickets[event.period] ?? 0) + 1;
+      if (CRICKET_DELIVERY_KEYS.has(event.typeKey) && isLegalDelivery(event.typeKey)) {
+        periodBalls[event.period] = (periodBalls[event.period] ?? 0) + 1;
+      }
+    }
 
-    await tx.gamePeriodScore.upsert({
-      where: { gameId_period: { gameId, period } },
-      create: { organizationId, gameId, period, label: `SET ${period}`, homeScore: nextHome, awayScore: nextAway },
-      update: { homeScore: nextHome, awayScore: nextAway },
+    const result = scoringModule.apply(definition, {
+      homeSeasonClubId: game.fixture.homeSeasonClubId,
+      awaySeasonClubId: game.fixture.awaySeasonClubId,
+      currentPeriod: game.currentPeriod,
+      homeScore: game.fixture.homeScore,
+      awayScore: game.fixture.awayScore,
+      periodScores: game.periodScores.map((score) => ({ period: score.period, home: score.homeScore, away: score.awayScore })),
+      periodWickets,
+      periodBalls,
+      seasonClubId: input.seasonClubId,
+      typeKey: input.typeKey,
+      runs: input.runs,
     });
+    if (!result.ok) throw new Error(result.reason);
+
+    const homeBefore = game.fixture.homeScore;
+    const awayBefore = game.fixture.awayScore;
+    await tx.fixture.update({
+      where: { id: fixtureId },
+      data: { homeScore: result.homeScore, awayScore: result.awayScore },
+    });
+
+    if (result.period) {
+      await tx.gamePeriodScore.upsert({
+        where: { gameId_period: { gameId, period: result.period.period } },
+        create: { organizationId, gameId, period: result.period.period, label: `P${result.period.period}`, homeScore: result.period.home, awayScore: result.period.away },
+        update: { homeScore: result.period.home, awayScore: result.period.away },
+      });
+    }
+
+    const player = input.playerId
+      ? await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } })
+      : null;
 
     const sequenceNumber = game.nextEventSequence;
     await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
-    const typeKey =
-      input.typeKey && definition.events.some((event) => event.key === input.typeKey) ? input.typeKey : "RALLY_POINT";
     await tx.gameEvent.create({
       data: {
         organizationId,
         gameId,
         seasonClubId: input.seasonClubId,
-        eventType: "SCORE",
-        typeKey,
-        points: 1,
-        data: { sportKey: definition.key, set: period, points: 1 },
-        period,
+        playerId: player?.id ?? null,
+        eventType: result.eventKind,
+        typeKey: result.typeKey,
+        points: result.points,
+        data: { sportKey: definition.key, module: scoringModule.key, note: result.note },
+        period: result.period?.period ?? game.currentPeriod,
         clockSeconds: remainingClockSeconds(game),
-        description: input.description?.trim() || `${typeKey === "RALLY_POINT" ? "Point" : typeKey} (set ${period})`,
+        description:
+          input.description?.trim() ||
+          `${result.typeKey.replace(/_/g, " ")}${result.points ? ` (${result.points})` : ""}${player ? ` — ${player.athlete.firstName} ${player.athlete.lastName}` : ""}`,
         sequenceNumber,
+        homeScoreBefore: homeBefore,
+        awayScoreBefore: awayBefore,
+        homeScoreAfter: result.homeScore,
+        awayScoreAfter: result.awayScore,
         source: "ULTRA_NATIVE_LIVE_SCORER",
         createdById: session.user.id,
       },
     });
 
-    const nextSets = [...playedSets.filter((set) => set.period !== period), { period, home: nextHome, away: nextAway }].sort(
-      (a, b) => a.period - b.period,
-    );
-    const summary = evaluateSets(config, nextSets);
-    const setCompleted = summary.sets.find((set) => set.period === period)?.complete === true;
+    if (result.nextPeriod) {
+      await tx.game.update({ where: { id: gameId }, data: { currentPeriod: result.nextPeriod } });
+    }
 
-    await tx.fixture.update({
-      where: { id: fixtureId },
-      data: { homeScore: summary.homeSetsWon, awayScore: summary.awaySetsWon },
-    });
-
-    if (summary.matchWinner) {
+    if (result.finalize) {
       const winnerSeasonClubId =
-        summary.matchWinner === "HOME" ? game.fixture.homeSeasonClubId : game.fixture.awaySeasonClubId;
+        result.finalizeWinner === "HOME"
+          ? game.fixture.homeSeasonClubId
+          : result.finalizeWinner === "AWAY"
+            ? game.fixture.awaySeasonClubId
+            : null;
       await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId } });
       await tx.game.update({
         where: { id: gameId },
@@ -1373,232 +1422,36 @@ export async function recordSetPoint(gameId: string, fixtureId: string, formData
           gameId,
           eventType: "GAME_ENDED",
           typeKey: "GAME_ENDED",
-          period,
+          period: result.period?.period ?? game.currentPeriod,
           clockSeconds: 0,
-          description: `Match won ${summary.homeSetsWon}\u2013${summary.awaySetsWon}`,
+          description: `Final ${result.homeScore}\u2013${result.awayScore}`,
           source: "ULTRA_NATIVE_LIVE_SCORER",
           createdById: session.user.id,
         },
       });
       await recalculateStandings(tx, organizationId, game.fixture.seasonId);
-      await writeAuditLog(tx, {
-        organizationId,
-        userId: session.user.id,
-        action: "GAME_FINALIZED",
-        entityType: "Game",
-        entityId: gameId,
-        details: { fixtureId, trigger: "SET_MATCH_WON", homeSets: summary.homeSetsWon, awaySets: summary.awaySetsWon, winnerSeasonClubId },
-      });
-    } else if (setCompleted) {
-      await tx.game.update({
-        where: { id: gameId },
-        data: { currentPeriod: Math.min(config.periodCount, period + 1) },
-      });
     }
 
     await writeAuditLog(tx, {
       organizationId,
       userId: session.user.id,
-      action: "SET_POINT_RECORDED",
+      action: "SCORING_EVENT_RECORDED",
       entityType: "Game",
       entityId: gameId,
-      details: { fixtureId, set: period, home: nextHome, away: nextAway, typeKey },
+      details: {
+        fixtureId,
+        module: scoringModule.key,
+        typeKey: result.typeKey,
+        seasonClubId: input.seasonClubId,
+        homeScore: result.homeScore,
+        awayScore: result.awayScore,
+        finalize: result.finalize,
+      },
     });
   });
 
   revalidatePath(`/games/${fixtureId}/live`);
   revalidatePath(`/fixtures/${fixtureId}`);
   revalidatePath("/standings");
-  revalidatePath(`/scoreboard/${gameId}`);
-}
-
-const goalInput = z.object({
-  seasonClubId: z.string().min(1),
-  typeKey: z.string().optional(),
-  playerId: z.string().optional(),
-  description: z.string().optional(),
-});
-
-// Football scoring: one goal increments the credited side's fixture score by 1. An own goal credits
-// the OPPONENT of the selected team. Cards/corners/shots remain non-scoring catalog events.
-export async function recordGoal(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
-  const input = goalInput.parse(Object.fromEntries(formData.entries()));
-
-  await withOrganizationContext(organizationId, async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
-    const game = await tx.game.findUniqueOrThrow({
-      where: { id: gameId },
-      include: { fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } } },
-    });
-    assertGameIsMutable(game.status, game.fixture.status);
-    if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
-
-    const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
-    if (!definition || definition.scoring.unit !== "goal") throw new Error("NOT_GOAL_SPORT");
-
-    const home = game.fixture.homeSeasonClubId;
-    const away = game.fixture.awaySeasonClubId;
-    if (![home, away].includes(input.seasonClubId)) throw new Error("INVALID_TEAM");
-
-    const typeKey = input.typeKey && definition.events.some((event) => event.key === input.typeKey) ? input.typeKey : "GOAL";
-    const ownGoal = typeKey === "OWN_GOAL";
-    const creditedSeasonClubId = ownGoal ? (input.seasonClubId === home ? away : home) : input.seasonClubId;
-    const isHomeCredited = creditedSeasonClubId === home;
-
-    const homeBefore = game.fixture.homeScore;
-    const awayBefore = game.fixture.awayScore;
-    const homeAfter = isHomeCredited ? homeBefore + 1 : homeBefore;
-    const awayAfter = isHomeCredited ? awayBefore : awayBefore + 1;
-
-    await tx.fixture.update({
-      where: { id: fixtureId },
-      data: { homeScore: homeAfter, awayScore: awayAfter },
-    });
-
-    const player = input.playerId
-      ? await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } })
-      : null;
-
-    const sequenceNumber = game.nextEventSequence;
-    await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
-    await tx.gameEvent.create({
-      data: {
-        organizationId,
-        gameId,
-        seasonClubId: input.seasonClubId,
-        playerId: player?.id ?? null,
-        eventType: "SCORE",
-        typeKey,
-        points: 1,
-        data: { sportKey: definition.key, creditedSeasonClubId, ownGoal: ownGoal || undefined },
-        period: game.currentPeriod,
-        clockSeconds: remainingClockSeconds(game),
-        description:
-          input.description?.trim() ||
-          `${typeKey.replace(/_/g, " ")}${player ? ` — ${player.athlete.firstName} ${player.athlete.lastName}` : ""}`,
-        sequenceNumber,
-        homeScoreBefore: homeBefore,
-        awayScoreBefore: awayBefore,
-        homeScoreAfter: homeAfter,
-        awayScoreAfter: awayAfter,
-        source: "ULTRA_NATIVE_LIVE_SCORER",
-        createdById: session.user.id,
-      },
-    });
-
-    await writeAuditLog(tx, {
-      organizationId,
-      userId: session.user.id,
-      action: "GOAL_RECORDED",
-      entityType: "Game",
-      entityId: gameId,
-      details: { fixtureId, typeKey, selectedSeasonClubId: input.seasonClubId, creditedSeasonClubId, homeScore: homeAfter, awayScore: awayAfter },
-    });
-  });
-
-  revalidatePath(`/games/${fixtureId}/live`);
-  revalidatePath(`/fixtures/${fixtureId}`);
-  revalidatePath(`/scoreboard/${gameId}`);
-}
-
-const runsInput = z.object({
-  seasonClubId: z.string().min(1),
-  runs: z.coerce.number().int().min(0).max(6).optional(),
-  typeKey: z.string().optional(),
-  playerId: z.string().optional(),
-  description: z.string().optional(),
-});
-
-// Cricket scoring: runs are credited to the batting side for the current innings. Limited-overs
-// convention here is home bats first (innings 1 = home, innings 2 = away). A wicket adds no runs.
-export async function recordRuns(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
-  const input = runsInput.parse(Object.fromEntries(formData.entries()));
-
-  await withOrganizationContext(organizationId, async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
-    const game = await tx.game.findUniqueOrThrow({
-      where: { id: gameId },
-      include: { fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } } },
-    });
-    assertGameIsMutable(game.status, game.fixture.status);
-    if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
-
-    const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
-    if (!definition || definition.scoring.unit !== "run") throw new Error("NOT_RUN_SPORT");
-
-    const home = game.fixture.homeSeasonClubId;
-    const away = game.fixture.awaySeasonClubId;
-    const battingSeasonClubId = game.currentPeriod <= 1 ? home : away;
-    if (input.seasonClubId !== battingSeasonClubId) throw new Error("NOT_BATTING");
-
-    const typeKey = input.typeKey && definition.events.some((event) => event.key === input.typeKey) ? input.typeKey : "RUN";
-    const eventDefinition = definition.events.find((event) => event.key === typeKey);
-    const isWicket = typeKey === "WICKET";
-    const runs = isWicket ? 0 : input.runs ?? eventDefinition?.pointValues?.[0] ?? 1;
-
-    const isHomeBatting = battingSeasonClubId === home;
-    const homeBefore = game.fixture.homeScore;
-    const awayBefore = game.fixture.awayScore;
-    const homeAfter = isHomeBatting ? homeBefore + runs : homeBefore;
-    const awayAfter = isHomeBatting ? awayBefore : awayBefore + runs;
-
-    await tx.fixture.update({ where: { id: fixtureId }, data: { homeScore: homeAfter, awayScore: awayAfter } });
-
-    // Innings score row (runs on the batting side).
-    const period = game.currentPeriod;
-    const existing = await tx.gamePeriodScore.findUnique({ where: { gameId_period: { gameId, period } } });
-    const inningHome = (existing?.homeScore ?? 0) + (isHomeBatting ? runs : 0);
-    const inningAway = (existing?.awayScore ?? 0) + (isHomeBatting ? 0 : runs);
-    await tx.gamePeriodScore.upsert({
-      where: { gameId_period: { gameId, period } },
-      create: { organizationId, gameId, period, label: `INNINGS ${period}`, homeScore: inningHome, awayScore: inningAway },
-      update: { homeScore: inningHome, awayScore: inningAway },
-    });
-
-    const player = input.playerId
-      ? await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } })
-      : null;
-
-    const sequenceNumber = game.nextEventSequence;
-    await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
-    await tx.gameEvent.create({
-      data: {
-        organizationId,
-        gameId,
-        seasonClubId: input.seasonClubId,
-        playerId: player?.id ?? null,
-        eventType: isWicket ? "NOTE" : "SCORE",
-        typeKey,
-        points: runs || null,
-        data: { sportKey: definition.key, innings: period, wickets: isWicket ? 1 : 0 },
-        period,
-        clockSeconds: 0,
-        description:
-          input.description?.trim() ||
-          `${typeKey.replace(/_/g, " ")}${runs ? ` (${runs})` : ""}${player ? ` — ${player.athlete.firstName} ${player.athlete.lastName}` : ""}`,
-        sequenceNumber,
-        homeScoreBefore: homeBefore,
-        awayScoreBefore: awayBefore,
-        homeScoreAfter: homeAfter,
-        awayScoreAfter: awayAfter,
-        source: "ULTRA_NATIVE_LIVE_SCORER",
-        createdById: session.user.id,
-      },
-    });
-
-    await writeAuditLog(tx, {
-      organizationId,
-      userId: session.user.id,
-      action: "RUNS_RECORDED",
-      entityType: "Game",
-      entityId: gameId,
-      details: { fixtureId, innings: period, typeKey, runs, wicket: isWicket, battingSeasonClubId, homeScore: homeAfter, awayScore: awayAfter },
-    });
-  });
-
-  revalidatePath(`/games/${fixtureId}/live`);
-  revalidatePath(`/fixtures/${fixtureId}`);
   revalidatePath(`/scoreboard/${gameId}`);
 }

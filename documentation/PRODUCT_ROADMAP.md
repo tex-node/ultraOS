@@ -283,8 +283,11 @@ at `https://app.neonultra.ng/giesm`. Volleyball is now operable end-to-end throu
 team, generate a round-robin schedule, capture rally points (sets via `GamePeriodScore`), and the
 match auto-finalizes into standings. Football and cricket now have specialised scoring too (goals,
 including own goals; runs and wickets by innings) and finalization permits draws/ties where the
-sport allows them. Remaining gaps: drag-drop rescheduling, offline capture, and deeper per-sport
-presentation (cricket overs/wickets, football cards) on public pages.
+sport allows them. Scoring is now a dispatched module registry (`lib/sports/scoring-modules.ts`:
+sets/goals/runs) so the console and server action have no sport-specific branching, and cricket has
+an innings engine (overs, wickets, innings-end, chase target). Remaining gaps: drag-drop
+rescheduling, offline capture, tennis (needs the individual-entrant fixture migration), and deeper
+per-sport presentation on public pages.
 
 | ID | Deliverable | Phase | Status | Depends on |
 | --- | --- | --- | --- | --- |
