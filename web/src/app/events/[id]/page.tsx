@@ -14,6 +14,7 @@ import { EventStatus } from "@/generated/prisma/enums";
 import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { formatLagosDateTime } from "@/lib/format-datetime";
 import { formatNaira } from "@/lib/money";
+import { PUBLIC_SHORT_LINKS } from "@/lib/public-short-links";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
 export default async function EventDetailPage({
@@ -25,7 +26,7 @@ export default async function EventDetailPage({
   const session = await requirePermissionOrRedirect("event:manage", `/events/${id}`);
   if (!session.user.organizationId) throw new MissingOrganizationContextError();
   const organizationId = session.user.organizationId;
-  const [event, fanClubs] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+  const [event, fanClubs, organization, registrationForm] = await withOrganizationContext(organizationId, (tx) => Promise.all([
     tx.event.findUnique({
       where: { id },
       include: {
@@ -60,8 +61,24 @@ export default async function EventDetailPage({
       include: { club: true },
       orderBy: { club: { name: "asc" } },
     }),
+    tx.organization.findUnique({ where: { id: organizationId }, select: { slug: true } }),
+    tx.registrationForm.findFirst({
+      where: { organizationId, eventId: id },
+      include: { _count: { select: { submissions: true } } },
+    }),
   ]));
   if (!event) notFound();
+
+  const organizationSlug = organization?.slug ?? null;
+  // A memorable short link (e.g. /giesm) wins over the canonical /register/[org]/[event] path.
+  const shortLink = event.slug && organizationSlug
+    ? Object.entries(PUBLIC_SHORT_LINKS).find(
+        ([, link]) => link.organizationSlug === organizationSlug && link.eventSlug === event.slug,
+      )?.[0] ?? null
+    : null;
+  const publicRegistrationPath =
+    event.slug && organizationSlug ? (shortLink ? `/${shortLink}` : `/register/${organizationSlug}/${event.slug}`) : null;
+  const registrationOpen = registrationForm?.publicEnabled && registrationForm.status === "OPEN" && Boolean(event.slug);
 
   return (
     <OperationsShell user={session.user}>
@@ -80,6 +97,7 @@ export default async function EventDetailPage({
               </form>
             ))}
             <Link href={`/public/events/${id}`} className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-zinc-950">Public booking</Link>
+            <Link href={`/events/${id}/registration`} className="rounded-lg border border-emerald-400/40 px-3 py-2 text-xs text-emerald-300">Registration setup</Link>
             <Link href={`/events/${id}/debrief`} className="rounded-lg border border-emerald-400/40 px-3 py-2 text-xs text-emerald-300">Post-event debrief</Link>
           </div>
         </div>
@@ -90,6 +108,44 @@ export default async function EventDetailPage({
           <Metric label="Reserved" value={event.seatZones.reduce((sum, zone) => sum + zone.reservedQuantity, 0)} />
           <Metric label="Accreditation" value={event.accreditations.length} />
           <Metric label="Orders" value={event.orders.length} />
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Team registration</h2>
+              <p className="mt-1 text-sm text-zinc-400">
+                {registrationForm
+                  ? `${registrationForm.status}${registrationForm.publicEnabled ? " · public" : " · private"} · ${registrationForm._count.submissions} submission(s)`
+                  : "No registration form yet. Set one up to accept teams."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href={`/events/${id}/registration`} className="rounded-lg border border-white/10 px-3 py-2 text-xs hover:border-white/25">
+                {registrationForm ? "Edit registration" : "Set up registration"}
+              </Link>
+              <Link href="/registrations" className="rounded-lg border border-white/10 px-3 py-2 text-xs hover:border-white/25">
+                Review submissions
+              </Link>
+            </div>
+          </div>
+          {registrationOpen && publicRegistrationPath ? (
+            <p className="mt-4 text-sm text-zinc-300">
+              Public registration:{" "}
+              <Link href={publicRegistrationPath} className="text-emerald-300 underline">
+                {publicRegistrationPath}
+              </Link>
+              {shortLink ? <span className="ml-2 text-xs text-zinc-500">short link</span> : null}
+            </p>
+          ) : publicRegistrationPath ? (
+            <p className="mt-4 text-sm text-amber-300">
+              A public URL exists ({publicRegistrationPath}) but the form is not OPEN and public. Enable it in Registration setup.
+            </p>
+          ) : (
+            <p className="mt-4 text-sm text-amber-300">
+              Give this event a public slug and enable the form to expose a public registration URL.
+            </p>
+          )}
         </section>
 
         <div className="mt-8 grid gap-6 xl:grid-cols-2">
