@@ -20,6 +20,7 @@ import {
 } from "@/lib/ultra-scoring-engine";
 import { recalculateStandings } from "@/lib/standings-recalculate";
 import { getSportDefinition } from "@/lib/sports/registry";
+import { matchOutcome } from "@/lib/sports/match-result";
 import { currentSetNumber, evaluateSets, setScoringConfig } from "@/lib/sports/set-scoring";
 import { hasBlockingIssue, runConstraints } from "@/lib/sports/validators";
 import type { Prisma } from "@/generated/prisma/client";
@@ -867,11 +868,19 @@ export async function finalizeGame(gameId: string, fixtureId: string) {
   const current = await withOrganizationContext(organizationId, (tx) =>
     tx.game.findUniqueOrThrow({
       where: { id: gameId },
-      include: { fixture: true },
+      include: {
+        fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } },
+      },
     }),
   );
   assertGameIsMutable(current.status, current.fixture.status);
-  if (current.fixture.homeScore === current.fixture.awayScore) {
+  const definition = getSportDefinition(current.fixture.division.competition.sport.slug);
+  const outcome = definition
+    ? matchOutcome(definition, current.fixture.homeScore, current.fixture.awayScore)
+    : null;
+  // A level score is only a valid final result for sports that allow draws/ties (football, cricket);
+  // basketball (and any no-draw sport) must not finalize level.
+  if (current.fixture.homeScore === current.fixture.awayScore && !outcome) {
     redirect(`/games/${fixtureId}/live?error=tied`);
   }
 
@@ -884,7 +893,9 @@ export async function finalizeGame(gameId: string, fixtureId: string) {
     const winnerSeasonClubId =
       game.fixture.homeScore > game.fixture.awayScore
         ? game.fixture.homeSeasonClubId
-        : game.fixture.awaySeasonClubId;
+        : game.fixture.awayScore > game.fixture.homeScore
+          ? game.fixture.awaySeasonClubId
+          : null; // a permitted draw/tie has no winner
 
     await tx.fixture.update({
       where: { id: fixtureId },
@@ -1398,5 +1409,196 @@ export async function recordSetPoint(gameId: string, fixtureId: string, formData
   revalidatePath(`/games/${fixtureId}/live`);
   revalidatePath(`/fixtures/${fixtureId}`);
   revalidatePath("/standings");
+  revalidatePath(`/scoreboard/${gameId}`);
+}
+
+const goalInput = z.object({
+  seasonClubId: z.string().min(1),
+  typeKey: z.string().optional(),
+  playerId: z.string().optional(),
+  description: z.string().optional(),
+});
+
+// Football scoring: one goal increments the credited side's fixture score by 1. An own goal credits
+// the OPPONENT of the selected team. Cards/corners/shots remain non-scoring catalog events.
+export async function recordGoal(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const input = goalInput.parse(Object.fromEntries(formData.entries()));
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
+    const game = await tx.game.findUniqueOrThrow({
+      where: { id: gameId },
+      include: { fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } } },
+    });
+    assertGameIsMutable(game.status, game.fixture.status);
+    if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
+
+    const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
+    if (!definition || definition.scoring.unit !== "goal") throw new Error("NOT_GOAL_SPORT");
+
+    const home = game.fixture.homeSeasonClubId;
+    const away = game.fixture.awaySeasonClubId;
+    if (![home, away].includes(input.seasonClubId)) throw new Error("INVALID_TEAM");
+
+    const typeKey = input.typeKey && definition.events.some((event) => event.key === input.typeKey) ? input.typeKey : "GOAL";
+    const ownGoal = typeKey === "OWN_GOAL";
+    const creditedSeasonClubId = ownGoal ? (input.seasonClubId === home ? away : home) : input.seasonClubId;
+    const isHomeCredited = creditedSeasonClubId === home;
+
+    const homeBefore = game.fixture.homeScore;
+    const awayBefore = game.fixture.awayScore;
+    const homeAfter = isHomeCredited ? homeBefore + 1 : homeBefore;
+    const awayAfter = isHomeCredited ? awayBefore : awayBefore + 1;
+
+    await tx.fixture.update({
+      where: { id: fixtureId },
+      data: { homeScore: homeAfter, awayScore: awayAfter },
+    });
+
+    const player = input.playerId
+      ? await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } })
+      : null;
+
+    const sequenceNumber = game.nextEventSequence;
+    await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
+    await tx.gameEvent.create({
+      data: {
+        organizationId,
+        gameId,
+        seasonClubId: input.seasonClubId,
+        playerId: player?.id ?? null,
+        eventType: "SCORE",
+        typeKey,
+        points: 1,
+        data: { sportKey: definition.key, creditedSeasonClubId, ownGoal: ownGoal || undefined },
+        period: game.currentPeriod,
+        clockSeconds: remainingClockSeconds(game),
+        description:
+          input.description?.trim() ||
+          `${typeKey.replace(/_/g, " ")}${player ? ` — ${player.athlete.firstName} ${player.athlete.lastName}` : ""}`,
+        sequenceNumber,
+        homeScoreBefore: homeBefore,
+        awayScoreBefore: awayBefore,
+        homeScoreAfter: homeAfter,
+        awayScoreAfter: awayAfter,
+        source: "ULTRA_NATIVE_LIVE_SCORER",
+        createdById: session.user.id,
+      },
+    });
+
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "GOAL_RECORDED",
+      entityType: "Game",
+      entityId: gameId,
+      details: { fixtureId, typeKey, selectedSeasonClubId: input.seasonClubId, creditedSeasonClubId, homeScore: homeAfter, awayScore: awayAfter },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/live`);
+  revalidatePath(`/fixtures/${fixtureId}`);
+  revalidatePath(`/scoreboard/${gameId}`);
+}
+
+const runsInput = z.object({
+  seasonClubId: z.string().min(1),
+  runs: z.coerce.number().int().min(0).max(6).optional(),
+  typeKey: z.string().optional(),
+  playerId: z.string().optional(),
+  description: z.string().optional(),
+});
+
+// Cricket scoring: runs are credited to the batting side for the current innings. Limited-overs
+// convention here is home bats first (innings 1 = home, innings 2 = away). A wicket adds no runs.
+export async function recordRuns(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const input = runsInput.parse(Object.fromEntries(formData.entries()));
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
+    const game = await tx.game.findUniqueOrThrow({
+      where: { id: gameId },
+      include: { fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } } },
+    });
+    assertGameIsMutable(game.status, game.fixture.status);
+    if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
+
+    const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
+    if (!definition || definition.scoring.unit !== "run") throw new Error("NOT_RUN_SPORT");
+
+    const home = game.fixture.homeSeasonClubId;
+    const away = game.fixture.awaySeasonClubId;
+    const battingSeasonClubId = game.currentPeriod <= 1 ? home : away;
+    if (input.seasonClubId !== battingSeasonClubId) throw new Error("NOT_BATTING");
+
+    const typeKey = input.typeKey && definition.events.some((event) => event.key === input.typeKey) ? input.typeKey : "RUN";
+    const eventDefinition = definition.events.find((event) => event.key === typeKey);
+    const isWicket = typeKey === "WICKET";
+    const runs = isWicket ? 0 : input.runs ?? eventDefinition?.pointValues?.[0] ?? 1;
+
+    const isHomeBatting = battingSeasonClubId === home;
+    const homeBefore = game.fixture.homeScore;
+    const awayBefore = game.fixture.awayScore;
+    const homeAfter = isHomeBatting ? homeBefore + runs : homeBefore;
+    const awayAfter = isHomeBatting ? awayBefore : awayBefore + runs;
+
+    await tx.fixture.update({ where: { id: fixtureId }, data: { homeScore: homeAfter, awayScore: awayAfter } });
+
+    // Innings score row (runs on the batting side).
+    const period = game.currentPeriod;
+    const existing = await tx.gamePeriodScore.findUnique({ where: { gameId_period: { gameId, period } } });
+    const inningHome = (existing?.homeScore ?? 0) + (isHomeBatting ? runs : 0);
+    const inningAway = (existing?.awayScore ?? 0) + (isHomeBatting ? 0 : runs);
+    await tx.gamePeriodScore.upsert({
+      where: { gameId_period: { gameId, period } },
+      create: { organizationId, gameId, period, label: `INNINGS ${period}`, homeScore: inningHome, awayScore: inningAway },
+      update: { homeScore: inningHome, awayScore: inningAway },
+    });
+
+    const player = input.playerId
+      ? await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } })
+      : null;
+
+    const sequenceNumber = game.nextEventSequence;
+    await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
+    await tx.gameEvent.create({
+      data: {
+        organizationId,
+        gameId,
+        seasonClubId: input.seasonClubId,
+        playerId: player?.id ?? null,
+        eventType: isWicket ? "NOTE" : "SCORE",
+        typeKey,
+        points: runs || null,
+        data: { sportKey: definition.key, innings: period, wickets: isWicket ? 1 : 0 },
+        period,
+        clockSeconds: 0,
+        description:
+          input.description?.trim() ||
+          `${typeKey.replace(/_/g, " ")}${runs ? ` (${runs})` : ""}${player ? ` — ${player.athlete.firstName} ${player.athlete.lastName}` : ""}`,
+        sequenceNumber,
+        homeScoreBefore: homeBefore,
+        awayScoreBefore: awayBefore,
+        homeScoreAfter: homeAfter,
+        awayScoreAfter: awayAfter,
+        source: "ULTRA_NATIVE_LIVE_SCORER",
+        createdById: session.user.id,
+      },
+    });
+
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "RUNS_RECORDED",
+      entityType: "Game",
+      entityId: gameId,
+      details: { fixtureId, innings: period, typeKey, runs, wicket: isWicket, battingSeasonClubId, homeScore: homeAfter, awayScore: awayAfter },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/live`);
+  revalidatePath(`/fixtures/${fixtureId}`);
   revalidatePath(`/scoreboard/${gameId}`);
 }

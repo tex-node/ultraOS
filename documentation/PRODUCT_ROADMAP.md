@@ -281,9 +281,10 @@ Reality check (2026-09-15): the engine (Stages 1–9) is implemented and applied
 production**; all backfills/parity checks pass. The GIESM 2026 volleyball registration is **live**
 at `https://app.neonultra.ng/giesm`. Volleyball is now operable end-to-end through the app: onboard a
 team, generate a round-robin schedule, capture rally points (sets via `GamePeriodScore`), and the
-match auto-finalizes into standings. Remaining gaps: basketball-only scorer panels for other sports'
-specialised scoring (football goals/cards, cricket innings), drag-drop rescheduling, and offline
-capture.
+match auto-finalizes into standings. Football and cricket now have specialised scoring too (goals,
+including own goals; runs and wickets by innings) and finalization permits draws/ties where the
+sport allows them. Remaining gaps: drag-drop rescheduling, offline capture, and deeper per-sport
+presentation (cricket overs/wickets, football cards) on public pages.
 
 | ID | Deliverable | Phase | Status | Depends on |
 | --- | --- | --- | --- | --- |
@@ -323,8 +324,8 @@ capture.
 | P5.6 | PDF/CSV exports | P5 | `In progress` | — |
 | P5.7 | Official scoresheet + FIBA parity checklist | P5 | `Not started` | P5.2 |
 | P6.1 | Volleyball pilot end-to-end | P6 | `Done` | P1-P5, Engine S8 |
-| P6.2 | Football end-to-end | P6 | `Not started` | P6.1 |
-| P6.3 | Cricket end-to-end | P6 | `Not started` | P6.1 |
+| P6.2 | Football end-to-end | P6 | `In progress` | P6.1 |
+| P6.3 | Cricket end-to-end | P6 | `In progress` | P6.1 |
 | P6.4 | Tennis end-to-end | P6 | `Not started` | P6.1 |
 | P6.5 | Knockout and group-stage formats | P6 | `In progress` | Engine S9 |
 | P7.1 | Offline hardening and recovery drills | P7 | `Not started` | P4.6 |

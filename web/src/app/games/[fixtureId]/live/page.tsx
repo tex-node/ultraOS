@@ -28,6 +28,7 @@ import { FINAL_PERIOD, isUltraTime, periodLabel, remainingShotClockSeconds, ULTR
 import { getSportDefinition } from "@/lib/sports/registry";
 import { setScoringConfig } from "@/lib/sports/set-scoring";
 import { withOrganizationContext } from "@/lib/tenant-context";
+import { GoalRunPanel } from "./goal-run-panel";
 import { SetScorePanel } from "./set-score-panel";
 import { SportCapturePanel } from "./sport-capture-panel";
 
@@ -69,6 +70,11 @@ export default async function Live({ params, searchParams }: { params: Promise<{
   const hasShotClock = capabilities.has("SHOT_CLOCK");
   const isBasketball = definition?.key === "BASKETBALL";
   const setConfig = definition ? setScoringConfig(definition) : null;
+  const scoreUnit =
+    definition && (definition.scoring.unit === "goal" || definition.scoring.unit === "run")
+      ? definition.scoring.unit
+      : null;
+  const battingTeamId = game && game.currentPeriod <= 1 ? fixture.homeSeasonClub.id : fixture.awaySeasonClub.id;
   const substitutionCheckDue = Boolean(game && game.currentPeriod >= FINAL_PERIOD && game.status !== "FINAL");
   const confirmations = substitutionCheckDue
     ? await withOrganizationContext(session.user.organizationId, (tx) => tx.auditLog.findMany({
@@ -273,6 +279,18 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             config={setConfig}
             sets={game.periodScores.map((set) => ({ period: set.period, home: set.homeScore, away: set.awayScore }))}
             currentPeriod={game.currentPeriod}
+            teams={[
+              { id: fixture.homeSeasonClub.id, name: fixture.homeSeasonClub.club.name },
+              { id: fixture.awaySeasonClub.id, name: fixture.awaySeasonClub.club.name },
+            ]}
+          />
+        ) : null}
+        {(scoreUnit === "goal" || scoreUnit === "run") && game && game.status !== "FINAL" ? (
+          <GoalRunPanel
+            gameId={game.id}
+            fixtureId={fixtureId}
+            unit={scoreUnit}
+            battingTeamId={battingTeamId}
             teams={[
               { id: fixture.homeSeasonClub.id, name: fixture.homeSeasonClub.club.name },
               { id: fixture.awaySeasonClub.id, name: fixture.awaySeasonClub.club.name },
