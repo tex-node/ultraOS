@@ -26,6 +26,7 @@ import { canFixturePermission, requireFixturePermissionOrRedirect } from "@/lib/
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { FINAL_PERIOD, isUltraTime, periodLabel, remainingShotClockSeconds, ULTRA_RULES } from "@/lib/game-rules";
 import { getSportDefinition } from "@/lib/sports/registry";
+import { resolveFormat } from "@/lib/sports/format";
 import { chaseTarget, inningsConfig, isDelivery, isLegalDelivery, oversDisplay } from "@/lib/sports/innings-scoring";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { ScoreCapturePanel } from "./score-capture-panel";
@@ -307,7 +308,12 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             definition={definition}
             battingTeamId={battingTeamId}
             innings={cricketInnings ?? undefined}
-            knockout={fixture.division.competition.format === "KNOCKOUT"}
+            knockout={
+              resolveFormat({
+                divisionFormat: fixture.division.format,
+                competitionFormat: fixture.division.competition.format,
+              }).format === "KNOCKOUT"
+            }
             scoresLevel={fixture.homeScore === fixture.awayScore}
             shootoutKicks={game.events
               .filter((event) => event.typeKey === "PENALTY_SHOOTOUT")

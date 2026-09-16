@@ -23,6 +23,7 @@ import { getSportDefinition } from "@/lib/sports/registry";
 import { isLegalDelivery } from "@/lib/sports/innings-scoring";
 import { advanceKnockoutBracket } from "@/lib/sports/knockout-bracket";
 import { matchOutcome } from "@/lib/sports/match-result";
+import { resolveFormat } from "@/lib/sports/format";
 import { requireSeasonClubId } from "@/lib/sports/fixture-sides";
 import { shootoutWinner, type ShootoutKick } from "@/lib/sports/shootout";
 import { resolveScoringModule } from "@/lib/sports/scoring-modules";
@@ -880,7 +881,11 @@ export async function finalizeGame(gameId: string, fixtureId: string) {
   );
   assertGameIsMutable(current.status, current.fixture.status);
   const definition = getSportDefinition(current.fixture.division.competition.sport.slug);
-  const knockout = current.fixture.division.competition.format === "KNOCKOUT";
+  const knockout =
+    resolveFormat({
+      divisionFormat: current.fixture.division.format,
+      competitionFormat: current.fixture.division.competition.format,
+    }).format === "KNOCKOUT";
   const outcome = definition
     ? matchOutcome(definition, current.fixture.homeScore, current.fixture.awayScore, { knockout })
     : null;
@@ -1523,7 +1528,12 @@ export async function recordShootoutKick(gameId: string, fixtureId: string, form
     assertGameIsMutable(game.status, game.fixture.status);
     if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
 
-    if (game.fixture.division.competition.format !== "KNOCKOUT") throw new Error("NOT_KNOCKOUT");
+    const isKnockout =
+      resolveFormat({
+        divisionFormat: game.fixture.division.format,
+        competitionFormat: game.fixture.division.competition.format,
+      }).format === "KNOCKOUT";
+    if (!isKnockout) throw new Error("NOT_KNOCKOUT");
     const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
     if (!definition) throw new Error("UNKNOWN_SPORT");
     if (!definition.capabilities.includes("PENALTIES")) throw new Error("NO_PENALTIES_CAPABILITY");

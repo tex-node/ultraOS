@@ -738,6 +738,8 @@ model Competition {
   // elimination; a level score must be resolved by extra time/penalties, not finalized as a draw),
   // GROUP_STAGE (seeded groups -> round-robin).
   format           CompetitionFormat @default(ROUND_ROBIN)
+  // GROUP_STAGE only: the default number of groups. A division may override it.
+  groupCount       Int               @default(2)
   divisions        Division[]
   seasons          Season[]
   entrants         Entrant[]
@@ -767,6 +769,10 @@ model Division {
   name                  String
   slug                  String
   isActive              Boolean               @default(true)
+  // Optional per-division override of the competition's format/group count. Null inherits from the
+  // competition, so a competition can run a league in one division and a knockout in another.
+  format                CompetitionFormat?
+  groupCount            Int?
   seasonClubs           SeasonClub[]
   drafts                Draft[]
   fixtures              Fixture[]

@@ -7,6 +7,7 @@
 
 import type { Prisma } from "@/generated/prisma/client";
 import { bracketSize, planNextRound, type BracketMatch, type BracketParticipant } from "./knockout-advance";
+import { resolveFormat } from "./format";
 
 export type BracketFixtureRef = {
   id: string;
@@ -30,9 +31,11 @@ export async function advanceKnockoutBracket(
 
   const division = await tx.division.findUniqueOrThrow({
     where: { id: fixture.divisionId },
-    select: { knockoutByes: true, competition: { select: { format: true } } },
+    select: { format: true, knockoutByes: true, competition: { select: { format: true } } },
   });
-  if (division.competition.format !== "KNOCKOUT") return [];
+  if (resolveFormat({ divisionFormat: division.format, competitionFormat: division.competition.format }).format !== "KNOCKOUT") {
+    return [];
+  }
 
   const all = await tx.fixture.findMany({
     where: {

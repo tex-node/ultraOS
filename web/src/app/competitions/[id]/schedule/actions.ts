@@ -7,6 +7,7 @@ import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
 import { generateFixtures, generateKnockout, type GeneratedFixture } from "@/lib/sports/fixtures";
 import { sideSeasonClubId } from "@/lib/sports/fixture-sides";
+import { resolveFormat } from "@/lib/sports/format";
 import { allocateSlot, parseGameDays, playDatesForRound } from "@/lib/sports/schedule-slots";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
@@ -49,7 +50,7 @@ export async function generateSchedule(
   const result = await withOrganizationContext(organizationId, async (tx) => {
     const season = await tx.season.findFirst({
       where: { id: input.seasonId, organizationId, competition: { divisions: { some: { id: input.divisionId } } } },
-      select: { id: true, competition: { select: { format: true } } },
+      select: { id: true, competition: { select: { format: true, groupCount: true } } },
     });
     if (!season) return { error: "Season or division not found." } as ScheduleFormState;
     const venue = await tx.venue.findFirst({ where: { id: input.venueId, organizationId }, select: { id: true } });
@@ -71,7 +72,20 @@ export async function generateSchedule(
 
     const entrantBySeasonClub = new Map(seasonClubs.map((seasonClub) => [seasonClub.id, seasonClub.entrant?.id ?? null]));
     const teamIds = seasonClubs.map((seasonClub) => seasonClub.id);
-    const format = season.competition.format;
+
+    // The division may override the competition's format/group count; resolve through one helper so
+    // the schedule always matches what the bracket/knockout code will later assume.
+    const division = await tx.division.findFirstOrThrow({
+      where: { id: input.divisionId },
+      select: { format: true, groupCount: true },
+    });
+    const { format, groupCount } = resolveFormat({
+      divisionFormat: division.format,
+      competitionFormat: season.competition.format,
+      divisionGroupCount: division.groupCount,
+      competitionGroupCount: season.competition.groupCount,
+    });
+
     // Knockout draws carry byes - round-1 positions with no fixture whose entrant auto-advances.
     // They are persisted on the division so the bracket can be advanced as results arrive.
     let pairs: GeneratedFixture[];
@@ -86,7 +100,7 @@ export async function generateSchedule(
         ]),
       );
     } else {
-      pairs = generateFixtures(format, teamIds, { doubleRound, groupCount: 2 });
+      pairs = generateFixtures(format, teamIds, { doubleRound, groupCount });
     }
 
     // Existing fixtures for the season, for clash detection.

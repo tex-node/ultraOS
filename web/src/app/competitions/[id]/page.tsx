@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
+import { formatLabel } from "@/lib/sports/format";
 import { describeSport, getSportDefinition } from "@/lib/sports/registry";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
@@ -57,6 +58,13 @@ export default async function CompetitionDetailPage({ params }: { params: Promis
             <p className="text-xs uppercase tracking-[.24em] text-emerald-400">{competition.sport.name}</p>
             <h1 className="mt-2 text-3xl font-semibold">{competition.name}</h1>
             <p className="mt-1 text-sm text-zinc-400">{summary?.formatSummary ?? "Sport format not configured."}</p>
+            <p className="mt-1 text-sm text-zinc-400">
+              Format: {formatLabel(competition.format)}
+              {competition.format === "GROUP_STAGE" ? ` · ${competition.groupCount} groups` : ""}
+              {competition.divisions.some((division) => division.format || division.groupCount)
+                ? " · some divisions override"
+                : ""}
+            </p>
           </div>
           <span
             className={`rounded-full px-3 py-1 text-xs font-medium ${
@@ -129,6 +137,9 @@ export default async function CompetitionDetailPage({ params }: { params: Promis
         <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
           <h2 className="text-lg font-semibold">Next steps</h2>
           <div className="mt-4 flex flex-wrap gap-3">
+            <Link href={`/competitions/${competition.id}/settings`} className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:border-white/25">
+              Format
+            </Link>
             <Link href={`/competitions/${competition.id}/sport-rules`} className="rounded-lg border border-emerald-400/40 px-4 py-2 text-sm text-emerald-200 hover:border-emerald-400">
               Sport rules
             </Link>
