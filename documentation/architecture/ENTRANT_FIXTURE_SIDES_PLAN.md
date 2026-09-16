@@ -68,9 +68,13 @@ touched, so the entrant side becomes first-class everywhere.
 - Individual onboarding data path: `scripts/individual-pilot-setup.ts` creates INDIVIDUAL entrants
   with no Club and entrant-sided fixtures.
 
-Remaining tennis wiring: register a tennis scoring module (points -> games -> sets -> match,
-`tennis-scoring.ts`) in the capture dispatch and surface a capture panel, so individual matches can
-be scored live rather than seeded by script.
+Tennis capture wiring (done): a `TENNIS_SETS` scoring module is registered in the capture dispatch
+(points with deuce/advantage -> games -> sets -> match). The capture action resolves a side as a
+SeasonClub or an Entrant, attributes ledger events to the entrant for individual fixtures, replays
+the set's points to recover the current game, and sets the entrant winner on finalization. The live
+console resolves entrant sides so an individual fixture renders, and the tennis `POINT` event is in
+the catalog. Remaining: football extra time / penalty shootouts, and swapping B3's team-path
+assertions for the resolver.
 
 - `Standing`: make `seasonClubId` nullable and add `entrantId` (org/season-scoped) so individual
   sports get their own standings rows.
