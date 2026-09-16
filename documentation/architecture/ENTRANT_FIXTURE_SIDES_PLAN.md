@@ -56,7 +56,21 @@ All compiler-surfaced read sites were migrated so the application builds with nu
 Follow-up: replace the team-path assertions with the resolver opportunistically as those files are
 touched, so the entrant side becomes first-class everywhere.
 
-### B4 — Individual standings and onboarding (next)
+### B4 — Individual standings and onboarding (done)
+
+- `Standing.seasonClubId` is **nullable** with a unique `entrantId` and a CHECK that a standing
+  references a SeasonClub or an Entrant (`20260916100000_standing_entrant`). Applied to staging and
+  production.
+- `recalculateStandings` now computes **Entrant-keyed** standings for fixtures whose sides are
+  entrants (individual sports) and SeasonClub-keyed standings for team sports, through the same
+  engine. Validated on staging: a tennis pilot (4 individual entrants, 6 round-robin fixtures, set
+  scores) produced entrant standings with set-ratio tiebreaks.
+- Individual onboarding data path: `scripts/individual-pilot-setup.ts` creates INDIVIDUAL entrants
+  with no Club and entrant-sided fixtures.
+
+Remaining tennis wiring: register a tennis scoring module (points -> games -> sets -> match,
+`tennis-scoring.ts`) in the capture dispatch and surface a capture panel, so individual matches can
+be scored live rather than seeded by script.
 
 - `Standing`: make `seasonClubId` nullable and add `entrantId` (org/season-scoped) so individual
   sports get their own standings rows.
