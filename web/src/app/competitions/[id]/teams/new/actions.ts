@@ -5,6 +5,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
+import { ensureSeasonClubEntry } from "@/lib/season-club-entry";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
 export type TeamFormState = { error?: string; ok?: boolean; name?: string };
@@ -19,10 +20,10 @@ const schema = z.object({
   secondaryColor: z.string().trim().max(20).optional(),
 });
 
-// In-app team onboarding (product P2): finds-or-creates a Club, its SeasonClub in the chosen
-// competition season/division, and the matching TEAM Entrant, so a team can be added to a
-// tournament without the public registration form. Roster management continues on the SeasonClub
-// roster page.
+// In-app team onboarding: creates/reuses the Club, its SeasonClub in the chosen competition
+// season/division, the matching TEAM Entrant and its Standing (one call into ensureSeasonClubEntry,
+// so an in-app team is indistinguishable from one added via the club's season form). Roster
+// management continues on the SeasonClub roster page.
 export async function createTeam(_previous: TeamFormState, formData: FormData): Promise<TeamFormState> {
   const { session, organizationId } = await requirePermissionWithOrganization("club:manage");
   const parsed = schema.safeParse(formDataToRecord(formData));
@@ -40,67 +41,69 @@ export async function createTeam(_previous: TeamFormState, formData: FormData): 
     const division = await tx.division.findFirst({ where: { id: input.divisionId, competitionId: competition.id }, select: { id: true } });
     if (!season || !division) return { error: "Season or division not found for this competition." } as TeamFormState;
 
-    let club = await tx.club.findFirst({
-      where: { organizationId, shortName: input.shortName },
-      select: { id: true, name: true, shortName: true, logoUrl: true, primaryColor: true, secondaryColor: true },
+    const entry = await ensureSeasonClubEntry(tx, {
+      organizationId,
+      competitionId: competition.id,
+      seasonId: season.id,
+      divisionId: division.id,
+      name: input.name,
+      shortName: input.shortName,
+      sportId: competition.sportId,
+      primaryColor: input.primaryColor || null,
+      secondaryColor: input.secondaryColor || null,
     });
-    if (!club) {
-      club = await tx.club.create({
-        data: {
-          organizationId,
-          sportId: competition.sportId,
-          name: input.name,
-          shortName: input.shortName,
-          primaryColor: input.primaryColor || null,
-          secondaryColor: input.secondaryColor || null,
-        },
-        select: { id: true, name: true, shortName: true, logoUrl: true, primaryColor: true, secondaryColor: true },
-      });
-    }
-
-    let seasonClub = await tx.seasonClub!.findFirst({
-      where: { seasonId: season.id, clubId: club.id, divisionId: division.id },
-      select: { id: true },
-    });
-    if (!seasonClub) {
-      seasonClub = await tx.seasonClub!.create({
-        data: { organizationId, seasonId: season.id, clubId: club.id, divisionId: division.id },
-        select: { id: true },
-      });
-    }
-
-    const entrant = await tx.entrant.findFirst({ where: { seasonClubId: seasonClub.id }, select: { id: true } });
-    if (!entrant) {
-      await tx.entrant.create({
-        data: {
-          organizationId,
-          competitionId: competition.id,
-          seasonId: season.id,
-          divisionId: division.id,
-          seasonClubId: seasonClub.id,
-          type: "TEAM",
-          name: club.name,
-          shortName: club.shortName,
-          logoUrl: club.logoUrl,
-          primaryColor: club.primaryColor,
-          secondaryColor: club.secondaryColor,
-        },
-      });
-    }
 
     await writeAuditLog(tx, {
       organizationId,
       userId: session.user.id,
       action: "TEAM_ONBOARDED",
       entityType: "SeasonClub",
-      entityId: seasonClub.id,
-      details: { competitionId: competition.id, seasonId: season.id, divisionId: division.id, clubId: club.id, replayed: Boolean(entrant) },
+      entityId: entry.seasonClubId,
+      details: {
+        competitionId: competition.id,
+        seasonId: season.id,
+        divisionId: division.id,
+        clubId: entry.clubId,
+        entrantId: entry.entrantId,
+        standingId: entry.standingId,
+        created: entry.created,
+      },
     });
 
-    return { ok: true, name: club.name } as TeamFormState;
+    return { ok: true, name: input.name.trim() } as TeamFormState;
   });
 
+  revalidatePath(`/competitions/${input.competitionId}/teams`);
   revalidatePath(`/competitions/${input.competitionId}`);
   revalidatePath("/clubs");
   return result;
+}
+
+// Removes a team from a division. Withdrawing (rather than deleting) keeps its fixtures, results and
+// history intact while taking it out of future schedule generation (which reads ACTIVE only).
+export async function withdrawTeam(formData: FormData) {
+  const { session, organizationId } = await requirePermissionWithOrganization("club:manage");
+  const parsed = z
+    .object({ competitionId: z.string().min(1), seasonClubId: z.string().min(1) })
+    .parse(formDataToRecord(formData));
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    const seasonClub = await tx.seasonClub.findFirstOrThrow({
+      where: { id: parsed.seasonClubId, organizationId },
+      select: { id: true, seasonId: true, divisionId: true, clubId: true },
+    });
+    await tx.seasonClub.update({ where: { id: seasonClub.id }, data: { status: "WITHDRAWN" } });
+    await tx.entrant.updateMany({ where: { seasonClubId: seasonClub.id }, data: { status: "WITHDRAWN" } });
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "TEAM_WITHDRAWN",
+      entityType: "SeasonClub",
+      entityId: seasonClub.id,
+      details: { seasonId: seasonClub.seasonId, divisionId: seasonClub.divisionId, clubId: seasonClub.clubId },
+    });
+  });
+
+  revalidatePath(`/competitions/${parsed.competitionId}/teams`);
+  revalidatePath(`/competitions/${parsed.competitionId}`);
 }

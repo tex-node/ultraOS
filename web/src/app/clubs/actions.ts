@@ -18,6 +18,7 @@ import {
   type ClubFormState,
 } from "@/lib/club-validation";
 import { upsertPublicResourceLocator } from "@/lib/public-locators";
+import { ensureSeasonClubEntry } from "@/lib/season-club-entry";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
 function mutationError(error: unknown): ClubFormState {
@@ -314,8 +315,18 @@ export async function createSeasonClub(
         },
       });
 
-      await tx.standing.create({
-        data: { organizationId, seasonId: parsed.data.seasonId, seasonClubId: created.id },
+      // Every team must also have its TEAM Entrant and Standing, or it is invisible to entrant-keyed
+      // fixture sides and standings. Reuses the same entry helper as the competition's team form.
+      const division = await tx.division.findFirstOrThrow({
+        where: { id: parsed.data.divisionId },
+        select: { competitionId: true },
+      });
+      await ensureSeasonClubEntry(tx, {
+        organizationId,
+        competitionId: division.competitionId,
+        seasonId: parsed.data.seasonId,
+        divisionId: parsed.data.divisionId,
+        clubId: parsed.data.clubId,
       });
 
       await writeAuditLog(tx, {

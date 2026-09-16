@@ -132,6 +132,9 @@ export default async function CompetitionDetailPage({ params }: { params: Promis
             <Link href={`/competitions/${competition.id}/sport-rules`} className="rounded-lg border border-emerald-400/40 px-4 py-2 text-sm text-emerald-200 hover:border-emerald-400">
               Sport rules
             </Link>
+            <Link href={`/competitions/${competition.id}/teams`} className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:border-white/25">
+              Teams
+            </Link>
             <Link href={`/competitions/${competition.id}/teams/new`} className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:border-white/25">
               Add team
             </Link>
