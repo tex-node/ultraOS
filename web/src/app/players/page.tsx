@@ -36,7 +36,7 @@ export default async function PlayersPage() {
       {athletes.map(a => { const p=a.registrations[0]; return <Link key={a.id} href={`/players/${a.id}`} className="grid gap-3 border-b border-white/[.06] p-5 last:border-0 hover:bg-white/[.025] md:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div><p className="font-semibold">{a.firstName} {a.lastName}</p><p className="text-xs text-zinc-500">Athlete · {a.nationality ?? "Nationality not set"}</p></div>
         <div><p className="text-xs text-zinc-500">Latest season</p><p className="mt-1 text-sm">{p?.season.name ?? "Not registered"}</p></div>
-        <div><p className="text-xs text-zinc-500">SeasonClub</p><p className="mt-1 text-sm">{p?.seasonClub ? `${p.seasonClub.club.name} · ${p.seasonClub.division.name}` : "Unassigned"}</p></div>
+        <div><p className="text-xs text-zinc-500">SeasonClub</p><p className="mt-1 text-sm">{p?.seasonClub ? `${p.seasonClub!.club.name} · ${p.seasonClub!.division.name}` : "Unassigned"}</p></div>
         <div><p className="text-xs text-zinc-500">Player status</p><p className="mt-1 text-sm">{p?.status ?? "No registration"}</p></div>
       </Link>;})}
       {athletes.length===0 ? <p className="p-10 text-center text-zinc-400">No athletes registered.</p>:null}

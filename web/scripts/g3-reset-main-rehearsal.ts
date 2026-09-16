@@ -10,7 +10,7 @@ async function main() {
   const remainingAllocations = await prisma.draftAllocation.count({ where: { draftEventId: DRAFT_EVENT_ID } });
   const liveAllocations = await prisma.draftAllocation.count({ where: { operatingMode: "LIVE" } });
   const playerAssignments = await prisma.player.count({ where: { seasonClubId: { not: null } } });
-  const coachAssignments = await prisma.seasonClub.count({ where: { OR: [{ headCoachId: { not: null } }, { assistantCoachId: { not: null } }] } });
+  const coachAssignments = await prisma.seasonClub!.count({ where: { OR: [{ headCoachId: { not: null } }, { assistantCoachId: { not: null } }] } });
   const event = await prisma.draftEvent.findUniqueOrThrow({ where: { id: DRAFT_EVENT_ID } });
 
   console.log(JSON.stringify({

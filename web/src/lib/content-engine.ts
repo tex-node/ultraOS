@@ -146,13 +146,13 @@ export async function generateContentPayload(
         },
       });
       const player = athleteName(pick.player.athlete);
-      const club = pick.seasonClub.club.name;
+      const club = pick.seasonClub!.club.name;
       const pickOrdinal = ordinal(pick.pickNumber);
       const variables = {
         title: "Draft Pick",
         player,
         club,
-        ...clubVariables("club", pick.seasonClub.club),
+        ...clubVariables("club", pick.seasonClub!.club),
         pick: String(pick.pickNumber),
         pickOrdinal,
         season: pick.draft.season.name,
@@ -169,7 +169,7 @@ export async function generateContentPayload(
           { label: "Position", value: pick.player.position },
         ],
         club,
-        clubBrand: clubVariables("club", pick.seasonClub.club),
+        clubBrand: clubVariables("club", pick.seasonClub!.club),
         player,
         pick: pick.pickNumber,
         season: pick.draft.season.name,
@@ -324,16 +324,16 @@ export async function generateContentPayload(
           b.won - a.won ||
           b.pointDifference - a.pointDifference ||
           b.pointsFor - a.pointsFor ||
-          a.seasonClub.club.name.localeCompare(b.seasonClub.club.name),
+          a.seasonClub!.club.name.localeCompare(b.seasonClub!.club.name),
       );
       const leader = rows[0];
       if (!leader) throw new Error("STANDINGS_EMPTY");
-      const leaderName = leader.seasonClub.club.name;
+      const leaderName = leader.seasonClub!.club.name;
       const record = `${leader.won}-${leader.lost}`;
       const table = rows
         .map(
           (row, index) =>
-            `${index + 1}. ${row.seasonClub.club.name} ${row.won}-${row.lost} (${row.leaguePoints} pts)`,
+            `${index + 1}. ${row.seasonClub!.club.name} ${row.won}-${row.lost} (${row.leaguePoints} pts)`,
         )
         .join("\n");
       const variables = {
@@ -349,14 +349,14 @@ export async function generateContentPayload(
         headline: `${leaderName} leads the table`,
         subheadline: `${record} record | ${leader.leaguePoints} league points`,
         stats: rows.slice(0, 4).map((row, index) => ({
-          label: `${index + 1}. ${row.seasonClub.club.shortName}`,
+          label: `${index + 1}. ${row.seasonClub!.club.shortName}`,
           value: `${row.won}-${row.lost} | ${row.leaguePoints} pts`,
         })),
         leader: leaderName,
         record,
         standings: rows.map((row, index) => ({
           position: index + 1,
-          club: row.seasonClub.club.name,
+          club: row.seasonClub!.club.name,
           played: row.played,
           won: row.won,
           lost: row.lost,

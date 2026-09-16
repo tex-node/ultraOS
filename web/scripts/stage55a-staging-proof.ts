@@ -76,7 +76,7 @@ async function cleanup() {
       await tx.mediaAssetUsage.deleteMany({ where: { asset: { title: { startsWith: runTag } } } });
       await tx.mediaAsset.deleteMany({ where: { title: { startsWith: runTag } } });
       await tx.standing.deleteMany({ where: { seasonClub: { club: { name: { startsWith: runTag } } } } });
-      await tx.seasonClub.deleteMany({ where: { club: { name: { startsWith: runTag } } } });
+      await tx.seasonClub!.deleteMany({ where: { club: { name: { startsWith: runTag } } } });
       await tx.player.deleteMany({ where: { athlete: { email: { contains: runTag } } } });
       await tx.athlete.deleteMany({ where: { email: { contains: runTag } } });
       await tx.club.deleteMany({ where: { name: { startsWith: runTag } } });
@@ -153,10 +153,10 @@ async function main() {
       data: { organizationId: org.id, sportId: sport.id, name: `${runTag} Away Club`, shortName: `${runTag.slice(-8)}A`, status: "ACTIVE" },
     });
     await upsertPublicResourceLocator(tx, { resourceType: PublicResourceLocatorType.CLUB, publicKey: awayClub.id, organizationId: org.id, resourceId: awayClub.id });
-    const homeSeasonClub = await tx.seasonClub.create({
+    const homeSeasonClub = await tx.seasonClub!.create({
       data: { organizationId: org.id, seasonId: season.id, clubId: homeClub.id, divisionId: division.id, status: "ACTIVE" },
     });
-    const awaySeasonClub = await tx.seasonClub.create({
+    const awaySeasonClub = await tx.seasonClub!.create({
       data: { organizationId: org.id, seasonId: season.id, clubId: awayClub.id, divisionId: division.id, status: "ACTIVE" },
     });
     await tx.standing.createMany({

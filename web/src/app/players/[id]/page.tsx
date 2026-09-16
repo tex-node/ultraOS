@@ -66,7 +66,7 @@ export default async function AthletePage({
             <div>
               <p className="text-xs uppercase tracking-[.2em] text-emerald-400">Permanent athlete profile</p>
               <h1 className="mt-2 text-3xl font-semibold">{athlete.firstName} {athlete.lastName}</h1>
-              <p className="mt-2 text-sm text-zinc-400">{athlete.ultraAthleteId ?? "Ultra ID pending"} | {current?.seasonClub ? `${current.seasonClub.club.name} | ${current.seasonClub.division.name}` : "Unassigned"} | {current?.position ?? "Position pending"}</p>
+              <p className="mt-2 text-sm text-zinc-400">{athlete.ultraAthleteId ?? "Ultra ID pending"} | {current?.seasonClub ? `${current.seasonClub!.club.name} | ${current.seasonClub!.division.name}` : "Unassigned"} | {current?.position ?? "Position pending"}</p>
               <p className="mt-1 text-xs text-zinc-500">Profile: {completeness.status}{canManage && completeness.missing.length ? ` | Missing: ${completeness.missing.join(", ")}` : ""}</p>
             </div>
             {canManage ? <div className="flex gap-2"><Link href={`/players/${athlete.id}/edit`} className="rounded-xl border border-white/10 px-4 py-2 text-sm">Edit athlete</Link><Link href={`/players/${athlete.id}/seasons/new`} className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950">Register for season</Link>{athlete.registrations.length === 0 ? <form action={deleteAthlete.bind(null, athlete.id)}><button className="rounded-xl border border-rose-400/20 px-4 py-2 text-sm text-rose-300">Delete athlete</button></form> : null}</div> : null}
@@ -93,7 +93,7 @@ export default async function AthletePage({
         <h2 id="clubs" className="mt-8 text-xl font-semibold">Player registrations and clubs</h2>
         <div className="mt-4 space-y-4">{athlete.registrations.map((player) => <article key={player.id} className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
           <div className="flex justify-between gap-4"><div><p className="font-semibold">{player.season.name} | {player.position}</p><p className="text-xs text-zinc-500">{player.season.competition.name} | Player | {player.status}</p></div>{canManage ? <div className="flex gap-3"><Link href={`/player-registrations/${player.id}/edit`} className="text-sm text-emerald-400">Edit registration</Link><form action={removePlayerRegistration.bind(null, player.id, athlete.id)}><button className="text-sm text-rose-300">{player._count.draftPicks + player._count.gameEvents + player._count.playerStats > 0 ? "Deactivate" : "Delete"}</button></form></div> : null}</div>
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-4"><p>SeasonClub: <b>{player.seasonClub ? `${player.seasonClub.club.name} | ${player.seasonClub.division.name}` : "Unassigned"}</b></p><p>Jersey: <b>{player.jerseyNumber ?? "-"}</b></p><p>Measurements: <b>{player.heightCm}cm / {player.weightKg}kg</b></p><p>Draft squad: <b>{player.draftSquadMembers[0]?.draftSquad.name ?? "-"}</b></p></div>
+          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-4"><p>SeasonClub: <b>{player.seasonClub! ? `${player.seasonClub!.club.name} | ${player.seasonClub!.division.name}` : "Unassigned"}</b></p><p>Jersey: <b>{player.jerseyNumber ?? "-"}</b></p><p>Measurements: <b>{player.heightCm}cm / {player.weightKg}kg</b></p><p>Draft squad: <b>{player.draftSquadMembers[0]?.draftSquad.name ?? "-"}</b></p></div>
         </article>)}</div>
 
         <h2 id="match-data" className="mt-8 text-xl font-semibold">Match Data</h2>

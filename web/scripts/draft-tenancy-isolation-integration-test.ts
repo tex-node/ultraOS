@@ -28,7 +28,7 @@ async function buildOrgHierarchy(orgId: string, tag: string, sportId: string) {
     const division = await tx.division.create({ data: { organizationId: orgId, competitionId: competition.id, name: `${tag} Division`, slug: `${tag.toLowerCase()}-division-${Date.now()}`, isActive: true } });
     const season = await tx.season.create({ data: { organizationId: orgId, competitionId: competition.id, name: `${tag} Season`, startDate: new Date("2026-01-01"), endDate: new Date("2026-12-31"), status: SeasonStatus.ACTIVE } });
     const club = await tx.club.create({ data: { organizationId: orgId, sportId, name: `${tag} Club`, shortName: tag.toUpperCase().slice(0, 4), status: ClubStatus.ACTIVE, brandingStatus: ClubBrandingStatus.BRANDING_INCOMPLETE } });
-    const seasonClub = await tx.seasonClub.create({ data: { organizationId: orgId, seasonId: season.id, clubId: club.id, divisionId: division.id, status: SeasonClubStatus.ACTIVE } });
+    const seasonClub = await tx.seasonClub!.create({ data: { organizationId: orgId, seasonId: season.id, clubId: club.id, divisionId: division.id, status: SeasonClubStatus.ACTIVE } });
     return { competition, division, season, club, seasonClub };
   });
 }
@@ -84,11 +84,11 @@ async function main() {
   report("Org B Player added to Org B DraftSquad", true);
 
   const squadAllocation = await reserveNextAllocation({ organizationId: orgB.id, draftEventId: draftEventSquad.id, divisionId: orgBHierarchy.division.id, subjectType: AllocationSubjectType.SQUAD, userId: playerUser.id });
-  report("reserveNextAllocation (SQUAD) picked the only eligible squad/club", squadAllocation.draftSquadId === squad.id && squadAllocation.seasonClubId === orgBHierarchy.seasonClub.id);
+  report("reserveNextAllocation (SQUAD) picked the only eligible squad/club", squadAllocation.draftSquadId === squad.id && squadAllocation.seasonClubId === orgBHierarchy.seasonClub!.id);
   await revealAllocation(orgB.id, squadAllocation.id, playerUser.id);
   await confirmAllocation(orgB.id, squadAllocation.id, playerUser.id);
   const confirmedPlayer = await withOrganizationContext(orgB.id, (tx) => tx.player.findUnique({ where: { id: player.id } }));
-  report("Org B Squad confirmation -> Org B SeasonClub PASS (Player.seasonClubId/status written)", confirmedPlayer?.seasonClubId === orgBHierarchy.seasonClub.id && confirmedPlayer?.status === PlayerStatus.DRAFTED);
+  report("Org B Squad confirmation -> Org B SeasonClub PASS (Player.seasonClubId/status written)", confirmedPlayer?.seasonClubId === orgBHierarchy.seasonClub!.id && confirmedPlayer?.status === PlayerStatus.DRAFTED);
 
   console.log("\n========== Org B COACH allocation (real reserve -> reveal -> confirm) ==========");
   const { user: coachUser, staff } = await buildStaff(orgB.id, "Coach1");
@@ -111,10 +111,10 @@ async function main() {
   report("Org B Coach added to Org B Coach Pool", true);
 
   const coachAllocation = await reserveNextAllocation({ organizationId: orgB.id, draftEventId: draftEventCoach.id, divisionId: orgBHierarchy.division.id, subjectType: AllocationSubjectType.COACH, userId: coachUser.id });
-  report("reserveNextAllocation (COACH) picked the only eligible coach/club", coachAllocation.staffId === staff.id && coachAllocation.seasonClubId === orgBHierarchy.seasonClub.id);
+  report("reserveNextAllocation (COACH) picked the only eligible coach/club", coachAllocation.staffId === staff.id && coachAllocation.seasonClubId === orgBHierarchy.seasonClub!.id);
   await revealAllocation(orgB.id, coachAllocation.id, coachUser.id);
   await confirmAllocation(orgB.id, coachAllocation.id, coachUser.id);
-  const confirmedClub = await withOrganizationContext(orgB.id, (tx) => tx.seasonClub.findUnique({ where: { id: orgBHierarchy.seasonClub.id } }));
+  const confirmedClub = await withOrganizationContext(orgB.id, (tx) => tx.seasonClub!.findUnique({ where: { id: orgBHierarchy.seasonClub!.id } }));
   report("Org B Coach confirmation -> Org B SeasonClub PASS (SeasonClub.headCoachId written)", confirmedClub?.headCoachId === staff.id);
 
   console.log("\n========== Cross-org denial (application level, restricted role, RLS + composite FK) ==========");
@@ -151,7 +151,7 @@ async function main() {
     report("Org A Coach -> Org B Coach Pool denied (application-level guard, not a DB constraint)", false, "NOT_TESTED: no Neon Ultra staff found to attempt with");
   }
 
-  const neonUltraSeasonClub = await withOrganizationContext(NEON_ULTRA, (tx) => tx.seasonClub.findFirst({ orderBy: { createdAt: "asc" } }));
+  const neonUltraSeasonClub = await withOrganizationContext(NEON_ULTRA, (tx) => tx.seasonClub!.findFirst({ orderBy: { createdAt: "asc" } }));
   if (neonUltraSeasonClub) {
     try {
       await withOrganizationContext(orgB.id, (tx) => tx.draftAllocation.create({
@@ -169,7 +169,7 @@ async function main() {
   if (neonUltraDivision) {
     try {
       await withOrganizationContext(orgB.id, (tx) => tx.draftAllocation.create({
-        data: { organizationId: orgB.id, draftEventId: draftEventSquad.id, divisionId: neonUltraDivision.id, subjectType: AllocationSubjectType.SQUAD, draftSquadId: squad.id, seasonClubId: orgBHierarchy.seasonClub.id, sequence: 998, createdById: playerUser.id },
+        data: { organizationId: orgB.id, draftEventId: draftEventSquad.id, divisionId: neonUltraDivision.id, subjectType: AllocationSubjectType.SQUAD, draftSquadId: squad.id, seasonClubId: orgBHierarchy.seasonClub!.id, sequence: 998, createdById: playerUser.id },
       }));
       report("Org A Division -> Org B DraftAllocation denied (composite FK)", false, "create succeeded unexpectedly");
     } catch (error) {
@@ -195,12 +195,12 @@ async function main() {
   await withOrganizationContext(orgB.id, (tx) => tx.player.deleteMany({ where: { organizationId: orgB.id } }));
   await withOrganizationContext(orgB.id, (tx) => tx.athlete.deleteMany({ where: { organizationId: orgB.id } }));
   await withOrganizationContext(orgB.id, (tx) => tx.staff.deleteMany({ where: { organizationId: orgB.id } }));
-  await withOrganizationContext(orgB.id, (tx) => tx.seasonClub.deleteMany({ where: { organizationId: orgB.id } }));
+  await withOrganizationContext(orgB.id, (tx) => tx.seasonClub!.deleteMany({ where: { organizationId: orgB.id } }));
   await withOrganizationContext(orgB.id, (tx) => tx.club.deleteMany({ where: { organizationId: orgB.id } }));
   await withOrganizationContext(orgB.id, (tx) => tx.season.deleteMany({ where: { organizationId: orgB.id } }));
   await withOrganizationContext(orgB.id, (tx) => tx.division.deleteMany({ where: { organizationId: orgB.id } }));
   await withOrganizationContext(orgB.id, (tx) => tx.competition.deleteMany({ where: { organizationId: orgB.id } }));
-  await withOrganizationContext(NEON_ULTRA, (tx) => tx.seasonClub.deleteMany({ where: { id: hierarchyA.seasonClub.id } }));
+  await withOrganizationContext(NEON_ULTRA, (tx) => tx.seasonClub!.deleteMany({ where: { id: hierarchyA.seasonClub!.id } }));
   await withOrganizationContext(NEON_ULTRA, (tx) => tx.club.deleteMany({ where: { id: hierarchyA.club.id } }));
   await withOrganizationContext(NEON_ULTRA, (tx) => tx.season.deleteMany({ where: { id: hierarchyA.season.id } }));
   await withOrganizationContext(NEON_ULTRA, (tx) => tx.division.deleteMany({ where: { id: hierarchyA.division.id } }));

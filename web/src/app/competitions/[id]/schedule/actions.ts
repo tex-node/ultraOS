@@ -44,7 +44,7 @@ export async function generateSchedule(
     const venue = await tx.venue.findFirst({ where: { id: input.venueId, organizationId }, select: { id: true } });
     if (!venue) return { error: "Venue not found." } as ScheduleFormState;
 
-    const seasonClubs = await tx.seasonClub.findMany({
+    const seasonClubs = await tx.seasonClub!.findMany({
       where: { seasonId: season.id, divisionId: input.divisionId, status: "ACTIVE" },
       select: { id: true, entrant: { select: { id: true } }, club: { select: { shortName: true } } },
     });

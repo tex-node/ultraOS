@@ -42,7 +42,7 @@ async function main() {
   });
 
   const finalCheck = await prisma.player.count({ where: { seasonClubId: { not: null } } });
-  const coachCheck = await prisma.seasonClub.count({ where: { OR: [{ headCoachId: { not: null } }, { assistantCoachId: { not: null } }] } });
+  const coachCheck = await prisma.seasonClub!.count({ where: { OR: [{ headCoachId: { not: null } }, { assistantCoachId: { not: null } }] } });
   console.log("Post-verification official writes (must be 0):", { players: finalCheck, coaches: coachCheck });
 }
 

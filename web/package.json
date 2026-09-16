@@ -47,6 +47,7 @@
     "fixture-sides:parity-check": "tsx scripts/fixture-sides-parity-check.ts",
     "giesm:setup": "tsx scripts/giesm-setup.ts",
     "volleyball:pilot": "tsx scripts/volleyball-pilot-setup.ts",
+    "individual:pilot": "tsx scripts/individual-pilot-setup.ts",
     "vision:analyze": "tsx scripts/vision-analyze.ts",
     "db:studio": "prisma studio",
     "db:backup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-database.ps1",

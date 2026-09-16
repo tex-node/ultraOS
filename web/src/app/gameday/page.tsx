@@ -45,7 +45,7 @@ export default async function GameDayControlCenter() {
       : [];
     const event = await tx.event.findFirst({ where: { status: { in: ["PUBLISHED", "IN_PROGRESS"] } }, orderBy: { startTime: "asc" } });
     const seasonClubs = season
-      ? await tx.seasonClub.findMany({ where: { seasonId: season.id, status: "ACTIVE" }, include: { club: true, headCoach: true, players: true }, orderBy: { club: { name: "asc" } } })
+      ? await tx.seasonClub!.findMany({ where: { seasonId: season.id, status: "ACTIVE" }, include: { club: true, headCoach: true, players: true }, orderBy: { club: { name: "asc" } } })
       : [];
     return { season, fixtures, incidentEntries, event, seasonClubs };
   });

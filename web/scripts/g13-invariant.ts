@@ -15,7 +15,7 @@ async function main() {
     select: { seasonClubId: true, won: true, lost: true, leaguePoints: true, pointsFor: true, pointsAgainst: true },
   });
 
-  const seasonClubCoaches = await prisma.seasonClub.findMany({
+  const seasonClubCoaches = await prisma.seasonClub!.findMany({
     orderBy: { id: "asc" },
     select: { id: true, headCoachId: true },
   });
@@ -24,7 +24,7 @@ async function main() {
     prisma.player.count(),
     prisma.application.count(),
     prisma.staff.count(),
-    prisma.seasonClub.count(),
+    prisma.seasonClub!.count(),
     prisma.player.count({ where: { seasonClubId: { not: null } } }),
     prisma.playerStat.count(),
     prisma.teamStat.count(),

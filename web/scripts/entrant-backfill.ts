@@ -27,7 +27,7 @@ async function main() {
 
   for (const organization of organizations) {
     await withOrganizationContext(organization.id, async (tx) => {
-      const seasonClubs = await tx.seasonClub.findMany({
+      const seasonClubs = await tx.seasonClub!.findMany({
         where: { organizationId: organization.id },
         select: {
           id: true,

@@ -398,10 +398,10 @@ export async function analyzeCoachRow(tx: Prisma.TransactionClient, rawData: Rec
   }
 
   let seasonClubId: string | undefined;
-  if (normalized.assignmentRole !== "UNASSIGNED" && normalized.seasonClub) {
-    const seasonClub = await tx.seasonClub.findFirst({
+  if (normalized.assignmentRole !== "UNASSIGNED" && normalized.seasonClub!) {
+    const seasonClub = await tx.seasonClub!.findFirst({
       where: {
-        club: { name: { equals: normalized.seasonClub, mode: "insensitive" } },
+        club: { name: { equals: normalized.seasonClub!, mode: "insensitive" } },
         season: normalized.season ? { name: { equals: normalized.season, mode: "insensitive" } } : undefined,
       },
       select: { id: true, seasonId: true, divisionId: true },
@@ -409,7 +409,7 @@ export async function analyzeCoachRow(tx: Prisma.TransactionClient, rawData: Rec
     if (!seasonClub) {
       errors.push("SeasonClub assignment was not found.");
     } else if (matchedEntityType === "Staff" && matchedEntityId) {
-      const conflict = await tx.seasonClub.findFirst({
+      const conflict = await tx.seasonClub!.findFirst({
         where: {
           id: { not: seasonClub.id },
           OR: [{ headCoachId: matchedEntityId }, { assistantCoachId: matchedEntityId }],
@@ -765,7 +765,7 @@ async function processCoachRow(tx: Prisma.TransactionClient, organizationId: str
   const assignmentRole = stringField(data, "assignmentRole");
   const seasonClubId = stringField(data, "seasonClubId");
   if (seasonClubId && (assignmentRole === "HEAD_COACH" || assignmentRole === "ASSISTANT_COACH")) {
-    await tx.seasonClub.update({
+    await tx.seasonClub!.update({
       data: assignmentRole === "HEAD_COACH" ? { headCoachId: staff.id } : { assistantCoachId: staff.id },
       where: { id: seasonClubId },
     });
@@ -818,7 +818,7 @@ async function processClubRow(tx: Prisma.TransactionClient, organizationId: stri
   });
   const divisionId = stringField(data, "divisionId");
   if (seasonId && divisionId) {
-    const seasonClub = await tx.seasonClub.upsert({
+    const seasonClub = await tx.seasonClub!.upsert({
       where: { seasonId_clubId_divisionId: { clubId: club.id, divisionId, seasonId } },
       update: {},
       create: { organizationId, clubId: club.id, divisionId, seasonId, status: SeasonClubStatus.ACTIVE },

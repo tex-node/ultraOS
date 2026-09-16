@@ -54,7 +54,7 @@ export default async function DashboardPage() {
           },
         },
       }),
-      tx.seasonClub.findMany({
+      tx.seasonClub!.findMany({
         where: {
           status: "ACTIVE",
           ...(activeSeason ? { seasonId: activeSeason.id } : {}),
@@ -92,7 +92,7 @@ export default async function DashboardPage() {
     let standingFailures = 0;
     if (activeSeason) {
       const [teams, finalFixtures, storedRows] = await Promise.all([
-        tx.seasonClub.findMany({
+        tx.seasonClub!.findMany({
           where: { seasonId: activeSeason.id },
           select: { id: true },
         }),

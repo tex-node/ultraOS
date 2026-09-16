@@ -23,7 +23,7 @@ export default async function GameDayCheckIn() {
     const event = await tx.event.findFirst({ where: { status: { in: ["PUBLISHED", "IN_PROGRESS"] } }, orderBy: { startTime: "asc" } });
     const season = await tx.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } });
     const seasonClubs = season
-    ? await tx.seasonClub.findMany({
+    ? await tx.seasonClub!.findMany({
         where: { seasonId: season.id, status: "ACTIVE" },
         include: { club: true, players: { include: { athlete: true }, orderBy: { athlete: { firstName: "asc" } } } },
         orderBy: { club: { name: "asc" } },

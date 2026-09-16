@@ -89,7 +89,7 @@ export async function assignSeasonClubCoach(formData: FormData) {
 
   await withOrganizationContext(organizationId, async (tx) => {
     const [seasonClub, staff] = await Promise.all([
-      tx.seasonClub.findUniqueOrThrow({
+      tx.seasonClub!.findUniqueOrThrow({
         select: { divisionId: true, id: true, seasonId: true },
         where: { id: seasonClubId },
       }),
@@ -104,7 +104,7 @@ export async function assignSeasonClubCoach(formData: FormData) {
       throw new Error("Selected staff member is not a coach.");
     }
 
-    const competingAssignment = await tx.seasonClub.findFirst({
+    const competingAssignment = await tx.seasonClub!.findFirst({
       select: { id: true },
       where: {
         id: { not: seasonClub.id },
@@ -117,7 +117,7 @@ export async function assignSeasonClubCoach(formData: FormData) {
       throw new Error("Coach is already assigned in this season/division.");
     }
 
-    await tx.seasonClub.update({
+    await tx.seasonClub!.update({
       data: assignmentType === "head" ? { headCoachId: staff.id } : { assistantCoachId: staff.id },
       where: { id: seasonClub.id },
     });
@@ -145,8 +145,8 @@ export async function clearSeasonClubCoach(formData: FormData) {
   }
 
   await withOrganizationContext(organizationId, async (tx) => {
-    await tx.seasonClub.findUniqueOrThrow({ where: { id: seasonClubId }, select: { id: true } });
-    await tx.seasonClub.update({
+    await tx.seasonClub!.findUniqueOrThrow({ where: { id: seasonClubId }, select: { id: true } });
+    await tx.seasonClub!.update({
       data: assignmentType === "head" ? { headCoachId: null } : { assistantCoachId: null },
       where: { id: seasonClubId },
     });

@@ -27,7 +27,7 @@ async function main() {
   console.log("currentAllocationId after cancel (must be null):", eventAfter.currentAllocationId);
   console.log("allocation status after cancel:", allocationAfter.status);
 
-  const officialWrites = await prisma.seasonClub.count({ where: { headCoachId: { not: null } } });
+  const officialWrites = await prisma.seasonClub!.count({ where: { headCoachId: { not: null } } });
   console.log("Official coach writes (must be 0):", officialWrites);
 
   // Prove the subject/club is immediately available again — the exact scenario the earlier fix addressed.

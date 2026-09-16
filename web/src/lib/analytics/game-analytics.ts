@@ -112,7 +112,7 @@ function toPlayerLine(stat: RawGame["playerStats"][number], side: "HOME" | "AWAY
     jerseyNumber: stat.player.jerseyNumber,
     photoUrl: stat.player.athlete.photoUrl,
     seasonClubId: stat.seasonClubId,
-    seasonClubShortName: stat.seasonClub.club.shortName,
+    seasonClubShortName: stat.seasonClub!.club.shortName,
     side,
     didNotPlay: stat.didNotPlay,
     minutesPlayed: stat.minutesPlayed,

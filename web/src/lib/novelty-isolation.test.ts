@@ -14,7 +14,7 @@ const FORBIDDEN_PATTERNS = [
   /recalculateStandings/,
   /\.fixture\.(update|create|upsert|delete)/,
   /\.standing\.(update|create|upsert|delete)/,
-  /\.seasonClub\.(update|create|upsert|delete)/,
+  /\.seasonClub!\.(update|create|upsert|delete)/,
 ];
 
 test("novelty match scoring never touches competitive Fixture/Standing/SeasonClub tables", () => {

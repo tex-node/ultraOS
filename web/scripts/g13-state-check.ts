@@ -8,7 +8,7 @@ async function main() {
     prisma.player.count(),
     prisma.staff.count(),
     prisma.club.count(),
-    prisma.seasonClub.count(),
+    prisma.seasonClub!.count(),
     prisma.standing.count(),
     prisma.game.groupBy({ by: ["dataCapability"], _count: true }),
     prisma.game.groupBy({ by: ["statSource"], _count: true }),

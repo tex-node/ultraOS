@@ -129,7 +129,7 @@ export async function realDataCounts(seasonId: string | undefined, db: Readiness
   return {
     users: await prisma.user.count(),
     clubs: await prisma.club.count(),
-    seasonClubs: seasonId ? await prisma.seasonClub.count({ where: { seasonId } }) : 0,
+    seasonClubs: seasonId ? await prisma.seasonClub!.count({ where: { seasonId } }) : 0,
     athletes: await prisma.athlete.count(),
     players: seasonId ? await prisma.player.count({ where: { seasonId } }) : 0,
     coaches: await prisma.staff.count({ where: { role: { in: [StaffRole.HEAD_COACH, StaffRole.ASSISTANT_COACH] } } }),
@@ -144,7 +144,7 @@ export async function realDataCounts(seasonId: string | undefined, db: Readiness
 
 export async function clubReadiness(seasonId: string, db: ReadinessDb) {
   const prisma = db;
-  const seasonClubs = await prisma.seasonClub.findMany({
+  const seasonClubs = await prisma.seasonClub!.findMany({
     where: { seasonId },
     include: { club: { include: { fanClub: true } }, players: true, standing: true },
     orderBy: [{ division: { name: "asc" } }, { club: { name: "asc" } }],

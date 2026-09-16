@@ -32,7 +32,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
 
     const { names, seasonClubs } = await withOrganizationContext(organization.id, async (tx) => ({
       names: await resolvePlayerNames(entries.map((e) => e.playerId), tx),
-      seasonClubs: await tx.seasonClub.findMany({ where: { seasonId: season.id }, include: { club: true } }),
+      seasonClubs: await tx.seasonClub!.findMany({ where: { seasonId: season.id }, include: { club: true } }),
     }));
     const clubByShortName = new Map(seasonClubs.map((sc) => [sc.club.shortName, sc.club]));
 

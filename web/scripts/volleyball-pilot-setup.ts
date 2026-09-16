@@ -91,9 +91,9 @@ async function main() {
           select: { id: true },
         });
       }
-      let seasonClub = await tx.seasonClub.findFirst({ where: { seasonId: season.id, clubId: club.id, divisionId: division.id }, select: { id: true } });
+      let seasonClub = await tx.seasonClub!.findFirst({ where: { seasonId: season.id, clubId: club.id, divisionId: division.id }, select: { id: true } });
       if (!seasonClub) {
-        seasonClub = await tx.seasonClub.create({
+        seasonClub = await tx.seasonClub!.create({
           data: { organizationId: organization.id, seasonId: season.id, clubId: club.id, divisionId: division.id },
           select: { id: true },
         });

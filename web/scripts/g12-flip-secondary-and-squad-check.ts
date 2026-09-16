@@ -63,11 +63,11 @@ async function main() {
   console.log(`Men's eligible pool: ${men}`);
   console.log(`Women's eligible pool: ${women}`);
 
-  const menShortfall = await prisma.seasonClub.findMany({
+  const menShortfall = await prisma.seasonClub!.findMany({
     where: { divisionId: MEN_DIVISION_ID },
     include: { club: true, players: true },
   });
-  const womenShortfall = await prisma.seasonClub.findMany({
+  const womenShortfall = await prisma.seasonClub!.findMany({
     where: { divisionId: WOMEN_DIVISION_ID },
     include: { club: true, players: true },
   });

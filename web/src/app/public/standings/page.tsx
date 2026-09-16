@@ -16,7 +16,7 @@ const EMPTY_STANDING = { leaguePoints: 0, lost: 0, played: 0, pointDifference: 0
 function groupByDivision(rows: Row[]) {
   const groups = new Map<string, Row[]>();
   for (const row of rows) {
-    const division = row.seasonClub.division.name;
+    const division = row.seasonClub!.division.name;
     groups.set(division, [...(groups.get(division) ?? []), row]);
   }
   return groups;
@@ -29,7 +29,7 @@ function sortRows(rows: Row[]) {
       b.won - a.won ||
       b.pointDifference - a.pointDifference ||
       b.pointsFor - a.pointsFor ||
-      a.seasonClub.club.name.localeCompare(b.seasonClub.club.name),
+      a.seasonClub!.club.name.localeCompare(b.seasonClub!.club.name),
   );
 }
 
@@ -78,7 +78,7 @@ export default async function Standings() {
                     key={row.id}
                   >
                     <b>{index + 1}</b>
-                    <span>{row.seasonClub.club.name}</span>
+                    <span>{row.seasonClub!.club.name}</span>
                     <span>{row.played} P</span>
                     <span>{row.won} W</span>
                     <span>{row.lost} L</span>

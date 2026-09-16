@@ -345,7 +345,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
                   <div key={event.id} className="border-b border-white/[.06] py-2 text-sm">
                     <div className="flex justify-between">
                       <span>
-                        {event.seasonClub ? event.seasonClub.club.shortName : "Game"} · {event.player ? `${event.player.athlete.firstName} ${event.player.athlete.lastName}` : "Team"} · {event.description}
+                        {event.seasonClub! ? event.seasonClub!.club.shortName : "Game"} · {event.player ? `${event.player.athlete.firstName} ${event.player.athlete.lastName}` : "Team"} · {event.description}
                         {event.eventType === "FOUL" && (event.fouledPlayer || event.foulType) ? ` (${[event.foulType, event.fouledPlayer ? `on ${event.fouledPlayer.athlete.firstName} ${event.fouledPlayer.athlete.lastName}` : null].filter(Boolean).join(" · ")})` : ""}
                         {event.status !== "ACTIVE" ? <span className="ml-2 text-xs uppercase tracking-wider text-amber-400">{event.status}</span> : null}
                       </span>

@@ -165,7 +165,7 @@ export async function archiveClub(clubId: string) {
   const { session, organizationId } = await requirePermissionWithOrganization("club:manage");
 
   const shouldRedirectForActiveRegistrations = await withOrganizationContext(organizationId, async (tx) => {
-    const activeRegistrations = await tx.seasonClub.count({
+    const activeRegistrations = await tx.seasonClub!.count({
       where: { clubId, status: SeasonClubStatus.ACTIVE },
     });
 
@@ -299,7 +299,7 @@ export async function createSeasonClub(
         throw new ScopeValidationError("One or more staff assignments do not match the required role.");
       }
 
-      const created = await tx.seasonClub.create({
+      const created = await tx.seasonClub!.create({
         data: {
           organizationId,
           clubId: parsed.data.clubId,
@@ -356,7 +356,7 @@ export async function updateSeasonClub(
 
   try {
     await withOrganizationContext(organizationId, async (tx) => {
-      const currentRegistration = await tx.seasonClub.findUnique({
+      const currentRegistration = await tx.seasonClub!.findUnique({
         where: { id: seasonClubId },
         select: {
           clubId: true,
@@ -410,7 +410,7 @@ export async function updateSeasonClub(
         );
       }
 
-      const updated = await tx.seasonClub.update({
+      const updated = await tx.seasonClub!.update({
         where: { id: seasonClubId },
         data: {
           clubId: parsed.data.clubId,
@@ -458,7 +458,7 @@ export async function withdrawSeasonClub(seasonClubId: string, clubId: string) {
   const { session, organizationId } = await requirePermissionWithOrganization("club:manage");
 
   await withOrganizationContext(organizationId, async (tx) => {
-    const withdrawn = await tx.seasonClub.update({
+    const withdrawn = await tx.seasonClub!.update({
       where: { id: seasonClubId },
       data: { status: SeasonClubStatus.WITHDRAWN },
     });

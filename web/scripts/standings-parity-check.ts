@@ -41,7 +41,7 @@ async function main() {
         if (!definition) continue;
 
         const [seasonClubs, fixtures, stored] = await Promise.all([
-          tx.seasonClub.findMany({
+          tx.seasonClub!.findMany({
             where: { seasonId: season.id },
             select: { id: true, club: { select: { name: true } }, entrant: { select: { id: true } } },
           }),
@@ -89,7 +89,7 @@ async function main() {
         );
 
         for (const standing of stored) {
-          const expected = computed.get(standing.seasonClubId);
+          const expected = computed.get(standing.seasonClubId!);
           if (!expected) continue;
           orgChecked += 1;
           for (const field of CORE_FIELDS) {

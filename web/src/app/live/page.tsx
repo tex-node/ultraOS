@@ -41,7 +41,7 @@ export default async function PublicLive() {
   // most useful real content instead - next fixture, latest result, standings entry point.
   if (live.length === 0) {
     const seasonClubs = season
-      ? await withOrganizationContext(organization.id, (tx) => tx.seasonClub.findMany({
+      ? await withOrganizationContext(organization.id, (tx) => tx.seasonClub!.findMany({
           where: { seasonId: season.id, status: "ACTIVE" },
           include: { club: true, division: true, standing: true },
         }))

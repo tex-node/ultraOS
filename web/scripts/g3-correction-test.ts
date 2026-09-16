@@ -21,7 +21,7 @@ async function main() {
   const auditEntry = await prisma.auditLog.findFirst({ where: { action: "DRAFT_EVENT_ALLOCATION_CORRECTED", entityId: ALLOCATION_ID }, orderBy: { createdAt: "desc" } });
   console.log("AuditLog entry:", JSON.stringify(auditEntry));
 
-  const officialWrites = await prisma.seasonClub.count({ where: { headCoachId: { not: null } } });
+  const officialWrites = await prisma.seasonClub!.count({ where: { headCoachId: { not: null } } });
   console.log("SeasonClub headCoach assignments after correction (must remain 0):", officialWrites);
 }
 

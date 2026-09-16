@@ -99,8 +99,8 @@ async function main() {
       const venue = await tx.venue.create({ data: { organizationId: org.id, name: "Test Arena", address: "1 Test Way", city: "Lagos", capacity: 500 } });
       const club = await tx.club.create({ data: { organizationId: org.id, sportId: sport.id, name: "Test Club", shortName: `T${tag}C`, status: "ACTIVE", brandingStatus: "BRANDING_INCOMPLETE" } });
       const clubB = await tx.club.create({ data: { organizationId: org.id, sportId: sport.id, name: "Test Club Two", shortName: `T${tag}D`, status: "ACTIVE", brandingStatus: "BRANDING_INCOMPLETE" } });
-      const seasonClub = await tx.seasonClub.create({ data: { organizationId: org.id, seasonId: season.id, clubId: club.id, divisionId: division.id, status: "ACTIVE" } });
-      const seasonClubB = await tx.seasonClub.create({ data: { organizationId: org.id, seasonId: season.id, clubId: clubB.id, divisionId: division.id, status: "ACTIVE" } });
+      const seasonClub = await tx.seasonClub!.create({ data: { organizationId: org.id, seasonId: season.id, clubId: club.id, divisionId: division.id, status: "ACTIVE" } });
+      const seasonClubB = await tx.seasonClub!.create({ data: { organizationId: org.id, seasonId: season.id, clubId: clubB.id, divisionId: division.id, status: "ACTIVE" } });
       const coach = await tx.staff.create({ data: { organizationId: org.id, name: "Test Coach", role: "HEAD_COACH", ultraStaffId: `T${tag}S-${stamp}` } });
       const athlete = await tx.athlete.create({
         data: {
@@ -452,7 +452,7 @@ async function main() {
         await tx.systemSetting.deleteMany({ where: { organizationId: orgId } });
         await tx.player.deleteMany({ where: { organizationId: orgId } });
         await tx.athlete.deleteMany({ where: { organizationId: orgId } });
-        await tx.seasonClub.deleteMany({ where: { organizationId: orgId } });
+        await tx.seasonClub!.deleteMany({ where: { organizationId: orgId } });
         await tx.staff.deleteMany({ where: { organizationId: orgId } });
         await tx.club.deleteMany({ where: { organizationId: orgId } });
         await tx.venue.deleteMany({ where: { organizationId: orgId } });

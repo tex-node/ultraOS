@@ -41,7 +41,7 @@ async function main() {
   const prePlayerTotals = await loadSeasonPlayerTotals(SEASON_ID);
   const preFinalGames = await prisma.game.count({ where: { status: "FINAL" } });
 
-  const clubs = await prisma.seasonClub.findMany({
+  const clubs = await prisma.seasonClub!.findMany({
     where: { seasonId: SEASON_ID },
     include: { players: { include: { athlete: true }, take: 10 } },
     take: 2,

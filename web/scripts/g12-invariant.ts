@@ -19,7 +19,7 @@ async function main() {
     prisma.player.count(),
     prisma.application.count(),
     prisma.staff.count(),
-    prisma.seasonClub.count(),
+    prisma.seasonClub!.count(),
     prisma.player.count({ where: { seasonClubId: { not: null } } }),
   ]);
 

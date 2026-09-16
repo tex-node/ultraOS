@@ -123,7 +123,7 @@ async function cleanup() {
       await tx.standing.deleteMany({
         where: { seasonClub: { club: { name: { startsWith: runTag } } } },
       });
-      await tx.seasonClub.deleteMany({
+      await tx.seasonClub!.deleteMany({
         where: { club: { name: { startsWith: runTag } } },
       });
       await tx.player.deleteMany({
@@ -305,7 +305,7 @@ async function createGraph(label: "A" | "B") {
       organizationId: org.id,
       resourceId: awayClub.id,
     });
-    const homeSeasonClub = await tx.seasonClub.create({
+    const homeSeasonClub = await tx.seasonClub!.create({
       data: {
         organizationId: org.id,
         seasonId: season.id,
@@ -314,7 +314,7 @@ async function createGraph(label: "A" | "B") {
         status: "ACTIVE",
       },
     });
-    const awaySeasonClub = await tx.seasonClub.create({
+    const awaySeasonClub = await tx.seasonClub!.create({
       data: {
         organizationId: org.id,
         seasonId: season.id,

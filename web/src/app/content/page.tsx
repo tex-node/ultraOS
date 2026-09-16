@@ -64,7 +64,7 @@ export default async function ContentStudioPage() {
       label: "Draft Pick Announcement",
       options: draftPicks.map((pick) => ({
         id: pick.id,
-        label: `#${pick.pickNumber} ${pick.player.athlete.firstName} ${pick.player.athlete.lastName} | ${pick.seasonClub.club.name}`,
+        label: `#${pick.pickNumber} ${pick.player.athlete.firstName} ${pick.player.athlete.lastName} | ${pick.seasonClub!.club.name}`,
       })),
     },
     {

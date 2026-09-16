@@ -59,7 +59,7 @@ export async function purgePlan(origin: "DEMO" | "REHEARSAL") {
   const staffIds = roots.staff.map((root) => root.id);
   const eventIds = roots.events.map((root) => root.id);
   const userIds = [...roots.athletes, ...roots.staff].map((root) => root.userId).filter(Boolean) as string[];
-  const seasonClubIds = (await prisma.seasonClub.findMany({
+  const seasonClubIds = (await prisma.seasonClub!.findMany({
     where: { OR: [{ recordOrigin }, { clubId: { in: clubIds } }, { headCoachId: { in: staffIds } }, { assistantCoachId: { in: staffIds } }, { teamManagerId: { in: staffIds } }, { scoutId: { in: staffIds } }, { fanCaptainId: { in: staffIds } }] },
     select: { id: true },
   })).map((item) => item.id);

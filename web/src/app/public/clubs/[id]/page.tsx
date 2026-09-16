@@ -255,7 +255,7 @@ async function TeamDnaSection({
 }
 
 async function SimilarTeams({ organizationId, matches }: { organizationId: string; matches: ReturnType<typeof findSimilarTeams> }) {
-  const seasonClubs = await withOrganizationContext(organizationId, (tx) => tx.seasonClub.findMany({
+  const seasonClubs = await withOrganizationContext(organizationId, (tx) => tx.seasonClub!.findMany({
     where: { id: { in: matches.map((m) => m.seasonClubId) } },
     select: { id: true, club: { select: { id: true, name: true } } },
   }));

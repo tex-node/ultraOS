@@ -54,7 +54,7 @@ export default async function BroadcastGraphics({ searchParams }: { searchParams
   const [games, playerTotals, seasonClubs] = await withOrganizationContext(organizationId, (tx) => Promise.all([
     loadSeasonGameCores(season.id, tx),
     loadSeasonPlayerTotals(season.id, tx),
-    tx.seasonClub.findMany({ where: { seasonId: season.id }, select: { id: true, clubId: true, club: { select: { name: true } } } }),
+    tx.seasonClub!.findMany({ where: { seasonId: season.id }, select: { id: true, clubId: true, club: { select: { name: true } } } }),
   ]));
   const clubIdBySeasonClubId = new Map(seasonClubs.map((sc) => [sc.id, sc.clubId]));
   const teamTotalsByClub = computeSeasonTeamTotals(games);

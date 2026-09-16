@@ -37,7 +37,7 @@ async function main() {
   ok("Diagnostics reports overall HEALTHY with no live game and no residue", idleHealth.overallStatus === "HEALTHY", idleHealth.overallStatus);
   ok("Diagnostics correctly reports no live game rather than fabricating one", idleHealth.selectedGame === null);
 
-  const clubs = await prisma.seasonClub.findMany({ where: { seasonId: SEASON_ID }, include: { club: true, players: { include: { athlete: true }, take: 6 } }, take: 2 });
+  const clubs = await prisma.seasonClub!.findMany({ where: { seasonId: SEASON_ID }, include: { club: true, players: { include: { athlete: true }, take: 6 } }, take: 2 });
   const [home, away] = clubs;
   const hp = home.players, ap = away.players;
 

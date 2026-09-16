@@ -19,7 +19,7 @@ async function main() {
   // Clean up: correct this verification allocation and reset stage for the operator.
   await correctAllocation("cmt4odhgn0000wokk8fbwr6ro", allocation.id, ACTOR_ID, "Verification test for DraftAllocation unique-constraint fix — not a real allocation.");
 
-  const officialWrites = await prisma.seasonClub.count({ where: { headCoachId: { not: null } } });
+  const officialWrites = await prisma.seasonClub!.count({ where: { headCoachId: { not: null } } });
   console.log("Official coach writes after correction (must be 0):", officialWrites);
 }
 

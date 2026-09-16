@@ -81,7 +81,7 @@ export async function draftEventReadiness(tx: Prisma.TransactionClient, draftEve
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
-  const seasonClubs = await tx.seasonClub.findMany({
+  const seasonClubs = await tx.seasonClub!.findMany({
     where: { seasonId: event.seasonId, status: "ACTIVE" },
     include: { club: true, division: true },
   });
@@ -197,7 +197,7 @@ async function eligibleSeasonClubs(tx: Prisma.TransactionClient, draftEventId: s
     where: { draftEventId, divisionId, operatingMode, subjectType, status: { notIn: [AllocationStatus.CANCELLED, AllocationStatus.CORRECTED] } },
     select: { seasonClubId: true },
   });
-  return tx.seasonClub.findMany({
+  return tx.seasonClub!.findMany({
     where: {
       divisionId,
       id: { notIn: claimed.map((allocation) => allocation.seasonClubId) },
@@ -395,7 +395,7 @@ export async function confirmAllocation(organizationId: string, allocationId: st
           allocation.staff?.role === StaffRole.ASSISTANT_COACH
             ? { assistantCoachId: allocation.staffId }
             : { headCoachId: allocation.staffId };
-        await tx.seasonClub.update({ where: { id: allocation.seasonClubId }, data: coachData });
+        await tx.seasonClub!.update({ where: { id: allocation.seasonClubId }, data: coachData });
       }
     }
     await tx.draftAllocation.update({
@@ -465,7 +465,7 @@ export async function correctAllocation(organizationId: string, allocationId: st
         });
       } else if (allocation.subjectType === AllocationSubjectType.COACH && allocation.staffId) {
         const coachField = allocation.staff?.role === StaffRole.ASSISTANT_COACH ? { assistantCoachId: null } : { headCoachId: null };
-        await tx.seasonClub.updateMany({ where: { id: allocation.seasonClubId, OR: [{ headCoachId: allocation.staffId }, { assistantCoachId: allocation.staffId }] }, data: coachField });
+        await tx.seasonClub!.updateMany({ where: { id: allocation.seasonClubId, OR: [{ headCoachId: allocation.staffId }, { assistantCoachId: allocation.staffId }] }, data: coachField });
       }
     }
     await tx.draftAllocation.update({
@@ -553,15 +553,15 @@ export async function publicDraftEventState(draftEventId: string, token?: string
         coach: isRevealed && allocation.staff ? { id: allocation.staff.id, name: allocation.staff.name } : null,
         seasonClub: isRevealed
           ? {
-              id: allocation.seasonClub.id,
-              name: allocation.seasonClub.club.name,
-              shortName: allocation.seasonClub.club.shortName,
-              logoUrl: allocation.seasonClub.club.logoUrl,
-              officialSlogan: allocation.seasonClub.club.officialSlogan,
-              crowdChant: allocation.seasonClub.club.crowdChant,
-              identityKeywords: allocation.seasonClub.club.identityKeywords,
-              primaryColor: allocation.seasonClub.club.primaryColor,
-              secondaryColor: allocation.seasonClub.club.secondaryColor,
+              id: allocation.seasonClub!.id,
+              name: allocation.seasonClub!.club.name,
+              shortName: allocation.seasonClub!.club.shortName,
+              logoUrl: allocation.seasonClub!.club.logoUrl,
+              officialSlogan: allocation.seasonClub!.club.officialSlogan,
+              crowdChant: allocation.seasonClub!.club.crowdChant,
+              identityKeywords: allocation.seasonClub!.club.identityKeywords,
+              primaryColor: allocation.seasonClub!.club.primaryColor,
+              secondaryColor: allocation.seasonClub!.club.secondaryColor,
             }
           : null,
       };
@@ -625,7 +625,7 @@ export async function reserveSecondaryDraftPick(params: {
       where: { draftId: params.draftId, playerId: params.playerId, status: DraftPickStatus.CORRECTED },
     });
 
-    const team = await tx.seasonClub.findUniqueOrThrow({
+    const team = await tx.seasonClub!.findUniqueOrThrow({
       where: { id: params.seasonClubId },
       select: { seasonId: true, divisionId: true, status: true },
     });
@@ -781,12 +781,12 @@ export async function publicSecondaryDraftState(draftId: string, token?: string,
         round: pick.round,
         seasonClub: isRevealed
           ? {
-              crowdChant: pick.seasonClub.club.crowdChant,
-              id: pick.seasonClub.id,
-              logoUrl: pick.seasonClub.club.logoUrl,
-              name: pick.seasonClub.club.name,
-              officialSlogan: pick.seasonClub.club.officialSlogan,
-              shortName: pick.seasonClub.club.shortName,
+              crowdChant: pick.seasonClub!.club.crowdChant,
+              id: pick.seasonClub!.id,
+              logoUrl: pick.seasonClub!.club.logoUrl,
+              name: pick.seasonClub!.club.name,
+              officialSlogan: pick.seasonClub!.club.officialSlogan,
+              shortName: pick.seasonClub!.club.shortName,
             }
           : null,
         status: pick.status,

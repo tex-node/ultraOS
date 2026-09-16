@@ -18,7 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
       const club = await resolveClubByPublicId(publicId, tx);
       if (!club) return null;
 
-      const activeSeasonClub = await tx.seasonClub.findFirst({
+      const activeSeasonClub = await tx.seasonClub!.findFirst({
         where: { clubId: club.id, status: "ACTIVE" },
         include: { division: true, standing: true },
         orderBy: { season: { startDate: "desc" } },

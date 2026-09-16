@@ -38,7 +38,7 @@ async function main() {
   const preFinalGames = await prisma.game.count({ where: { status: "FINAL" } });
   const preStandingsSum = await prisma.standing.aggregate({ where: { seasonId: SEASON_ID }, _sum: { played: true, won: true } });
 
-  const clubs = await prisma.seasonClub.findMany({ where: { seasonId: SEASON_ID }, include: { club: true, players: { include: { athlete: true }, take: 6 } }, take: 2 });
+  const clubs = await prisma.seasonClub!.findMany({ where: { seasonId: SEASON_ID }, include: { club: true, players: { include: { athlete: true }, take: 6 } }, take: 2 });
   const [home, away] = clubs;
   ok("Two real SeasonClubs with at least 5 rostered players found", clubs.length === 2 && clubs.every((c) => c.players.length >= 5));
   const hp = home.players, ap = away.players;

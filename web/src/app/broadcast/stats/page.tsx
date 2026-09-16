@@ -44,7 +44,7 @@ export default async function BroadcastStats() {
     const [games, playerTotals, seasonClubs] = await Promise.all([
       loadSeasonGameCores(season.id, tx),
       loadSeasonPlayerTotals(season.id, tx),
-      tx.seasonClub.findMany({ where: { seasonId: season.id }, select: { id: true, clubId: true } }),
+      tx.seasonClub!.findMany({ where: { seasonId: season.id }, select: { id: true, clubId: true } }),
     ]);
 
     // G.18: any currently live/paused game(s), rendered as a Commentator Command Center at the

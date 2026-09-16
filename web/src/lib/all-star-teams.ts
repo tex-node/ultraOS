@@ -116,7 +116,7 @@ export async function getAllStarCandidatePool(db: Db = prisma): Promise<{
       })
     : [];
 
-  const seasonClubs = await db.seasonClub.findMany({
+  const seasonClubs = await db.seasonClub!.findMany({
     where: { status: "ACTIVE" },
     include: { headCoach: true, assistantCoach: true, division: true, club: true },
   });

@@ -24,8 +24,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
       name: `${athlete.firstName} ${athlete.lastName}`,
       position: player.position,
       jerseyNumber: player.jerseyNumber,
-      club: player.seasonClub
-        ? { publicId: player.seasonClub.club.shortName.toLowerCase(), name: player.seasonClub.club.name, shortName: player.seasonClub.club.shortName }
+      club: player.seasonClub!
+        ? { publicId: player.seasonClub!.club.shortName.toLowerCase(), name: player.seasonClub!.club.name, shortName: player.seasonClub!.club.shortName }
         : null,
       generatedAt: new Date().toISOString(),
     };

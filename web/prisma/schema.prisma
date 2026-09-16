@@ -3559,10 +3559,12 @@ model Standing {
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   seasonId        String
   season          Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  seasonClubId    String       @unique
-  seasonClub      SeasonClub   @relation(fields: [seasonClubId], references: [id], onDelete: Cascade)
-  // Multi-sport Stage 2: entrant identity, populated by the backfill; nullable and additive.
-  entrantId       String?
+  // Multi-sport Entrant model (Stage B4): a standing belongs to a SeasonClub (team sports) OR an
+  // Entrant (individual sports). Both are nullable; a DB CHECK requires at least one. Existing rows
+  // all have a SeasonClub. entrantId is unique where present (one standing per entrant).
+  seasonClubId    String?      @unique
+  seasonClub      SeasonClub?  @relation(fields: [seasonClubId], references: [id], onDelete: Cascade)
+  entrantId       String?      @unique
   entrant         Entrant?     @relation(fields: [entrantId], references: [id], onDelete: SetNull)
   played          Int          @default(0)
   won             Int          @default(0)

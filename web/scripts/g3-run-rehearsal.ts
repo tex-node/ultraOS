@@ -19,7 +19,7 @@ function assertNoLeak(publicState: Awaited<ReturnType<typeof publicDraftEventSta
   if (!alloc) throw new Error("Allocation not found in public state");
   if (alloc.status !== "RESERVED" && alloc.status !== "REVEALING") return;
   const json = JSON.stringify(alloc);
-  if (json.includes('"name"') || (alloc as { squad?: unknown }).squad || (alloc as { staff?: unknown }).staff || (alloc as { seasonClub?: unknown }).seasonClub) {
+  if (json.includes('"name"') || (alloc as { squad?: unknown }).squad || (alloc as { staff?: unknown }).staff || (alloc as { seasonClub?: unknown }).seasonClub!) {
     throw new Error(`LEAK DETECTED: RESERVED/REVEALING allocation exposes identity: ${json}`);
   }
   console.log(`  [redaction OK] RESERVED payload: ${json}`);

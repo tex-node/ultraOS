@@ -139,8 +139,8 @@ export default async function TryoutGroupPage({ params }: { params: Promise<{ gr
                     {player.position} - {player.season.name}
                   </p>
                   <p className="mt-1 text-xs text-zinc-500">
-                    {player.seasonClub
-                      ? `${player.seasonClub.club.name} (${player.seasonClub.division.name})`
+                    {player.seasonClub!
+                      ? `${player.seasonClub!.club.name} (${player.seasonClub!.division.name})`
                       : "No SeasonClub assigned"}
                   </p>
                 </div>

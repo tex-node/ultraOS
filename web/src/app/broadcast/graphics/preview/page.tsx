@@ -158,7 +158,7 @@ async function buildPreviewCard(q: Query, seasonId: string, db: Db): Promise<Bui
     const totalsByTeam = computeSeasonTeamTotals(games);
     const target = totalsByTeam.get(q.id);
     if (!target) return null;
-    const seasonClub = await db.seasonClub.findUnique({ where: { id: q.id }, select: { clubId: true, club: { select: { logoUrl: true } } } });
+    const seasonClub = await db.seasonClub!.findUnique({ where: { id: q.id }, select: { clubId: true, club: { select: { logoUrl: true } } } });
     const logoUrl = seasonClub?.club.logoUrl ?? null;
 
     if (q.card === "profile") {

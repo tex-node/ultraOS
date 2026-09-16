@@ -30,7 +30,7 @@ async function cleanOrg(orgId: string) {
     await tx.systemSetting.deleteMany({ where: { organizationId: orgId } });
     await tx.player.deleteMany({ where: { organizationId: orgId } });
     await tx.athlete.deleteMany({ where: { organizationId: orgId } });
-    await tx.seasonClub.deleteMany({ where: { organizationId: orgId } });
+    await tx.seasonClub!.deleteMany({ where: { organizationId: orgId } });
     await tx.staff.deleteMany({ where: { organizationId: orgId } });
     await tx.club.deleteMany({ where: { organizationId: orgId } });
     await tx.venue.deleteMany({ where: { organizationId: orgId } });

@@ -36,8 +36,8 @@ async function buildFixtureRig(orgId: string, tag: string, sportId: string, sent
     const venue = await tx.venue.create({ data: { organizationId: orgId, name: `${tag} Venue`, address: "1 Sentinel Way", city: "Lagos", capacity: 500 } });
     const homeClub = await tx.club.create({ data: { organizationId: orgId, sportId, name: `${tag} Home Club`, shortName: `${tag.slice(0, 3).toUpperCase()}H`, status: ClubStatus.ACTIVE, brandingStatus: ClubBrandingStatus.BRANDING_INCOMPLETE } });
     const awayClub = await tx.club.create({ data: { organizationId: orgId, sportId, name: `${tag} Away Club`, shortName: `${tag.slice(0, 3).toUpperCase()}A`, status: ClubStatus.ACTIVE, brandingStatus: ClubBrandingStatus.BRANDING_INCOMPLETE } });
-    const homeSeasonClub = await tx.seasonClub.create({ data: { organizationId: orgId, seasonId: season.id, clubId: homeClub.id, divisionId: division.id, status: SeasonClubStatus.ACTIVE } });
-    const awaySeasonClub = await tx.seasonClub.create({ data: { organizationId: orgId, seasonId: season.id, clubId: awayClub.id, divisionId: division.id, status: SeasonClubStatus.ACTIVE } });
+    const homeSeasonClub = await tx.seasonClub!.create({ data: { organizationId: orgId, seasonId: season.id, clubId: homeClub.id, divisionId: division.id, status: SeasonClubStatus.ACTIVE } });
+    const awaySeasonClub = await tx.seasonClub!.create({ data: { organizationId: orgId, seasonId: season.id, clubId: awayClub.id, divisionId: division.id, status: SeasonClubStatus.ACTIVE } });
     const fixture = await tx.fixture.create({
       data: {
         organizationId: orgId, seasonId: season.id, divisionId: division.id,
@@ -95,7 +95,7 @@ async function cleanup(orgId: string, rig: Awaited<ReturnType<typeof buildFixtur
     await tx.athlete.deleteMany({ where: { id: rig.athlete.id } });
     await tx.game.deleteMany({ where: { id: rig.game.id } });
     await tx.fixture.deleteMany({ where: { id: rig.fixture.id } });
-    await tx.seasonClub.deleteMany({ where: { seasonId: rig.season.id } });
+    await tx.seasonClub!.deleteMany({ where: { seasonId: rig.season.id } });
     await tx.club.deleteMany({ where: { id: { in: [rig.homeClub.id, rig.awayClub.id] } } });
     await tx.venue.deleteMany({ where: { id: rig.venue.id } });
     await tx.season.deleteMany({ where: { id: rig.season.id } });
@@ -146,11 +146,11 @@ async function main() {
 
   console.log("\n========== READINESS: Org A/B dashboard-style standing-integrity checks don't cross-contaminate ==========");
   await withOrganizationContext(orgB.id, async (tx) => {
-    const teams = await tx.seasonClub.findMany({ where: { seasonId: rigB.season.id }, select: { id: true } });
+    const teams = await tx.seasonClub!.findMany({ where: { seasonId: rigB.season.id }, select: { id: true } });
     report("Org B readiness team scan sees exactly its own 2 SeasonClubs, not Org A's", teams.length === 2, `count=${teams.length}`);
   });
   await withOrganizationContext(NEON_ULTRA, async (tx) => {
-    const teams = await tx.seasonClub.findMany({ where: { seasonId: rigA.season.id }, select: { id: true } });
+    const teams = await tx.seasonClub!.findMany({ where: { seasonId: rigA.season.id }, select: { id: true } });
     report("Org A readiness team scan sees exactly its own 2 SeasonClubs, not Org B's", teams.length === 2, `count=${teams.length}`);
   });
 

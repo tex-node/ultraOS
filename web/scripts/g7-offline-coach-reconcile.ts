@@ -36,7 +36,7 @@ async function main() {
   });
   if (existingClaims.length > 0) throw new Error(`Refusing: ${existingClaims.length} non-terminal COACH allocations already exist.`);
 
-  const existingCoachWrites = await prisma.seasonClub.findMany({ where: { id: { in: clubIds } }, select: { id: true, headCoachId: true, assistantCoachId: true } });
+  const existingCoachWrites = await prisma.seasonClub!.findMany({ where: { id: { in: clubIds } }, select: { id: true, headCoachId: true, assistantCoachId: true } });
   for (const sc of existingCoachWrites) {
     if (sc.headCoachId || sc.assistantCoachId) throw new Error(`Refusing: SeasonClub ${sc.id} already has a coach on record.`);
   }
@@ -89,7 +89,7 @@ async function main() {
       });
 
       const coachData = staff.role === StaffRole.ASSISTANT_COACH ? { assistantCoachId: pairing.staffId } : { headCoachId: pairing.staffId };
-      await tx.seasonClub.update({ where: { id: pairing.seasonClubId }, data: coachData });
+      await tx.seasonClub!.update({ where: { id: pairing.seasonClubId }, data: coachData });
 
       await writeAuditLog(tx, {
         action: "DRAFT_EVENT_ALLOCATION_OFFLINE_RECONCILED",
@@ -105,7 +105,7 @@ async function main() {
     await prisma.draftEvent.update({ where: { id: DRAFT_EVENT_ID }, data: { displaySequence: { increment: 1 }, publicMessage: "Coach assignments reconciled after offline resolution." } });
   }
 
-  const officialCoachCount = await prisma.seasonClub.count({ where: { OR: [{ headCoachId: { not: null } }, { assistantCoachId: { not: null } }] } });
+  const officialCoachCount = await prisma.seasonClub!.count({ where: { OR: [{ headCoachId: { not: null } }, { assistantCoachId: { not: null } }] } });
   console.log("Official coach assignments now on record:", officialCoachCount, "(expect 8 after apply, 0 on dry run)");
 }
 

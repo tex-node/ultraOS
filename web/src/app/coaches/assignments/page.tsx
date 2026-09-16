@@ -38,7 +38,7 @@ export default async function CoachAssignmentsPage() {
     );
   }
   const [seasonClubs, coaches] = await withOrganizationContext(session.user.organizationId, (tx) => Promise.all([
-    tx.seasonClub.findMany({
+    tx.seasonClub!.findMany({
       include: {
         assistantCoach: true,
         club: true,

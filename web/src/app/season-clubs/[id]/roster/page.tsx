@@ -30,7 +30,7 @@ export default async function SeasonClubRosterPage({
   const canEdit = hasPermission(session.user.roles, "player:manage");
   const query = await searchParams;
 
-  const registration = await withOrganizationContext(session.user.organizationId, (tx) => tx.seasonClub.findUnique({
+  const registration = await withOrganizationContext(session.user.organizationId, (tx) => tx.seasonClub!.findUnique({
     where: { id },
     include: {
       club: { select: { id: true, name: true, shortName: true } },

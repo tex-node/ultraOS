@@ -72,11 +72,11 @@ async function main() {
         }
 
         const keyFor = (standing: (typeof group)[number]) =>
-          standing.entrantId ?? entrantBySeasonClub.get(standing.seasonClubId) ?? standing.seasonClubId;
+          standing.entrantId ?? entrantBySeasonClub.get(standing.seasonClubId!) ?? standing.seasonClubId!;
 
         const rows: StandingRow[] = group.map((standing) => ({
           entrantId: keyFor(standing),
-          name: standing.seasonClub.club.name,
+          name: standing.seasonClub!.club.name,
           played: standing.played,
           won: standing.won,
           drawn: standing.drawn,
@@ -101,7 +101,7 @@ async function main() {
             await tx.standing.update({
               where: { id: standing.id },
               data: {
-                entrantId: standing.entrantId ?? entrantBySeasonClub.get(standing.seasonClubId) ?? null,
+                entrantId: standing.entrantId ?? entrantBySeasonClub.get(standing.seasonClubId!) ?? null,
                 rank: ranked1.rank,
                 rankTiebreak: ranked1.rankTiebreak,
               },

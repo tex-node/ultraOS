@@ -23,7 +23,7 @@ export async function createTrainingSession(formData: FormData) {
   const seasonClubId = value(formData, "seasonClubId") || null;
   const training = await withOrganizationContext(organizationId, async (tx) => {
     if (seasonId) await tx.season.findUniqueOrThrow({ where: { id: seasonId }, select: { id: true } });
-    if (seasonClubId) await tx.seasonClub.findUniqueOrThrow({ where: { id: seasonClubId }, select: { id: true } });
+    if (seasonClubId) await tx.seasonClub!.findUniqueOrThrow({ where: { id: seasonClubId }, select: { id: true } });
     return tx.trainingSession.create({
       data: {
         organizationId,

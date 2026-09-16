@@ -120,7 +120,7 @@ export default async function DraftControlPage({ params }: { params: Promise<{ d
             {current ? (
               <div className="mt-8 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-5">
                 <p className="text-xs uppercase tracking-[.2em] text-emerald-300">Current {current.operatingMode.toLowerCase()} allocation</p>
-                <h3 className="mt-2 text-2xl font-semibold">{current.draftSquad?.name ?? current.staff?.name} to {current.seasonClub.club.name}</h3>
+                <h3 className="mt-2 text-2xl font-semibold">{current.draftSquad?.name ?? current.staff?.name} to {current.seasonClub!.club.name}</h3>
                 <p className="mt-2 text-sm text-zinc-400">{current.status} - {current.division.name}</p>
                 <div className="mt-5 flex flex-wrap gap-2">
                   <form action={startSuspenseAction.bind(null, event.id, current.id)}><button className="rounded-xl border border-white/10 px-4 py-3 text-sm">Start suspense</button></form>
@@ -144,7 +144,7 @@ export default async function DraftControlPage({ params }: { params: Promise<{ d
           <h2 className="text-xl font-semibold">Allocation history</h2>
           <div className="mt-4 grid gap-3">{event.allocations.map((allocation) => (
             <div className="rounded-xl border border-white/[.06] bg-black/20 p-4" key={allocation.id}>
-              <p className="font-semibold">#{allocation.sequence} {allocation.draftSquad?.name ?? allocation.staff?.name} to {allocation.seasonClub.club.name}</p>
+              <p className="font-semibold">#{allocation.sequence} {allocation.draftSquad?.name ?? allocation.staff?.name} to {allocation.seasonClub!.club.name}</p>
               <p className="text-xs text-zinc-500">{allocation.operatingMode} - {allocation.subjectType} - {allocation.status} - {allocation.division.name}</p>
               {allocation.status === "REVEALED" || allocation.status === "CONFIRMED" ? (
                 <form action={correctAllocationAction.bind(null, event.id, allocation.id)} className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]">

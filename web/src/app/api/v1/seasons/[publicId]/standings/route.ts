@@ -31,8 +31,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
     const rows = loaded.rows;
 
     const standings: StandingV1[] = rows.map((s) => ({
-      club: { publicId: s.seasonClub.club.shortName.toLowerCase(), name: s.seasonClub.club.name, shortName: s.seasonClub.club.shortName },
-      division: s.seasonClub.division.name,
+      club: { publicId: s.seasonClub!.club.shortName.toLowerCase(), name: s.seasonClub!.club.name, shortName: s.seasonClub!.club.shortName },
+      division: s.seasonClub!.division.name,
       played: s.played, won: s.won, lost: s.lost,
       pointsFor: s.pointsFor, pointsAgainst: s.pointsAgainst, pointDifference: s.pointDifference, leaguePoints: s.leaguePoints,
     }));

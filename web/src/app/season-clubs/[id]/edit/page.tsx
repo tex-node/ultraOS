@@ -15,7 +15,7 @@ export default async function EditSeasonClubPage({
   const { id } = await params;
 
   const { registration, seasons, divisions, staff } = await withOrganizationContext(organizationId, async (tx) => {
-    const registration = await tx.seasonClub.findUnique({
+    const registration = await tx.seasonClub!.findUnique({
       where: { id },
       include: {
         club: { select: { id: true, name: true, sportId: true } },

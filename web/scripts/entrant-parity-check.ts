@@ -25,7 +25,7 @@ async function main() {
 
   for (const organization of organizations) {
     const result = await withOrganizationContext(organization.id, async (tx) => {
-      const seasonClubs = await tx.seasonClub.count({ where: { organizationId: organization.id } });
+      const seasonClubs = await tx.seasonClub!.count({ where: { organizationId: organization.id } });
       const teamEntrants = await tx.entrant.count({ where: { organizationId: organization.id, type: "TEAM" } });
       const teamEntrantsWithoutSeasonClub = await tx.entrant.count({
         where: { organizationId: organization.id, type: "TEAM", seasonClubId: null },

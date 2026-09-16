@@ -38,7 +38,7 @@ function ok(label: string, condition: boolean, detail?: unknown) {
 async function main() {
   console.log("=== G.15 Rehearsal: start ===");
 
-  const clubs = await prisma.seasonClub.findMany({
+  const clubs = await prisma.seasonClub!.findMany({
     where: { seasonId: SEASON_ID },
     include: { players: { include: { athlete: true }, take: 3 } },
     take: 2,

@@ -100,7 +100,7 @@ export async function updateAthlete(
 async function validateSeasonClub(db: Prisma.TransactionClient, seasonId: string, seasonClubId: string) {
   if (!seasonClubId) return true;
   return Boolean(
-    await db.seasonClub.findFirst({
+    await db.seasonClub!.findFirst({
       where: { id: seasonClubId, seasonId },
       select: { id: true },
     }),

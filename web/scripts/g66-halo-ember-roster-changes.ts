@@ -63,7 +63,7 @@ async function main() {
   await confirmSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick.id, ACTOR_ID);
   console.log("Adeshina Funmilayo confirmed to Halo.");
 
-  const [halo, ember] = await prisma.seasonClub.findMany({
+  const [halo, ember] = await prisma.seasonClub!.findMany({
     where: { id: { in: [HALO_SEASON_CLUB_ID, "cmqfqpnrb0017lgkkm9i40f6u"] } },
     include: { club: true, players: true },
   });

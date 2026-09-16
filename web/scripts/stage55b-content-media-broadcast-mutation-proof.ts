@@ -110,8 +110,8 @@ async function main() {
     const division = await tx.division.create({ data: { organizationId: a.org.id, competitionId: a.competition.id, name: "Div A6", slug: `div-a6-${stamp}`, isActive: true } });
     const venue = await tx.venue.create({ data: { organizationId: a.org.id, name: "Arena A6", address: "1 Test Way", city: "Lagos", capacity: 1000 } });
     const clubB = await tx.club.create({ data: { organizationId: a.org.id, sportId: sport.id, name: "Opponent A6", shortName: "OA6", status: "ACTIVE", brandingStatus: "BRANDING_INCOMPLETE" } });
-    const seasonClub1 = await tx.seasonClub.create({ data: { organizationId: a.org.id, seasonId: a.season.id, clubId: a.club.id, divisionId: division.id, status: "ACTIVE" } });
-    const seasonClub2 = await tx.seasonClub.create({ data: { organizationId: a.org.id, seasonId: a.season.id, clubId: clubB.id, divisionId: division.id, status: "ACTIVE" } });
+    const seasonClub1 = await tx.seasonClub!.create({ data: { organizationId: a.org.id, seasonId: a.season.id, clubId: a.club.id, divisionId: division.id, status: "ACTIVE" } });
+    const seasonClub2 = await tx.seasonClub!.create({ data: { organizationId: a.org.id, seasonId: a.season.id, clubId: clubB.id, divisionId: division.id, status: "ACTIVE" } });
     const fixtureA = await tx.fixture.create({ data: { organizationId: a.org.id, seasonId: a.season.id, divisionId: division.id, homeSeasonClubId: seasonClub1.id, awaySeasonClubId: seasonClub2.id, scheduledAt: new Date(), venueId: venue.id, status: "SCHEDULED" } });
     return { fixtureA, division, venue, clubB, seasonClub1, seasonClub2 };
   });
@@ -233,7 +233,7 @@ async function main() {
       await tx.mediaAssetUsage.deleteMany({ where: { organizationId: org.org.id } });
       await tx.mediaAsset.deleteMany({ where: { organizationId: org.org.id } });
       await tx.fixture.deleteMany({ where: { organizationId: org.org.id } });
-      await tx.seasonClub.deleteMany({ where: { organizationId: org.org.id } });
+      await tx.seasonClub!.deleteMany({ where: { organizationId: org.org.id } });
       await tx.club.deleteMany({ where: { organizationId: org.org.id } });
       await tx.venue.deleteMany({ where: { organizationId: org.org.id } });
       await tx.division.deleteMany({ where: { organizationId: org.org.id } });

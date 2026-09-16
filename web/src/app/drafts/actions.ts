@@ -57,7 +57,7 @@ export async function makeDraftPick(draftId:string,_s:DraftState,fd:FormData):Pr
     if(draft.status!=="LIVE")throw new Error("DRAFT_NOT_LIVE");
     const [player,team]=await Promise.all([
       tx.player.findUnique({where:{id:p.data.playerId},select:{seasonId:true,status:true,seasonClubId:true,draftSelectionGroup:true}}),
-      tx.seasonClub.findUnique({where:{id:p.data.seasonClubId},select:{seasonId:true,divisionId:true,status:true}}),
+      tx.seasonClub!.findUnique({where:{id:p.data.seasonClubId},select:{seasonId:true,divisionId:true,status:true}}),
     ]);
     const requiredGroup=draft.tier===DraftTier.MAIN?DraftSelectionGroup.MAIN_DRAFT:DraftSelectionGroup.SECONDARY_DRAFT;
     if(!player||player.seasonId!==draft.seasonId||!["DRAFT_ELIGIBLE","UNDRAFTED"].includes(player.status)||player.seasonClubId||player.draftSelectionGroup!==requiredGroup)throw new Error("PLAYER_INELIGIBLE");

@@ -26,8 +26,8 @@ async function buildOrgBFixtureRig(tx: Prisma.TransactionClient) {
   const venue = await tx.venue.create({ data: { organizationId: orgB.id, name: "Privileged Vision Proof Venue", address: "1 Proof Way", city: "Lagos", capacity: 500 } });
   const homeClub = await tx.club.create({ data: { organizationId: orgB.id, sportId: sport.id, name: "Privileged Vision Proof Home Club", shortName: "PVPH", status: ClubStatus.ACTIVE, brandingStatus: ClubBrandingStatus.BRANDING_INCOMPLETE } });
   const awayClub = await tx.club.create({ data: { organizationId: orgB.id, sportId: sport.id, name: "Privileged Vision Proof Away Club", shortName: "PVPA", status: ClubStatus.ACTIVE, brandingStatus: ClubBrandingStatus.BRANDING_INCOMPLETE } });
-  const homeSeasonClub = await tx.seasonClub.create({ data: { organizationId: orgB.id, seasonId: season.id, clubId: homeClub.id, divisionId: division.id, status: SeasonClubStatus.ACTIVE } });
-  const awaySeasonClub = await tx.seasonClub.create({ data: { organizationId: orgB.id, seasonId: season.id, clubId: awayClub.id, divisionId: division.id, status: SeasonClubStatus.ACTIVE } });
+  const homeSeasonClub = await tx.seasonClub!.create({ data: { organizationId: orgB.id, seasonId: season.id, clubId: homeClub.id, divisionId: division.id, status: SeasonClubStatus.ACTIVE } });
+  const awaySeasonClub = await tx.seasonClub!.create({ data: { organizationId: orgB.id, seasonId: season.id, clubId: awayClub.id, divisionId: division.id, status: SeasonClubStatus.ACTIVE } });
   const fixture = await tx.fixture.create({
     data: { organizationId: orgB.id, seasonId: season.id, divisionId: division.id, homeSeasonClubId: homeSeasonClub.id, awaySeasonClubId: awaySeasonClub.id, scheduledAt: new Date("2026-06-01T18:00:00Z"), venueId: venue.id, status: FixtureStatus.SCHEDULED, recordOrigin: RecordOrigin.PRODUCTION },
   });

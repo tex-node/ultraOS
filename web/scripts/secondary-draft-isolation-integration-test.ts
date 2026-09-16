@@ -59,8 +59,8 @@ async function main() {
   cleanup.push(() => prisma.division.delete({ where: { id: division.id } }));
   const club = await prisma.club.create({ data: { name: TAG, recordOrigin: "REHEARSAL", shortName: TAG.slice(0, 12), sportId: sport.id } });
   cleanup.push(() => prisma.club.delete({ where: { id: club.id } }));
-  const seasonClub = await prisma.seasonClub.create({ data: { clubId: club.id, divisionId: division.id, seasonId: season.id } });
-  cleanup.push(() => prisma.seasonClub.delete({ where: { id: seasonClub.id } }));
+  const seasonClub = await prisma.seasonClub!.create({ data: { clubId: club.id, divisionId: division.id, seasonId: season.id } });
+  cleanup.push(() => prisma.seasonClub!.delete({ where: { id: seasonClub.id } }));
 
   const rehearsalEvent = await prisma.draftEvent.create({
     data: { createdById: actor.id, currentStage: DraftEventStage.MEN_SQUAD_ALLOCATION, displayToken: randomBytes(16).toString("hex"), name: `${TAG}_EVENT_REHEARSAL`, operatingMode: DraftEventOperatingMode.REHEARSAL, publicTitle: TAG, seasonId: season.id, status: DraftEventStatus.LIVE },
@@ -121,7 +121,7 @@ async function main() {
   const stateReserved = await publicSecondaryDraftState(rehearsalDraft.id);
   const latestReserved = stateReserved!.picks.at(-1)!;
   assert.equal(latestReserved.player, null, "RESERVED Secondary Draft pick must not expose player identity");
-  assert.equal(latestReserved.seasonClub, null, "RESERVED Secondary Draft pick must not expose destination Club");
+  assert.equal(latestReserved.seasonClub!, null, "RESERVED Secondary Draft pick must not expose destination Club");
   await revealSecondaryDraftPick("cmt4odhgn0000wokk8fbwr6ro", pick4.id, actor.id);
   const stateRevealed = await publicSecondaryDraftState(rehearsalDraft.id);
   const latestRevealed = stateRevealed!.picks.at(-1)!;

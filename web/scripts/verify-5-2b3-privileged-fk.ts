@@ -21,7 +21,7 @@ async function buildOrgBFixture(tx: Prisma.TransactionClient) {
   const division = await tx.division.create({ data: { organizationId: orgB.id, competitionId: competition.id, name: "Privileged Proof Division", slug: `privileged-proof-division-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, isActive: true } });
   const season = await tx.season.create({ data: { organizationId: orgB.id, competitionId: competition.id, name: "Privileged Proof Season", startDate: new Date("2026-01-01"), endDate: new Date("2026-12-31"), status: SeasonStatus.ACTIVE } });
   const club = await tx.club.create({ data: { organizationId: orgB.id, sportId: sport.id, name: "Privileged Proof Club", shortName: "PPC", status: ClubStatus.ACTIVE, brandingStatus: ClubBrandingStatus.BRANDING_INCOMPLETE } });
-  const seasonClub = await tx.seasonClub.create({ data: { organizationId: orgB.id, seasonId: season.id, clubId: club.id, divisionId: division.id, status: SeasonClubStatus.ACTIVE } });
+  const seasonClub = await tx.seasonClub!.create({ data: { organizationId: orgB.id, seasonId: season.id, clubId: club.id, divisionId: division.id, status: SeasonClubStatus.ACTIVE } });
   const user = await tx.user.create({ data: { email: `privileged-proof-${Date.now()}-${Math.random().toString(36).slice(2, 6)}@example.test`, name: "Privileged Proof", role: "FAN" } });
   const draftEvent = await tx.draftEvent.create({ data: { organizationId: orgB.id, name: "Privileged Proof Event", publicTitle: "Privileged Proof Event", seasonId: season.id, status: DraftEventStatus.LIVE, operatingMode: DraftEventOperatingMode.LIVE, currentStage: DraftEventStage.MEN_SQUAD_ALLOCATION, displayToken: `privileged-proof-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, createdById: user.id } });
   const squad = await tx.draftSquad.create({ data: { organizationId: orgB.id, draftEventId: draftEvent.id, seasonId: season.id, divisionId: division.id, name: "Privileged Proof Squad", sequence: 1 } });
@@ -46,7 +46,7 @@ async function main() {
     return;
   }
 
-  const neonUltraSeasonClub = await prisma.seasonClub.findFirst({ orderBy: { createdAt: "asc" } });
+  const neonUltraSeasonClub = await prisma.seasonClub!.findFirst({ orderBy: { createdAt: "asc" } });
   const neonUltraDivision = await prisma.division.findFirst({ orderBy: { createdAt: "asc" } });
   const neonUltraDraftEvent = await prisma.draftEvent.findFirst({ orderBy: { createdAt: "asc" } });
   const neonUltraDraftSquad = await prisma.draftSquad.findFirst({ orderBy: { createdAt: "asc" } });
@@ -70,7 +70,7 @@ async function main() {
       constraintName: "DraftAllocation_organizationId_divisionId_fkey",
       run: async (tx) => {
         const f = await buildOrgBFixture(tx);
-        return tx.draftAllocation.create({ data: { organizationId: f.orgB.id, draftEventId: f.draftEvent.id, divisionId: neonUltraDivision.id, subjectType: AllocationSubjectType.SQUAD, draftSquadId: f.squad.id, seasonClubId: f.seasonClub.id, sequence: 1, createdById: f.userId } });
+        return tx.draftAllocation.create({ data: { organizationId: f.orgB.id, draftEventId: f.draftEvent.id, divisionId: neonUltraDivision.id, subjectType: AllocationSubjectType.SQUAD, draftSquadId: f.squad.id, seasonClubId: f.seasonClub!.id, sequence: 1, createdById: f.userId } });
       },
     });
   }
@@ -80,7 +80,7 @@ async function main() {
       constraintName: "DraftAllocation_organizationId_draftEventId_fkey",
       run: async (tx) => {
         const f = await buildOrgBFixture(tx);
-        return tx.draftAllocation.create({ data: { organizationId: f.orgB.id, draftEventId: neonUltraDraftEvent.id, divisionId: f.division.id, subjectType: AllocationSubjectType.SQUAD, draftSquadId: f.squad.id, seasonClubId: f.seasonClub.id, sequence: 1, createdById: f.userId } });
+        return tx.draftAllocation.create({ data: { organizationId: f.orgB.id, draftEventId: neonUltraDraftEvent.id, divisionId: f.division.id, subjectType: AllocationSubjectType.SQUAD, draftSquadId: f.squad.id, seasonClubId: f.seasonClub!.id, sequence: 1, createdById: f.userId } });
       },
     });
   }

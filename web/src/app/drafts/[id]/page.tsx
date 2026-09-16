@@ -63,7 +63,7 @@ export default async function DraftRoom({ params }: { params: Promise<{ id: stri
           status: { in: ["DRAFT_ELIGIBLE", "UNDRAFTED"] },
         },
       }),
-      tx.seasonClub.findMany({
+      tx.seasonClub!.findMany({
         include: { club: true, _count: { select: { players: true } } },
         orderBy: { club: { name: "asc" } },
         where: { divisionId: draft.divisionId, seasonId: draft.seasonId, status: "ACTIVE" },
@@ -192,7 +192,7 @@ export default async function DraftRoom({ params }: { params: Promise<{ id: stri
                     <div className="grid grid-cols-[70px_1fr_1fr]">
                       <b>#{pick.pickNumber}</b>
                       <span>{isRevealed ? `${pick.player.athlete.firstName} ${pick.player.athlete.lastName}` : pick.status === "CORRECTED" ? "(corrected)" : "On the clock..."}</span>
-                      <span className="text-zinc-400">{isRevealed ? `${pick.seasonClub.club.name} - R${pick.round}` : pick.status}</span>
+                      <span className="text-zinc-400">{isRevealed ? `${pick.seasonClub!.club.name} - R${pick.round}` : pick.status}</span>
                     </div>
                     {isRevealed && pick.status !== "CORRECTED" ? (
                       <form action={correctSecondaryDraftPickAction.bind(null, id, pick.id)} className="mt-2 grid gap-2 md:grid-cols-[1fr_auto]">

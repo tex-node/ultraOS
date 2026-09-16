@@ -14,7 +14,7 @@ async function main() {
     console.log("Corrected:", id);
   }
 
-  const officialCoach = await prisma.seasonClub.count({ where: { OR: [{ headCoachId: { not: null } }, { assistantCoachId: { not: null } }] } });
+  const officialCoach = await prisma.seasonClub!.count({ where: { OR: [{ headCoachId: { not: null } }, { assistantCoachId: { not: null } }] } });
   const officialPlayers = await prisma.player.count({ where: { seasonClubId: { not: null } } });
   console.log("Official coach assignments after correction (must be 0):", officialCoach);
   console.log("Official player assignments after correction (must be 0):", officialPlayers);

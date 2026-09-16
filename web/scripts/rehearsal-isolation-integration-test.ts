@@ -41,10 +41,10 @@ async function run() {
   });
   cleanup.push(() => prisma.club.delete({ where: { id: club.id } }));
 
-  const seasonClub = await prisma.seasonClub.create({
+  const seasonClub = await prisma.seasonClub!.create({
     data: { clubId: club.id, divisionId: division.id, seasonId: season.id },
   });
-  cleanup.push(() => prisma.seasonClub.delete({ where: { id: seasonClub.id } }));
+  cleanup.push(() => prisma.seasonClub!.delete({ where: { id: seasonClub.id } }));
 
   const user = await prisma.user.create({
     data: { email: `${TAG.toLowerCase()}@example.invalid`, name: TAG, passwordHash: randomUUID(), recordOrigin: "REHEARSAL" },

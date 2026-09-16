@@ -34,7 +34,7 @@ async function main() {
   console.log(`PRE_REHEARSAL_STANDINGS_WON=${preStandingsSum._sum.won}`);
   console.log(`PRE_REHEARSAL_FINAL_GAMES=${preFinalGames}`);
 
-  const clubs = await prisma.seasonClub.findMany({
+  const clubs = await prisma.seasonClub!.findMany({
     where: { seasonId: SEASON_ID },
     include: { players: { include: { athlete: true }, take: 10 } },
     take: 2,

@@ -38,7 +38,7 @@ async function main() {
     round++;
   }
 
-  const rosters = await prisma.seasonClub.findMany({
+  const rosters = await prisma.seasonClub!.findMany({
     where: { id: { in: picks.map((p) => p.seasonClubId) } },
     include: { club: true, players: true },
   });

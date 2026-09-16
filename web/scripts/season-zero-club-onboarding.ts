@@ -263,7 +263,7 @@ async function main() {
       },
     });
 
-    const seasonClub = await prisma.seasonClub.upsert({
+    const seasonClub = await prisma.seasonClub!.upsert({
       where: {
         seasonId_clubId_divisionId: {
           clubId: club.id,
@@ -293,11 +293,11 @@ async function main() {
   const counts = {
     clubs: await prisma.club.count({ where: { sportId: scope.sportId } }),
     clubLogos: await prisma.mediaAsset.count({ where: { purpose: MediaAssetPurpose.CLUB_LOGO, status: "READY" } }),
-    menSeasonClubs: await prisma.seasonClub.count({
+    menSeasonClubs: await prisma.seasonClub!.count({
       where: { seasonId: scope.seasonId, division: { name: "Men's Division" }, status: "ACTIVE" },
     }),
-    seasonClubs: await prisma.seasonClub.count({ where: { seasonId: scope.seasonId, status: "ACTIVE" } }),
-    womenSeasonClubs: await prisma.seasonClub.count({
+    seasonClubs: await prisma.seasonClub!.count({ where: { seasonId: scope.seasonId, status: "ACTIVE" } }),
+    womenSeasonClubs: await prisma.seasonClub!.count({
       where: { seasonId: scope.seasonId, division: { name: "Women's Division" }, status: "ACTIVE" },
     }),
   };

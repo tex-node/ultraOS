@@ -73,7 +73,7 @@ async function main() {
       const division = await tx.division.create({ data: { organizationId: org.id, competitionId: competition.id, name: `${tag} Division`, slug: `${tag.toLowerCase()}-division-${stamp}`, isActive: true } });
       const season = await tx.season.create({ data: { organizationId: org.id, competitionId: competition.id, name: `${tag} Season`, startDate: new Date("2026-01-01"), endDate: new Date("2026-12-31"), status: SeasonStatus.ACTIVE } });
       const club = await tx.club.create({ data: { organizationId: org.id, sportId: sport.id, name: "Test Club", shortName: `T${tag}C`, status: "ACTIVE", brandingStatus: "BRANDING_INCOMPLETE" } });
-      const seasonClub = await tx.seasonClub.create({ data: { organizationId: org.id, seasonId: season.id, clubId: club.id, divisionId: division.id, status: "ACTIVE" } });
+      const seasonClub = await tx.seasonClub!.create({ data: { organizationId: org.id, seasonId: season.id, clubId: club.id, divisionId: division.id, status: "ACTIVE" } });
       const coach = await tx.staff.create({ data: { organizationId: org.id, name: "Test Coach", role: StaffRole.HEAD_COACH, ultraStaffId: `T${tag}S-${stamp}` } });
       const athlete = await tx.athlete.create({
         data: {
@@ -101,22 +101,22 @@ async function main() {
   async function assignSeasonClubCoachAs(orgId: string, seasonClubId: string, staffId: string) {
     return withOrganizationContext(orgId, async (tx) => {
       const [seasonClub, staff] = await Promise.all([
-        tx.seasonClub.findUniqueOrThrow({ where: { id: seasonClubId }, select: { id: true, divisionId: true, seasonId: true } }),
+        tx.seasonClub!.findUniqueOrThrow({ where: { id: seasonClubId }, select: { id: true, divisionId: true, seasonId: true } }),
         tx.staff.findUniqueOrThrow({ where: { id: staffId }, select: { id: true, role: true } }),
       ]);
-      return tx.seasonClub.update({ where: { id: seasonClub.id }, data: { headCoachId: staff.id } });
+      return tx.seasonClub!.update({ where: { id: seasonClub.id }, data: { headCoachId: staff.id } });
     });
   }
-  const orgAAssign = await assignSeasonClubCoachAs(a.org.id, a.seasonClub.id, a.coach.id);
+  const orgAAssign = await assignSeasonClubCoachAs(a.org.id, a.seasonClub!.id, a.coach.id);
   record("COACH", "Org A assigns its own coach to its own SeasonClub", "PASS", orgAAssign.headCoachId === a.coach.id, JSON.stringify({ headCoachId: orgAAssign.headCoachId === a.coach.id }));
   try {
-    await assignSeasonClubCoachAs(b.org.id, a.seasonClub.id, a.coach.id);
+    await assignSeasonClubCoachAs(b.org.id, a.seasonClub!.id, a.coach.id);
     record("COACH", "Org B assigns Org A's coach to Org A's SeasonClub (forged cross-tenant assignment)", "denied (not found)", false, "unexpectedly succeeded");
   } catch (error) {
     record("COACH", "Org B assigns Org A's coach to Org A's SeasonClub (forged cross-tenant assignment)", "denied (not found)", isNotFound(error), isNotFound(error) ? "P2025, as expected" : String(error).slice(0, 150));
   }
   try {
-    await assignSeasonClubCoachAs(b.org.id, b.seasonClub.id, a.coach.id);
+    await assignSeasonClubCoachAs(b.org.id, b.seasonClub!.id, a.coach.id);
     record("COACH", "Org B assigns Org A's coach to Org B's own SeasonClub", "denied (not found)", false, "unexpectedly succeeded");
   } catch (error) {
     record("COACH", "Org B assigns Org A's coach to Org B's own SeasonClub", "denied (not found)", isNotFound(error), isNotFound(error) ? "P2025, as expected" : String(error).slice(0, 150));
@@ -161,14 +161,14 @@ async function main() {
   async function createTrainingSessionAs(orgId: string, seasonId: string, seasonClubId: string) {
     return withOrganizationContext(orgId, async (tx) => {
       await tx.season.findUniqueOrThrow({ where: { id: seasonId }, select: { id: true } });
-      await tx.seasonClub.findUniqueOrThrow({ where: { id: seasonClubId }, select: { id: true } });
+      await tx.seasonClub!.findUniqueOrThrow({ where: { id: seasonClubId }, select: { id: true } });
       return tx.trainingSession.create({ data: { organizationId: orgId, createdById: actor.id, title: "Test Session", sessionType: "TEAM_PRACTICE", occurredAt: new Date(), seasonId, seasonClubId } });
     });
   }
-  const trainingA = await createTrainingSessionAs(a.org.id, a.season.id, a.seasonClub.id);
+  const trainingA = await createTrainingSessionAs(a.org.id, a.season.id, a.seasonClub!.id);
   record("TRN", "Org A creates its own training session", "PASS", Boolean(trainingA.id), JSON.stringify({ id: Boolean(trainingA.id) }));
   try {
-    await createTrainingSessionAs(b.org.id, a.season.id, a.seasonClub.id);
+    await createTrainingSessionAs(b.org.id, a.season.id, a.seasonClub!.id);
     record("TRN", "Org B creates a training session using Org A's seasonId/seasonClubId", "denied (not found)", false, "unexpectedly succeeded");
   } catch (error) {
     record("TRN", "Org B creates a training session using Org A's seasonId/seasonClubId", "denied (not found)", isNotFound(error), isNotFound(error) ? "P2025, as expected" : String(error).slice(0, 150));
@@ -308,11 +308,11 @@ async function main() {
   record("PLR", "Org A's athlete state after Org B's failed update", "unchanged (still 'Test')", orgAAthleteAfterAttack.firstName === "Test", orgAAthleteAfterAttack.firstName);
 
   async function validateSeasonClubAs(orgId: string, seasonId: string, seasonClubId: string) {
-    return withOrganizationContext(orgId, (tx) => tx.seasonClub.findFirst({ where: { id: seasonClubId, seasonId }, select: { id: true } }));
+    return withOrganizationContext(orgId, (tx) => tx.seasonClub!.findFirst({ where: { id: seasonClubId, seasonId }, select: { id: true } }));
   }
-  const orgAOwnSeasonClubValid = await validateSeasonClubAs(a.org.id, a.season.id, a.seasonClub.id);
+  const orgAOwnSeasonClubValid = await validateSeasonClubAs(a.org.id, a.season.id, a.seasonClub!.id);
   record("PLR", "Org A's own season+seasonClub combination validates", "valid", Boolean(orgAOwnSeasonClubValid), JSON.stringify({ valid: Boolean(orgAOwnSeasonClubValid) }));
-  const orgBUsingOrgASeasonClub = await validateSeasonClubAs(b.org.id, a.season.id, a.seasonClub.id);
+  const orgBUsingOrgASeasonClub = await validateSeasonClubAs(b.org.id, a.season.id, a.seasonClub!.id);
   record("PLR", "Org B attempts createPlayer with Org A's seasonId+seasonClubId", "invalid (null, RLS-invisible)", orgBUsingOrgASeasonClub === null, JSON.stringify(orgBUsingOrgASeasonClub));
 
   console.log("\n========== PLAYERS/ATHLETE: photo-import ultraAthleteId match scoping (players/actions.ts) ==========");
@@ -335,18 +335,18 @@ async function main() {
   async function createPlayerAs(orgId: string, athleteId: string, seasonId: string, seasonClubId: string) {
     return withOrganizationContext(orgId, async (tx) => {
       await tx.athlete.findUniqueOrThrow({ where: { id: athleteId }, select: { id: true } });
-      const validScope = await tx.seasonClub.findFirst({ where: { id: seasonClubId, seasonId }, select: { id: true } });
+      const validScope = await tx.seasonClub!.findFirst({ where: { id: seasonClubId, seasonId }, select: { id: true } });
       if (!validScope) throw new Error("INVALID_SCOPE");
       return tx.player.create({ data: { organizationId: orgId, athleteId, seasonId, seasonClubId, position: "Forward", heightCm: 200, weightKg: 100, status: PlayerStatus.DRAFT_ELIGIBLE, draftSelectionGroup: DraftSelectionGroup.MAIN_DRAFT } });
     });
   }
   try {
-    await createPlayerAs(b.org.id, a.athlete.id, b.season.id, b.seasonClub.id);
+    await createPlayerAs(b.org.id, a.athlete.id, b.season.id, b.seasonClub!.id);
     record("REL", "Org B's createPlayer (fixed) with a tampered hidden athleteId naming Athlete A", "denied (not found)", false, "unexpectedly succeeded");
   } catch (error) {
     record("REL", "Org B's createPlayer (fixed) with a tampered hidden athleteId naming Athlete A", "denied (not found)", isNotFound(error), isNotFound(error) ? "P2025, as expected" : String(error).slice(0, 150));
   }
-  const legitimatePlayerB = await createPlayerAs(b.org.id, newAthleteB.id, b.season.id, b.seasonClub.id);
+  const legitimatePlayerB = await createPlayerAs(b.org.id, newAthleteB.id, b.season.id, b.seasonClub!.id);
   record("REL", "Org B's createPlayer (fixed) with its own real athleteId", "PASS", legitimatePlayerB.organizationId === b.org.id, JSON.stringify({ organizationId: legitimatePlayerB.organizationId === b.org.id }));
 
   // ============================== CLEANUP ==============================
@@ -360,7 +360,7 @@ async function main() {
       await tx.athlete.deleteMany({ where: { organizationId: org.org.id } });
       await tx.adminOfflineIntake.deleteMany({ where: { organizationId: org.org.id } });
       await tx.application.deleteMany({ where: { organizationId: org.org.id } });
-      await tx.seasonClub.deleteMany({ where: { id: org.seasonClub.id } });
+      await tx.seasonClub!.deleteMany({ where: { id: org.seasonClub!.id } });
       await tx.staff.deleteMany({ where: { organizationId: org.org.id } });
       await tx.club.deleteMany({ where: { id: org.club.id } });
       await tx.season.deleteMany({ where: { id: org.season.id } });
