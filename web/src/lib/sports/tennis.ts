@@ -28,6 +28,7 @@ export const TENNIS: SportDefinition = {
     drawsAllowed: false,
   },
   events: [
+    { key: "POINT", label: "Point", category: "SCORING" },
     { key: "ACE", label: "Ace", category: "SERVE", producesMetrics: ["aces"] },
     { key: "DOUBLE_FAULT", label: "Double fault", category: "SERVE", producesMetrics: ["doubleFaults"] },
     { key: "WINNER", label: "Winner", category: "SCORING", producesMetrics: ["winners"] },

@@ -7,8 +7,9 @@
 import type { SportDefinition } from "./types";
 import { applyDelivery, battingSide, chaseTarget, inningsConfig, isInningsComplete, type Innings } from "./innings-scoring";
 import { evaluateSets, setScoringConfig } from "./set-scoring";
+import { awardPoint, evaluateTennis, isSetComplete, tennisConfig } from "./tennis-scoring";
 
-export type ScoringModuleKind = "SETS" | "GOALS" | "RUNS";
+export type ScoringModuleKind = "SETS" | "GOALS" | "RUNS" | "TENNIS";
 
 export type ScoringAction = { typeKey: string; label: string; runs?: number };
 
@@ -24,6 +25,9 @@ export type ScoringModuleInput = {
   seasonClubId: string;
   typeKey?: string;
   runs?: number;
+  // Tennis: the current game's point counts (deuce/advantage tracked by the tennis rules). Omitted
+  // for other modules.
+  tennisPoints?: { home: number; away: number };
 };
 
 export type ScoringModuleResult =
@@ -40,6 +44,8 @@ export type ScoringModuleResult =
       finalizeWinner: "HOME" | "AWAY" | null;
       nextPeriod?: number;
       note?: string;
+      // Tennis: the game's point counts after this delivery.
+      tennisPoints?: { home: number; away: number };
     };
 
 export interface SportScoringModule {
@@ -241,7 +247,57 @@ const cricketModule: SportScoringModule = {
   },
 };
 
-export const SCORING_MODULES: SportScoringModule[] = [volleyballModule, footballModule, cricketModule];
+const tennisModule: SportScoringModule = {
+  key: "TENNIS_SETS",
+  kind: "TENNIS",
+  supports: (definition) => tennisConfig(definition) !== null,
+  actions: () => [{ typeKey: "POINT", label: "Point" }],
+  apply: (definition, input) => {
+    const config = tennisConfig(definition);
+    if (!config) return missingSport();
+    const home = input.homeSeasonClubId;
+    const away = input.awaySeasonClubId;
+    if (input.seasonClubId !== home && input.seasonClubId !== away) return { ok: false, reason: "INVALID_TEAM" };
+    const side: "HOME" | "AWAY" = input.seasonClubId === home ? "HOME" : "AWAY";
+
+    const currentSet = Math.min(input.currentPeriod, config.setCount);
+    const row = input.periodScores.find((score) => score.period === currentSet);
+    let games = { home: row?.home ?? 0, away: row?.away ?? 0 };
+    let tennisPoints = input.tennisPoints ?? { home: 0, away: 0 };
+
+    const awarded = awardPoint(tennisPoints, side);
+    tennisPoints = awarded.points;
+    if (awarded.gameWon) {
+      games = { home: games.home + (side === "HOME" ? 1 : 0), away: games.away + (side === "AWAY" ? 1 : 0) };
+      tennisPoints = { home: 0, away: 0 };
+    }
+    const setComplete = awarded.gameWon && isSetComplete(config, games);
+
+    const allSets = [
+      ...input.periodScores.filter((score) => score.period !== currentSet),
+      { period: currentSet, home: games.home, away: games.away },
+    ];
+    const summary = evaluateTennis(config, allSets);
+    const finalize = summary.matchWinner !== null;
+
+    return {
+      ok: true,
+      homeScore: summary.homeSetsWon,
+      awayScore: summary.awaySetsWon,
+      period: { period: currentSet, home: games.home, away: games.away },
+      points: null,
+      typeKey: input.typeKey ?? "POINT",
+      eventKind: "NOTE",
+      finalize,
+      finalizeWinner: summary.matchWinner,
+      nextPeriod: setComplete && !finalize ? Math.min(config.setCount, currentSet + 1) : undefined,
+      tennisPoints,
+      note: awarded.gameWon ? "Game won" : undefined,
+    };
+  },
+};
+
+export const SCORING_MODULES: SportScoringModule[] = [tennisModule, volleyballModule, footballModule, cricketModule];
 
 export function resolveScoringModule(definition: SportDefinition): SportScoringModule | null {
   return SCORING_MODULES.find((candidate) => candidate.supports(definition)) ?? null;

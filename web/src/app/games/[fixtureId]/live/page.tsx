@@ -44,6 +44,8 @@ export default async function Live({ params, searchParams }: { params: Promise<{
     include: {
       homeSeasonClub: { include: { club: true, players: { include: { athlete: true } } } },
       awaySeasonClub: { include: { club: true, players: { include: { athlete: true } } } },
+      homeEntrant: { select: { id: true, name: true } },
+      awayEntrant: { select: { id: true, name: true } },
       game: {
         include: {
           events: {
@@ -68,7 +70,20 @@ export default async function Live({ params, searchParams }: { params: Promise<{
   const capabilities = new Set(definition?.capabilities ?? []);
   const hasShotClock = capabilities.has("SHOT_CLOCK");
   const isBasketball = definition?.key === "BASKETBALL";
-  const battingTeamId = game && game.currentPeriod <= 1 ? fixture.homeSeasonClub!.id : fixture.awaySeasonClub!.id;
+  // A fixture side is a SeasonClub (team sports) or an Entrant (individual sports).
+  const homeSide = {
+    id: fixture.homeSeasonClub?.id ?? fixture.homeEntrant?.id ?? "",
+    name: fixture.homeSeasonClub?.club.name ?? fixture.homeEntrant?.name ?? "TBD",
+    label: fixture.homeSeasonClub?.club.shortName ?? fixture.homeEntrant?.name ?? "TBD",
+    players: fixture.homeSeasonClub?.players ?? [],
+  };
+  const awaySide = {
+    id: fixture.awaySeasonClub?.id ?? fixture.awayEntrant?.id ?? "",
+    name: fixture.awaySeasonClub?.club.name ?? fixture.awayEntrant?.name ?? "TBD",
+    label: fixture.awaySeasonClub?.club.shortName ?? fixture.awayEntrant?.name ?? "TBD",
+    players: fixture.awaySeasonClub?.players ?? [],
+  };
+  const battingTeamId = game && game.currentPeriod <= 1 ? homeSide.id : awaySide.id;
 
   // Cricket innings summary for the console (overs bowled, wickets lost, chase target).
   const inningsConfigForSport = definition ? inningsConfig(definition) : null;
@@ -134,7 +149,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             </div>
           ) : null}
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-center">
-            <TeamScore name={fixture.homeSeasonClub!.club.shortName} score={fixture.homeScore} />
+            <TeamScore name={homeSide.label} score={fixture.homeScore} />
             <div>
               <p className="text-xs text-zinc-500">{game ? periodLabel(game.currentPeriod, game.status) : "HALF 1"}</p>
               <p className="mt-1 font-mono text-3xl font-bold sm:text-4xl">
@@ -142,7 +157,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
               </p>
               <p className="mt-1 text-xs text-emerald-400">{game?.status ?? "NOT STARTED"}</p>
             </div>
-            <TeamScore name={fixture.awaySeasonClub!.club.shortName} score={fixture.awayScore} />
+            <TeamScore name={awaySide.label} score={fixture.awayScore} />
           </div>
 
           {hasShotClock && game && game.status !== "FINAL" ? (
@@ -184,11 +199,11 @@ export default async function Live({ params, searchParams }: { params: Promise<{
           <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
             <h3 className="font-semibold">Mandatory second-half substitution check</h3>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
-              {[fixture.homeSeasonClub!, fixture.awaySeasonClub!].map((team) => {
+              {[homeSide, awaySide].map((team) => {
                 const confirmed = confirmedClubIds.has(team.id);
                 return (
                   <div key={team.id} className="flex items-center justify-between rounded-lg border border-white/10 p-3">
-                    <span>{team.club.name}</span>
+                    <span>{team.name}</span>
                     {confirmed ? (
                       <span className="text-xs font-semibold text-emerald-400">CONFIRMED</span>
                     ) : (
@@ -205,9 +220,9 @@ export default async function Live({ params, searchParams }: { params: Promise<{
 
         {game && game.status !== "FINAL" ? (
           <div className="mt-6 grid gap-6 lg:grid-cols-2">
-            {[fixture.homeSeasonClub!, fixture.awaySeasonClub!].map((team) => (
+            {[homeSide, awaySide].map((team) => (
               <section key={team.id} className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
-                <h3 className="font-semibold">{team.club.name} scoring</h3>
+                <h3 className="font-semibold">{team.name} scoring</h3>
                 <form action={recordScore.bind(null, game.id, fixtureId)} className="mt-4">
                   <input type="hidden" name="seasonClubId" value={team.id} />
                   <select name="playerId" className="min-h-[48px] w-full rounded-lg bg-white/[.05] p-3">
@@ -253,7 +268,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
                   <p className="col-span-2 -mb-1 text-xs text-zinc-500">If recording a foul (optional - leave blank when it isn&apos;t clearly one-sided):</p>
                   <select name="fouledPlayerId" className="min-h-[48px] rounded-lg bg-white/[.05] p-3">
                     <option value="">Fouled player (unknown/none)</option>
-                    {[...fixture.homeSeasonClub!.players, ...fixture.awaySeasonClub!.players].map((player) => <option key={player.id} value={player.id}>{player.athlete.firstName} {player.athlete.lastName}</option>)}
+                    {[...homeSide.players, ...awaySide.players].map((player) => <option key={player.id} value={player.id}>{player.athlete.firstName} {player.athlete.lastName}</option>)}
                   </select>
                   <select name="foulType" className="min-h-[48px] rounded-lg bg-white/[.05] p-3">
                     <option value="">Foul type (unspecified)</option>
@@ -271,14 +286,14 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             definition={definition}
             teams={[
               {
-                id: fixture.homeSeasonClub!.id,
-                name: fixture.homeSeasonClub!.club.name,
-                players: fixture.homeSeasonClub!.players.map((player) => ({ id: player.id, name: `${player.athlete.firstName} ${player.athlete.lastName}` })),
+                id: homeSide.id,
+                name: homeSide.name,
+                players: homeSide.players.map((player) => ({ id: player.id, name: `${player.athlete.firstName} ${player.athlete.lastName}` })),
               },
               {
-                id: fixture.awaySeasonClub!.id,
-                name: fixture.awaySeasonClub!.club.name,
-                players: fixture.awaySeasonClub!.players.map((player) => ({ id: player.id, name: `${player.athlete.firstName} ${player.athlete.lastName}` })),
+                id: awaySide.id,
+                name: awaySide.name,
+                players: awaySide.players.map((player) => ({ id: player.id, name: `${player.athlete.firstName} ${player.athlete.lastName}` })),
               },
             ]}
           />
@@ -291,8 +306,8 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             battingTeamId={battingTeamId}
             innings={cricketInnings ?? undefined}
             teams={[
-              { id: fixture.homeSeasonClub!.id, name: fixture.homeSeasonClub!.club.name },
-              { id: fixture.awaySeasonClub!.id, name: fixture.awaySeasonClub!.club.name },
+              { id: homeSide.id, name: homeSide.name },
+              { id: awaySide.id, name: awaySide.name },
             ]}
           />
         ) : null}

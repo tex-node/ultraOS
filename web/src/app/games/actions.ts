@@ -23,6 +23,7 @@ import { getSportDefinition } from "@/lib/sports/registry";
 import { isLegalDelivery } from "@/lib/sports/innings-scoring";
 import { matchOutcome } from "@/lib/sports/match-result";
 import { resolveScoringModule } from "@/lib/sports/scoring-modules";
+import { awardPoint } from "@/lib/sports/tennis-scoring";
 import { hasBlockingIssue, runConstraints } from "@/lib/sports/validators";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -1317,7 +1318,10 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
       include: {
         fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } },
         periodScores: { orderBy: { period: "asc" } },
-        events: { select: { period: true, typeKey: true } },
+        events: {
+          select: { period: true, typeKey: true, seasonClubId: true, entrantId: true, sequenceNumber: true },
+          orderBy: { sequenceNumber: "asc" },
+        },
       },
     });
     assertGameIsMutable(game.status, game.fixture.status);
@@ -1327,6 +1331,13 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
     if (!definition) throw new Error("UNKNOWN_SPORT");
     const scoringModule = resolveScoringModule(definition);
     if (!scoringModule) throw new Error("NO_SCORING_MODULE");
+
+    // The captured party is a SeasonClub (team sports) or an Entrant (individual sports).
+    const homePartyId = game.fixture.homeSeasonClubId ?? game.fixture.homeEntrantId;
+    const awayPartyId = game.fixture.awaySeasonClubId ?? game.fixture.awayEntrantId;
+    if (!homePartyId || !awayPartyId) throw new Error("FIXTURE_SIDES_MISSING");
+    const capturedIsEntrant =
+      input.seasonClubId === game.fixture.homeEntrantId || input.seasonClubId === game.fixture.awayEntrantId;
 
     // Per-innings wickets/balls (cricket) derived from the ledger.
     const periodWickets: Record<number, number> = {};
@@ -1339,9 +1350,25 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
       }
     }
 
+    // Tennis: replay this set's point events to recover the current game's point counts.
+    let tennisPoints: { home: number; away: number } | undefined;
+    if (scoringModule.kind === "TENNIS") {
+      tennisPoints = { home: 0, away: 0 };
+      for (const event of game.events) {
+        if (event.period !== game.currentPeriod || event.typeKey !== "POINT") continue;
+        const side =
+          (event.entrantId && event.entrantId === game.fixture.homeEntrantId) ||
+          (event.seasonClubId && event.seasonClubId === game.fixture.homeSeasonClubId)
+            ? "HOME"
+            : "AWAY";
+        const awarded = awardPoint(tennisPoints, side);
+        tennisPoints = awarded.gameWon ? { home: 0, away: 0 } : awarded.points;
+      }
+    }
+
     const result = scoringModule.apply(definition, {
-      homeSeasonClubId: game.fixture.homeSeasonClubId!,
-      awaySeasonClubId: game.fixture.awaySeasonClubId!,
+      homeSeasonClubId: homePartyId,
+      awaySeasonClubId: awayPartyId,
       currentPeriod: game.currentPeriod,
       homeScore: game.fixture.homeScore,
       awayScore: game.fixture.awayScore,
@@ -1351,6 +1378,7 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
       seasonClubId: input.seasonClubId,
       typeKey: input.typeKey,
       runs: input.runs,
+      tennisPoints,
     });
     if (!result.ok) throw new Error(result.reason);
 
@@ -1369,7 +1397,7 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
       });
     }
 
-    const player = input.playerId
+    const player = !capturedIsEntrant && input.playerId
       ? await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } })
       : null;
 
@@ -1379,12 +1407,13 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
       data: {
         organizationId,
         gameId,
-        seasonClubId: input.seasonClubId,
+        seasonClubId: capturedIsEntrant ? null : input.seasonClubId,
+        entrantId: capturedIsEntrant ? input.seasonClubId : null,
         playerId: player?.id ?? null,
         eventType: result.eventKind,
         typeKey: result.typeKey,
         points: result.points,
-        data: { sportKey: definition.key, module: scoringModule.key, note: result.note },
+        data: { sportKey: definition.key, module: scoringModule.key, note: result.note, tennisPoints: result.tennisPoints },
         period: result.period?.period ?? game.currentPeriod,
         clockSeconds: remainingClockSeconds(game),
         description:
@@ -1407,11 +1436,17 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
     if (result.finalize) {
       const winnerSeasonClubId =
         result.finalizeWinner === "HOME"
-          ? game.fixture.homeSeasonClubId!
+          ? game.fixture.homeSeasonClubId
           : result.finalizeWinner === "AWAY"
-            ? game.fixture.awaySeasonClubId!
+            ? game.fixture.awaySeasonClubId
             : null;
-      await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId } });
+      const winnerEntrantId =
+        result.finalizeWinner === "HOME"
+          ? game.fixture.homeEntrantId
+          : result.finalizeWinner === "AWAY"
+            ? game.fixture.awayEntrantId
+            : null;
+      await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId, winnerEntrantId } });
       await tx.game.update({
         where: { id: gameId },
         data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null, isUltraTimeActive: false },

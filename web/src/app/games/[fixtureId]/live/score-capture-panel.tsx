@@ -26,7 +26,14 @@ export function ScoreCapturePanel({
   const scoringModule = resolveScoringModule(definition);
   if (!scoringModule) return null;
   const actions = scoringModule.actions(definition);
-  const title = scoringModule.kind === "SETS" ? "Set scoring" : scoringModule.kind === "GOALS" ? "Goal scoring" : "Run scoring";
+  const title =
+    scoringModule.kind === "SETS"
+      ? "Set scoring"
+      : scoringModule.kind === "GOALS"
+        ? "Goal scoring"
+        : scoringModule.kind === "TENNIS"
+          ? "Point scoring"
+          : "Run scoring";
 
   const actionButtons = (teamId: string) => (
     <div className="mt-3 flex flex-wrap gap-2">
