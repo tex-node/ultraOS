@@ -7,6 +7,7 @@ import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
 import { generateFixtures, generateKnockout, type GeneratedFixture } from "@/lib/sports/fixtures";
 import { sideSeasonClubId } from "@/lib/sports/fixture-sides";
+import { allocateSlot } from "@/lib/sports/schedule-slots";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
 export type ScheduleFormState = { error?: string; created?: number; conflicts?: number; detail?: string };
@@ -17,12 +18,15 @@ const schema = z.object({
   venueId: z.string().min(1, "Choose a venue."),
   startDate: z.string().min(1, "Choose a start date."),
   intervalDays: z.coerce.number().int().min(0).max(30),
+  slotHours: z.coerce.number().int().min(1).max(12).optional(),
   doubleRound: z.string().optional(),
 });
 
-// Generates a single round-robin schedule for a season division from its active SeasonClubs.
-// Detects venue-slot and team double-booking clashes against existing fixtures and skips those
-// slots rather than overwriting. Nothing is recalculated silently - the caller gets the counts.
+// Generates a schedule for a season division from its active SeasonClubs. Formats: round-robin league,
+// single-elimination knockout (with byes) or group stage. Within a round, matches take consecutive
+// time slots at the chosen venue, so a venue can host several matches on the same day. Fixtures that
+// cannot be placed after stepping through the search window are counted as conflicts, never silently
+// overwritten. Nothing is recalculated silently - the caller gets the counts.
 export async function generateSchedule(
   _previous: ScheduleFormState,
   formData: FormData,
@@ -32,6 +36,8 @@ export async function generateSchedule(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
   const input = parsed.data;
   const doubleRound = input.doubleRound === "on" || input.doubleRound === "true";
+  const slotHours = input.slotHours ?? 2;
+  const slotMs = slotHours * 3_600_000;
 
   const start = new Date(`${input.startDate}T00:00:00.000Z`);
   if (Number.isNaN(start.getTime())) return { error: "Invalid start date." };
@@ -91,15 +97,27 @@ export async function generateSchedule(
     let created = 0;
     let conflicts = 0;
     for (const pair of pairs) {
-      const scheduledAt = new Date(start.getTime() + (pair.round - 1) * input.intervalDays * 86_400_000);
-      const iso = scheduledAt.toISOString();
-      const venueKey = `${venue.id}|${iso}`;
-      const homeKey = `${pair.homeEntrantId}|${iso}`;
-      const awayKey = `${pair.awayEntrantId}|${iso}`;
-      if (venueSlots.has(venueKey) || teamSlots.has(homeKey) || teamSlots.has(awayKey)) {
+      // All matches in a round start from the same day; each takes the first free slot at or after it,
+      // stepping forward by the slot length so several matches can share one venue on the same day.
+      const roundBase = new Date(start.getTime() + (pair.round - 1) * input.intervalDays * 86_400_000);
+      const allocation = allocateSlot({
+        base: roundBase,
+        stepMs: slotMs,
+        isTaken: (candidate) => {
+          const candidateIso = candidate.toISOString();
+          return (
+            venueSlots.has(`${venue.id}|${candidateIso}`) ||
+            teamSlots.has(`${pair.homeEntrantId}|${candidateIso}`) ||
+            teamSlots.has(`${pair.awayEntrantId}|${candidateIso}`)
+          );
+        },
+      });
+      if (allocation.conflict) {
         conflicts += 1;
         continue;
       }
+      const scheduledAt = allocation.scheduledAt;
+      const iso = scheduledAt.toISOString();
       await tx.fixture.create({
         data: {
           organizationId,
@@ -117,9 +135,9 @@ export async function generateSchedule(
           groupLabel: pair.group ?? null,
         },
       });
-      venueSlots.add(venueKey);
-      teamSlots.add(homeKey);
-      teamSlots.add(awayKey);
+      venueSlots.add(`${venue.id}|${iso}`);
+      teamSlots.add(`${pair.homeEntrantId}|${iso}`);
+      teamSlots.add(`${pair.awayEntrantId}|${iso}`);
       created += 1;
     }
 

@@ -53,6 +53,10 @@ export function GenerateScheduleForm({
         Days between rounds
         <input name="intervalDays" type="number" min="0" max="30" defaultValue={7} className={inputClass} />
       </label>
+      <label className={labelClass}>
+        Slot length (hours)
+        <input name="slotHours" type="number" min="1" max="12" defaultValue={2} className={inputClass} />
+      </label>
       <label className="flex items-center gap-2 text-sm text-zinc-300">
         <input type="checkbox" name="doubleRound" /> Double round-robin (home &amp; away)
       </label>
@@ -63,7 +67,7 @@ export function GenerateScheduleForm({
       {done ? (
         <p className="sm:col-span-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
           {state.created} fixture{state.created === 1 ? "" : "s"} created
-          {state.conflicts ? ` · ${state.conflicts} slot${state.conflicts === 1 ? "" : "s"} skipped (venue or team clash)` : ""}.
+          {state.conflicts ? ` · ${state.conflicts} fixture${state.conflicts === 1 ? "" : "s"} could not be placed (no free slot)` : ""}.
         </p>
       ) : null}
 
