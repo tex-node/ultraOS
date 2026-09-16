@@ -332,7 +332,7 @@ export async function confirmMandatorySubstitution(gameId: string, fixtureId: st
   const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
-    if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(seasonClubId)) {
+    if (![game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!].includes(seasonClubId)) {
       throw new Error("INVALID_TEAM");
     }
     await writeAuditLog(tx, {
@@ -380,8 +380,8 @@ export async function recordScore(
     }
     if (
       ![
-        game.fixture.homeSeasonClubId,
-        game.fixture.awaySeasonClubId,
+        game.fixture.homeSeasonClubId!,
+        game.fixture.awaySeasonClubId!,
       ].includes(input.seasonClubId)
     ) {
       throw new Error("INVALID_TEAM");
@@ -412,7 +412,7 @@ export async function recordScore(
     if (!shot.valid) throw new Error(shot.error);
     const { basePointValue, multiplier, pointsAwarded, isUltraTime: ultraTime } = shot;
 
-    const isHome = input.seasonClubId === game.fixture.homeSeasonClubId;
+    const isHome = input.seasonClubId === game.fixture.homeSeasonClubId!;
     const currentScore = isHome
       ? game.fixture.homeScore
       : game.fixture.awayScore;
@@ -470,7 +470,7 @@ export async function recordScore(
       0,
       nextScore,
     );
-    const opposingSeasonClubId = isHome ? game.fixture.awaySeasonClubId : game.fixture.homeSeasonClubId;
+    const opposingSeasonClubId = isHome ? game.fixture.awaySeasonClubId! : game.fixture.homeSeasonClubId!;
     if (ultraTime && actualPoints !== 0) {
       await applyTeamShotStatDeltas(
         tx,
@@ -534,7 +534,7 @@ export async function voidScoreEventAction(
     if (event.status !== "ACTIVE") throw new Error("EVENT_NOT_ACTIVE");
     const eventPoints = event.points ?? 0;
 
-    const isHome = event.seasonClubId === game.fixture.homeSeasonClubId;
+    const isHome = event.seasonClubId === game.fixture.homeSeasonClubId!;
     const currentScore = isHome ? game.fixture.homeScore : game.fixture.awayScore;
     const newScore = Math.max(0, currentScore - eventPoints);
 
@@ -566,7 +566,7 @@ export async function voidScoreEventAction(
       newScore,
     );
     if (event.isUltraTime && eventPoints !== 0) {
-      const opposingSeasonClubId = isHome ? game.fixture.awaySeasonClubId : game.fixture.homeSeasonClubId;
+      const opposingSeasonClubId = isHome ? game.fixture.awaySeasonClubId! : game.fixture.homeSeasonClubId!;
       await applyTeamShotStatDeltas(
         tx,
         organizationId,
@@ -644,7 +644,7 @@ export async function correctScoreEventAction(
     if (!shot.valid) throw new Error(shot.error);
 
     const eventPoints = event.points ?? 0;
-    const isHome = event.seasonClubId === game.fixture.homeSeasonClubId;
+    const isHome = event.seasonClubId === game.fixture.homeSeasonClubId!;
     const currentScore = isHome ? game.fixture.homeScore : game.fixture.awayScore;
     const baseScore = Math.max(0, currentScore - eventPoints);
     const newScore = Math.max(0, baseScore + shot.pointsAwarded);
@@ -718,7 +718,7 @@ export async function correctScoreEventAction(
     );
     const netOpponentUltraPointsAgainst = (event.isUltraTime ? -eventPoints : 0) + (shot.isUltraTime ? actualPoints : 0);
     if (netOpponentUltraPointsAgainst !== 0) {
-      const opposingSeasonClubId = isHome ? game.fixture.awaySeasonClubId : game.fixture.homeSeasonClubId;
+      const opposingSeasonClubId = isHome ? game.fixture.awaySeasonClubId! : game.fixture.homeSeasonClubId!;
       await applyTeamShotStatDeltas(
         tx,
         organizationId,
@@ -792,8 +792,8 @@ export async function recordStatEvent(
     }
     if (
       ![
-        game.fixture.homeSeasonClubId,
-        game.fixture.awaySeasonClubId,
+        game.fixture.homeSeasonClubId!,
+        game.fixture.awaySeasonClubId!,
       ].includes(input.seasonClubId)
     ) {
       throw new Error("INVALID_TEAM");
@@ -810,7 +810,7 @@ export async function recordStatEvent(
     let fouledPlayerId: string | undefined;
     if (input.eventType === "FOUL" && input.fouledPlayerId) {
       const fouledPlayer = await tx.player.findFirst({
-        where: { id: input.fouledPlayerId, seasonClubId: { in: [game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId] } },
+        where: { id: input.fouledPlayerId, seasonClubId: { in: [game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!] } },
       });
       if (!fouledPlayer) throw new Error("INVALID_FOULED_PLAYER");
       fouledPlayerId = fouledPlayer.id;
@@ -893,9 +893,9 @@ export async function finalizeGame(gameId: string, fixtureId: string) {
     assertGameIsMutable(game.status, game.fixture.status);
     const winnerSeasonClubId =
       game.fixture.homeScore > game.fixture.awayScore
-        ? game.fixture.homeSeasonClubId
+        ? game.fixture.homeSeasonClubId!
         : game.fixture.awayScore > game.fixture.homeScore
-          ? game.fixture.awaySeasonClubId
+          ? game.fixture.awaySeasonClubId!
           : null; // a permitted draw/tie has no winner
 
     await tx.fixture.update({
@@ -970,7 +970,7 @@ export async function undoLastEvent(gameId: string, fixtureId: string) {
     const clockSeconds = remainingClockSeconds(game);
 
     if (last.eventType === "SCORE") {
-      const isHome = last.seasonClubId === game.fixture.homeSeasonClubId;
+      const isHome = last.seasonClubId === game.fixture.homeSeasonClubId!;
       const currentScore = isHome ? game.fixture.homeScore : game.fixture.awayScore;
       const reversal = -(last.points ?? 0);
       const nextScore = Math.max(0, currentScore + reversal);
@@ -1216,7 +1216,7 @@ export async function recordSportEvent(gameId: string, fixtureId: string, formDa
     assertGameIsMutable(game.status, game.fixture.status);
     if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
 
-    if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
+    if (![game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!].includes(input.seasonClubId)) {
       throw new Error("INVALID_TEAM");
     }
 
@@ -1340,8 +1340,8 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
     }
 
     const result = scoringModule.apply(definition, {
-      homeSeasonClubId: game.fixture.homeSeasonClubId,
-      awaySeasonClubId: game.fixture.awaySeasonClubId,
+      homeSeasonClubId: game.fixture.homeSeasonClubId!,
+      awaySeasonClubId: game.fixture.awaySeasonClubId!,
       currentPeriod: game.currentPeriod,
       homeScore: game.fixture.homeScore,
       awayScore: game.fixture.awayScore,
@@ -1407,9 +1407,9 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
     if (result.finalize) {
       const winnerSeasonClubId =
         result.finalizeWinner === "HOME"
-          ? game.fixture.homeSeasonClubId
+          ? game.fixture.homeSeasonClubId!
           : result.finalizeWinner === "AWAY"
-            ? game.fixture.awaySeasonClubId
+            ? game.fixture.awaySeasonClubId!
             : null;
       await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId } });
       await tx.game.update({

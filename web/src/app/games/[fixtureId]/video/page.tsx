@@ -30,7 +30,7 @@ export default async function GameVideoRegistry({ params }: { params: Promise<{ 
       <main className="mx-auto max-w-4xl px-6 py-10">
         <p className="text-xs uppercase tracking-[.2em] text-violet-400">Vision · Video Registry</p>
         <h1 className="mt-2 text-3xl font-bold">
-          {fixture.homeSeasonClub.club.shortName} vs {fixture.awaySeasonClub.club.shortName}
+          {fixture.homeSeasonClub!.club.shortName} vs {fixture.awaySeasonClub!.club.shortName}
         </h1>
         <p className="mt-1 text-sm text-zinc-500">Register game video for AI vision analysis. This never overwrites basketball truth.</p>
 

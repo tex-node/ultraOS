@@ -38,7 +38,7 @@ export default async function RehearsalLive({ params }: { params: Promise<{ fixt
         <h1 className="mt-2 text-3xl font-bold">Rehearsal live view</h1>
         <p className="mt-2 text-sm text-zinc-500">This exact card is what a spectator will see once this fixture is real. Never linked from public navigation.</p>
         <div className="mt-8">
-          <LiveGameHero fixture={fixture} model={model} href={`/rehearsal/live/${fixtureId}`} rehearsal />
+          <LiveGameHero fixture={{ ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }} model={model} href={`/rehearsal/live/${fixtureId}`} rehearsal />
         </div>
       </main>
     </OperationsShell>

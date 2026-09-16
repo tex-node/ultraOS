@@ -60,7 +60,7 @@ export default async function PublicLive() {
         {upcoming[0] ? (
           <section className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e] p-6">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">Next game</h2>
-            <p className="mt-3 text-lg">{upcoming[0].homeSeasonClub.club.name} vs {upcoming[0].awaySeasonClub.club.name}</p>
+            <p className="mt-3 text-lg">{upcoming[0].homeSeasonClub!.club.name} vs {upcoming[0].awaySeasonClub!.club.name}</p>
             <p className="mt-1 text-sm text-zinc-500">{formatLagosTime(upcoming[0].scheduledAt)}</p>
           </section>
         ) : null}
@@ -71,7 +71,7 @@ export default async function PublicLive() {
             <p className="mt-3 text-zinc-500">No results yet.</p>
           ) : (
             <Link href={`/public/fixtures/${results[results.length - 1].id}`} className="mt-3 block rounded-lg bg-white/[.04] p-4 text-sm hover:bg-white/[.07]">
-              {results[results.length - 1].homeSeasonClub.club.shortName} {results[results.length - 1].homeScore} — {results[results.length - 1].awayScore} {results[results.length - 1].awaySeasonClub.club.shortName}
+              {results[results.length - 1].homeSeasonClub!.club.shortName} {results[results.length - 1].homeScore} — {results[results.length - 1].awayScore} {results[results.length - 1].awaySeasonClub!.club.shortName}
               <span className="ml-2 text-emerald-400">View game story →</span>
             </Link>
           )}
@@ -135,7 +135,7 @@ export default async function PublicLive() {
       <LiveRefresher />
       <div className="mt-8 space-y-8">
         {live.map((fixture, i) => (
-          <LiveGameHero key={fixture.id} fixture={fixture} model={models[i]} href={`/public/fixtures/${fixture.id}`} staleness={freshness[i]} />
+          <LiveGameHero key={fixture.id} fixture={{ ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }} model={models[i]} href={`/public/fixtures/${fixture.id}`} staleness={freshness[i]} />
         ))}
       </div>
     </main>

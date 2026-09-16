@@ -38,8 +38,8 @@ async function main() {
 
       for (const fixture of fixtures) {
         const sides = [
-          { sc: fixture.homeSeasonClubId, entrantId: fixture.homeEntrantId, entrantSeasonClubId: fixture.homeEntrant?.seasonClubId ?? null },
-          { sc: fixture.awaySeasonClubId, entrantId: fixture.awayEntrantId, entrantSeasonClubId: fixture.awayEntrant?.seasonClubId ?? null },
+          { sc: fixture.homeSeasonClubId!, entrantId: fixture.homeEntrantId, entrantSeasonClubId: fixture.homeEntrant?.seasonClubId ?? null },
+          { sc: fixture.awaySeasonClubId!, entrantId: fixture.awayEntrantId, entrantSeasonClubId: fixture.awayEntrant?.seasonClubId ?? null },
         ];
         let hasEntrantBoth = true;
         for (const side of sides) {

@@ -111,7 +111,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   return NextResponse.json({
     gameId: game.id,
     dataCapability: capability,
-    home: { club: game.fixture.homeSeasonClub.club.shortName, ...teamLine(game.fixture.homeSeasonClubId) },
-    away: { club: game.fixture.awaySeasonClub.club.shortName, ...teamLine(game.fixture.awaySeasonClubId) },
+    home: { club: game.fixture.homeSeasonClub!.club.shortName, ...teamLine(game.fixture.homeSeasonClubId!) },
+    away: { club: game.fixture.awaySeasonClub!.club.shortName, ...teamLine(game.fixture.awaySeasonClubId!) },
   });
 }

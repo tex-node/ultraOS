@@ -88,7 +88,7 @@ async function main() {
       const g = await tx.game.findUniqueOrThrow({ where: { id: game.id }, include: { fixture: true, ruleSnapshot: true } });
       const shot = scoreShot({ rules: effectiveRuleSnapshot(g.ruleSnapshot), shotValue, gameStatus: g.status, currentPeriod: period, remainingClockSeconds: clockSeconds });
       if (!shot.valid) throw new Error(shot.error);
-      const isHome = seasonClubId === g.fixture.homeSeasonClubId;
+      const isHome = seasonClubId === g.fixture.homeSeasonClubId!;
       const currentScore = isHome ? g.fixture.homeScore : g.fixture.awayScore;
       const nextScore = currentScore + shot.pointsAwarded;
       await tx.fixture.update({ where: { id: fixture.id }, data: isHome ? { homeScore: nextScore } : { awayScore: nextScore } });
@@ -142,7 +142,7 @@ async function main() {
   async function getReconciliation() {
     const g = await prisma.game.findUniqueOrThrow({ where: { id: game.id }, include: { fixture: true } });
     const events = await prisma.gameEvent.findMany({ where: { gameId: game.id, source: "ULTRA_NATIVE_LIVE_STATISTICIAN" }, select: { seasonClubId: true, points: true, status: true } });
-    const { homeScore, awayScore } = replayScore(events, g.fixture.homeSeasonClubId, g.fixture.awaySeasonClubId);
+    const { homeScore, awayScore } = replayScore(events, g.fixture.homeSeasonClubId!, g.fixture.awaySeasonClubId!);
     return reconcileGameScore(g.fixture.homeScore, g.fixture.awayScore, homeScore, awayScore, events.length > 0);
   }
 
@@ -226,7 +226,7 @@ async function main() {
     const g = await tx.game.findUniqueOrThrow({ where: { id: game.id }, include: { fixture: true, ruleSnapshot: true } });
     const shot = scoreShot({ rules: effectiveRuleSnapshot(g.ruleSnapshot), shotValue: 3, gameStatus: "LIVE", currentPeriod: correctable!.period, remainingClockSeconds: correctable!.clockSeconds });
     if (!shot.valid) throw new Error(shot.error);
-    const isHome = correctable!.seasonClubId === g.fixture.homeSeasonClubId;
+    const isHome = correctable!.seasonClubId === g.fixture.homeSeasonClubId!;
     const currentScore = isHome ? g.fixture.homeScore : g.fixture.awayScore;
     const baseScore = currentScore - (correctable!.points ?? 0);
     const newScore = baseScore + shot.pointsAwarded;
@@ -258,7 +258,7 @@ async function main() {
   try {
     await prisma.$transaction(async (tx) => {
       const g = await tx.game.findUniqueOrThrow({ where: { id: game.id }, include: { fixture: true } });
-      if (![g.fixture.homeSeasonClubId, g.fixture.awaySeasonClubId].includes("not-a-real-season-club")) throw new Error("INVALID_TEAM");
+      if (![g.fixture.homeSeasonClubId!, g.fixture.awaySeasonClubId!].includes("not-a-real-season-club")) throw new Error("INVALID_TEAM");
     });
   } catch (e) {
     rejectedWrongTeam = e instanceof Error && e.message === "INVALID_TEAM";

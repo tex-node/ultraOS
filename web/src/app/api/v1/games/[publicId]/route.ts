@@ -18,8 +18,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
     const generatedAt = new Date().toISOString();
     const game: LiveGameV1 = {
       fixtureId: fixture.id, gameId: fixture.game!.id, status: model.status,
-      home: { publicId: fixture.homeSeasonClub.club.shortName.toLowerCase(), name: fixture.homeSeasonClub.club.name, shortName: fixture.homeSeasonClub.club.shortName },
-      away: { publicId: fixture.awaySeasonClub.club.shortName.toLowerCase(), name: fixture.awaySeasonClub.club.name, shortName: fixture.awaySeasonClub.club.shortName },
+      home: { publicId: fixture.homeSeasonClub!.club.shortName.toLowerCase(), name: fixture.homeSeasonClub!.club.name, shortName: fixture.homeSeasonClub!.club.shortName },
+      away: { publicId: fixture.awaySeasonClub!.club.shortName.toLowerCase(), name: fixture.awaySeasonClub!.club.name, shortName: fixture.awaySeasonClub!.club.shortName },
       score: model.score, period: model.period, periodLabel: model.periodLabel,
       clock: honestClock(model.status, model.clock), shotClock: honestClock(model.status, model.shotClock),
       ultraTime: {

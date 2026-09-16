@@ -23,8 +23,8 @@ export async function GET(request: Request) {
       const model = await buildLivePresentationModelForGame(f.game!.id, tx);
       return {
         fixtureId: f.id, gameId: f.game!.id, status: model.status,
-        home: { publicId: f.homeSeasonClub.club.shortName.toLowerCase(), name: f.homeSeasonClub.club.name, shortName: f.homeSeasonClub.club.shortName },
-        away: { publicId: f.awaySeasonClub.club.shortName.toLowerCase(), name: f.awaySeasonClub.club.name, shortName: f.awaySeasonClub.club.shortName },
+        home: { publicId: f.homeSeasonClub!.club.shortName.toLowerCase(), name: f.homeSeasonClub!.club.name, shortName: f.homeSeasonClub!.club.shortName },
+        away: { publicId: f.awaySeasonClub!.club.shortName.toLowerCase(), name: f.awaySeasonClub!.club.name, shortName: f.awaySeasonClub!.club.shortName },
         score: model.score, period: model.period, periodLabel: model.periodLabel,
         clock: model.clock, shotClock: model.shotClock,
         ultraTime: {

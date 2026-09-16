@@ -22,7 +22,7 @@ export async function loadProductionGraphicModel(gameId: string): Promise<{ fixt
     });
     if (!game || !isProductionPresentationFixture(game.fixture)) return null;
     const model = await buildLivePresentationModelForGame(gameId, tx);
-    return { fixture: game.fixture, model };
+    return { fixture: { ...game.fixture, homeSeasonClub: game.fixture.homeSeasonClub!, awaySeasonClub: game.fixture.awaySeasonClub! }, model };
   });
 }
 

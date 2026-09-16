@@ -24,7 +24,7 @@ export function CommentatorCommandCenter({
         {rehearsal ? "Rehearsal · Commentator Command Center" : "Live now · Commentator Command Center"}
       </p>
       <p className="mt-2 text-2xl font-black">
-        {fixture.homeSeasonClub.club.shortName} {model.score.home} — {model.score.away} {fixture.awaySeasonClub.club.shortName}
+        {fixture.homeSeasonClub!.club.shortName} {model.score.home} — {model.score.away} {fixture.awaySeasonClub!.club.shortName}
       </p>
       <p className="text-sm text-zinc-500">
         {model.periodLabel} · {Math.floor(model.clock.remainingSeconds / 60)}:{(model.clock.remainingSeconds % 60).toString().padStart(2, "0")} · shot clock {model.shotClock.remainingSeconds}
@@ -56,7 +56,7 @@ export function CommentatorCommandCenter({
         <div className="mt-4">
           <p className="text-[10px] uppercase tracking-wide text-zinc-600">Ultra Intelligence</p>
           <div className="mt-1 flex gap-6 text-sm">
-            <span>4PT MAKES — {fixture.homeSeasonClub.club.shortName} {model.fourPoint.home?.made ?? 0} · {fixture.awaySeasonClub.club.shortName} {model.fourPoint.away?.made ?? 0}</span>
+            <span>4PT MAKES — {fixture.homeSeasonClub!.club.shortName} {model.fourPoint.home?.made ?? 0} · {fixture.awaySeasonClub!.club.shortName} {model.fourPoint.away?.made ?? 0}</span>
           </div>
         </div>
       ) : null}
@@ -76,8 +76,8 @@ export function CommentatorCommandCenter({
           <p className="text-[10px] uppercase tracking-wide text-zinc-600">Game Pulse</p>
           <p className="mt-1 text-sm text-zinc-300">
             {model.gamePulse.leadChanges} lead changes · {model.gamePulse.ties} ties
-            {model.gamePulse.largestLead ? ` · largest lead ${model.gamePulse.largestLead.team === "HOME" ? fixture.homeSeasonClub.club.shortName : fixture.awaySeasonClub.club.shortName} +${model.gamePulse.largestLead.margin}` : ""}
-            {model.gamePulse.currentRun ? ` · current run ${model.gamePulse.currentRun.team === "HOME" ? fixture.homeSeasonClub.club.shortName : fixture.awaySeasonClub.club.shortName} ${model.gamePulse.currentRun.points}–0` : ""}
+            {model.gamePulse.largestLead ? ` · largest lead ${model.gamePulse.largestLead.team === "HOME" ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName} +${model.gamePulse.largestLead.margin}` : ""}
+            {model.gamePulse.currentRun ? ` · current run ${model.gamePulse.currentRun.team === "HOME" ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName} ${model.gamePulse.currentRun.points}–0` : ""}
           </p>
         </div>
       ) : null}

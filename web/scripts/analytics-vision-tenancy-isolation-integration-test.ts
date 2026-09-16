@@ -128,7 +128,7 @@ async function main() {
     // proves the real computation path, not calculateStandings() in isolation.
     await recalculateStandings(tx, orgB.id, rigB.season.id);
     const standings = await tx.standing.findMany({ where: { seasonId: rigB.season.id } });
-    const homeStanding = standings.find((s) => s.seasonClubId === rigB.homeSeasonClub.id);
+    const homeStanding = standings.find((s) => s.seasonClubId === rigB.homeSeasonClub!.id);
     report("Org B recalculateStandings recomputes Org B's own standing correctly (won=1, pointsFor=337)", homeStanding?.won === 1 && homeStanding?.pointsFor === SENTINEL_B_POINTS, JSON.stringify(homeStanding));
 
     // Cross-org denial: Org A's real gameId, under Org B's own tx.

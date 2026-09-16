@@ -144,10 +144,10 @@ function toPlayerLine(stat: RawGame["playerStats"][number], side: "HOME" | "AWAY
 
 function toGameCore(game: RawGame): GameCore {
   const fixture = game.fixture;
-  const homeTeamStat = game.teamStats.find((t) => t.seasonClubId === fixture.homeSeasonClubId);
-  const awayTeamStat = game.teamStats.find((t) => t.seasonClubId === fixture.awaySeasonClubId);
-  const homePlayers = game.playerStats.filter((s) => s.seasonClubId === fixture.homeSeasonClubId);
-  const awayPlayers = game.playerStats.filter((s) => s.seasonClubId === fixture.awaySeasonClubId);
+  const homeTeamStat = game.teamStats.find((t) => t.seasonClubId === fixture.homeSeasonClubId!);
+  const awayTeamStat = game.teamStats.find((t) => t.seasonClubId === fixture.awaySeasonClubId!);
+  const homePlayers = game.playerStats.filter((s) => s.seasonClubId === fixture.homeSeasonClubId!);
+  const awayPlayers = game.playerStats.filter((s) => s.seasonClubId === fixture.awaySeasonClubId!);
   return {
     gameId: game.id,
     fixtureId: fixture.id,
@@ -157,7 +157,7 @@ function toGameCore(game: RawGame): GameCore {
     scheduledAt: fixture.scheduledAt,
     home: toTeamSideStats(homeTeamStat, fixture.homeScore, homePlayers),
     away: toTeamSideStats(awayTeamStat, fixture.awayScore, awayPlayers),
-    players: game.playerStats.map((s) => toPlayerLine(s, s.seasonClubId === fixture.homeSeasonClubId ? "HOME" : "AWAY")),
+    players: game.playerStats.map((s) => toPlayerLine(s, s.seasonClubId === fixture.homeSeasonClubId! ? "HOME" : "AWAY")),
     periods: game.periodScores.map((p) => ({ period: p.period, label: p.label, homeScore: p.homeScore, awayScore: p.awayScore })),
   };
 }
@@ -271,7 +271,7 @@ export async function loadPlayerBestGame(playerId: string, db: Db = prisma): Pro
 
   const best = [...stats].sort((a, b) => effProxy(b) - effProxy(a))[0];
   const fixture = best.game.fixture;
-  const opponent = fixture.homeSeasonClubId === best.seasonClubId ? fixture.awaySeasonClub.club.shortName : fixture.homeSeasonClub.club.shortName;
+  const opponent = fixture.homeSeasonClubId! === best.seasonClubId ? fixture.awaySeasonClub!.club.shortName : fixture.homeSeasonClub!.club.shortName;
 
   return {
     fixtureId: fixture.id,
@@ -312,10 +312,10 @@ export async function loadPlayerGameLog(playerId: string, db: Db = prisma): Prom
 
   const rows = stats.map((s): PlayerGameLogRow => {
     const fixture = s.game.fixture;
-    const isHome = fixture.homeSeasonClubId === s.seasonClubId;
+    const isHome = fixture.homeSeasonClubId! === s.seasonClubId;
     const own = isHome ? fixture.homeScore : fixture.awayScore;
     const opp = isHome ? fixture.awayScore : fixture.homeScore;
-    const opponentShortName = isHome ? fixture.awaySeasonClub.club.shortName : fixture.homeSeasonClub.club.shortName;
+    const opponentShortName = isHome ? fixture.awaySeasonClub!.club.shortName : fixture.homeSeasonClub!.club.shortName;
     return {
       fixtureId: fixture.id,
       scheduledAt: fixture.scheduledAt,

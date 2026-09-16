@@ -49,8 +49,8 @@ async function main() {
   const subRows = await prisma.gameEvent.findMany({ where: { gameId, eventType: "SUBSTITUTION", status: "ACTIVE" }, orderBy: { sequenceNumber: "asc" }, select: { seasonClubId: true, playerId: true, substitutedOutPlayerId: true, sequenceNumber: true, period: true, clockSeconds: true } });
   const subsWithClock: SubstitutionWithClock[] = subRows.map((s) => ({ seasonClubId: s.seasonClubId!, playerInId: s.playerId!, playerOutId: s.substitutedOutPlayerId!, sequenceNumber: s.sequenceNumber!, period: s.period, clockSeconds: s.clockSeconds }));
   const gameEndPoint = { period: game.currentPeriod, clockSeconds: remainingClockSeconds(game) };
-  const homeMinutes = verifyTeamMinutes(fixture.homeSeasonClubId, starters, subsWithClock, gameEndPoint);
-  const awayMinutes = verifyTeamMinutes(fixture.awaySeasonClubId, starters, subsWithClock, gameEndPoint);
+  const homeMinutes = verifyTeamMinutes(fixture.homeSeasonClubId!, starters, subsWithClock, gameEndPoint);
+  const awayMinutes = verifyTeamMinutes(fixture.awaySeasonClubId!, starters, subsWithClock, gameEndPoint);
   ok("Home team minutes reconstruct as MINUTES_VERIFIED with the 5x-elapsed integrity check satisfied", homeMinutes.confidence === "MINUTES_VERIFIED" && homeMinutes.actualTeamPlayerSeconds === homeMinutes.expectedTeamPlayerSeconds, homeMinutes);
   ok("Away team minutes reconstruct as MINUTES_VERIFIED with the 5x-elapsed integrity check satisfied", awayMinutes.confidence === "MINUTES_VERIFIED" && awayMinutes.actualTeamPlayerSeconds === awayMinutes.expectedTeamPlayerSeconds, awayMinutes);
   ok("A player involved in a substitution has less than full-game minutes", (homeMinutes.playerSeconds.get([...homeMinutes.playerSeconds.keys()][0]) ?? 0) >= 0); // sanity: map is populated
@@ -74,7 +74,7 @@ async function main() {
         });
       }
       const derivedTeams = deriveTeamStats(derivedPlayers);
-      for (const seasonClubId of [g.fixture.homeSeasonClubId, g.fixture.awaySeasonClubId]) {
+      for (const seasonClubId of [g.fixture.homeSeasonClubId!, g.fixture.awaySeasonClubId!]) {
         const t = derivedTeams.get(seasonClubId) ?? emptyTeamStats(seasonClubId);
         await tx.teamStat.upsert({
           where: { gameId_seasonClubId: { gameId, seasonClubId } },
@@ -115,7 +115,7 @@ async function main() {
   // --- Finalize ---
   await prisma.$transaction(async (tx) => {
     const g = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
-    const winnerSeasonClubId = g.fixture.homeScore > g.fixture.awayScore ? g.fixture.homeSeasonClubId : g.fixture.awaySeasonClubId;
+    const winnerSeasonClubId = g.fixture.homeScore > g.fixture.awayScore ? g.fixture.homeSeasonClubId! : g.fixture.awaySeasonClubId!;
     await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId } });
     await tx.game.update({ where: { id: gameId }, data: { status: "FINAL", endedAt: new Date(), clockSecondsRemaining: remainingClockSeconds(g) } });
     await recalculateStandings(tx, "cmt4odhgn0000wokk8fbwr6ro", SEASON_ID);

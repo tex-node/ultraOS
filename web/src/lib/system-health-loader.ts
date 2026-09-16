@@ -156,7 +156,7 @@ export async function buildSystemHealth(organizationId: string, selectedGameId?:
       if (fixture?.game) {
         selectedGame = {
           fixtureId: fixture.id, gameId: fixture.game.id,
-          homeShortName: fixture.homeSeasonClub.club.shortName, awayShortName: fixture.awaySeasonClub.club.shortName,
+          homeShortName: fixture.homeSeasonClub!.club.shortName, awayShortName: fixture.awaySeasonClub!.club.shortName,
           status: fixture.game.status,
         };
         const model = await buildLivePresentationModelForGame(fixture.game.id, tx);

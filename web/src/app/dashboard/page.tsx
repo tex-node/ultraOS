@@ -110,7 +110,11 @@ export default async function DashboardPage() {
       ]);
       const expected = calculateStandings(
         teams.map((team) => team.id),
-        finalFixtures,
+        finalFixtures.map((fixture) => ({
+          ...fixture,
+          homeSeasonClubId: fixture.homeSeasonClubId!,
+          awaySeasonClubId: fixture.awaySeasonClubId!,
+        })),
       );
       const stored = new Map(storedRows.map((row) => [row.seasonClubId, row]));
       standingFailures = [...expected].filter(([teamId, row]) => {
@@ -189,7 +193,7 @@ export default async function DashboardPage() {
           <AlertPanel title="Live and paused games">
             {[...liveGames, ...awaitingFinalization].map((game) => (
               <Link key={game.id} href={`/games/${game.fixtureId}/live`} className="block border-b border-white/[.06] py-3 last:border-0">
-                {game.fixture.homeSeasonClub.club.name} vs {game.fixture.awaySeasonClub.club.name}
+                {game.fixture.homeSeasonClub!.club.name} vs {game.fixture.awaySeasonClub!.club.name}
                 <span className="ml-2 text-xs text-zinc-500">{game.status}</span>
               </Link>
             ))}
@@ -207,7 +211,7 @@ export default async function DashboardPage() {
           <AlertPanel title="Fixture readiness">
             {[...new Map([...missingOfficials, ...fixtureConflicts].map((fixture) => [fixture.id, fixture])).values()].map((fixture) => (
               <Link key={fixture.id} href={`/fixtures/${fixture.id}`} className="block border-b border-white/[.06] py-3 last:border-0">
-                <p>{fixture.homeSeasonClub.club.name} vs {fixture.awaySeasonClub.club.name}</p>
+                <p>{fixture.homeSeasonClub!.club.name} vs {fixture.awaySeasonClub!.club.name}</p>
                 <p className="mt-1 text-xs text-zinc-500">
                   {fixture.scheduledAt.toLocaleString()} · {fixture.venue.name}
                   {fixture.officials.length === 0 ? " · No officials" : ""}

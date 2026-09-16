@@ -80,7 +80,11 @@ async function main() {
               name: seasonClub.club.name,
               entrantId: seasonClub.entrant?.id ?? null,
             })),
-            fixtures,
+            fixtures.map((fixture) => ({
+              ...fixture,
+              homeSeasonClubId: fixture.homeSeasonClubId!,
+              awaySeasonClubId: fixture.awaySeasonClubId!,
+            })),
           ).map((row) => [row.seasonClubId, row]),
         );
 

@@ -73,15 +73,15 @@ test("basketball season standings are parity-equal to the legacy engine", () => 
   const legacy = calculateStandings(
     teams.map((team) => team.seasonClubId),
     fixtures.map((fixture) => ({
-      homeSeasonClubId: fixture.homeSeasonClubId,
-      awaySeasonClubId: fixture.awaySeasonClubId,
+      homeSeasonClubId: fixture.homeSeasonClubId!,
+      awaySeasonClubId: fixture.awaySeasonClubId!,
       homeScore: fixture.homeScore,
       awayScore: fixture.awayScore,
       winnerSeasonClubId:
         fixture.homeScore > fixture.awayScore
-          ? fixture.homeSeasonClubId
+          ? fixture.homeSeasonClubId!
           : fixture.awayScore > fixture.homeScore
-            ? fixture.awaySeasonClubId
+            ? fixture.awaySeasonClubId!
             : null,
     })),
   );

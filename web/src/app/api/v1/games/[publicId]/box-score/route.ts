@@ -19,8 +19,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
     const organization = await resolveDefaultPublicOrganization();
     const names = await withOrganizationContext(organization.id, (tx) => resolvePlayerNames(model.players.map((p) => p.playerId), tx));
     const clubFor = (seasonClubId: string) => seasonClubId === model.teams.home.seasonClubId
-      ? { publicId: fixture.homeSeasonClub.club.shortName.toLowerCase(), name: fixture.homeSeasonClub.club.name, shortName: fixture.homeSeasonClub.club.shortName }
-      : { publicId: fixture.awaySeasonClub.club.shortName.toLowerCase(), name: fixture.awaySeasonClub.club.name, shortName: fixture.awaySeasonClub.club.shortName };
+      ? { publicId: fixture.homeSeasonClub!.club.shortName.toLowerCase(), name: fixture.homeSeasonClub!.club.name, shortName: fixture.homeSeasonClub!.club.shortName }
+      : { publicId: fixture.awaySeasonClub!.club.shortName.toLowerCase(), name: fixture.awaySeasonClub!.club.name, shortName: fixture.awaySeasonClub!.club.shortName };
 
     const generatedAt = new Date().toISOString();
     const boxScore: BoxScoreV1 = {

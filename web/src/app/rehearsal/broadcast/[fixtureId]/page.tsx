@@ -34,7 +34,7 @@ export default async function RehearsalBroadcast({ params }: { params: Promise<{
       <main className="mx-auto max-w-6xl px-6 py-10">
         <p className="text-xs uppercase tracking-[.2em] text-fuchsia-400">Rehearsal · Commentator Preview</p>
         <h1 className="mt-2 text-3xl font-bold">Rehearsal broadcast view</h1>
-        <CommentatorCommandCenter fixture={fixture} model={model} rehearsal />
+        <CommentatorCommandCenter fixture={{ ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }} model={model} rehearsal />
       </main>
     </OperationsShell>
   );

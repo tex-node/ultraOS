@@ -39,9 +39,9 @@ export function LiveGameHero({
         ) : null}
 
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
-          <p className="text-lg font-semibold">{fixture.homeSeasonClub.club.name}</p>
+          <p className="text-lg font-semibold">{fixture.homeSeasonClub!.club.name}</p>
           <p className="font-mono text-5xl font-black">{model.score.home} — {model.score.away}</p>
-          <p className="text-lg font-semibold">{fixture.awaySeasonClub.club.name}</p>
+          <p className="text-lg font-semibold">{fixture.awaySeasonClub!.club.name}</p>
         </div>
         <p className="mt-3 text-center text-sm text-zinc-500">
           {model.periodLabel} · <GameClock seconds={model.clock.remainingSeconds} status={model.clock.running ? "LIVE" : "PAUSED"} startedAt={null} />
@@ -74,18 +74,18 @@ export function LiveGameHero({
           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 border-t border-white/[.06] pt-3 text-xs text-zinc-500">
             <span>{model.gamePulse.leadChanges} lead changes</span>
             {model.gamePulse.largestLead ? (
-              <span>Largest lead: {model.gamePulse.largestLead.team === "HOME" ? fixture.homeSeasonClub.club.shortName : fixture.awaySeasonClub.club.shortName} by {model.gamePulse.largestLead.margin}</span>
+              <span>Largest lead: {model.gamePulse.largestLead.team === "HOME" ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName} by {model.gamePulse.largestLead.margin}</span>
             ) : null}
             {model.gamePulse.currentRun && model.gamePulse.currentRun.points >= 4 ? (
-              <span className="text-amber-300">{model.gamePulse.currentRun.team === "HOME" ? fixture.homeSeasonClub.club.shortName : fixture.awaySeasonClub.club.shortName} on a {model.gamePulse.currentRun.points}–0 run</span>
+              <span className="text-amber-300">{model.gamePulse.currentRun.team === "HOME" ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName} on a {model.gamePulse.currentRun.points}–0 run</span>
             ) : null}
           </div>
         ) : null}
 
         {model.fourPoint.home || model.fourPoint.away ? (
           <div className="mt-4 flex justify-center gap-6 text-xs text-violet-300">
-            <span>4PT {fixture.homeSeasonClub.club.shortName} {model.fourPoint.home?.made ?? 0}</span>
-            <span>4PT {fixture.awaySeasonClub.club.shortName} {model.fourPoint.away?.made ?? 0}</span>
+            <span>4PT {fixture.homeSeasonClub!.club.shortName} {model.fourPoint.home?.made ?? 0}</span>
+            <span>4PT {fixture.awaySeasonClub!.club.shortName} {model.fourPoint.away?.made ?? 0}</span>
           </div>
         ) : null}
 

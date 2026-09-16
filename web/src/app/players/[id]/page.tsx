@@ -97,7 +97,7 @@ export default async function AthletePage({
         </article>)}</div>
 
         <h2 id="match-data" className="mt-8 text-xl font-semibold">Match Data</h2>
-        <div className="mt-4 grid gap-3">{career.gameLog.slice(0, 10).map((stat) => <article className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5" key={stat.id}><p className="font-semibold">{stat.game.fixture.homeSeasonClub.club.name} vs {stat.game.fixture.awaySeasonClub.club.name}</p><p className="text-sm text-zinc-400">{stat.points} PTS | {stat.rebounds} REB | {stat.assists} AST | {stat.steals} STL | {stat.blocks} BLK</p></article>)}</div>
+        <div className="mt-4 grid gap-3">{career.gameLog.slice(0, 10).map((stat) => <article className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5" key={stat.id}><p className="font-semibold">{stat.game.fixture.homeSeasonClub!.club.name} vs {stat.game.fixture.awaySeasonClub!.club.name}</p><p className="text-sm text-zinc-400">{stat.points} PTS | {stat.rebounds} REB | {stat.assists} AST | {stat.steals} STL | {stat.blocks} BLK</p></article>)}</div>
 
         <h2 id="training" className="mt-8 text-xl font-semibold">Training</h2>
         <div className="mt-4 grid gap-3">{athlete.trainingRecords.map((record) => <article className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5" key={record.id}><p className="font-semibold">{record.trainingSession.title}</p><p className="text-sm text-zinc-400">{record.attendanceStatus} | {record.publicSummary ?? (canManage ? record.developmentFocus : "Private notes hidden")}</p></article>)}</div>

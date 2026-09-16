@@ -124,7 +124,7 @@ export async function recordStatisticianShot(gameId: string, fixtureId: string, 
 
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
+    if (![game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!].includes(input.seasonClubId)) {
       throw new Error("INVALID_TEAM");
     }
     const player = await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } });
@@ -193,7 +193,7 @@ export async function recordStatisticianStat(gameId: string, fixtureId: string, 
 
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
+    if (![game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!].includes(input.seasonClubId)) {
       throw new Error("INVALID_TEAM");
     }
     const player = await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } });
@@ -202,7 +202,7 @@ export async function recordStatisticianStat(gameId: string, fixtureId: string, 
     let fouledPlayerId: string | undefined;
     if (input.eventType === "FOUL" && input.fouledPlayerId) {
       const fouledPlayer = await tx.player.findFirst({
-        where: { id: input.fouledPlayerId, seasonClubId: { in: [game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId] } },
+        where: { id: input.fouledPlayerId, seasonClubId: { in: [game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!] } },
       });
       if (!fouledPlayer) throw new Error("INVALID_FOULED_PLAYER");
       fouledPlayerId = fouledPlayer.id;
@@ -252,7 +252,7 @@ export async function recordSubstitution(gameId: string, fixtureId: string, form
 
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
+    if (![game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!].includes(input.seasonClubId)) {
       throw new Error("INVALID_TEAM");
     }
     const [playerIn, playerOut] = await Promise.all([
@@ -321,7 +321,7 @@ export async function confirmStartingFive(gameId: string, fixtureId: string, for
 
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    if (![game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId].includes(input.seasonClubId)) {
+    if (![game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!].includes(input.seasonClubId)) {
       throw new Error("INVALID_TEAM");
     }
     const uniqueIds = new Set(input.playerIds);
@@ -400,8 +400,8 @@ export async function getGameReconciliation(gameId: string): Promise<GameReconci
     const events = await loadActiveStatisticianEvents(tx, gameId);
     const hasStatisticianEvents = events.length > 0;
     const teamStats = deriveTeamStats(derivePlayerStats(events));
-    const homeScore = deriveTeamScore(teamStats, game.fixture.homeSeasonClubId);
-    const awayScore = deriveTeamScore(teamStats, game.fixture.awaySeasonClubId);
+    const homeScore = deriveTeamScore(teamStats, game.fixture.homeSeasonClubId!);
+    const awayScore = deriveTeamScore(teamStats, game.fixture.awaySeasonClubId!);
     return reconcileGameScore(game.fixture.homeScore, game.fixture.awayScore, homeScore, awayScore, hasStatisticianEvents);
   });
 }
@@ -425,8 +425,8 @@ export async function getGameLiveBoxScore(gameId: string): Promise<LiveBoxScore>
     return {
       players: [...playerStats.values()],
       teams: {
-        home: teamStats.get(game.fixture.homeSeasonClubId) ?? emptyTeamStats(game.fixture.homeSeasonClubId),
-        away: teamStats.get(game.fixture.awaySeasonClubId) ?? emptyTeamStats(game.fixture.awaySeasonClubId),
+        home: teamStats.get(game.fixture.homeSeasonClubId!) ?? emptyTeamStats(game.fixture.homeSeasonClubId!),
+        away: teamStats.get(game.fixture.awaySeasonClubId!) ?? emptyTeamStats(game.fixture.awaySeasonClubId!),
       },
     };
   });
@@ -482,7 +482,7 @@ async function rebuildGameStatsFromEvents(tx: Prisma.TransactionClient, organiza
   }
 
   const derivedTeams = deriveTeamStats(derivedPlayers);
-  for (const seasonClubId of [game.fixture.homeSeasonClubId, game.fixture.awaySeasonClubId]) {
+  for (const seasonClubId of [game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!]) {
     const t = derivedTeams.get(seasonClubId) ?? emptyTeamStats(seasonClubId);
     await tx.teamStat.upsert({
       where: { gameId_seasonClubId: { gameId, seasonClubId } },
@@ -525,8 +525,8 @@ export async function verifyStatistics(gameId: string, fixtureId: string, formDa
     if (!hasStatisticianEvents) throw new Error("NO_STATISTICIAN_EVENTS_TO_VERIFY");
 
     const teamStats = deriveTeamStats(derivePlayerStats(events));
-    const homeScore = deriveTeamScore(teamStats, game.fixture.homeSeasonClubId);
-    const awayScore = deriveTeamScore(teamStats, game.fixture.awaySeasonClubId);
+    const homeScore = deriveTeamScore(teamStats, game.fixture.homeSeasonClubId!);
+    const awayScore = deriveTeamScore(teamStats, game.fixture.awaySeasonClubId!);
     const reconciliation = reconcileGameScore(game.fixture.homeScore, game.fixture.awayScore, homeScore, awayScore, hasStatisticianEvents);
 
     if (reconciliation.overallStatus === "MISMATCH" && !input.overrideReason?.trim()) {

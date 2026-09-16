@@ -2980,10 +2980,14 @@ model Fixture {
   division           Division          @relation(fields: [divisionId], references: [id], onDelete: Restrict)
   eventId            String?
   event              Event?            @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  homeSeasonClubId   String
-  homeSeasonClub     SeasonClub        @relation("HomeSeasonClub", fields: [homeSeasonClubId], references: [id], onDelete: Restrict)
-  awaySeasonClubId   String
-  awaySeasonClub     SeasonClub        @relation("AwaySeasonClub", fields: [awaySeasonClubId], references: [id], onDelete: Restrict)
+  // Multi-sport Entrant model (Stage B2): a fixture side is EITHER a SeasonClub (team sports) OR an
+  // Entrant (individual/pair/relay sports). Both are nullable; a DB CHECK (migration
+  // 20260915160000_fixture_side_entrant) requires at least one per side. Read paths resolve sides
+  // through web/src/lib/sports/fixture-sides.ts rather than the raw columns.
+  homeSeasonClubId   String?
+  homeSeasonClub     SeasonClub?       @relation("HomeSeasonClub", fields: [homeSeasonClubId], references: [id], onDelete: Restrict)
+  awaySeasonClubId   String?
+  awaySeasonClub     SeasonClub?       @relation("AwaySeasonClub", fields: [awaySeasonClubId], references: [id], onDelete: Restrict)
   scheduledAt        DateTime
   venueId            String
   venue              Venue             @relation(fields: [venueId], references: [id], onDelete: Restrict)

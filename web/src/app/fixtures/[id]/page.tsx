@@ -47,9 +47,9 @@ export default async function FixturePage({
             {fixture.season.name} · {fixture.division.name}
           </p>
           <div className="mt-8 grid grid-cols-[1fr_auto_1fr] items-center gap-8">
-            <div><p className="text-2xl font-semibold">{fixture.homeSeasonClub.club.name}</p><p className="text-xs text-zinc-500">Home SeasonClub</p></div>
+            <div><p className="text-2xl font-semibold">{fixture.homeSeasonClub!.club.name}</p><p className="text-xs text-zinc-500">Home SeasonClub</p></div>
             <p className="text-zinc-500">VS</p>
-            <div><p className="text-2xl font-semibold">{fixture.awaySeasonClub.club.name}</p><p className="text-xs text-zinc-500">Away SeasonClub</p></div>
+            <div><p className="text-2xl font-semibold">{fixture.awaySeasonClub!.club.name}</p><p className="text-xs text-zinc-500">Away SeasonClub</p></div>
           </div>
           <p className="mt-8 text-zinc-400">{formatLagosDateTime(fixture.scheduledAt)} · {fixture.venue.name}</p>
           <p className="mt-2">{fixture.status}{fixture.game ? ` · Game ${fixture.game.status}` : ""}</p>

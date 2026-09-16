@@ -186,8 +186,8 @@ export async function generateContentPayload(
           awaySeasonClub: { include: { club: true } },
         },
       });
-      const home = fixture.homeSeasonClub.club.name;
-      const away = fixture.awaySeasonClub.club.name;
+      const home = fixture.homeSeasonClub!.club.name;
+      const away = fixture.awaySeasonClub!.club.name;
       const date = fixture.scheduledAt.toLocaleDateString("en-NG", {
         dateStyle: "full",
       });
@@ -199,8 +199,8 @@ export async function generateContentPayload(
         title: "Fixture Release",
         home,
         away,
-        ...clubVariables("homeClub", fixture.homeSeasonClub.club),
-        ...clubVariables("awayClub", fixture.awaySeasonClub.club),
+        ...clubVariables("homeClub", fixture.homeSeasonClub!.club),
+        ...clubVariables("awayClub", fixture.awaySeasonClub!.club),
         date,
         time,
         venue: fixture.venue.name,
@@ -215,8 +215,8 @@ export async function generateContentPayload(
         footer: fixture.venue.name,
         home,
         away,
-        homeClub: clubVariables("homeClub", fixture.homeSeasonClub.club),
-        awayClub: clubVariables("awayClub", fixture.awaySeasonClub.club),
+        homeClub: clubVariables("homeClub", fixture.homeSeasonClub!.club),
+        awayClub: clubVariables("awayClub", fixture.awaySeasonClub!.club),
         date,
         time,
         venue: fixture.venue.name,
@@ -248,8 +248,8 @@ export async function generateContentPayload(
         },
       });
       if (fixture.status !== "FINAL") throw new Error("FIXTURE_NOT_FINAL");
-      const home = fixture.homeSeasonClub.club.name;
-      const away = fixture.awaySeasonClub.club.name;
+      const home = fixture.homeSeasonClub!.club.name;
+      const away = fixture.awaySeasonClub!.club.name;
       const homeWon = fixture.homeScore > fixture.awayScore;
       const winner = homeWon ? home : away;
       const loser = homeWon ? away : home;

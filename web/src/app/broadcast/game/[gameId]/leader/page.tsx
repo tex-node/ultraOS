@@ -25,7 +25,7 @@ export default async function LeaderGraphic({ params }: { params: Promise<{ game
       <p className="text-[10px] font-bold uppercase tracking-[.25em] text-cyan-400">{model.isFinal ? "Game Leader" : "Live Leader"}</p>
       {categories.map((l) => {
         const player = model.players.find((p) => p.playerId === l.playerId);
-        const clubShort = l.seasonClubId === model.teams.home.seasonClubId ? fixture.homeSeasonClub.club.shortName : fixture.awaySeasonClub.club.shortName;
+        const clubShort = l.seasonClubId === model.teams.home.seasonClubId ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName;
         return (
           <div key={l.category} className="flex items-baseline gap-3">
             <span className="w-20 text-[10px] uppercase tracking-wide text-zinc-500">{l.category}</span>

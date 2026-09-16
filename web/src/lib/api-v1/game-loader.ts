@@ -24,6 +24,6 @@ export async function loadPublicGame(fixturePublicId: string): Promise<{ fixture
     });
     if (!fixture || !isProductionPresentationFixture(fixture) || !fixture.game) return null;
     const model = await buildLivePresentationModelForGame(fixture.game.id, tx);
-    return { fixture, model };
+    return { fixture: { ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }, model };
   });
 }

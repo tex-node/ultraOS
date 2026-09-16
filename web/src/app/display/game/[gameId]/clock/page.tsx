@@ -43,9 +43,9 @@ export default async function VenueClockDisplay({ params }: { params: Promise<{ 
         </span>
       </div>
       <div className="mt-10 grid grid-cols-3 items-center gap-6 text-center">
-        <p className="text-2xl font-semibold md:text-4xl">{game.fixture.homeSeasonClub.club.shortName}</p>
+        <p className="text-2xl font-semibold md:text-4xl">{game.fixture.homeSeasonClub!.club.shortName}</p>
         <p className="font-mono text-4xl font-black md:text-6xl">{model.score.home} — {model.score.away}</p>
-        <p className="text-2xl font-semibold md:text-4xl">{game.fixture.awaySeasonClub.club.shortName}</p>
+        <p className="text-2xl font-semibold md:text-4xl">{game.fixture.awaySeasonClub!.club.shortName}</p>
       </div>
     </main>
   );

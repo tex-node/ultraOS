@@ -21,8 +21,8 @@ export default async function TeamComparisonGraphic({ params }: { params: Promis
       <TransparentBody />
       <p className="text-[10px] font-bold uppercase tracking-[.25em] text-cyan-400">Team Comparison</p>
       <div className="flex justify-between text-sm font-bold">
-        <span>{fixture.homeSeasonClub.club.shortName}</span>
-        <span>{fixture.awaySeasonClub.club.shortName}</span>
+        <span>{fixture.homeSeasonClub!.club.shortName}</span>
+        <span>{fixture.awaySeasonClub!.club.shortName}</span>
       </div>
       <table className="mt-1 w-full text-sm">
         <tbody>

@@ -37,7 +37,7 @@ export default async function VisionFailures() {
               {observations.map((o) => (
                 <div key={o.id} className="rounded-xl border border-red-400/30 bg-red-400/[.04] p-3 text-xs">
                   <p className="font-bold text-red-300">{o.failureCategory}</p>
-                  <p className="mt-1 text-zinc-400">{o.gameVideo.fixture.homeSeasonClub.club.shortName} vs {o.gameVideo.fixture.awaySeasonClub.club.shortName} · {o.observationType} @ {o.videoTimeMs}ms</p>
+                  <p className="mt-1 text-zinc-400">{o.gameVideo.fixture.homeSeasonClub!.club.shortName} vs {o.gameVideo.fixture.awaySeasonClub!.club.shortName} · {o.observationType} @ {o.videoTimeMs}ms</p>
                 </div>
               ))}
             </div>
@@ -51,7 +51,7 @@ export default async function VisionFailures() {
               {matches.map((m) => (
                 <div key={m.id} className="rounded-xl border border-red-400/30 bg-red-400/[.04] p-3 text-xs">
                   <p className="font-bold text-red-300">{m.failureCategory}</p>
-                  <p className="mt-1 text-zinc-400">{m.observation.gameVideo.fixture.homeSeasonClub.club.shortName} vs {m.observation.gameVideo.fixture.awaySeasonClub.club.shortName} — {m.gameEvent.description}</p>
+                  <p className="mt-1 text-zinc-400">{m.observation.gameVideo.fixture.homeSeasonClub!.club.shortName} vs {m.observation.gameVideo.fixture.awaySeasonClub!.club.shortName} — {m.gameEvent.description}</p>
                 </div>
               ))}
             </div>

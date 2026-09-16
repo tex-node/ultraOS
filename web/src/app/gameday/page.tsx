@@ -60,16 +60,16 @@ export default async function GameDayControlCenter() {
   if (nextFixture) {
     const minutesUntil = (nextFixture.scheduledAt.getTime() - now.getTime()) / 60000;
     if (minutesUntil > 0 && minutesUntil <= STARTS_SOON_MINUTES) {
-      warnings.push(`${nextFixture.homeSeasonClub.club.shortName} vs ${nextFixture.awaySeasonClub.club.shortName} starts in ${Math.ceil(minutesUntil)} min`);
+      warnings.push(`${nextFixture.homeSeasonClub!.club.shortName} vs ${nextFixture.awaySeasonClub!.club.shortName} starts in ${Math.ceil(minutesUntil)} min`);
     }
     if (minutesUntil < 0 && live.length === 0) {
-      warnings.push(`${nextFixture.homeSeasonClub.club.shortName} vs ${nextFixture.awaySeasonClub.club.shortName} was scheduled ${Math.ceil(-minutesUntil)} min ago and hasn't started — previous game may not be finalized`);
+      warnings.push(`${nextFixture.homeSeasonClub!.club.shortName} vs ${nextFixture.awaySeasonClub!.club.shortName} was scheduled ${Math.ceil(-minutesUntil)} min ago and hasn't started — previous game may not be finalized`);
     }
   }
   for (const fixture of live) {
     const minutesRunning = (now.getTime() - fixture.scheduledAt.getTime()) / 60000;
     if (minutesRunning > SLOT_MINUTES) {
-      warnings.push(`${fixture.homeSeasonClub.club.shortName} vs ${fixture.awaySeasonClub.club.shortName} is running ${Math.round(minutesRunning - SLOT_MINUTES)} min behind its slot`);
+      warnings.push(`${fixture.homeSeasonClub!.club.shortName} vs ${fixture.awaySeasonClub!.club.shortName} is running ${Math.round(minutesRunning - SLOT_MINUTES)} min behind its slot`);
     }
   }
 
@@ -97,7 +97,7 @@ export default async function GameDayControlCenter() {
     const present = seasonClub.players.filter((p) => checkInStatuses[p.id]?.status === "PRESENT").length;
     const late = seasonClub.players.filter((p) => checkInStatuses[p.id]?.status === "LATE").length;
     const unavailable = seasonClub.players.filter((p) => ["ABSENT", "UNAVAILABLE"].includes(checkInStatuses[p.id]?.status ?? "")).length;
-    const firstFixture = fixtures.find((f) => f.homeSeasonClubId === seasonClub.id || f.awaySeasonClubId === seasonClub.id);
+    const firstFixture = fixtures.find((f) => f.homeSeasonClubId! === seasonClub.id || f.awaySeasonClubId! === seasonClub.id);
     let readiness: "READY" | "WARNING" | "BLOCKED" = "READY";
     if (!seasonClub.headCoach) readiness = "BLOCKED";
     else if (present + late < seasonClub.players.length) readiness = "WARNING";
@@ -143,7 +143,7 @@ export default async function GameDayControlCenter() {
           <div className="mt-5 space-y-2">
             {openIncidents.map((incident) => (
               <Link key={incident.id} href={incident.fixture ? `/games/${incident.fixture.id}/live` : "#"} className="block rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-2 text-sm text-rose-300">
-                OPEN INCIDENT · {incident.details.incidentType.replace(/_/g, " ")} · {incident.fixture ? `${incident.fixture.homeSeasonClub.club.shortName} vs ${incident.fixture.awaySeasonClub.club.shortName}` : ""} · {incident.details.reason}
+                OPEN INCIDENT · {incident.details.incidentType.replace(/_/g, " ")} · {incident.fixture ? `${incident.fixture.homeSeasonClub!.club.shortName} vs ${incident.fixture.awaySeasonClub!.club.shortName}` : ""} · {incident.details.reason}
               </Link>
             ))}
           </div>
@@ -158,7 +158,7 @@ export default async function GameDayControlCenter() {
               <div className="mt-3 space-y-3">
                 {live.map((fixture) => (
                   <Link key={fixture.id} href={`/games/${fixture.id}/live`} className="block">
-                    <p className="font-semibold">{fixture.homeSeasonClub.club.shortName} {fixture.homeScore} — {fixture.awayScore} {fixture.awaySeasonClub.club.shortName}</p>
+                    <p className="font-semibold">{fixture.homeSeasonClub!.club.shortName} {fixture.homeScore} — {fixture.awayScore} {fixture.awaySeasonClub!.club.shortName}</p>
                     <p className="text-xs text-emerald-400">
                       {periodLabel(fixture.game!.currentPeriod, fixture.game!.status)} · {Math.floor(remainingClockSeconds(fixture.game!) / 60)}:{(remainingClockSeconds(fixture.game!) % 60).toString().padStart(2, "0")} · {fixture.game!.status}
                     </p>
@@ -171,7 +171,7 @@ export default async function GameDayControlCenter() {
             <p className="text-xs uppercase tracking-wider text-zinc-500">Next game</p>
             {nextFixture ? (
               <>
-                <p className="mt-3 font-semibold">{nextFixture.homeSeasonClub.club.shortName} vs {nextFixture.awaySeasonClub.club.shortName}</p>
+                <p className="mt-3 font-semibold">{nextFixture.homeSeasonClub!.club.shortName} vs {nextFixture.awaySeasonClub!.club.shortName}</p>
                 <p className="text-xs text-zinc-500">{formatLagosTime(nextFixture.scheduledAt)}</p>
               </>
             ) : (
@@ -226,7 +226,7 @@ export default async function GameDayControlCenter() {
                   <div className="flex items-center gap-4">
                     <span className="w-16 text-xs text-zinc-500">{formatLagosTime(fixture.scheduledAt)}</span>
                     <span className="text-sm font-medium">
-                      {fixture.homeSeasonClub.club.shortName} {fixture.status !== "SCHEDULED" ? fixture.homeScore : ""} <span className="text-zinc-600">vs</span> {fixture.status !== "SCHEDULED" ? fixture.awayScore : ""} {fixture.awaySeasonClub.club.shortName}
+                      {fixture.homeSeasonClub!.club.shortName} {fixture.status !== "SCHEDULED" ? fixture.homeScore : ""} <span className="text-zinc-600">vs</span> {fixture.status !== "SCHEDULED" ? fixture.awayScore : ""} {fixture.awaySeasonClub!.club.shortName}
                     </span>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${badgeClass}`}>{status}</span>
                   </div>

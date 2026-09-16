@@ -61,7 +61,7 @@ async function main() {
       const g = await tx.game.findUniqueOrThrow({ where: { id: game.id }, include: { fixture: true, ruleSnapshot: true } });
       const shot = scoreShot({ rules: effectiveRuleSnapshot(g.ruleSnapshot), shotValue, gameStatus: g.status, currentPeriod: period, remainingClockSeconds: clockSeconds });
       if (!shot.valid) throw new Error(shot.error);
-      const isHome = seasonClubId === g.fixture.homeSeasonClubId;
+      const isHome = seasonClubId === g.fixture.homeSeasonClubId!;
       const currentScore = isHome ? g.fixture.homeScore : g.fixture.awayScore;
       const nextScore = currentScore + shot.pointsAwarded;
       await tx.fixture.update({ where: { id: fixture.id }, data: isHome ? { homeScore: nextScore } : { awayScore: nextScore } });
@@ -155,7 +155,7 @@ async function main() {
   // --- Finalize, verify, then a post-final correction, proving presentation propagation ---
   await prisma.$transaction(async (tx) => {
     const g = await tx.game.findUniqueOrThrow({ where: { id: game.id }, include: { fixture: true } });
-    const winnerSeasonClubId = g.fixture.homeScore > g.fixture.awayScore ? g.fixture.homeSeasonClubId : g.fixture.awaySeasonClubId;
+    const winnerSeasonClubId = g.fixture.homeScore > g.fixture.awayScore ? g.fixture.homeSeasonClubId! : g.fixture.awaySeasonClubId!;
     await tx.fixture.update({ where: { id: fixture.id }, data: { status: "FINAL", winnerSeasonClubId } });
     await tx.game.update({ where: { id: game.id }, data: { status: "FINAL", endedAt: new Date(), clockSecondsRemaining: remainingClockSeconds(g) } });
   });
@@ -177,7 +177,7 @@ async function main() {
         await tx.playerStat.upsert({ where: { gameId_playerId: { gameId: game.id, playerId } }, create: { gameId: game.id, playerId, seasonClubId: p.seasonClubId, points: p.points, rebounds: p.rebounds, assists: p.assists, steals: p.steals, blocks: p.blocks, turnovers: p.turnovers, fouls: p.fouls, fieldGoalsMade: p.fieldGoalsMade, fieldGoalsAttempted: p.fieldGoalsAttempted, twoPointsMade: p.twoPointsMade, twoPointsAttempted: p.twoPointsAttempted, threePointsMade: p.threePointsMade, threePointsAttempted: p.threePointsAttempted, freeThrowsMade: p.freeThrowsMade, freeThrowsAttempted: p.freeThrowsAttempted, offensiveRebounds: p.offensiveRebounds, defensiveRebounds: p.defensiveRebounds, fourPointsMade: p.fourPointsMade, fourPointsAttempted: p.fourPointsAttempted, ultraTimePoints: p.ultraTimePoints, ultraTimeFieldGoalsMade: p.ultraTimeFieldGoalsMade, ultraTimeFieldGoalsAttempted: p.ultraTimeFieldGoalsAttempted, statSource: "EVENT_DERIVED" }, update: { points: p.points, rebounds: p.rebounds, assists: p.assists, steals: p.steals, blocks: p.blocks, turnovers: p.turnovers, fouls: p.fouls, fieldGoalsMade: p.fieldGoalsMade, fieldGoalsAttempted: p.fieldGoalsAttempted, twoPointsMade: p.twoPointsMade, twoPointsAttempted: p.twoPointsAttempted, threePointsMade: p.threePointsMade, threePointsAttempted: p.threePointsAttempted, freeThrowsMade: p.freeThrowsMade, freeThrowsAttempted: p.freeThrowsAttempted, offensiveRebounds: p.offensiveRebounds, defensiveRebounds: p.defensiveRebounds, fourPointsMade: p.fourPointsMade, fourPointsAttempted: p.fourPointsAttempted, ultraTimePoints: p.ultraTimePoints, ultraTimeFieldGoalsMade: p.ultraTimeFieldGoalsMade, ultraTimeFieldGoalsAttempted: p.ultraTimeFieldGoalsAttempted, statSource: "EVENT_DERIVED" } });
       }
       const derivedTeams = deriveTeamStats(derivedPlayers);
-      for (const seasonClubId of [g.fixture.homeSeasonClubId, g.fixture.awaySeasonClubId]) {
+      for (const seasonClubId of [g.fixture.homeSeasonClubId!, g.fixture.awaySeasonClubId!]) {
         const t = derivedTeams.get(seasonClubId) ?? emptyTeamStats(seasonClubId);
         await tx.teamStat.upsert({ where: { gameId_seasonClubId: { gameId: game.id, seasonClubId } }, create: { gameId: game.id, seasonClubId, points: t.points, rebounds: t.rebounds, assists: t.assists, turnovers: t.turnovers, fouls: t.fouls, fourPointsMade: t.fourPointsMade, fourPointsAttempted: t.fourPointsAttempted, ultraTimePointsFor: t.ultraTimePointsFor, statSource: "EVENT_DERIVED" }, update: { points: t.points, rebounds: t.rebounds, assists: t.assists, turnovers: t.turnovers, fouls: t.fouls, fourPointsMade: t.fourPointsMade, fourPointsAttempted: t.fourPointsAttempted, ultraTimePointsFor: t.ultraTimePointsFor, statSource: "EVENT_DERIVED" } });
       }

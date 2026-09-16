@@ -111,7 +111,7 @@ export default async function BroadcastStats() {
         </div>
 
         {liveFixtures.map((fixture, i) => (
-          <CommentatorCommandCenter key={fixture.id} fixture={fixture} model={liveModels[i]} />
+          <CommentatorCommandCenter key={fixture.id} fixture={{ ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }} model={liveModels[i]} />
         ))}
 
         <Section title="Season Zero Snapshot">

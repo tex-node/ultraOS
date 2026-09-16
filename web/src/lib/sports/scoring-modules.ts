@@ -67,8 +67,8 @@ const volleyballModule: SportScoringModule = {
   apply: (definition, input) => {
     const config = setScoringConfig(definition);
     if (!config) return missingSport();
-    const home = input.homeSeasonClubId;
-    const away = input.awaySeasonClubId;
+    const home = input.homeSeasonClubId!;
+    const away = input.awaySeasonClubId!;
     if (input.seasonClubId !== home && input.seasonClubId !== away) return { ok: false, reason: "INVALID_TEAM" };
     const isHome = input.seasonClubId === home;
 
@@ -110,8 +110,8 @@ const footballModule: SportScoringModule = {
     { typeKey: "OWN_GOAL", label: "Own goal" },
   ],
   apply: (_definition, input) => {
-    const home = input.homeSeasonClubId;
-    const away = input.awaySeasonClubId;
+    const home = input.homeSeasonClubId!;
+    const away = input.awaySeasonClubId!;
     if (input.seasonClubId !== home && input.seasonClubId !== away) return { ok: false, reason: "INVALID_TEAM" };
     const typeKey = input.typeKey ?? "GOAL";
     const ownGoal = typeKey === "OWN_GOAL";
@@ -148,8 +148,8 @@ const cricketModule: SportScoringModule = {
   apply: (definition, input) => {
     const config = inningsConfig(definition);
     if (!config) return missingSport();
-    const home = input.homeSeasonClubId;
-    const away = input.awaySeasonClubId;
+    const home = input.homeSeasonClubId!;
+    const away = input.awaySeasonClubId!;
     const period = input.currentPeriod <= config.inningsCount ? input.currentPeriod : config.inningsCount;
     const batting = battingSide(config, period);
     const battingSeasonClubId = batting === "HOME" ? home : away;

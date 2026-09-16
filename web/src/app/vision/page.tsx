@@ -50,7 +50,7 @@ export default async function VisionDashboard() {
                   <Link key={v.id} href={`/vision/games/${v.fixtureId}?video=${v.id}`} className="block rounded-xl border border-white/[.08] bg-[#0b100e] p-4 transition hover:border-violet-400/40">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <p className="text-sm font-semibold">{v.fixture.homeSeasonClub.club.shortName} vs {v.fixture.awaySeasonClub.club.shortName}</p>
+                        <p className="text-sm font-semibold">{v.fixture.homeSeasonClub!.club.shortName} vs {v.fixture.awaySeasonClub!.club.shortName}</p>
                         <p className="text-xs text-zinc-500">{v.sourceType} · {v._count.observations} observation(s) · capability: {v.visionCapability}</p>
                       </div>
                       <div className="text-right text-xs text-zinc-500">

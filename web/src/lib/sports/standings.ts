@@ -309,8 +309,8 @@ export function computeSeasonStandings(
 ): ComputedStandingRow[] {
   const entrants: StandingsEntrant[] = teams.map((team) => ({ entrantId: team.seasonClubId, name: team.name }));
   const results: StandingsResult[] = fixtures.map((fixture) => ({
-    homeEntrantId: fixture.homeSeasonClubId,
-    awayEntrantId: fixture.awaySeasonClubId,
+    homeEntrantId: fixture.homeSeasonClubId!,
+    awayEntrantId: fixture.awaySeasonClubId!,
     homeScore: fixture.homeScore,
     awayScore: fixture.awayScore,
     secondary: secondaryForFixture(definition, fixture),

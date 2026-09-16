@@ -155,8 +155,8 @@ export async function previewGameResultImport(input: GameResultImportInput): Pro
     if (!fixture) {
       return { fixtureId: input.fixtureId, status: "BLOCKED", reason: "Fixture not found.", homeMatches: [], awayMatches: [] };
     }
-    const homeMatches = await matchTeamPlayers(tx, fixture.homeSeasonClubId, input.home.players);
-    const awayMatches = await matchTeamPlayers(tx, fixture.awaySeasonClubId, input.away.players);
+    const homeMatches = await matchTeamPlayers(tx, fixture.homeSeasonClubId!, input.home.players);
+    const awayMatches = await matchTeamPlayers(tx, fixture.awaySeasonClubId!, input.away.players);
     return { fixtureId: input.fixtureId, status: "IMPORTED", homeMatches, awayMatches };
   });
 }
@@ -175,13 +175,13 @@ export async function importGameResult(input: GameResultImportInput, actorId: st
     if (fixture.status === "FINAL" || fixture.game?.status === "FINAL") {
       return { fixtureId: input.fixtureId, status: "BLOCKED", reason: "Fixture is already FINAL. Use the supersede workflow instead of importing again.", homeMatches: [], awayMatches: [] };
     }
-    if (fixture.homeSeasonClub.club.shortName.toUpperCase() !== input.homeShortName.toUpperCase()
-      || fixture.awaySeasonClub.club.shortName.toUpperCase() !== input.awayShortName.toUpperCase()) {
-      return { fixtureId: input.fixtureId, status: "BLOCKED", reason: `GAME_IDENTITY_MISMATCH: fixture is ${fixture.homeSeasonClub.club.shortName} vs ${fixture.awaySeasonClub.club.shortName}, import is ${input.homeShortName} vs ${input.awayShortName}.`, homeMatches: [], awayMatches: [] };
+    if (fixture.homeSeasonClub!.club.shortName.toUpperCase() !== input.homeShortName.toUpperCase()
+      || fixture.awaySeasonClub!.club.shortName.toUpperCase() !== input.awayShortName.toUpperCase()) {
+      return { fixtureId: input.fixtureId, status: "BLOCKED", reason: `GAME_IDENTITY_MISMATCH: fixture is ${fixture.homeSeasonClub!.club.shortName} vs ${fixture.awaySeasonClub!.club.shortName}, import is ${input.homeShortName} vs ${input.awayShortName}.`, homeMatches: [], awayMatches: [] };
     }
 
-    const homeMatches = await matchTeamPlayers(tx, fixture.homeSeasonClubId, input.home.players);
-    const awayMatches = await matchTeamPlayers(tx, fixture.awaySeasonClubId, input.away.players);
+    const homeMatches = await matchTeamPlayers(tx, fixture.homeSeasonClubId!, input.home.players);
+    const awayMatches = await matchTeamPlayers(tx, fixture.awaySeasonClubId!, input.away.players);
     const unresolved = [...homeMatches, ...awayMatches].filter((m) => m.status !== "MATCHED");
     // Unresolved rows are skipped (no PlayerStat written for them), not blocking — team-level
     // results (score, TeamStat, standings) are still real and correct even when an individual
@@ -192,8 +192,8 @@ export async function importGameResult(input: GameResultImportInput, actorId: st
     const winnerSeasonClubId = input.homeScore === input.awayScore
       ? null
       : input.homeScore > input.awayScore
-        ? fixture.homeSeasonClubId
-        : fixture.awaySeasonClubId;
+        ? fixture.homeSeasonClubId!
+        : fixture.awaySeasonClubId!;
 
     await tx.fixture.update({
       where: { id: input.fixtureId },
@@ -237,8 +237,8 @@ export async function importGameResult(input: GameResultImportInput, actorId: st
     }
 
     const teamSides: Array<{ seasonClubId: string; line: ImportTeamLine; matches: PlayerMatch[] }> = [
-      { seasonClubId: fixture.homeSeasonClubId, line: input.home, matches: homeMatches },
-      { seasonClubId: fixture.awaySeasonClubId, line: input.away, matches: awayMatches },
+      { seasonClubId: fixture.homeSeasonClubId!, line: input.home, matches: homeMatches },
+      { seasonClubId: fixture.awaySeasonClubId!, line: input.away, matches: awayMatches },
     ];
 
     for (const side of teamSides) {

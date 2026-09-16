@@ -48,7 +48,11 @@ export async function recalculateStandings(
       name: team.club.name,
       entrantId: team.entrant?.id ?? null,
     })),
-    fixtures,
+    fixtures.map((fixture) => ({
+      ...fixture,
+      homeSeasonClubId: fixture.homeSeasonClubId!,
+      awaySeasonClubId: fixture.awaySeasonClubId!,
+    })),
   );
 
   for (const row of computed) {

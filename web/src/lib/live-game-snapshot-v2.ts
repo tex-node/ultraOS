@@ -144,8 +144,8 @@ export async function buildLiveGameSnapshotV2(gameId: string, db: Db = prisma): 
     }),
   ]);
 
-  const homeId = game.fixture.homeSeasonClubId;
-  const awayId = game.fixture.awaySeasonClubId;
+  const homeId = game.fixture.homeSeasonClubId!;
+  const awayId = game.fixture.awaySeasonClubId!;
 
   const playerStatsMap = derivePlayerStats(statisticianEvents);
   const teamStatsMap = deriveTeamStats(playerStatsMap);
@@ -223,8 +223,8 @@ export async function buildLiveGameSnapshotV2(gameId: string, db: Db = prisma): 
     dataCapability: capability,
     score: { home: game.fixture.homeScore, away: game.fixture.awayScore },
     teams: {
-      home: { seasonClubId: homeId, shortName: game.fixture.homeSeasonClub.club.shortName, name: game.fixture.homeSeasonClub.club.name },
-      away: { seasonClubId: awayId, shortName: game.fixture.awaySeasonClub.club.shortName, name: game.fixture.awaySeasonClub.club.name },
+      home: { seasonClubId: homeId, shortName: game.fixture.homeSeasonClub!.club.shortName, name: game.fixture.homeSeasonClub!.club.name },
+      away: { seasonClubId: awayId, shortName: game.fixture.awaySeasonClub!.club.shortName, name: game.fixture.awaySeasonClub!.club.name },
     },
     liveBoxScore,
     leaders: computeLeaders(liveBoxScore.players),

@@ -75,7 +75,7 @@ export default async function BroadcastControl({ searchParams }: { searchParams:
         ) : (
           games.map(({ fixture, model }) => (
             <section key={fixture.id} className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
-              <p className="text-sm font-bold">{fixture.homeSeasonClub.club.shortName} {model.score.home} — {model.score.away} {fixture.awaySeasonClub.club.shortName}</p>
+              <p className="text-sm font-bold">{fixture.homeSeasonClub!.club.shortName} {model.score.home} — {model.score.away} {fixture.awaySeasonClub!.club.shortName}</p>
 
               <Suggestions gameId={fixture.game!.id} model={model} />
 
@@ -94,7 +94,7 @@ export default async function BroadcastControl({ searchParams }: { searchParams:
                   <div className="mt-2 flex flex-wrap gap-2">
                     {model.players.slice(0, 10).map((p) => (
                       <form key={p.playerId} action={setPreviewAction.bind(null, fixture.game!.id, "PLAYER_SPOTLIGHT" as GraphicType, p.playerId)}>
-                        <button className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-zinc-300 hover:border-white/40">{p.points} PTS · {p.seasonClubId === model.teams.home.seasonClubId ? fixture.homeSeasonClub.club.shortName : fixture.awaySeasonClub.club.shortName}</button>
+                        <button className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-zinc-300 hover:border-white/40">{p.points} PTS · {p.seasonClubId === model.teams.home.seasonClubId ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName}</button>
                       </form>
                     ))}
                   </div>

@@ -34,8 +34,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
     const clubFor = (seasonClubId: string | null) => {
       if (!seasonClubId) return null;
       return seasonClubId === model.teams.home.seasonClubId
-        ? { publicId: fixture.homeSeasonClub.club.shortName.toLowerCase(), name: fixture.homeSeasonClub.club.name, shortName: fixture.homeSeasonClub.club.shortName }
-        : { publicId: fixture.awaySeasonClub.club.shortName.toLowerCase(), name: fixture.awaySeasonClub.club.name, shortName: fixture.awaySeasonClub.club.shortName };
+        ? { publicId: fixture.homeSeasonClub!.club.shortName.toLowerCase(), name: fixture.homeSeasonClub!.club.name, shortName: fixture.homeSeasonClub!.club.shortName }
+        : { publicId: fixture.awaySeasonClub!.club.shortName.toLowerCase(), name: fixture.awaySeasonClub!.club.name, shortName: fixture.awaySeasonClub!.club.shortName };
     };
 
     const activeEvents = model.latestEvents.filter((e) => e.status === "ACTIVE");

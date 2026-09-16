@@ -73,7 +73,7 @@ async function main() {
       const g = await tx.game.findUniqueOrThrow({ where: { id: game.id }, include: { fixture: true, ruleSnapshot: true } });
       const shot = scoreShot({ rules: effectiveRuleSnapshot(g.ruleSnapshot), shotValue, gameStatus: g.status, currentPeriod: period, remainingClockSeconds: clockSeconds });
       if (!shot.valid) throw new Error(shot.error);
-      const isHome = seasonClubId === g.fixture.homeSeasonClubId;
+      const isHome = seasonClubId === g.fixture.homeSeasonClubId!;
       const currentScore = isHome ? g.fixture.homeScore : g.fixture.awayScore;
       const nextScore = currentScore + shot.pointsAwarded;
       await tx.fixture.update({ where: { id: fixture.id }, data: isHome ? { homeScore: nextScore } : { awayScore: nextScore } });
@@ -139,7 +139,7 @@ async function main() {
     const g = await prisma.game.findUniqueOrThrow({ where: { id: game.id }, include: { fixture: true } });
     const events: DerivableEvent[] = await prisma.gameEvent.findMany({ where: { gameId: game.id, source: STAT_SOURCE, status: "ACTIVE" }, orderBy: { sequenceNumber: "asc" }, select: { eventType: true, status: true, seasonClubId: true, playerId: true, points: true, basePointValue: true, isUltraTime: true } });
     const teamStats = deriveTeamStats(derivePlayerStats(events));
-    return reconcileGameScore(g.fixture.homeScore, g.fixture.awayScore, deriveTeamScore(teamStats, g.fixture.homeSeasonClubId), deriveTeamScore(teamStats, g.fixture.awaySeasonClubId), events.length > 0);
+    return reconcileGameScore(g.fixture.homeScore, g.fixture.awayScore, deriveTeamScore(teamStats, g.fixture.homeSeasonClubId!), deriveTeamScore(teamStats, g.fixture.awaySeasonClubId!), events.length > 0);
   }
 
   // --- Full event set ---

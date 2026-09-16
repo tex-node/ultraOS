@@ -49,11 +49,11 @@ export default async function Match({ params }: { params: Promise<{ id: string }
   const organizationId = locator.organizationId;
 
   if (fixture.status !== "FINAL") {
-    return <PreGameOrLive fixture={fixture} organizationId={organizationId} />;
+    return <PreGameOrLive fixture={{ ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }} organizationId={organizationId} />;
   }
 
   const game = await withOrganizationContext(organizationId, (tx) => loadGameCoreByFixture(id, tx));
-  if (!game) return <PreGameOrLive fixture={fixture} organizationId={organizationId} />;
+  if (!game) return <PreGameOrLive fixture={{ ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }} organizationId={organizationId} />;
 
   const storyTags = classifyGameStory(game);
   const headlineTag = GAME_STORY_PRIORITY.find((t) => storyTags.includes(t));
@@ -141,9 +141,9 @@ async function PreGameOrLive({
       <section className="rounded-3xl border border-white/[.08] bg-[#0b100e] p-8 text-center">
         <p className="text-cyan-400">{fixture.status}</p>
         <div className="mt-8 grid grid-cols-[1fr_auto_1fr] items-center">
-          <MatchTeam name={fixture.homeSeasonClub.club.name} score={fixture.homeScore} />
+          <MatchTeam name={fixture.homeSeasonClub!.club.name} score={fixture.homeScore} />
           <span className="text-zinc-500">VS</span>
-          <MatchTeam name={fixture.awaySeasonClub.club.name} score={fixture.awayScore} />
+          <MatchTeam name={fixture.awaySeasonClub!.club.name} score={fixture.awayScore} />
         </div>
         <p className="mt-8 text-zinc-400">
           {formatLagosDateTime(fixture.scheduledAt)} · {fixture.venue.name}

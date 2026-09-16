@@ -19,7 +19,7 @@ export default async function PlayerSpotlight({ params, searchParams }: { params
   const display = await resolvePlayerDisplay(playerId);
   if (!stat || !display) notFound();
 
-  const clubShort = model.teams.home.seasonClubId === stat.seasonClubId ? fixture.homeSeasonClub.club.shortName : fixture.awaySeasonClub.club.shortName;
+  const clubShort = model.teams.home.seasonClubId === stat.seasonClubId ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName;
 
   return (
     <div className="inline-flex w-[420px] flex-col gap-2 rounded-2xl bg-black/85 p-5 font-sans text-white">

@@ -42,7 +42,7 @@ export default async function Scorebug({ params }: { params: Promise<{ gameId: s
       <GraphicRefresher intervalSeconds={3} />
       <TransparentBody />
       <div className="flex items-center gap-2 rounded-lg bg-black/80 px-3 py-2">
-        <span className="text-sm font-bold uppercase tracking-wider">{game.fixture.homeSeasonClub.club.shortName}</span>
+        <span className="text-sm font-bold uppercase tracking-wider">{game.fixture.homeSeasonClub!.club.shortName}</span>
         <span className="font-mono text-xl font-black">{model.score.home}</span>
       </div>
       <div className="flex flex-col items-center rounded-lg bg-black/80 px-3 py-2">
@@ -57,7 +57,7 @@ export default async function Scorebug({ params }: { params: Promise<{ gameId: s
       </div>
       <div className="flex items-center gap-2 rounded-lg bg-black/80 px-3 py-2">
         <span className="font-mono text-xl font-black">{model.score.away}</span>
-        <span className="text-sm font-bold uppercase tracking-wider">{game.fixture.awaySeasonClub.club.shortName}</span>
+        <span className="text-sm font-bold uppercase tracking-wider">{game.fixture.awaySeasonClub!.club.shortName}</span>
       </div>
     </div>
   );

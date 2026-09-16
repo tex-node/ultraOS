@@ -27,14 +27,14 @@ export default async function Page({ params }: { params: Promise<{ gameId: strin
       awayScore: g.fixture.awayScore,
       venue: g.fixture.venue.name,
       home: {
-        name: g.fixture.homeSeasonClub.club.name,
-        shortName: g.fixture.homeSeasonClub.club.shortName,
-        color: g.fixture.homeSeasonClub.club.primaryColor,
+        name: g.fixture.homeSeasonClub!.club.name,
+        shortName: g.fixture.homeSeasonClub!.club.shortName,
+        color: g.fixture.homeSeasonClub!.club.primaryColor,
       },
       away: {
-        name: g.fixture.awaySeasonClub.club.name,
-        shortName: g.fixture.awaySeasonClub.club.shortName,
-        color: g.fixture.awaySeasonClub.club.primaryColor,
+        name: g.fixture.awaySeasonClub!.club.name,
+        shortName: g.fixture.awaySeasonClub!.club.shortName,
+        color: g.fixture.awaySeasonClub!.club.primaryColor,
       },
     },
   };

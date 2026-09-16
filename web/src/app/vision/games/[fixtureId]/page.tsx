@@ -41,7 +41,7 @@ export default async function FixtureVisionWorkspace({ params, searchParams }: {
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-6xl px-6 py-10">
         <p className="text-xs uppercase tracking-[.2em] text-violet-400">AI Vision · Fixture Workspace</p>
-        <h1 className="mt-2 text-3xl font-bold">{fixture.homeSeasonClub.club.shortName} vs {fixture.awaySeasonClub.club.shortName}</h1>
+        <h1 className="mt-2 text-3xl font-bold">{fixture.homeSeasonClub!.club.shortName} vs {fixture.awaySeasonClub!.club.shortName}</h1>
         <div className="mt-2 flex flex-wrap gap-2">
           {videos.map((v) => (
             <Link key={v.id} href={`/vision/games/${fixtureId}?video=${v.id}`} className={`rounded-lg border px-3 py-1.5 text-xs ${selected?.id === v.id ? "border-violet-400/60 bg-violet-400/10 text-violet-300" : "border-white/10 text-zinc-400"}`}>

@@ -69,7 +69,7 @@ export default async function StatisticianConsole({
   const reconciliation = await getGameReconciliation(game.id);
   const liveBoxScore = await getGameLiveBoxScore(game.id);
   const lineup = await getGameLineup(game.id);
-  const startersConfirmed = { home: (lineup.get(fixture.homeSeasonClubId)?.size ?? 0) > 0, away: (lineup.get(fixture.awaySeasonClubId)?.size ?? 0) > 0 };
+  const startersConfirmed = { home: (lineup.get(fixture.homeSeasonClubId!)?.size ?? 0) > 0, away: (lineup.get(fixture.awaySeasonClubId!)?.size ?? 0) > 0 };
   const bothStartersConfirmed = startersConfirmed.home && startersConfirmed.away;
   const events = await withOrganizationContext(session.user.organizationId, (tx) => tx.gameEvent.findMany({
     where: { gameId: game.id, source: "ULTRA_NATIVE_LIVE_STATISTICIAN" },
@@ -96,8 +96,8 @@ export default async function StatisticianConsole({
   const gameEndPoint = { period: game.currentPeriod, clockSeconds: remainingSeconds };
   const minutesByTeam = bothStartersConfirmed
     ? {
-        home: verifyTeamMinutes(fixture.homeSeasonClubId, starterRows, substitutionsWithClock, gameEndPoint),
-        away: verifyTeamMinutes(fixture.awaySeasonClubId, starterRows, substitutionsWithClock, gameEndPoint),
+        home: verifyTeamMinutes(fixture.homeSeasonClubId!, starterRows, substitutionsWithClock, gameEndPoint),
+        away: verifyTeamMinutes(fixture.awaySeasonClubId!, starterRows, substitutionsWithClock, gameEndPoint),
       }
     : null;
 
@@ -133,7 +133,7 @@ export default async function StatisticianConsole({
           ) : null}
           <h1 className="text-lg font-semibold">Statistician console</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            {fixture.homeSeasonClub.club.shortName} vs {fixture.awaySeasonClub.club.shortName} · {periodLabel(game.currentPeriod, game.status)} · {game.status}
+            {fixture.homeSeasonClub!.club.shortName} vs {fixture.awaySeasonClub!.club.shortName} · {periodLabel(game.currentPeriod, game.status)} · {game.status}
           </p>
           {game.status === "FINAL" ? (
             <p className="mt-2 text-xs text-amber-400">This game is FINAL. Statistician entry is closed; only verification remains available.</p>
@@ -142,8 +142,8 @@ export default async function StatisticianConsole({
 
         {isMutable && !bothStartersConfirmed ? (
           <div className="mt-6 grid gap-6 lg:grid-cols-2">
-            <StartingFivePanel team={fixture.homeSeasonClub} gameId={game.id} fixtureId={fixtureId} confirmed={startersConfirmed.home} />
-            <StartingFivePanel team={fixture.awaySeasonClub} gameId={game.id} fixtureId={fixtureId} confirmed={startersConfirmed.away} />
+            <StartingFivePanel team={fixture.homeSeasonClub!} gameId={game.id} fixtureId={fixtureId} confirmed={startersConfirmed.home} />
+            <StartingFivePanel team={fixture.awaySeasonClub!} gameId={game.id} fixtureId={fixtureId} confirmed={startersConfirmed.away} />
           </div>
         ) : null}
 
@@ -157,7 +157,7 @@ export default async function StatisticianConsole({
                 : "⚠ SCORE RECONCILIATION REQUIRED — the statistician's derived score does not match the official scoreboard."}
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {[{ team: fixture.homeSeasonClub, r: reconciliation.home }, { team: fixture.awaySeasonClub, r: reconciliation.away }].map(({ team, r }) => (
+            {[{ team: fixture.homeSeasonClub!, r: reconciliation.home }, { team: fixture.awaySeasonClub!, r: reconciliation.away }].map(({ team, r }) => (
               <div key={team.id} className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm">
                 <p className="font-semibold">{team.club.shortName}</p>
                 <p className="mt-1 text-xs opacity-80">OFFICIAL {r.officialScore} · STATISTICAL {r.status === "UNAVAILABLE" ? "—" : r.statisticalScore}</p>
@@ -181,22 +181,22 @@ export default async function StatisticianConsole({
         {isMutable && bothStartersConfirmed ? (
           <div className="mt-6 grid gap-6 lg:grid-cols-2">
             <TeamStatPanel
-              team={fixture.homeSeasonClub}
+              team={fixture.homeSeasonClub!}
               gameId={game.id}
               fixtureId={fixtureId}
               ultraTime={ultraTime}
-              onCourt={lineup.get(fixture.homeSeasonClubId) ?? new Set()}
+              onCourt={lineup.get(fixture.homeSeasonClubId!) ?? new Set()}
               selectedPlayerId={query.homePlayer}
               selectParamName="homePlayer"
               otherPlayerId={query.awayPlayer}
               otherParamName="awayPlayer"
             />
             <TeamStatPanel
-              team={fixture.awaySeasonClub}
+              team={fixture.awaySeasonClub!}
               gameId={game.id}
               fixtureId={fixtureId}
               ultraTime={ultraTime}
-              onCourt={lineup.get(fixture.awaySeasonClubId) ?? new Set()}
+              onCourt={lineup.get(fixture.awaySeasonClubId!) ?? new Set()}
               selectedPlayerId={query.awayPlayer}
               selectParamName="awayPlayer"
               otherPlayerId={query.homePlayer}
@@ -218,8 +218,8 @@ export default async function StatisticianConsole({
           <p className="mt-1 text-xs text-zinc-500">Computed live from the statistician&apos;s own event ledger — a read model, not yet the canonical box score until verified.</p>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             {[
-              { team: fixture.homeSeasonClub, totals: liveBoxScore.teams.home, minutes: minutesByTeam?.home },
-              { team: fixture.awaySeasonClub, totals: liveBoxScore.teams.away, minutes: minutesByTeam?.away },
+              { team: fixture.homeSeasonClub!, totals: liveBoxScore.teams.home, minutes: minutesByTeam?.home },
+              { team: fixture.awaySeasonClub!, totals: liveBoxScore.teams.away, minutes: minutesByTeam?.away },
             ].map(({ team, totals, minutes }) => (
               <div key={team.id} className="rounded-xl border border-white/10 p-3 text-sm">
                 <div className="flex justify-between font-semibold"><span>{team.club.shortName}</span><span>{totals.points} PTS</span></div>

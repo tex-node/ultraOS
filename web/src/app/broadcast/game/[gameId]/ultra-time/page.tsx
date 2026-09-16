@@ -25,12 +25,12 @@ export default async function UltraTimeGraphic({ params }: { params: Promise<{ g
         <p className="text-xl font-bold text-amber-300">ULTRA TIME IN {model.ultraTime.secondsUntilStart}s</p>
       )}
       <p className="text-sm text-zinc-400">ALL POINTS ×2</p>
-      <p className="font-mono text-2xl font-black">{fixture.homeSeasonClub.club.shortName} {model.score.home} — {model.score.away} {fixture.awaySeasonClub.club.shortName}</p>
+      <p className="font-mono text-2xl font-black">{fixture.homeSeasonClub!.club.shortName} {model.score.home} — {model.score.away} {fixture.awaySeasonClub!.club.shortName}</p>
       {model.dataCapability === "FULL_ULTRA" ? (
         <p className="text-xs text-amber-200">
-          Ultra Time pts — {fixture.homeSeasonClub.club.shortName} {model.players.filter((p) => p.seasonClubId === model.teams.home.seasonClubId).reduce((s, p) => s + p.ultraTimePoints, 0)}
+          Ultra Time pts — {fixture.homeSeasonClub!.club.shortName} {model.players.filter((p) => p.seasonClubId === model.teams.home.seasonClubId).reduce((s, p) => s + p.ultraTimePoints, 0)}
           {" · "}
-          {fixture.awaySeasonClub.club.shortName} {model.players.filter((p) => p.seasonClubId === model.teams.away.seasonClubId).reduce((s, p) => s + p.ultraTimePoints, 0)}
+          {fixture.awaySeasonClub!.club.shortName} {model.players.filter((p) => p.seasonClubId === model.teams.away.seasonClubId).reduce((s, p) => s + p.ultraTimePoints, 0)}
         </p>
       ) : null}
     </div>

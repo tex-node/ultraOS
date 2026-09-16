@@ -63,8 +63,8 @@ export async function generateSchedule(
     const teamSlots = new Set<string>();
     for (const fixture of existing) {
       const iso = fixture.scheduledAt.toISOString();
-      teamSlots.add(`${fixture.homeSeasonClubId}|${iso}`);
-      teamSlots.add(`${fixture.awaySeasonClubId}|${iso}`);
+      teamSlots.add(`${fixture.homeSeasonClubId!}|${iso}`);
+      teamSlots.add(`${fixture.awaySeasonClubId!}|${iso}`);
     }
 
     let created = 0;

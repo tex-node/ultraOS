@@ -72,7 +72,7 @@ export default async function ContentStudioPage() {
       label: "Fixture Release",
       options: fixtures.map((fixture) => ({
         id: fixture.id,
-        label: `${fixture.homeSeasonClub.club.name} vs ${fixture.awaySeasonClub.club.name} | ${fixture.scheduledAt.toLocaleDateString()}`,
+        label: `${fixture.homeSeasonClub!.club.name} vs ${fixture.awaySeasonClub!.club.name} | ${fixture.scheduledAt.toLocaleDateString()}`,
       })),
     },
     {
@@ -80,7 +80,7 @@ export default async function ContentStudioPage() {
       label: "Match Result",
       options: fixtures.map((fixture) => ({
         id: fixture.id,
-        label: `${fixture.homeSeasonClub.club.name} ${fixture.homeScore}-${fixture.awayScore} ${fixture.awaySeasonClub.club.name}`,
+        label: `${fixture.homeSeasonClub!.club.name} ${fixture.homeScore}-${fixture.awayScore} ${fixture.awaySeasonClub!.club.name}`,
         disabled: fixture.status !== "FINAL",
       })),
     },
@@ -89,7 +89,7 @@ export default async function ContentStudioPage() {
       label: "MVP Announcement",
       options: fixtures.map((fixture) => ({
         id: fixture.id,
-        label: `${fixture.homeSeasonClub.club.name} vs ${fixture.awaySeasonClub.club.name}`,
+        label: `${fixture.homeSeasonClub!.club.name} vs ${fixture.awaySeasonClub!.club.name}`,
         disabled: fixture.status !== "FINAL",
       })),
     },

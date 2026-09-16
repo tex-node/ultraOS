@@ -40,7 +40,7 @@ export default async function VisionVideos() {
             <div className="mt-3 space-y-2">
               {videos.map((v) => (
                 <div key={v.id} className="rounded-xl border border-white/[.08] bg-[#0b100e] p-4 text-sm">
-                  <p className="font-semibold">{v.fixture.homeSeasonClub.club.shortName} vs {v.fixture.awaySeasonClub.club.shortName} — {v.sourceType}</p>
+                  <p className="font-semibold">{v.fixture.homeSeasonClub!.club.shortName} vs {v.fixture.awaySeasonClub!.club.shortName} — {v.sourceType}</p>
                   <p className="mt-1 text-xs text-zinc-500">
                     Ingest: <span className="font-bold text-amber-300">{v.ingestStatus}</span>
                     {v.codec ? ` · ${v.codec}` : ""}{v.durationSeconds ? ` · ${Math.round(v.durationSeconds / 60)}min` : ""}
@@ -108,7 +108,7 @@ export default async function VisionVideos() {
           </p>
           {videos.filter((v) => v.gameId).map((v) => (
             <form key={v.gameId} action={setAttackingDirectionAction.bind(null, v.gameId!)} className="mt-2 flex items-center gap-2 text-xs">
-              <span>{v.fixture.homeSeasonClub.club.shortName} vs {v.fixture.awaySeasonClub.club.shortName}:</span>
+              <span>{v.fixture.homeSeasonClub!.club.shortName} vs {v.fixture.awaySeasonClub!.club.shortName}:</span>
               <select name="homeAttacksBasketFirstHalf" className="rounded border border-white/10 bg-[#050807] px-2 py-1">
                 <option value="A">Home attacks basket A first half</option>
                 <option value="B">Home attacks basket B first half</option>

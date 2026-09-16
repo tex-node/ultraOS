@@ -21,7 +21,7 @@ export default async function FinalScoreGraphic({ params }: { params: Promise<{ 
       <GraphicRefresher />
       <TransparentBody />
       <p className="text-[10px] font-bold uppercase tracking-[.3em] text-emerald-400">Final Score</p>
-      <p className="font-mono text-4xl font-black">{fixture.homeSeasonClub.club.shortName} {model.score.home} — {model.score.away} {fixture.awaySeasonClub.club.shortName}</p>
+      <p className="font-mono text-4xl font-black">{fixture.homeSeasonClub!.club.shortName} {model.score.home} — {model.score.away} {fixture.awaySeasonClub!.club.shortName}</p>
       {!verified ? (
         <p className="text-xs font-bold uppercase tracking-wide text-amber-300">Statistics pending verification</p>
       ) : (

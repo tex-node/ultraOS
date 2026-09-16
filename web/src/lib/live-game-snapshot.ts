@@ -55,8 +55,8 @@ export function buildLiveGameSnapshot(input: {
   const hasStatisticianEvents = input.statisticianEvents.length > 0;
   const { homeScore: statisticalHome, awayScore: statisticalAway } = replayScore(
     input.statisticianEvents,
-    input.homeSeasonClubId,
-    input.awaySeasonClubId,
+    input.homeSeasonClubId!,
+    input.awaySeasonClubId!,
   );
   const reconciliation = reconcileGameScore(
     input.officialHomeScore,

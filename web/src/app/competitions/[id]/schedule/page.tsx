@@ -85,9 +85,9 @@ export default async function CompetitionSchedulePage({ params }: { params: Prom
                     <tr key={fixture.id} className="border-t border-white/5">
                       <td className="py-2 pr-4 text-zinc-400">{formatLagosDateTime(fixture.scheduledAt)}</td>
                       <td className="py-2 pr-4">
-                        <Link href={`/fixtures/${fixture.id}`} className="text-emerald-300">{fixture.homeSeasonClub.club.shortName}</Link>
+                        <Link href={`/fixtures/${fixture.id}`} className="text-emerald-300">{fixture.homeSeasonClub!.club.shortName}</Link>
                       </td>
-                      <td className="py-2 pr-4">{fixture.awaySeasonClub.club.shortName}</td>
+                      <td className="py-2 pr-4">{fixture.awaySeasonClub!.club.shortName}</td>
                       <td className="py-2 pr-4 text-zinc-400">{fixture.venue.name}</td>
                       <td className="py-2 pr-4 text-zinc-400">{fixture.status}</td>
                       <td className="py-2 pr-4">{fixture.homeScore}–{fixture.awayScore}</td>

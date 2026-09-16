@@ -68,7 +68,7 @@ export default async function ReconciliationPage({
     });
   }
 
-  const allPlayers = [...fixture.homeSeasonClub.players, ...fixture.awaySeasonClub.players].filter((p) => nativePlayerLines.has(p.id));
+  const allPlayers = [...fixture.homeSeasonClub!.players, ...fixture.awaySeasonClub!.players].filter((p) => nativePlayerLines.has(p.id));
 
   // Official comparison values are read from the query string only - this page never writes
   // anything to PlayerStat/TeamStat or any other table. A comparison is purely ephemeral,
@@ -113,7 +113,7 @@ export default async function ReconciliationPage({
     return line;
   }
 
-  const teamResults: TeamReconciliation[] = [fixture.homeSeasonClub, fixture.awaySeasonClub].map((team) => {
+  const teamResults: TeamReconciliation[] = [fixture.homeSeasonClub!, fixture.awaySeasonClub!].map((team) => {
     const native = teamNativeLine(team.id);
     const official = officialTeamLine(team.id);
     const hasOfficial = Object.keys(official).length > 0;
@@ -133,7 +133,7 @@ export default async function ReconciliationPage({
         <section className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
           <h1 className="text-lg font-semibold">Native vs. official reconciliation</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            {fixture.homeSeasonClub.club.shortName} vs {fixture.awaySeasonClub.club.shortName}. Native totals below come from this
+            {fixture.homeSeasonClub!.club.shortName} vs {fixture.awaySeasonClub!.club.shortName}. Native totals below come from this
             game&apos;s own materialized statistics. Enter official/PDF numbers to compare — nothing on this page is ever written to
             the database; every comparison is computed fresh from what you type in.
           </p>
@@ -147,7 +147,7 @@ export default async function ReconciliationPage({
         <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
           <h2 className="font-semibold">Team totals</h2>
           <form method="get" className="mt-4 grid gap-6 lg:grid-cols-2">
-            {[fixture.homeSeasonClub, fixture.awaySeasonClub].map((team) => {
+            {[fixture.homeSeasonClub!, fixture.awaySeasonClub!].map((team) => {
               const native = teamNativeLine(team.id);
               const result = teamResults.find((r) => r.seasonClubId === team.id)!;
               return (
