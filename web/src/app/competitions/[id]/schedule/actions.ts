@@ -5,7 +5,8 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
-import { generateRoundRobin } from "@/lib/sports/fixtures";
+import { generateFixtures } from "@/lib/sports/fixtures";
+import { sideSeasonClubId } from "@/lib/sports/fixture-sides";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
 export type ScheduleFormState = { error?: string; created?: number; conflicts?: number; detail?: string };
@@ -38,13 +39,13 @@ export async function generateSchedule(
   const result = await withOrganizationContext(organizationId, async (tx) => {
     const season = await tx.season.findFirst({
       where: { id: input.seasonId, organizationId, competition: { divisions: { some: { id: input.divisionId } } } },
-      select: { id: true },
+      select: { id: true, competition: { select: { format: true } } },
     });
     if (!season) return { error: "Season or division not found." } as ScheduleFormState;
     const venue = await tx.venue.findFirst({ where: { id: input.venueId, organizationId }, select: { id: true } });
     if (!venue) return { error: "Venue not found." } as ScheduleFormState;
 
-    const seasonClubs = await tx.seasonClub!.findMany({
+    const seasonClubs = await tx.seasonClub.findMany({
       where: { seasonId: season.id, divisionId: input.divisionId, status: "ACTIVE" },
       select: { id: true, entrant: { select: { id: true } }, club: { select: { shortName: true } } },
     });
@@ -52,19 +53,24 @@ export async function generateSchedule(
 
     const entrantBySeasonClub = new Map(seasonClubs.map((seasonClub) => [seasonClub.id, seasonClub.entrant?.id ?? null]));
     const teamIds = seasonClubs.map((seasonClub) => seasonClub.id);
-    const pairs = generateRoundRobin(teamIds, { doubleRound });
+    const format = season.competition.format;
+    const pairs = generateFixtures(format, teamIds, { doubleRound, groupCount: 2 });
 
     // Existing fixtures for the season, for clash detection.
     const existing = await tx.fixture.findMany({
       where: { seasonId: season.id, status: { not: "CANCELLED" } },
-      select: { venueId: true, scheduledAt: true, homeSeasonClubId: true, awaySeasonClubId: true },
+      select: { venueId: true, scheduledAt: true, homeSeasonClubId: true, awaySeasonClubId: true, homeEntrantId: true, awayEntrantId: true },
     });
     const venueSlots = new Set(existing.map((fixture) => `${fixture.venueId}|${fixture.scheduledAt.toISOString()}`));
     const teamSlots = new Set<string>();
     for (const fixture of existing) {
       const iso = fixture.scheduledAt.toISOString();
-      teamSlots.add(`${fixture.homeSeasonClubId!}|${iso}`);
-      teamSlots.add(`${fixture.awaySeasonClubId!}|${iso}`);
+      // A side is a SeasonClub (team sports) or an Entrant (individual sports) - only team sides
+      // can clash with the SeasonClub-based generator.
+      for (const side of ["HOME", "AWAY"] as const) {
+        const seasonClubId = sideSeasonClubId(fixture, side);
+        if (seasonClubId) teamSlots.add(`${seasonClubId}|${iso}`);
+      }
     }
 
     let created = 0;
@@ -115,3 +121,4 @@ export async function generateSchedule(
   revalidatePath("/fixtures");
   return result;
 }
+

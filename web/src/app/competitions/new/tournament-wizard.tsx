@@ -99,6 +99,14 @@ export function TournamentWizard({ summaries }: { summaries: SportSummary[] }) {
             Season end
             <input name="endDate" type="date" required className={inputClass} />
           </label>
+          <label className={`${labelClass} sm:col-span-2`}>
+            Format
+            <select name="format" defaultValue="ROUND_ROBIN" className={inputClass}>
+              <option value="ROUND_ROBIN">League (round-robin) — every team plays every other</option>
+              <option value="KNOCKOUT">Knockout — single elimination (extra time &amp; penalties where the sport allows)</option>
+              <option value="GROUP_STAGE">Group stage — seeded groups, round-robin within each</option>
+            </select>
+          </label>
         </div>
       </section>
 

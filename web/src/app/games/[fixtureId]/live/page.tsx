@@ -305,6 +305,14 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             definition={definition}
             battingTeamId={battingTeamId}
             innings={cricketInnings ?? undefined}
+            knockout={fixture.division.competition.format === "KNOCKOUT"}
+            scoresLevel={fixture.homeScore === fixture.awayScore}
+            shootoutKicks={game.events
+              .filter((event) => event.typeKey === "PENALTY_SHOOTOUT")
+              .map((event) => {
+                const data = (event.data ?? {}) as { side?: string; scored?: boolean };
+                return { side: data.side === "AWAY" ? "AWAY" : "HOME", scored: Boolean(data.scored) };
+              })}
             teams={[
               { id: homeSide.id, name: homeSide.name },
               { id: awaySide.id, name: awaySide.name },

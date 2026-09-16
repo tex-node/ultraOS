@@ -1,7 +1,8 @@
 import { SubmitButton } from "@/app/components/submit-button";
 import { resolveScoringModule } from "@/lib/sports/scoring-modules";
+import { type ShootoutKick, type ShootoutSide } from "@/lib/sports/shootout";
 import type { SportDefinition } from "@/lib/sports/types";
-import { recordScoringEvent } from "../../actions";
+import { recordScoringEvent, recordShootoutKick } from "../../actions";
 
 const BIG_BTN = "min-h-[52px] min-w-[52px] rounded-xl text-sm font-semibold active:scale-95 transition";
 
@@ -15,6 +16,9 @@ export function ScoreCapturePanel({
   teams,
   battingTeamId,
   innings,
+  knockout = false,
+  scoresLevel = false,
+  shootoutKicks = [],
 }: {
   gameId: string;
   fixtureId: string;
@@ -22,6 +26,9 @@ export function ScoreCapturePanel({
   teams: { id: string; name: string }[];
   battingTeamId?: string;
   innings?: { period: number; overs: string; wickets: number; target: number | null };
+  knockout?: boolean;
+  scoresLevel?: boolean;
+  shootoutKicks?: ShootoutKick[];
 }) {
   const scoringModule = resolveScoringModule(definition);
   if (!scoringModule) return null;
@@ -49,6 +56,50 @@ export function ScoreCapturePanel({
       ))}
     </div>
   );
+
+  const supportsShootout = definition.capabilities.includes("PENALTIES");
+  const shootoutSection =
+    knockout && supportsShootout && teams.length === 2 ? (
+      <section className="mt-6 rounded-2xl border border-amber-400/20 bg-[#0b100e] p-5">
+        <h3 className="font-semibold">Penalty shootout</h3>
+        <p className="mt-0.5 text-xs text-zinc-500">
+          {scoresLevel
+            ? "Level after normal time — record each kick. Best-of-five, then sudden death; the winner is decided automatically."
+            : "Available once the match is level after normal time and extra time."}
+        </p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {teams.map((team, index) => {
+            const side: ShootoutSide = index === 0 ? "HOME" : "AWAY";
+            const taken = shootoutKicks.filter((kick) => kick.side === side);
+            const scored = taken.filter((kick) => kick.scored).length;
+            return (
+              <div key={team.id} className="rounded-xl border border-white/[.06] p-4">
+                <h4 className="text-sm font-semibold">{team.name}</h4>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {scored}/{taken.length} in the shootout
+                </p>
+                {scoresLevel ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {[true, false].map((scoredKick) => (
+                      <form key={String(scoredKick)} action={recordShootoutKick.bind(null, gameId, fixtureId)}>
+                        <input type="hidden" name="side" value={side} />
+                        <input type="hidden" name="scored" value={scoredKick ? "true" : "false"} />
+                        <SubmitButton
+                          pendingLabel="…"
+                          className={`${BIG_BTN} border px-4 text-xs ${scoredKick ? "border-emerald-400/30 text-emerald-300" : "border-rose-400/30 text-rose-300"}`}
+                        >
+                          {scoredKick ? "Scored" : "Missed"}
+                        </SubmitButton>
+                      </form>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    ) : null;
 
   if (scoringModule.kind === "RUNS") {
     const batting = teams.find((team) => team.id === battingTeamId);
@@ -81,6 +132,7 @@ export function ScoreCapturePanel({
           </div>
         ))}
       </div>
+      {shootoutSection}
     </section>
   );
 }

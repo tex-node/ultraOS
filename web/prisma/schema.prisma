@@ -27,6 +27,12 @@ enum SeasonStatus {
   COMPLETED
 }
 
+enum CompetitionFormat {
+  ROUND_ROBIN
+  KNOCKOUT
+  GROUP_STAGE
+}
+
 enum ClubStatus {
   ACTIVE
   INACTIVE
@@ -727,6 +733,11 @@ model Competition {
   slug             String
   description      String?
   isActive         Boolean           @default(true)
+  // Multi-sport: how fixtures in this competition are generated and whether a level score is a valid
+  // final result. ROUND_ROBIN (league, draws allowed where the sport allows), KNOCKOUT (single
+  // elimination; a level score must be resolved by extra time/penalties, not finalized as a draw),
+  // GROUP_STAGE (seeded groups -> round-robin).
+  format           CompetitionFormat @default(ROUND_ROBIN)
   divisions        Division[]
   seasons          Season[]
   entrants         Entrant[]

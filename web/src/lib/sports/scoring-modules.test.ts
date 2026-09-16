@@ -3,6 +3,7 @@ import test from "node:test";
 import { BASKETBALL } from "@/lib/sports/basketball";
 import { CRICKET } from "@/lib/sports/cricket";
 import { FOOTBALL } from "@/lib/sports/football";
+import { TENNIS } from "@/lib/sports/tennis";
 import { VOLLEYBALL } from "@/lib/sports/volleyball";
 import { resolveScoringModule, SCORING_MODULES } from "@/lib/sports/scoring-modules";
 
@@ -20,8 +21,9 @@ test("the registry dispatches one module per scoring family", () => {
   assert.equal(resolveScoringModule(VOLLEYBALL)?.kind, "SETS");
   assert.equal(resolveScoringModule(FOOTBALL)?.kind, "GOALS");
   assert.equal(resolveScoringModule(CRICKET)?.kind, "RUNS");
+  assert.equal(resolveScoringModule(TENNIS)?.kind, "TENNIS");
   assert.equal(resolveScoringModule(BASKETBALL), null); // basketball keeps its dedicated scorer
-  assert.deepEqual(SCORING_MODULES.map((module) => module.kind), ["SETS", "GOALS", "RUNS"]);
+  assert.deepEqual(SCORING_MODULES.map((module) => module.kind), ["TENNIS", "SETS", "GOALS", "RUNS"]);
 });
 
 test("volleyball adds a rally point to the current set without finalizing early", () => {

@@ -19,6 +19,7 @@ const tournamentSchema = z.object({
   startDate: z.string().min(1, "Choose a start date."),
   endDate: z.string().min(1, "Choose an end date."),
   divisions: z.string().trim().min(1, "Add at least one division."),
+  format: z.enum(["ROUND_ROBIN", "KNOCKOUT", "GROUP_STAGE"]).optional(),
 });
 
 function slugify(value: string): string {
@@ -78,7 +79,7 @@ export async function createTournament(
     }
 
     const competition = await tx.competition.create({
-      data: { organizationId, sportId: sport.id, name: input.competitionName, slug },
+      data: { organizationId, sportId: sport.id, name: input.competitionName, slug, format: input.format ?? "ROUND_ROBIN" },
     });
 
     const season = await tx.season.create({

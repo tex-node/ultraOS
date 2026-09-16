@@ -8,13 +8,26 @@ import type { SportDefinition } from "./types";
 
 export type MatchOutcome = "HOME" | "AWAY" | "DRAW" | "TIE" | "NO_RESULT" | null;
 
-export function matchOutcome(definition: SportDefinition, homeScore: number, awayScore: number): MatchOutcome {
+// In a knockout competition a level score is never a valid result - it must be resolved by extra
+// time/penalties, so matchOutcome treats it as undecided.
+export function matchOutcome(
+  definition: SportDefinition,
+  homeScore: number,
+  awayScore: number,
+  options: { knockout?: boolean } = {},
+): MatchOutcome {
   if (homeScore > awayScore) return "HOME";
   if (awayScore > homeScore) return "AWAY";
+  if (options.knockout) return null;
   if (!definition.scoring.drawsAllowed) return null; // a level result is not valid for this sport
   return definition.standings.outcomes.includes("TIE") ? "TIE" : "DRAW";
 }
 
-export function isDecidedResult(definition: SportDefinition, homeScore: number, awayScore: number): boolean {
-  return matchOutcome(definition, homeScore, awayScore) !== null;
+export function isDecidedResult(
+  definition: SportDefinition,
+  homeScore: number,
+  awayScore: number,
+  options: { knockout?: boolean } = {},
+): boolean {
+  return matchOutcome(definition, homeScore, awayScore, options) !== null;
 }

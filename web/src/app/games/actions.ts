@@ -22,6 +22,8 @@ import { recalculateStandings } from "@/lib/standings-recalculate";
 import { getSportDefinition } from "@/lib/sports/registry";
 import { isLegalDelivery } from "@/lib/sports/innings-scoring";
 import { matchOutcome } from "@/lib/sports/match-result";
+import { requireSeasonClubId } from "@/lib/sports/fixture-sides";
+import { shootoutWinner, type ShootoutKick } from "@/lib/sports/shootout";
 import { resolveScoringModule } from "@/lib/sports/scoring-modules";
 import { awardPoint } from "@/lib/sports/tennis-scoring";
 import { hasBlockingIssue, runConstraints } from "@/lib/sports/validators";
@@ -877,8 +879,9 @@ export async function finalizeGame(gameId: string, fixtureId: string) {
   );
   assertGameIsMutable(current.status, current.fixture.status);
   const definition = getSportDefinition(current.fixture.division.competition.sport.slug);
+  const knockout = current.fixture.division.competition.format === "KNOCKOUT";
   const outcome = definition
-    ? matchOutcome(definition, current.fixture.homeScore, current.fixture.awayScore)
+    ? matchOutcome(definition, current.fixture.homeScore, current.fixture.awayScore, { knockout })
     : null;
   // A level score is only a valid final result for sports that allow draws/ties (football, cricket);
   // basketball (and any no-draw sport) must not finalize level.
@@ -894,9 +897,9 @@ export async function finalizeGame(gameId: string, fixtureId: string) {
     assertGameIsMutable(game.status, game.fixture.status);
     const winnerSeasonClubId =
       game.fixture.homeScore > game.fixture.awayScore
-        ? game.fixture.homeSeasonClubId!
+        ? requireSeasonClubId(game.fixture, "HOME")
         : game.fixture.awayScore > game.fixture.homeScore
-          ? game.fixture.awaySeasonClubId!
+          ? requireSeasonClubId(game.fixture, "AWAY")
           : null; // a permitted draw/tie has no winner
 
     await tx.fixture.update({
@@ -1482,6 +1485,112 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
         awayScore: result.awayScore,
         finalize: result.finalize,
       },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/live`);
+  revalidatePath(`/fixtures/${fixtureId}`);
+  revalidatePath("/standings");
+  revalidatePath(`/scoreboard/${gameId}`);
+}
+
+const shootoutInput = z.object({
+  side: z.enum(["HOME", "AWAY"]),
+  scored: z.enum(["true", "false"]).transform((value) => value === "true"),
+});
+
+// Penalty shootout capture, for knockout matches that extra time could not separate. Each kick is a
+// GameEvent so the shootout stays auditable and correctable like any other ledger entry; the winner
+// is derived from the full kick ledger (best-of-five, then sudden death) rather than stored ad hoc.
+export async function recordShootoutKick(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const parsed = shootoutInput.parse(Object.fromEntries(formData.entries()));
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
+    const game = await tx.game.findUniqueOrThrow({
+      where: { id: gameId },
+      include: {
+        fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } },
+        events: { select: { typeKey: true, data: true }, orderBy: { sequenceNumber: "asc" } },
+      },
+    });
+    assertGameIsMutable(game.status, game.fixture.status);
+    if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
+
+    if (game.fixture.division.competition.format !== "KNOCKOUT") throw new Error("NOT_KNOCKOUT");
+    const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
+    if (!definition) throw new Error("UNKNOWN_SPORT");
+    if (!definition.capabilities.includes("PENALTIES")) throw new Error("NO_PENALTIES_CAPABILITY");
+    // A shootout only exists once regulation and extra time leave the match level.
+    if (game.fixture.homeScore !== game.fixture.awayScore) throw new Error("SCORES_NOT_LEVEL");
+
+    const kicks: ShootoutKick[] = [];
+    for (const event of game.events) {
+      if (event.typeKey !== "PENALTY_SHOOTOUT") continue;
+      const data = (event.data ?? {}) as { side?: string; scored?: boolean };
+      if ((data.side === "HOME" || data.side === "AWAY") && typeof data.scored === "boolean") {
+        kicks.push({ side: data.side, scored: data.scored });
+      }
+    }
+
+    const sequenceNumber = game.nextEventSequence;
+    await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
+    await tx.gameEvent.create({
+      data: {
+        organizationId,
+        gameId,
+        seasonClubId: parsed.side === "HOME" ? game.fixture.homeSeasonClubId : game.fixture.awaySeasonClubId,
+        entrantId: parsed.side === "HOME" ? game.fixture.homeEntrantId : game.fixture.awayEntrantId,
+        eventType: "SCORE",
+        typeKey: "PENALTY_SHOOTOUT",
+        points: parsed.scored ? 1 : 0,
+        data: { sportKey: definition.key, kind: "SHOOTOUT", side: parsed.side, scored: parsed.scored },
+        period: game.currentPeriod,
+        clockSeconds: remainingClockSeconds(game),
+        description: `Shootout — ${parsed.side === "HOME" ? "home" : "away"} ${parsed.scored ? "scored" : "missed"}`,
+        sequenceNumber,
+        homeScoreBefore: game.fixture.homeScore,
+        awayScoreBefore: game.fixture.awayScore,
+        homeScoreAfter: game.fixture.homeScore,
+        awayScoreAfter: game.fixture.awayScore,
+        source: "ULTRA_NATIVE_LIVE_SCORER",
+        createdById: session.user.id,
+      },
+    });
+
+    const winner = shootoutWinner([...kicks, { side: parsed.side, scored: parsed.scored }]);
+    if (winner) {
+      const winnerSeasonClubId = winner === "HOME" ? game.fixture.homeSeasonClubId : game.fixture.awaySeasonClubId;
+      const winnerEntrantId = winner === "HOME" ? game.fixture.homeEntrantId : game.fixture.awayEntrantId;
+      await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId, winnerEntrantId } });
+      await tx.game.update({
+        where: { id: gameId },
+        data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null, isUltraTimeActive: false },
+      });
+      await tx.gameEvent.create({
+        data: {
+          organizationId,
+          gameId,
+          eventType: "GAME_ENDED",
+          typeKey: "GAME_ENDED",
+          period: game.currentPeriod,
+          clockSeconds: 0,
+          description: `Shootout won by ${winner === "HOME" ? "home" : "away"}`,
+          source: "ULTRA_NATIVE_LIVE_SCORER",
+          createdById: session.user.id,
+        },
+      });
+      await recalculateStandings(tx, organizationId, game.fixture.seasonId);
+    }
+
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "SHOOTOUT_KICK_RECORDED",
+      entityType: "Game",
+      entityId: gameId,
+      details: { fixtureId, side: parsed.side, scored: parsed.scored, winner },
     });
   });
 
