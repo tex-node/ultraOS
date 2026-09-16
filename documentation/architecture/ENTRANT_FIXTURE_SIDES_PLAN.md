@@ -1,8 +1,8 @@
 ---
 title: Entrant Fixture Sides Plan
-status: In progress (Stage B1 complete)
-version: entrant-sides-1.0
-last_updated: 2026-09-15
+status: In progress (B1, B2 and B3 complete)
+version: entrant-sides-1.1
+last_updated: 2026-09-16
 ---
 
 # Entrant-Authoritative Fixture Sides (Staged Plan)
@@ -37,27 +37,26 @@ the entrant side already resolves for existing fixtures.
   reports entrant-side coverage. Read-only.
 - No schema or behaviour change.
 
-### B2 — Schema flip (next)
+### B2 — Schema flip (done)
 
-- Make `Fixture.homeSeasonClubId` / `awaySeasonClubId` **nullable**; add a CHECK constraint that each
-  side references a SeasonClub **or** an Entrant (never neither).
-- Migration is additive (widening nullability), authored then applied per environment with a backup;
-  `fixture-sides:parity-check` must report `PARITY OK` before and after.
-- Estimated blast radius measured at ~250 TypeScript errors across ~35 files (live console, stats,
-  broadcast, public API, content, analytics) — the reason this is staged rather than a big-bang.
+- `Fixture.homeSeasonClubId` / `awaySeasonClubId` are **nullable**; a CHECK constraint requires each
+  side to reference a SeasonClub **or** an Entrant (`20260915160000_fixture_side_entrant`). Applied
+  to staging and production via `prisma migrate deploy` (additive; all existing rows pass).
+- Measured blast radius was ~370 TypeScript errors across ~74 files.
 
-### B3 — Read migration (batches)
+### B3 — Read migration (done)
 
-Migrate read paths to `fixture-sides.ts` in batches, keeping `tsc`/build/parity green per batch:
+All compiler-surfaced read sites were migrated so the application builds with nullable sides:
+- Team-sport paths (live console, stats/reconciliation, broadcast, public API, content, analytics,
+  dashboard, vision, rehearsals) use non-null assertions where a SeasonClub is guaranteed by the
+  CHECK.
+- `fixture-sides.ts` remains the resolver seam; individual-sport paths (B4) will use it rather than
+  the raw columns.
 
-1. Live console + stats/reconciliation.
-2. Broadcast + public/v1 APIs.
-3. Content engine + analytics.
-4. Public pages + dashboard + rehearsals.
+Follow-up: replace the team-path assertions with the resolver opportunistically as those files are
+touched, so the entrant side becomes first-class everywhere.
 
-Team paths use `requireSeasonClubId` (guaranteed by the CHECK); individual paths use the Entrant.
-
-### B4 — Individual standings and onboarding
+### B4 — Individual standings and onboarding (next)
 
 - `Standing`: make `seasonClubId` nullable and add `entrantId` (org/season-scoped) so individual
   sports get their own standings rows.
