@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { MissingOrganizationContextError, requirePermissionWithOrganization, requireSession } from "@/lib/authorization";
+import { MissingOrganizationContextError, requireFixturePermission, requireSession } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { remainingShotClockSeconds, ULTRA_RULES } from "@/lib/game-rules";
@@ -178,7 +178,7 @@ const ULTRA_TIME_STAT_FIELD: Record<
 };
 
 export async function startGame(fixtureId: string) {
-  const { organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { organizationId } = await requireFixturePermission("game:operate", fixtureId);
   await withOrganizationContext(organizationId, async (tx) => {
     const fixture = await tx.fixture.findUniqueOrThrow({
       where: { id: fixtureId },
@@ -217,7 +217,7 @@ export async function startGame(fixtureId: string) {
 }
 
 export async function pauseGame(gameId: string, fixtureId: string) {
-  const { organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { organizationId } = await requireFixturePermission("game:operate", fixtureId);
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await tx.game.findUniqueOrThrow({
       where: { id: gameId },
@@ -245,7 +245,7 @@ export async function pauseGame(gameId: string, fixtureId: string) {
 }
 
 export async function resumeGame(gameId: string, fixtureId: string) {
-  const { organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { organizationId } = await requireFixturePermission("game:operate", fixtureId);
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await tx.game.findUniqueOrThrow({
       where: { id: gameId },
@@ -264,7 +264,7 @@ export async function resumeGame(gameId: string, fixtureId: string) {
 }
 
 export async function advancePeriod(gameId: string, fixtureId: string) {
-  const { organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { organizationId } = await requireFixturePermission("game:operate", fixtureId);
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await tx.game.findUniqueOrThrow({
       where: { id: gameId },
@@ -295,7 +295,7 @@ export async function advancePeriod(gameId: string, fixtureId: string) {
 const shotClockAction = z.enum(["START", "STOP", "RESET"]);
 
 export async function controlShotClock(gameId: string, fixtureId: string, formData: FormData) {
-  const { organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const action = shotClockAction.parse(formData.get("action"));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -333,7 +333,7 @@ export async function controlShotClock(gameId: string, fixtureId: string, formDa
 }
 
 export async function confirmMandatorySubstitution(gameId: string, fixtureId: string, seasonClubId: string) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
     if (![game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!].includes(seasonClubId)) {
@@ -365,7 +365,7 @@ export async function recordScore(
   fixtureId: string,
   formData: FormData,
 ) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const input = score.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -524,7 +524,7 @@ export async function voidScoreEventAction(
   fixtureId: string,
   formData: FormData,
 ) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const input = voidScoreEvent.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -618,7 +618,7 @@ export async function correctScoreEventAction(
   fixtureId: string,
   formData: FormData,
 ) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const input = correctScoreEvent.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -782,7 +782,7 @@ export async function recordStatEvent(
   fixtureId: string,
   formData: FormData,
 ) {
-  const { organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const input = statEvent.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -869,7 +869,7 @@ export async function recordStatEvent(
 }
 
 export async function finalizeGame(gameId: string, fixtureId: string) {
-  const { session, organizationId } = await requirePermissionWithOrganization("result:confirm");
+  const { session, organizationId } = await requireFixturePermission("result:confirm", fixtureId);
   const current = await withOrganizationContext(organizationId, (tx) =>
     tx.game.findUniqueOrThrow({
       where: { id: gameId },
@@ -954,7 +954,7 @@ export async function finalizeGame(gameId: string, fixtureId: string) {
 // the general correction form (negative points / another stat entry) instead - this button only
 // ever targets the single most recent action.
 export async function undoLastEvent(gameId: string, fixtureId: string) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
 
   await withOrganizationContext(organizationId, async (tx) => {
     // Same row lock as recordScore - the reversal below also reads-then-writes an absolute score.
@@ -1058,7 +1058,7 @@ const reopenSchema = z.object({ reason: z.string().trim().min(5, "A reason is re
 // game:operate scorer permission - reopening an official result is a bigger deal than
 // running a live game.
 export async function reopenGame(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("result:confirm");
+  const { session, organizationId } = await requireFixturePermission("result:confirm", fixtureId);
   const input = reopenSchema.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -1104,7 +1104,7 @@ const incidentSchema = z.object({
 });
 
 export async function recordIncident(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const input = incidentSchema.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -1146,7 +1146,7 @@ export async function recordIncident(gameId: string, fixtureId: string, formData
 const resolveIncidentSchema = z.object({ incidentId: z.string().min(1), resolution: z.string().trim().min(5, "Describe how this was resolved.") });
 
 export async function resolveIncident(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const input = resolveIncidentSchema.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -1207,7 +1207,7 @@ const sportEventInput = z.object({
 // resolved by the sport's own scoring model, not a single generic increment. Basketball keeps its
 // dedicated scorer panels (recordScore) for points.
 export async function recordSportEvent(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const input = sportEventInput.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -1314,7 +1314,7 @@ const CRICKET_DELIVERY_KEYS = new Set([
 // recalculates standings when the module reports the match decided. Replaces the per-sport scoring
 // actions (set points / goals / runs) with one dispatched path.
 export async function recordScoringEvent(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const input = scoringInput.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -1508,7 +1508,7 @@ const shootoutInput = z.object({
 // GameEvent so the shootout stays auditable and correctable like any other ledger entry; the winner
 // is derived from the full kick ledger (best-of-five, then sudden death) rather than stored ad hoc.
 export async function recordShootoutKick(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:operate");
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const parsed = shootoutInput.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {

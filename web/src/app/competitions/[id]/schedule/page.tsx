@@ -20,7 +20,7 @@ export default async function CompetitionSchedulePage({ params }: { params: Prom
       include: { sport: true, divisions: { orderBy: { name: "asc" } }, seasons: { orderBy: { startDate: "desc" } } },
     });
     if (!competition) return null;
-    const [venues, fixtures] = await Promise.all([
+    const [venues, fixtures, events] = await Promise.all([
       tx.venue.findMany({ where: { organizationId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       tx.fixture.findMany({
         where: { season: { competitionId: id } },
@@ -32,12 +32,17 @@ export default async function CompetitionSchedulePage({ params }: { params: Prom
         orderBy: { scheduledAt: "asc" },
         take: 200,
       }),
+      tx.event.findMany({
+        where: { season: { competitionId: id } },
+        orderBy: { startTime: "asc" },
+        select: { id: true, name: true, season: { select: { name: true } } },
+      }),
     ]);
-    return { competition, venues, fixtures };
+    return { competition, venues, fixtures, events };
   });
 
   if (!data) notFound();
-  const { competition, venues, fixtures } = data;
+  const { competition, venues, fixtures, events } = data;
 
   return (
     <OperationsShell user={session.user}>
@@ -59,6 +64,7 @@ export default async function CompetitionSchedulePage({ params }: { params: Prom
               seasons={competition.seasons.map((season) => ({ id: season.id, name: season.name }))}
               divisions={competition.divisions.map((division) => ({ id: division.id, name: division.name }))}
               venues={venues.map((venue) => ({ id: venue.id, name: venue.name }))}
+              events={events.map((event) => ({ id: event.id, name: event.name, seasonName: event.season.name }))}
             />
           )}
         </section>

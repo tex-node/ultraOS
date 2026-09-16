@@ -10,7 +10,7 @@
 // independent set of eyes without risking a duplicate/competing scoring truth (Part I.6).
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requirePermissionWithOrganization, requireSession, MissingOrganizationContextError } from "@/lib/authorization";
+import { requireFixturePermission, requireSession, MissingOrganizationContextError } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { prisma } from "@/lib/prisma";
@@ -118,7 +118,7 @@ const shotSchema = z.object({
 // Records one shot attempt (make or miss) into the statistician's own ledger. Deliberately
 // does not touch Fixture.homeScore/awayScore or PlayerStat/TeamStat - see file header.
 export async function recordStatisticianShot(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:record-stats");
+  const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
   const input = shotSchema.parse(Object.fromEntries(formData.entries()));
   const made = input.made === "true";
 
@@ -188,7 +188,7 @@ const otherStatSchema = z.object({
 });
 
 export async function recordStatisticianStat(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:record-stats");
+  const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
   const input = otherStatSchema.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -247,7 +247,7 @@ const substitutionSchema = z.object({
 // (Part XIV), derived fresh inside this same transaction so a concurrent substitution can never
 // corrupt the check (Part XXXIV).
 export async function recordSubstitution(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:record-stats");
+  const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
   const input = substitutionSchema.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -312,7 +312,7 @@ const startingFiveSchema = z.object({
 // replaces its prior selection (still fully audited both ways) rather than erroring, so a
 // pre-tip-off correction doesn't require a support workaround.
 export async function confirmStartingFive(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:record-stats");
+  const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
   const raw = Object.fromEntries(formData.entries());
   const input = startingFiveSchema.parse({
     seasonClubId: raw.seasonClubId,
@@ -351,7 +351,7 @@ export async function confirmStartingFive(gameId: string, fixtureId: string, for
 // excluded from replayScore, so the reconciliation panel updates correctly without losing
 // audit history.
 export async function undoLastStatisticianEvent(gameId: string, fixtureId: string) {
-  const { session, organizationId } = await requirePermissionWithOrganization("game:record-stats");
+  const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
 
   await withOrganizationContext(organizationId, async (tx) => {
     await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
@@ -514,7 +514,7 @@ const verifySchema = z.object({
 // cosmetic flag, it is the gate that promotes the statistician's ledger into the canonical box
 // score.
 export async function verifyStatistics(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("result:confirm");
+  const { session, organizationId } = await requireFixturePermission("result:confirm", fixtureId);
   const input = verifySchema.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -598,7 +598,7 @@ const postFinalCorrectionSchema = z.object({
 // or reconcile: "capture once, verify once, derive everything else" means there is exactly one
 // materialization code path, not two.
 export async function correctStatisticianEventPostFinal(gameId: string, fixtureId: string, formData: FormData) {
-  const { session, organizationId } = await requirePermissionWithOrganization("result:confirm");
+  const { session, organizationId } = await requireFixturePermission("result:confirm", fixtureId);
   const input = postFinalCorrectionSchema.parse(Object.fromEntries(formData.entries()));
   const hasReplacement = input.replacementShotValue !== undefined && input.replacementMade !== undefined;
 

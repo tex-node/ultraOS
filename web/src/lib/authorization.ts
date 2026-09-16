@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { userHasEventPermission } from "@/lib/event-staff";
 import { hasPermission, type Permission } from "@/lib/permissions";
 import { userHasPlatformPermission } from "@/lib/platform-permissions";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export class AuthenticationError extends Error {
   constructor() {
@@ -135,6 +137,70 @@ export async function requireAnyPermission(permissions: Permission[]) {
 export async function requireAnyPermissionOrRedirect(permissions: Permission[], loginRedirectTo: string) {
   try {
     return await requireAnyPermission(permissions);
+  } catch (error) {
+    if (error instanceof AuthenticationError) {
+      redirect(`/login?callbackUrl=${encodeURIComponent(loginRedirectTo)}`);
+    }
+    throw error;
+  }
+}
+
+// Event-scoped game control (see lib/event-staff.ts). A person running the table for one event should
+// not need a league-wide role: an EventStaffAssignment for the fixture's event grants that role's
+// permissions for that event only. Organization-wide roles keep working unchanged, and are checked
+// first so the common case never touches the database.
+async function userHasFixturePermission(
+  session: Awaited<ReturnType<typeof requireSession>>,
+  organizationId: string,
+  fixtureId: string,
+  permission: Permission,
+): Promise<boolean> {
+  if (hasPermission(session.user.roles, permission)) return true;
+
+  return withOrganizationContext(organizationId, async (tx) => {
+    const fixture = await tx.fixture.findFirst({
+      where: { id: fixtureId, organizationId },
+      select: { eventId: true },
+    });
+    // A fixture that belongs to no event cannot be covered by an event-scoped grant.
+    if (!fixture?.eventId) return false;
+    return userHasEventPermission(session.user.id, organizationId, fixture.eventId, permission, tx);
+  });
+}
+
+// The fixture-aware counterpart of requirePermissionWithOrganization: use it for anything that
+// operates a specific game (scoring, stats, confirming results), so event staff are honoured without
+// widening their permissions to the whole organization.
+export async function requireFixturePermission(permission: Permission, fixtureId: string) {
+  const session = await requireSession();
+  const organizationId = session.user.organizationId;
+  if (!organizationId) {
+    throw new MissingOrganizationContextError();
+  }
+  const allowed = await userHasFixturePermission(session, organizationId, fixtureId, permission);
+  if (!allowed) {
+    throw new AuthorizationError(permission);
+  }
+  return { session, organizationId };
+}
+
+// Non-throwing form, for deciding which controls a console should render. Falls back to the
+// organization-wide role check, so it is safe to call without a fixture for the common case.
+export async function canFixturePermission(permission: Permission, fixtureId: string): Promise<boolean> {
+  const session = await requireSession();
+  const organizationId = session.user.organizationId;
+  if (!organizationId) return false;
+  return userHasFixturePermission(session, organizationId, fixtureId, permission);
+}
+
+// Same redirect-on-anonymous behavior as requirePermissionOrRedirect, for fixture-scoped pages.
+export async function requireFixturePermissionOrRedirect(
+  permission: Permission,
+  fixtureId: string,
+  loginRedirectTo: string,
+) {
+  try {
+    return await requireFixturePermission(permission, fixtureId);
   } catch (error) {
     if (error instanceof AuthenticationError) {
       redirect(`/login?callbackUrl=${encodeURIComponent(loginRedirectTo)}`);

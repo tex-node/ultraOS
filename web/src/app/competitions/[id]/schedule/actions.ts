@@ -19,6 +19,7 @@ const schema = z.object({
   startDate: z.string().min(1, "Choose a start date."),
   intervalDays: z.coerce.number().int().min(0).max(30),
   slotHours: z.coerce.number().int().min(1).max(12).optional(),
+  eventId: z.string().optional(),
   doubleRound: z.string().optional(),
 });
 
@@ -53,6 +54,14 @@ export async function generateSchedule(
     if (!season) return { error: "Season or division not found." } as ScheduleFormState;
     const venue = await tx.venue.findFirst({ where: { id: input.venueId, organizationId }, select: { id: true } });
     if (!venue) return { error: "Venue not found." } as ScheduleFormState;
+
+    // Optional: attach the generated fixtures to an event (a match day). This is what lets
+    // event-scoped game staff operate these games - see lib/event-staff.ts.
+    const eventId = input.eventId?.trim() ? input.eventId.trim() : null;
+    if (eventId) {
+      const event = await tx.event.findFirst({ where: { id: eventId, seasonId: season.id }, select: { id: true } });
+      if (!event) return { error: "Event not found in the selected season." } as ScheduleFormState;
+    }
 
     const seasonClubs = await tx.seasonClub.findMany({
       where: { seasonId: season.id, divisionId: input.divisionId, status: "ACTIVE" },
@@ -142,6 +151,7 @@ export async function generateSchedule(
           organizationId,
           seasonId: season.id,
           divisionId: input.divisionId,
+          eventId,
           homeSeasonClubId: pair.homeEntrantId,
           awaySeasonClubId: pair.awayEntrantId,
           homeEntrantId: entrantBySeasonClub.get(pair.homeEntrantId) ?? null,

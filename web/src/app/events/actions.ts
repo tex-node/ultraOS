@@ -14,6 +14,7 @@ import {
 import { writeAuditLog } from "@/lib/audit";
 import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
+import { normalizeEventStaffRole } from "@/lib/event-staff";
 import { nairaToKobo } from "@/lib/money";
 import { upsertPublicResourceLocator } from "@/lib/public-locators";
 import { withOrganizationContext } from "@/lib/tenant-context";
@@ -293,4 +294,123 @@ export async function confirmReservationPayment(
     });
   });
   revalidatePath(`/events/${eventId}`);
+}
+
+const eventStaffSchema = z.object({
+  eventId: z.string().min(1),
+  role: z.string().min(1),
+  email: z.string().trim().toLowerCase().email("Enter the staff member's email address."),
+});
+
+// Grants an event-scoped game-day role (game controller, scorekeeper, statistician) to a user by
+// email. The permission takes effect only for this event's fixtures - see lib/event-staff.ts and
+// requireFixturePermission. Re-assigning a previously revoked role reactivates it.
+export async function assignEventStaff(formData: FormData) {
+  const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
+  const input = eventStaffSchema.parse(formDataToRecord(formData));
+  const role = normalizeEventStaffRole(input.role);
+  if (!role) throw new Error(`Unknown event staff role: ${input.role}`);
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    await tx.event.findUniqueOrThrow({ where: { id: input.eventId }, select: { id: true } });
+    const user = await tx.user.findUnique({
+      where: { email: input.email },
+      select: { id: true, name: true, email: true },
+    });
+    if (!user) throw new Error("No user account exists with that email address.");
+
+    await tx.eventStaffAssignment.upsert({
+      where: { eventId_role_userId: { eventId: input.eventId, role, userId: user.id } },
+      create: {
+        organizationId,
+        eventId: input.eventId,
+        role,
+        userId: user.id,
+        personName: user.name,
+        status: "OPEN",
+      },
+      update: { status: "OPEN", personName: user.name },
+    });
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "EVENT_STAFF_ASSIGNED",
+      entityType: "EventStaffAssignment",
+      entityId: input.eventId,
+      details: { eventId: input.eventId, role, staffUserId: user.id, staffEmail: user.email },
+    });
+  });
+  revalidatePath(`/events/${input.eventId}`);
+}
+
+// Revokes an event-scoped role. The row is kept (status CANCELLED) so the grant history survives -
+// userHasEventPermission only counts non-cancelled assignments.
+export async function revokeEventStaff(formData: FormData) {  const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
+  const assignmentId = String(formData.get("assignmentId") ?? "");
+  if (!assignmentId) throw new Error("Missing assignment.");
+
+  const eventId = await withOrganizationContext(organizationId, async (tx) => {
+    const assignment = await tx.eventStaffAssignment.findFirstOrThrow({
+      where: { id: assignmentId, organizationId },
+      select: { id: true, eventId: true, role: true, userId: true },
+    });
+    await tx.eventStaffAssignment.update({
+      where: { id: assignment.id },
+      data: { status: "CANCELLED" },
+    });
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "EVENT_STAFF_REVOKED",
+      entityType: "EventStaffAssignment",
+      entityId: assignment.id,
+      details: { eventId: assignment.eventId, role: assignment.role, staffUserId: assignment.userId },
+    });
+    return assignment.eventId;
+  });
+  revalidatePath(`/events/${eventId}`);
+}
+
+const attachFixturesSchema = z.object({
+  eventId: z.string().min(1),
+  seasonId: z.string().min(1),
+  divisionId: z.string().optional(),
+});
+
+// Attaches fixtures that are not yet on an event to this one, so event-scoped staff can operate them.
+// Scoped to the event's own season (and optionally one division) and never re-parents a fixture that
+// already belongs to another event. Returns the number of fixtures attached.
+export async function attachFixturesToEvent(formData: FormData) {
+  const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
+  const input = attachFixturesSchema.parse(formDataToRecord(formData));
+  const divisionId = input.divisionId?.trim() ? input.divisionId.trim() : null;
+  await withOrganizationContext(organizationId, async (tx) => {
+    const event = await tx.event.findUniqueOrThrow({
+      where: { id: input.eventId },
+      select: { id: true, seasonId: true },
+    });
+    if (event.seasonId !== input.seasonId) {
+      throw new Error("That season is not this event's season.");
+    }
+
+    const updated = await tx.fixture.updateMany({
+      where: {
+        seasonId: input.seasonId,
+        eventId: null, // never steal a fixture from another event
+        ...(divisionId ? { divisionId } : {}),
+      },
+      data: { eventId: input.eventId },
+    });
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "EVENT_FIXTURES_ATTACHED",
+      entityType: "Event",
+      entityId: input.eventId,
+      details: { seasonId: input.seasonId, divisionId, count: updated.count },
+    });
+    return updated.count;
+  });
+
+  revalidatePath(`/events/${input.eventId}`);
 }

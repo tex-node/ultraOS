@@ -15,7 +15,7 @@ import {
   undoLastStatisticianEvent,
   verifyStatistics,
 } from "../../stats-actions";
-import { requirePermissionOrRedirect } from "@/lib/authorization";
+import { requireFixturePermissionOrRedirect } from "@/lib/authorization";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { isUltraTime, periodLabel } from "@/lib/game-rules";
 import { verifyTeamMinutes, formatMinutes, type SubstitutionWithClock } from "@/lib/lineup-stints";
@@ -39,7 +39,7 @@ export default async function StatisticianConsole({
   searchParams: Promise<{ homePlayer?: string; awayPlayer?: string }>;
 }) {
   const { fixtureId } = await params;
-  const session = await requirePermissionOrRedirect("game:record-stats", `/games/${fixtureId}/stats`);
+  const { session } = await requireFixturePermissionOrRedirect("game:record-stats", fixtureId, `/games/${fixtureId}/stats`);
   const query = await searchParams;
 
   if (!session.user.organizationId) notFound();

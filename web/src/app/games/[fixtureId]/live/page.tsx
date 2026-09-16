@@ -22,7 +22,7 @@ import {
 } from "../../actions";
 import { getGameReconciliation } from "../../stats-actions";
 import { GameClock } from "../../game-clock";
-import { requirePermissionOrRedirect } from "@/lib/authorization";
+import { canFixturePermission, requireFixturePermissionOrRedirect } from "@/lib/authorization";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { FINAL_PERIOD, isUltraTime, periodLabel, remainingShotClockSeconds, ULTRA_RULES } from "@/lib/game-rules";
 import { getSportDefinition } from "@/lib/sports/registry";
@@ -36,7 +36,9 @@ export const revalidate = 0;
 
 export default async function Live({ params, searchParams }: { params: Promise<{ fixtureId: string }>; searchParams: Promise<{error?:string}> }) {
   const { fixtureId } = await params;
-  const session = await requirePermissionOrRedirect("game:operate", `/games/${fixtureId}/live`);
+  const { session } = await requireFixturePermissionOrRedirect("game:operate", fixtureId, `/games/${fixtureId}/live`);
+  // Confirming the final result is a separate permission; event staff may hold one without the other.
+  const canConfirmResult = await canFixturePermission("result:confirm", fixtureId);
   const query = await searchParams;
   if (!session.user.organizationId) notFound();
   const fixture = await withOrganizationContext(session.user.organizationId, (tx) => tx.fixture.findUnique({
@@ -180,7 +182,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
                 {game.status === "LIVE" ? <form action={pauseGame.bind(null, game.id, fixtureId)}><SubmitButton className={`${BIG_BTN} border border-white/10 px-5`}>Pause</SubmitButton></form> : game.status !== "FINAL" ? <form action={resumeGame.bind(null, game.id, fixtureId)}><SubmitButton className={`${BIG_BTN} bg-emerald-400 px-5 text-zinc-950`}>Resume</SubmitButton></form> : null}
                 {game.status !== "FINAL" ? <div className="flex flex-col items-center gap-1"><form action={advancePeriod.bind(null, game.id, fixtureId)}><SubmitButton className={`${BIG_BTN} border border-white/10 px-5`}>Next period</SubmitButton></form>{game.currentPeriod === 1 ? <p className="text-[10px] uppercase tracking-wider text-zinc-500">Halftime break: 2 min</p> : null}</div> : null}
                 {game.status !== "FINAL" && game.events.length > 0 ? <form action={undoLastEvent.bind(null, game.id, fixtureId)}><SubmitButton pendingLabel="Undoing…" className={`${BIG_BTN} border border-amber-400/30 px-5 text-amber-300`}>Undo last event</SubmitButton></form> : null}
-                {game.status !== "FINAL" ? <form action={finalizeGame.bind(null, game.id, fixtureId)}><SubmitButton pendingLabel="Finalizing…" className={`${BIG_BTN} border border-rose-400/20 px-5 text-rose-300`}>Confirm final</SubmitButton></form> : null}
+                {game.status !== "FINAL" && canConfirmResult ? <form action={finalizeGame.bind(null, game.id, fixtureId)}><SubmitButton pendingLabel="Finalizing…" className={`${BIG_BTN} border border-rose-400/20 px-5 text-rose-300`}>Confirm final</SubmitButton></form> : null}
               </>
             )}
           </div>

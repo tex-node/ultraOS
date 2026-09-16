@@ -3,13 +3,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import {
+  assignEventStaff,
+  attachFixturesToEvent,
   confirmReservationPayment,
   createAccreditation,
   createSeatZone,
   createVenueSection,
+  revokeEventStaff,
   setAccreditationStatus,
   setEventStatus,
 } from "../actions";
+import { EVENT_STAFF_ROLE_LABELS, EVENT_STAFF_ROLE_LIST, eventStaffRoleLabel } from "@/lib/event-staff";
 import { EventStatus } from "@/generated/prisma/enums";
 import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { formatLagosDateTime } from "@/lib/format-datetime";
@@ -26,12 +30,17 @@ export default async function EventDetailPage({
   const session = await requirePermissionOrRedirect("event:manage", `/events/${id}`);
   if (!session.user.organizationId) throw new MissingOrganizationContextError();
   const organizationId = session.user.organizationId;
-  const [event, fanClubs, organization, registrationForm] = await withOrganizationContext(organizationId, (tx) => Promise.all([
+  const [event, fanClubs, organization, registrationForm, eventStaff] = await withOrganizationContext(organizationId, (tx) => Promise.all([
     tx.event.findUnique({
       where: { id },
       include: {
         venue: { include: { sections: { orderBy: { name: "asc" } } } },
-        season: true,
+        season: {
+          include: {
+            competition: { include: { divisions: { orderBy: { name: "asc" }, select: { id: true, name: true } } } },
+          },
+        },
+        _count: { select: { fixtures: true } },
         seatZones: {
           include: {
             venueSection: true,
@@ -65,6 +74,10 @@ export default async function EventDetailPage({
     tx.registrationForm.findFirst({
       where: { organizationId, eventId: id },
       include: { _count: { select: { submissions: true } } },
+    }),
+    tx.eventStaffAssignment.findMany({
+      where: { eventId: id, status: { not: "CANCELLED" } },
+      orderBy: { role: "asc" },
     }),
   ]));
   if (!event) notFound();
@@ -108,6 +121,73 @@ export default async function EventDetailPage({
           <Metric label="Reserved" value={event.seatZones.reduce((sum, zone) => sum + zone.reservedQuantity, 0)} />
           <Metric label="Accreditation" value={event.accreditations.length} />
           <Metric label="Orders" value={event.orders.length} />
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+          <h2 className="text-lg font-semibold">Game-day staff</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            Give someone control of this event&apos;s games without a league-wide role — the grant applies
+            only to fixtures on this event.
+          </p>
+          <p className="mt-3 text-sm text-zinc-300">
+            {event._count.fixtures} fixture{event._count.fixtures === 1 ? "" : "s"} attached to this event.
+          </p>
+          <form action={attachFixturesToEvent} className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+            <input type="hidden" name="eventId" value={id} />
+            <input type="hidden" name="seasonId" value={event.seasonId} />
+            <select name="divisionId" defaultValue="" className="rounded-lg bg-white/[.05] p-3">
+              <option value="">All divisions in {event.season.name}</option>
+              {event.season.competition.divisions.map((division) => (
+                <option key={division.id} value={division.id}>
+                  {division.name}
+                </option>
+              ))}
+            </select>
+            <span className="self-center text-xs text-zinc-500">
+              Attaches fixtures that are not on an event yet. Never moves one from another event.
+            </span>
+            <button className="rounded-lg border border-white/10 px-5 py-3 text-sm hover:border-white/25">
+              Attach fixtures
+            </button>
+          </form>
+          <form action={assignEventStaff} className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+            <input type="hidden" name="eventId" value={id} />
+            <select name="role" defaultValue="GAME_CONTROLLER" className="rounded-lg bg-white/[.05] p-3" required>
+              {EVENT_STAFF_ROLE_LIST.map((role) => (
+                <option key={role} value={role}>
+                  {EVENT_STAFF_ROLE_LABELS[role]}
+                </option>
+              ))}
+            </select>
+            <input
+              name="email"
+              type="email"
+              required
+              placeholder="staff@example.com"
+              className="rounded-lg bg-white/[.05] p-3"
+            />
+            <button className="rounded-lg bg-emerald-400 px-5 py-3 font-semibold text-zinc-950">Assign</button>
+          </form>
+          {eventStaff.length ? (
+            <ul className="mt-4 divide-y divide-white/5 text-sm">
+              {eventStaff.map((assignment) => (
+                <li key={assignment.id} className="flex items-center justify-between gap-3 py-2">
+                  <span>
+                    <b>{eventStaffRoleLabel(assignment.role) ?? assignment.role}</b>
+                    <span className="ml-2 text-zinc-400">{assignment.personName ?? assignment.userId ?? "—"}</span>
+                  </span>
+                  <form action={revokeEventStaff}>
+                    <input type="hidden" name="assignmentId" value={assignment.id} />
+                    <button className="rounded-lg border border-white/10 px-3 py-1.5 text-xs hover:border-white/25">
+                      Revoke
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-4 text-sm text-zinc-500">No game-day staff assigned yet.</p>
+          )}
         </section>
 
         <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">

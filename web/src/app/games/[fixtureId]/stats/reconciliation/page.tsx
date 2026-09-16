@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { requirePermissionOrRedirect } from "@/lib/authorization";
+import { requireFixturePermissionOrRedirect } from "@/lib/authorization";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import {
   reconcileLine,
@@ -34,7 +34,7 @@ export default async function ReconciliationPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { fixtureId } = await params;
-  const session = await requirePermissionOrRedirect("result:confirm", `/games/${fixtureId}/stats/reconciliation`);
+  const { session } = await requireFixturePermissionOrRedirect("result:confirm", fixtureId, `/games/${fixtureId}/stats/reconciliation`);
   const query = await searchParams;
 
   if (!session.user.organizationId) notFound();

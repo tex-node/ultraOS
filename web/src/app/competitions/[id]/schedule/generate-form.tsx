@@ -11,11 +11,13 @@ export function GenerateScheduleForm({
   seasons,
   divisions,
   venues,
+  events,
 }: {
   competitionId: string;
   seasons: { id: string; name: string }[];
   divisions: { id: string; name: string }[];
   venues: { id: string; name: string }[];
+  events: { id: string; name: string; seasonName: string }[];
 }) {
   const [state, action, pending] = useActionState<ScheduleFormState, FormData>(generateSchedule, {});
   const done = typeof state.created === "number" && !state.error;
@@ -53,6 +55,22 @@ export function GenerateScheduleForm({
         Days between rounds
         <input name="intervalDays" type="number" min="0" max="30" defaultValue={7} className={inputClass} />
       </label>
+      {events.length ? (
+        <label className={labelClass}>
+          Event (optional)
+          <select name="eventId" defaultValue="" className={inputClass}>
+            <option value="">Not attached to an event</option>
+            {events.map((event) => (
+              <option key={event.id} value={event.id}>
+                {event.name} — {event.seasonName}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-zinc-500">
+            Attach these fixtures to a match-day event so its game staff can run them.
+          </span>
+        </label>
+      ) : null}
       <label className={labelClass}>
         Slot length (hours)
         <input name="slotHours" type="number" min="1" max="12" defaultValue={2} className={inputClass} />
