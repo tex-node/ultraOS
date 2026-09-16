@@ -774,6 +774,10 @@ model Division {
   draftAllocations      DraftAllocation[]
   draftCoachPoolEntries DraftCoachPoolEntry[]
   entrants              Entrant[]
+  // Knockout draws only: round-1 slots whose entrant has no first-round opponent, keyed by
+  // bracketPosition ("1" -> seasonClubId|entrantId shape). Byes auto-advance, so the advancement
+  // step needs to know which positions were empty.
+  knockoutByes          Json?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
@@ -3016,6 +3020,12 @@ model Fixture {
   awayEntrant        Entrant?          @relation("AwayEntrant", fields: [awayEntrantId], references: [id], onDelete: SetNull)
   winnerEntrantId    String?
   winnerEntrant      Entrant?          @relation("WinnerEntrant", fields: [winnerEntrantId], references: [id], onDelete: SetNull)
+  // Multi-sport bracket metadata. Nullable - round-robin fixtures (and pre-bracket legacy rows) have
+  // no round/position. `round` is 1-based within a division; `bracketPosition` is the 1-based slot in
+  // that round and drives knockout advancement (winners of positions 2k-1/2k meet at position k).
+  round              Int?
+  bracketPosition    Int?
+  groupLabel         String?
   game               Game?
   officials          FixtureOfficial[]
   media              AthleteMedia[]
@@ -3029,6 +3039,7 @@ model Fixture {
   @@index([seasonId, divisionId, scheduledAt])
   @@index([status, scheduledAt])
   @@index([venueId, scheduledAt])
+  @@index([divisionId, round, bracketPosition])
 }
 
 model FixtureOfficial {

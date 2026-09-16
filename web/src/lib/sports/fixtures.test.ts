@@ -60,6 +60,16 @@ test("knockout draw pads a non-power-of-two bracket with byes", () => {
   assert.equal(draw.byes.length, 2);
   assert.equal(draw.firstRound.length, 2);
   assert.deepEqual(draw.byes.sort(), ["a", "b"]);
+  // Bye positions are the round-1 slots with no fixture, and together with the fixtures fill the
+  // bracket without overlap.
+  assert.equal(draw.byePositions.length, 2);
+  const fixturePositions = new Set(draw.firstRound.map((fixture) => fixture.bracketPosition));
+  for (const bye of draw.byePositions) {
+    assert.equal(fixturePositions.has(bye.position), false);
+    assert.ok(draw.byes.includes(bye.entrantId));
+  }
+  const allPositions = new Set([...fixturePositions, ...draw.byePositions.map((bye) => bye.position)]);
+  assert.equal(allPositions.size, draw.size / 2);
 });
 
 test("group stage runs round-robin within seeded groups", () => {

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
-import { generateFixtures } from "@/lib/sports/fixtures";
+import { generateFixtures, generateKnockout, type GeneratedFixture } from "@/lib/sports/fixtures";
 import { sideSeasonClubId } from "@/lib/sports/fixture-sides";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
@@ -54,7 +54,22 @@ export async function generateSchedule(
     const entrantBySeasonClub = new Map(seasonClubs.map((seasonClub) => [seasonClub.id, seasonClub.entrant?.id ?? null]));
     const teamIds = seasonClubs.map((seasonClub) => seasonClub.id);
     const format = season.competition.format;
-    const pairs = generateFixtures(format, teamIds, { doubleRound, groupCount: 2 });
+    // Knockout draws carry byes - round-1 positions with no fixture whose entrant auto-advances.
+    // They are persisted on the division so the bracket can be advanced as results arrive.
+    let pairs: GeneratedFixture[];
+    let knockoutByes: Record<string, { seasonClubId: string | null; entrantId: string | null }> | null = null;
+    if (format === "KNOCKOUT") {
+      const draw = generateKnockout(teamIds);
+      pairs = draw.firstRound;
+      knockoutByes = Object.fromEntries(
+        draw.byePositions.map((bye) => [
+          String(bye.position),
+          { seasonClubId: bye.entrantId, entrantId: entrantBySeasonClub.get(bye.entrantId) ?? null },
+        ]),
+      );
+    } else {
+      pairs = generateFixtures(format, teamIds, { doubleRound, groupCount: 2 });
+    }
 
     // Existing fixtures for the season, for clash detection.
     const existing = await tx.fixture.findMany({
@@ -97,6 +112,9 @@ export async function generateSchedule(
           scheduledAt,
           venueId: venue.id,
           status: "SCHEDULED",
+          round: pair.round,
+          bracketPosition: pair.bracketPosition ?? null,
+          groupLabel: pair.group ?? null,
         },
       });
       venueSlots.add(venueKey);
@@ -105,13 +123,17 @@ export async function generateSchedule(
       created += 1;
     }
 
+    if (knockoutByes) {
+      await tx.division.update({ where: { id: input.divisionId }, data: { knockoutByes } });
+    }
+
     await writeAuditLog(tx, {
       organizationId,
       userId: session.user.id,
       action: "SCHEDULE_GENERATED",
       entityType: "Season",
       entityId: season.id,
-      details: { divisionId: input.divisionId, venueId: venue.id, doubleRound, created, conflicts, teams: seasonClubs.length },
+      details: { divisionId: input.divisionId, venueId: venue.id, format, doubleRound, created, conflicts, teams: seasonClubs.length, byes: knockoutByes ? Object.keys(knockoutByes).length : 0 },
     });
 
     return { created, conflicts } as ScheduleFormState;

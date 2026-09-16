@@ -21,6 +21,7 @@ import {
 import { recalculateStandings } from "@/lib/standings-recalculate";
 import { getSportDefinition } from "@/lib/sports/registry";
 import { isLegalDelivery } from "@/lib/sports/innings-scoring";
+import { advanceKnockoutBracket } from "@/lib/sports/knockout-bracket";
 import { matchOutcome } from "@/lib/sports/match-result";
 import { requireSeasonClubId } from "@/lib/sports/fixture-sides";
 import { shootoutWinner, type ShootoutKick } from "@/lib/sports/shootout";
@@ -906,6 +907,8 @@ export async function finalizeGame(gameId: string, fixtureId: string) {
       where: { id: fixtureId },
       data: { status: "FINAL", winnerSeasonClubId },
     });
+    // Knockout: when this completes the round, create the next round from the winners.
+    await advanceKnockoutBracket(tx, organizationId, game.fixture);
     await tx.game.update({
       where: { id: gameId },
       data: {
@@ -1454,6 +1457,8 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
         where: { id: gameId },
         data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null, isUltraTimeActive: false },
       });
+      // Knockout: when this completes the round, create the next round from the winners.
+      await advanceKnockoutBracket(tx, organizationId, game.fixture);
       await tx.gameEvent.create({
         data: {
           organizationId,
@@ -1568,6 +1573,8 @@ export async function recordShootoutKick(gameId: string, fixtureId: string, form
         where: { id: gameId },
         data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null, isUltraTimeActive: false },
       });
+      // Knockout: when this completes the round, create the next round from the winners.
+      await advanceKnockoutBracket(tx, organizationId, game.fixture);
       await tx.gameEvent.create({
         data: {
           organizationId,

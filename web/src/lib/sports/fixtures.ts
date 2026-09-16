@@ -107,19 +107,23 @@ export type KnockoutDraw = {
   rounds: number;
   firstRound: GeneratedFixture[];
   byes: string[];
+  // Round-1 slots that hold a bye, keyed by bracketPosition. A bye auto-advances, so the bracket
+  // advancement step needs the position (not just the entrant) to know which fixture feeds where.
+  byePositions: Array<{ position: number; entrantId: string }>;
 };
 
 // First round of a single-elimination draw. Entrants are seeded in the given order; a non-power-of-two
 // count produces byes that auto-advance. Later rounds are created as results arrive.
 export function generateKnockout(entrantIds: string[]): KnockoutDraw {
   if (entrantIds.length < 2) {
-    return { size: 0, rounds: 0, firstRound: [], byes: [...entrantIds] };
+    return { size: 0, rounds: 0, firstRound: [], byes: [...entrantIds], byePositions: [] };
   }
   const size = nextPowerOfTwo(entrantIds.length);
   const rounds = Math.round(Math.log2(size));
   const order = seedOrder(size);
   const firstRound: GeneratedFixture[] = [];
   const byes: string[] = [];
+  const byePositions: Array<{ position: number; entrantId: string }> = [];
 
   for (let i = 0; i < order.length; i += 2) {
     const first = entrantIds[order[i] - 1];
@@ -129,12 +133,14 @@ export function generateKnockout(entrantIds: string[]): KnockoutDraw {
       firstRound.push({ round: 1, homeEntrantId: first, awayEntrantId: second, bracketPosition });
     } else if (first) {
       byes.push(first);
+      byePositions.push({ position: bracketPosition, entrantId: first });
     } else if (second) {
       byes.push(second);
+      byePositions.push({ position: bracketPosition, entrantId: second });
     }
   }
 
-  return { size, rounds, firstRound, byes };
+  return { size, rounds, firstRound, byes, byePositions };
 }
 
 // Snake seeding so the strongest entrants are spread across groups.
