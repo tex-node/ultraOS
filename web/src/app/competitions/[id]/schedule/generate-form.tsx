@@ -57,6 +57,25 @@ export function GenerateScheduleForm({
         Slot length (hours)
         <input name="slotHours" type="number" min="1" max="12" defaultValue={2} className={inputClass} />
       </label>
+      <fieldset className="sm:col-span-2">
+        <legend className="text-sm text-zinc-300">Game days</legend>
+        <p className="mt-0.5 text-xs text-zinc-500">
+          Leave all unchecked to keep the plain date pattern. Check days to play only on those weekdays — a
+          weekends-only league is Saturday + Sunday.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-3">
+          {[["SUN", "Sun"], ["MON", "Mon"], ["TUE", "Tue"], ["WED", "Wed"], ["THU", "Thu"], ["FRI", "Fri"], ["SAT", "Sat"]].map(
+            ([value, label]) => (
+              <label key={value} className="flex items-center gap-2 text-sm text-zinc-300">
+                <input type="checkbox" name="gameDays" value={value} /> {label}
+              </label>
+            ),
+          )}
+        </div>
+        <label className="mt-3 flex items-center gap-2 text-sm text-zinc-300">
+          <input type="checkbox" name="spreadGameDays" defaultChecked /> Spread a round&apos;s matches across the selected days
+        </label>
+      </fieldset>
       <label className="flex items-center gap-2 text-sm text-zinc-300">
         <input type="checkbox" name="doubleRound" /> Double round-robin (home &amp; away)
       </label>

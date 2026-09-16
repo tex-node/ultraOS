@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { allocateSlot } from "@/lib/sports/schedule-slots";
+import { allocateSlot, parseGameDays, playDatesForRound } from "@/lib/sports/schedule-slots";
 
 const base = new Date("2026-01-01T00:00:00.000Z");
 const HOUR = 3_600_000;
@@ -52,3 +52,37 @@ test("two matches in one round at one venue take consecutive slots instead of cl
   assert.equal(first.scheduledAt.toISOString(), "2026-01-01T00:00:00.000Z");
   assert.equal(second.scheduledAt.toISOString(), "2026-01-01T02:00:00.000Z");
 });
+
+test("game days parse from names and numbers, deduped and sorted", () => {
+  assert.deepEqual(parseGameDays(["SAT", "SUN"]), [0, 6]);
+  assert.deepEqual(parseGameDays(["6", "sat", "3", "junk", ""]), [3, 6]);
+  assert.deepEqual(parseGameDays([]), []);
+});
+
+test("no game days keeps the nominal day", () => {
+  const dates = playDatesForRound({ nominal: new Date("2026-01-07T00:00:00.000Z"), gameDays: [] });
+  assert.deepEqual(dates.map((date) => date.toISOString()), ["2026-01-07T00:00:00.000Z"]);
+});
+
+test("weekend game days snap a midweek round onto Saturday and Sunday", () => {
+  // 2026-01-07 is a Wednesday; a seven-day window contains the following Sat (10th) and Sun (11th).
+  const dates = playDatesForRound({
+    nominal: new Date("2026-01-07T00:00:00.000Z"),
+    gameDays: [0, 6],
+    windowDays: 7,
+  });
+  assert.deepEqual(dates.map((date) => date.toISOString()), [
+    "2026-01-10T00:00:00.000Z",
+    "2026-01-11T00:00:00.000Z",
+  ]);
+});
+
+test("a one-day window that is not a play day falls back to the next allowed day", () => {
+  const dates = playDatesForRound({
+    nominal: new Date("2026-01-07T00:00:00.000Z"), // Wednesday
+    gameDays: [6], // Saturdays only
+    windowDays: 1,
+  });
+  assert.deepEqual(dates.map((date) => date.toISOString()), ["2026-01-10T00:00:00.000Z"]);
+});
+

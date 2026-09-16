@@ -7,7 +7,7 @@ import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
 import { generateFixtures, generateKnockout, type GeneratedFixture } from "@/lib/sports/fixtures";
 import { sideSeasonClubId } from "@/lib/sports/fixture-sides";
-import { allocateSlot } from "@/lib/sports/schedule-slots";
+import { allocateSlot, parseGameDays, playDatesForRound } from "@/lib/sports/schedule-slots";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
 export type ScheduleFormState = { error?: string; created?: number; conflicts?: number; detail?: string };
@@ -38,6 +38,9 @@ export async function generateSchedule(
   const doubleRound = input.doubleRound === "on" || input.doubleRound === "true";
   const slotHours = input.slotHours ?? 2;
   const slotMs = slotHours * 3_600_000;
+  // Multi-value checkbox: read directly rather than through the single-value record from the schema.
+  const gameDays = parseGameDays(formData.getAll("gameDays").map(String));
+  const spreadGameDays = formData.get("spreadGameDays") === "on" || formData.get("spreadGameDays") === "true";
 
   const start = new Date(`${input.startDate}T00:00:00.000Z`);
   if (Number.isNaN(start.getTime())) return { error: "Invalid start date." };
@@ -96,22 +99,38 @@ export async function generateSchedule(
 
     let created = 0;
     let conflicts = 0;
+    // Matches within a round are counted so that, when spreading across game days, they alternate
+    // between the allowed days (e.g. Saturday, Sunday, Saturday...).
+    const roundCounters = new Map<number, number>();
     for (const pair of pairs) {
-      // All matches in a round start from the same day; each takes the first free slot at or after it,
-      // stepping forward by the slot length so several matches can share one venue on the same day.
-      const roundBase = new Date(start.getTime() + (pair.round - 1) * input.intervalDays * 86_400_000);
-      const allocation = allocateSlot({
-        base: roundBase,
-        stepMs: slotMs,
-        isTaken: (candidate) => {
-          const candidateIso = candidate.toISOString();
-          return (
-            venueSlots.has(`${venue.id}|${candidateIso}`) ||
-            teamSlots.has(`${pair.homeEntrantId}|${candidateIso}`) ||
-            teamSlots.has(`${pair.awayEntrantId}|${candidateIso}`)
-          );
-        },
-      });
+      const roundNominal = new Date(start.getTime() + (pair.round - 1) * input.intervalDays * 86_400_000);
+      // With game days selected a round only lands on those weekdays (weekends-only leagues, etc.);
+      // otherwise the round keeps its nominal day.
+      const playDates = playDatesForRound({ nominal: roundNominal, gameDays, windowDays: Math.max(1, input.intervalDays) });
+      const indexInRound = roundCounters.get(pair.round) ?? 0;
+      roundCounters.set(pair.round, indexInRound + 1);
+
+      const isTaken = (candidate: Date) => {
+        const candidateIso = candidate.toISOString();
+        return (
+          venueSlots.has(`${venue.id}|${candidateIso}`) ||
+          teamSlots.has(`${pair.homeEntrantId}|${candidateIso}`) ||
+          teamSlots.has(`${pair.awayEntrantId}|${candidateIso}`)
+        );
+      };
+
+      // Each match starts on its preferred day and falls through the rest of the round's play dates
+      // if that day is full.
+      const preferred = spreadGameDays ? indexInRound % playDates.length : 0;
+      let allocation = { scheduledAt: roundNominal, conflict: true };
+      for (let attempt = 0; attempt < playDates.length; attempt += 1) {
+        const day = playDates[(preferred + attempt) % playDates.length];
+        const candidate = allocateSlot({ base: day, stepMs: slotMs, isTaken });
+        if (!candidate.conflict) {
+          allocation = candidate;
+          break;
+        }
+      }
       if (allocation.conflict) {
         conflicts += 1;
         continue;
@@ -151,7 +170,7 @@ export async function generateSchedule(
       action: "SCHEDULE_GENERATED",
       entityType: "Season",
       entityId: season.id,
-      details: { divisionId: input.divisionId, venueId: venue.id, format, doubleRound, created, conflicts, teams: seasonClubs.length, byes: knockoutByes ? Object.keys(knockoutByes).length : 0 },
+      details: { divisionId: input.divisionId, venueId: venue.id, format, doubleRound, slotHours, gameDays, spreadGameDays, created, conflicts, teams: seasonClubs.length, byes: knockoutByes ? Object.keys(knockoutByes).length : 0 },
     });
 
     return { created, conflicts } as ScheduleFormState;
