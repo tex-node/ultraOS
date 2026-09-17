@@ -164,6 +164,9 @@ export default async function CompetitionDetailPage({ params }: { params: Promis
             <Link href="/standings" className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:border-white/25">
               View standings
             </Link>
+            <Link href="/gameday" className="rounded-lg border border-emerald-400/40 px-4 py-2 text-sm text-emerald-300 hover:border-emerald-400">
+              Game Day
+            </Link>
           </div>
         </section>
       </main>

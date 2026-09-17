@@ -91,14 +91,17 @@ export function OperationsShell({ children, user }: OperationsShellProps) {
               Tournament management system
             </p>
           </div>
-          <nav className="flex items-center gap-1">
+          {/* The nav has more items than fit on one row below ~1024px. Like the public nav, the
+              overflow is contained inside the nav so it can be scrolled and every tab (Game Day
+              included) stays reachable, instead of being pushed off-screen with no way to reach it. */}
+          <nav className="order-3 -mx-1 flex w-full items-center gap-1 overflow-x-auto pb-1 [scrollbar-width:thin] lg:order-none lg:mx-0 lg:w-auto lg:overflow-visible lg:pb-0">
             {navigation.map((entry) => {
               if ("href" in entry) {
                 if (entry.adminOnly && !admin) return null;
                 return (
                   <Link
                     key={entry.href}
-                    className="rounded-lg px-3 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
+                    className="shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
                     href={entry.href}
                   >
                     {entry.label}
@@ -108,9 +111,9 @@ export function OperationsShell({ children, user }: OperationsShellProps) {
               const links = visibleLinks(entry.links, admin);
               if (links.length === 0) return null;
               return (
-                <div className="group relative" key={entry.label}>
+                <div className="group relative shrink-0" key={entry.label}>
                   <button
-                    className="rounded-lg px-3 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
+                    className="whitespace-nowrap rounded-lg px-3 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
                     type="button"
                   >
                     {entry.label} <span className="text-zinc-500">▾</span>
