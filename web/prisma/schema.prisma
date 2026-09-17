@@ -605,6 +605,8 @@ model User {
   isActive                     Boolean                  @default(true)
   roles                        UserRoleAssignment[]     @relation("AssignedUserRoles")
   rolesGranted                 UserRoleAssignment[]     @relation("GrantedUserRoles")
+  gameControlGrants            GameControlGrant[]       @relation("GameControlGrantee")
+  gameControlGrantsGranted     GameControlGrant[]       @relation("GameControlGrantedBy")
   staffProfile                 Staff?
   athleteProfile               Athlete?
   vendorProfile                Vendor?
@@ -743,6 +745,7 @@ model Competition {
   divisions        Division[]
   seasons          Season[]
   entrants         Entrant[]
+  gameControlGrants GameControlGrant[]
   contentTemplates ContentTemplate[]
   systemSettings   SystemSetting[]
   createdAt        DateTime          @default(now())
@@ -822,6 +825,7 @@ model Season {
   ruleSets              RuleSet[]
   courtSpecifications   CourtSpecification[]
   entrants              Entrant[]
+  gameControlGrants     GameControlGrant[]
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 
@@ -1833,6 +1837,44 @@ model Equipment {
   @@index([assignedOperatorId])
 }
 
+// Scoped game-control grant, granted from the Access dashboard.
+//
+// A grant with no scope applies organization-wide; otherwise it applies to exactly one competition
+// (a tournament), season or event. Authorization resolves a fixture's scope and accepts any matching
+// active grant, so an admin can give someone control of one tournament without a league-wide role.
+// Revocation clears nothing - revokedAt keeps the grant for audit, and readers ignore revoked rows.
+model GameControlGrant {
+  id             String          @id @default(cuid())
+  organizationId String          @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  userId         String
+  user           User            @relation("GameControlGrantee", fields: [userId], references: [id], onDelete: Cascade)
+  role           GameControlRole
+  competitionId  String?
+  competition    Competition?    @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  seasonId       String?
+  season         Season?         @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  eventId        String?
+  event          Event?          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  grantedById    String?
+  grantedBy      User?           @relation("GameControlGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  revokedAt      DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId, userId, revokedAt])
+  @@index([organizationId, competitionId])
+  @@index([organizationId, seasonId])
+  @@index([organizationId, eventId])
+}
+
+enum GameControlRole {
+  EVENT_ADMIN
+  GAME_CONTROLLER
+  SCOREKEEPER
+  STATISTICIAN
+}
+
 model EventStaffAssignment {
   id             String        @id @default(cuid())
   organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
@@ -2038,6 +2080,7 @@ model Event {
   debrief                 EventDebrief?
   vendorReviews           EventVendorReview[]
   volunteerReviews        EventVolunteerReview[]
+  gameControlGrants       GameControlGrant[]
   recordOrigin            RecordOrigin             @default(PRODUCTION)
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
@@ -4451,6 +4494,7 @@ model Organization {
   idPrefixAthlete           String                         @unique @default("UBA")
   idPrefixStaff             String                         @unique @default("UBS")
   roleAssignments           UserRoleAssignment[]
+  gameControlGrants         GameControlGrant[]
   competitions              Competition[]
   divisions                 Division[]
   seasons                   Season[]

@@ -14,7 +14,7 @@ import {
 import { writeAuditLog } from "@/lib/audit";
 import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
-import { normalizeEventStaffRole } from "@/lib/event-staff";
+import { normalizeGameControlRole } from "@/lib/game-access";
 import { nairaToKobo } from "@/lib/money";
 import { upsertPublicResourceLocator } from "@/lib/public-locators";
 import { withOrganizationContext } from "@/lib/tenant-context";
@@ -301,15 +301,14 @@ const eventStaffSchema = z.object({
   role: z.string().min(1),
   email: z.string().trim().toLowerCase().email("Enter the staff member's email address."),
 });
-
-// Grants an event-scoped game-day role (game controller, scorekeeper, statistician) to a user by
-// email. The permission takes effect only for this event's fixtures - see lib/event-staff.ts and
+// Grants an event-scoped game-control role (game controller, scorekeeper, statistician) to a user by
+// email. The permission takes effect only for this event's fixtures - see lib/game-access.ts and
 // requireFixturePermission. Re-assigning a previously revoked role reactivates it.
 export async function assignEventStaff(formData: FormData) {
   const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
   const input = eventStaffSchema.parse(formDataToRecord(formData));
-  const role = normalizeEventStaffRole(input.role);
-  if (!role) throw new Error(`Unknown event staff role: ${input.role}`);
+  const role = normalizeGameControlRole(input.role);
+  if (!role) throw new Error(`Unknown game-control role: ${input.role}`);
 
   await withOrganizationContext(organizationId, async (tx) => {
     await tx.event.findUniqueOrThrow({ where: { id: input.eventId }, select: { id: true } });
@@ -319,23 +318,29 @@ export async function assignEventStaff(formData: FormData) {
     });
     if (!user) throw new Error("No user account exists with that email address.");
 
-    await tx.eventStaffAssignment.upsert({
-      where: { eventId_role_userId: { eventId: input.eventId, role, userId: user.id } },
-      create: {
-        organizationId,
-        eventId: input.eventId,
-        role,
-        userId: user.id,
-        personName: user.name,
-        status: "OPEN",
-      },
-      update: { status: "OPEN", personName: user.name },
+    const existing = await tx.gameControlGrant.findFirst({
+      where: { organizationId, userId: user.id, eventId: input.eventId, role },
+      select: { id: true },
     });
+    if (existing) {
+      await tx.gameControlGrant.update({ where: { id: existing.id }, data: { revokedAt: null } });
+    } else {
+      await tx.gameControlGrant.create({
+        data: {
+          organizationId,
+          userId: user.id,
+          role,
+          eventId: input.eventId,
+          grantedById: session.user.id,
+        },
+      });
+    }
+
     await writeAuditLog(tx, {
       organizationId,
       userId: session.user.id,
       action: "EVENT_STAFF_ASSIGNED",
-      entityType: "EventStaffAssignment",
+      entityType: "GameControlGrant",
       entityId: input.eventId,
       details: { eventId: input.eventId, role, staffUserId: user.id, staffEmail: user.email },
     });
@@ -343,30 +348,28 @@ export async function assignEventStaff(formData: FormData) {
   revalidatePath(`/events/${input.eventId}`);
 }
 
-// Revokes an event-scoped role. The row is kept (status CANCELLED) so the grant history survives -
-// userHasEventPermission only counts non-cancelled assignments.
-export async function revokeEventStaff(formData: FormData) {  const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
+// Revokes an event-scoped role. The row is kept (revokedAt) so the grant history survives - readers
+// only count active grants.
+export async function revokeEventStaff(formData: FormData) {
+  const { session, organizationId } = await requirePermissionWithOrganization("event:manage");
   const assignmentId = String(formData.get("assignmentId") ?? "");
   if (!assignmentId) throw new Error("Missing assignment.");
 
   const eventId = await withOrganizationContext(organizationId, async (tx) => {
-    const assignment = await tx.eventStaffAssignment.findFirstOrThrow({
+    const grant = await tx.gameControlGrant.findFirstOrThrow({
       where: { id: assignmentId, organizationId },
       select: { id: true, eventId: true, role: true, userId: true },
     });
-    await tx.eventStaffAssignment.update({
-      where: { id: assignment.id },
-      data: { status: "CANCELLED" },
-    });
+    await tx.gameControlGrant.update({ where: { id: grant.id }, data: { revokedAt: new Date() } });
     await writeAuditLog(tx, {
       organizationId,
       userId: session.user.id,
       action: "EVENT_STAFF_REVOKED",
-      entityType: "EventStaffAssignment",
-      entityId: assignment.id,
-      details: { eventId: assignment.eventId, role: assignment.role, staffUserId: assignment.userId },
+      entityType: "GameControlGrant",
+      entityId: grant.id,
+      details: { eventId: grant.eventId, role: grant.role, staffUserId: grant.userId },
     });
-    return assignment.eventId;
+    return grant.eventId ?? "";
   });
   revalidatePath(`/events/${eventId}`);
 }

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { userHasEventPermission } from "@/lib/event-staff";
+import { userHasGameControlPermission } from "@/lib/game-access";
 import { hasPermission, type Permission } from "@/lib/permissions";
 import { userHasPlatformPermission } from "@/lib/platform-permissions";
 import { withOrganizationContext } from "@/lib/tenant-context";
@@ -145,10 +145,10 @@ export async function requireAnyPermissionOrRedirect(permissions: Permission[], 
   }
 }
 
-// Event-scoped game control (see lib/event-staff.ts). A person running the table for one event should
-// not need a league-wide role: an EventStaffAssignment for the fixture's event grants that role's
-// permissions for that event only. Organization-wide roles keep working unchanged, and are checked
-// first so the common case never touches the database.
+// Scoped game control (see lib/game-access.ts). A person running the table for one tournament, season
+// or event should not need a league-wide role: a GameControlGrant matching the fixture's scope grants
+// that role's permissions for those games only. Organization-wide roles are checked first, so the
+// common case never touches the database.
 async function userHasFixturePermission(
   session: Awaited<ReturnType<typeof requireSession>>,
   organizationId: string,
@@ -160,11 +160,21 @@ async function userHasFixturePermission(
   return withOrganizationContext(organizationId, async (tx) => {
     const fixture = await tx.fixture.findFirst({
       where: { id: fixtureId, organizationId },
-      select: { eventId: true },
+      select: { eventId: true, seasonId: true, division: { select: { competitionId: true } } },
     });
-    // A fixture that belongs to no event cannot be covered by an event-scoped grant.
-    if (!fixture?.eventId) return false;
-    return userHasEventPermission(session.user.id, organizationId, fixture.eventId, permission, tx);
+    if (!fixture) return false;
+
+    return userHasGameControlPermission(
+      session.user.id,
+      organizationId,
+      {
+        eventId: fixture.eventId,
+        seasonId: fixture.seasonId,
+        competitionId: fixture.division.competitionId,
+      },
+      permission,
+      tx,
+    );
   });
 }
 

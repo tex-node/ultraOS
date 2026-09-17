@@ -13,7 +13,7 @@ import {
   setAccreditationStatus,
   setEventStatus,
 } from "../actions";
-import { EVENT_STAFF_ROLE_LABELS, EVENT_STAFF_ROLE_LIST, eventStaffRoleLabel } from "@/lib/event-staff";
+import { GAME_CONTROL_ROLE_LABELS, GAME_CONTROL_ROLE_LIST, gameControlRoleLabel } from "@/lib/game-access";
 import { EventStatus } from "@/generated/prisma/enums";
 import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { formatLagosDateTime } from "@/lib/format-datetime";
@@ -75,8 +75,9 @@ export default async function EventDetailPage({
       where: { organizationId, eventId: id },
       include: { _count: { select: { submissions: true } } },
     }),
-    tx.eventStaffAssignment.findMany({
-      where: { eventId: id, status: { not: "CANCELLED" } },
+    tx.gameControlGrant.findMany({
+      where: { eventId: id, revokedAt: null },
+      include: { user: { select: { name: true, email: true } } },
       orderBy: { role: "asc" },
     }),
   ]));
@@ -153,9 +154,9 @@ export default async function EventDetailPage({
           <form action={assignEventStaff} className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
             <input type="hidden" name="eventId" value={id} />
             <select name="role" defaultValue="GAME_CONTROLLER" className="rounded-lg bg-white/[.05] p-3" required>
-              {EVENT_STAFF_ROLE_LIST.map((role) => (
+              {GAME_CONTROL_ROLE_LIST.map((role) => (
                 <option key={role} value={role}>
-                  {EVENT_STAFF_ROLE_LABELS[role]}
+                  {GAME_CONTROL_ROLE_LABELS[role]}
                 </option>
               ))}
             </select>
@@ -173,8 +174,8 @@ export default async function EventDetailPage({
               {eventStaff.map((assignment) => (
                 <li key={assignment.id} className="flex items-center justify-between gap-3 py-2">
                   <span>
-                    <b>{eventStaffRoleLabel(assignment.role) ?? assignment.role}</b>
-                    <span className="ml-2 text-zinc-400">{assignment.personName ?? assignment.userId ?? "—"}</span>
+                    <b>{gameControlRoleLabel(assignment.role) ?? assignment.role}</b>
+                    <span className="ml-2 text-zinc-400">{assignment.user?.name ?? assignment.user?.email ?? "—"}</span>
                   </span>
                   <form action={revokeEventStaff}>
                     <input type="hidden" name="assignmentId" value={assignment.id} />

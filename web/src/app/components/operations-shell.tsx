@@ -22,6 +22,7 @@ const navigation: NavEntry[] = [
     label: "Operations",
     links: [
       { href: "/operations", label: "Overview", adminOnly: true },
+      { href: "/access", label: "Access", adminOnly: true },
       { href: "/launch-readiness", label: "Launch", adminOnly: true },
       { href: "/draft-readiness", label: "Draft Ready", adminOnly: true },
       { href: "/data-readiness", label: "Data", adminOnly: true },
