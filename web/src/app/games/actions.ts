@@ -1206,11 +1206,11 @@ const sportEventInput = z.object({
   description: z.string().optional(),
 });
 
-// Sport-agnostic capture: records an event from the sport's catalog (SportDefinition.events) with
-// the catalog key in GameEvent.typeKey. This is the catalog-driven path (multi-sport S6.3); it does
-// not mutate the fixture score, because per-sport scoring (rally points/sets/innings/goals) is
-// resolved by the sport's own scoring model, not a single generic increment. Basketball keeps its
-// dedicated scorer panels (recordScore) for points.
+// Sport-agnostic capture for a sport's NON-scoring catalog events (cards, fouls, substitutions,
+// serves...), recorded with the catalog key in GameEvent.typeKey. Scoring events are rejected here:
+// they must go through the path that actually changes the scoreline (the sport's scoring module, or
+// basketball's dedicated recordScore), otherwise a "goal" would be stored as a note that does not
+// count. Sides resolve through the fixture-sides helper, so this works for individual sports too.
 export async function recordSportEvent(gameId: string, fixtureId: string, formData: FormData) {
   const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const input = sportEventInput.parse(Object.fromEntries(formData.entries()));
@@ -1228,7 +1228,14 @@ export async function recordSportEvent(gameId: string, fixtureId: string, formDa
     assertGameIsMutable(game.status, game.fixture.status);
     if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
 
-    if (![game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!].includes(input.seasonClubId)) {
+    // The captured party is a SeasonClub (team sports) or an Entrant (individual sports).
+    const capturedIsEntrant =
+      (game.fixture.homeEntrantId !== null && input.seasonClubId === game.fixture.homeEntrantId) ||
+      (game.fixture.awayEntrantId !== null && input.seasonClubId === game.fixture.awayEntrantId);
+    const validSide = capturedIsEntrant
+      ? true
+      : input.seasonClubId === game.fixture.homeSeasonClubId || input.seasonClubId === game.fixture.awaySeasonClubId;
+    if (!validSide) {
       throw new Error("INVALID_TEAM");
     }
 
@@ -1237,13 +1244,18 @@ export async function recordSportEvent(gameId: string, fixtureId: string, formDa
     const eventDefinition = definition.events.find((event) => event.key === input.typeKey);
     if (!eventDefinition) throw new Error("UNKNOWN_EVENT");
 
-    const player = input.playerId
+    // Scoring belongs to the scoring panel - refuse to store a score-less duplicate.
+    if (eventDefinition.scores === true && (definition.key === "BASKETBALL" || resolveScoringModule(definition))) {
+      throw new Error("USE_SCORING_PANEL");
+    }
+
+    const player = !capturedIsEntrant && input.playerId
       ? await tx.player.findFirst({
           where: { id: input.playerId, seasonClubId: input.seasonClubId },
           include: { athlete: true },
         })
       : null;
-    if (input.playerId && !player) throw new Error("INVALID_PLAYER");
+    if (input.playerId && !capturedIsEntrant && !player) throw new Error("INVALID_PLAYER");
 
     // Entry-time validation from the sport's constraints (architecture §5.11).
     const results = runConstraints(definition, "EVENT", {
@@ -1264,7 +1276,8 @@ export async function recordSportEvent(gameId: string, fixtureId: string, formDa
       data: {
         organizationId,
         gameId,
-        seasonClubId: input.seasonClubId,
+        seasonClubId: capturedIsEntrant ? null : input.seasonClubId,
+        entrantId: capturedIsEntrant ? input.seasonClubId : null,
         playerId: player?.id ?? null,
         eventType: "NOTE",
         typeKey: input.typeKey,

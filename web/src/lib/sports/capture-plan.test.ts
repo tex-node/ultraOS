@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BASKETBALL } from "@/lib/sports/basketball";
 import { VOLLEYBALL } from "@/lib/sports/volleyball";
-import { captureActionFor, capturePlan, scoringActions } from "@/lib/sports/capture-plan";
+import { captureActionFor, capturePlan, nonScoringCapturePlan, scoringActions } from "@/lib/sports/capture-plan";
 
 test("capture plan groups actions by category in definition order", () => {
   const plan = capturePlan(VOLLEYBALL);
@@ -35,4 +35,21 @@ test("scoring actions expose the sport's point values", () => {
 test("captureActionFor resolves a single action or undefined", () => {
   assert.equal(captureActionFor(BASKETBALL, "SHOT_MADE")?.label, "Shot made");
   assert.equal(captureActionFor(BASKETBALL, "NOPE"), undefined);
+});
+
+test("the catalog panel drops scoring events when a dedicated scorer owns the scoreline", () => {
+  const plan = nonScoringCapturePlan(VOLLEYBALL, { scoringHandledElsewhere: true });
+  const keys = plan.flatMap((group) => group.actions.map((action) => action.key));
+  assert.equal(keys.includes("ACE"), false); // scores through the SETS module
+  assert.equal(keys.includes("KILL"), false);
+  assert.equal(keys.includes("SUBSTITUTION"), true); // non-scoring event stays
+
+  // When nothing else owns the scoreline the full plan is kept.
+  const full = nonScoringCapturePlan(VOLLEYBALL, { scoringHandledElsewhere: false });
+  assert.equal(full.flatMap((group) => group.actions.map((action) => action.key)).includes("ACE"), true);
+});
+
+test("no catalog group is left empty after filtering", () => {
+  const plan = nonScoringCapturePlan(BASKETBALL, { scoringHandledElsewhere: true });
+  assert.ok(plan.every((group) => group.actions.length > 0));
 });

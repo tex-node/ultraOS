@@ -221,7 +221,9 @@ export default async function Live({ params, searchParams }: { params: Promise<{
           </section>
         ) : null}
 
-        {game && game.status !== "FINAL" ? (
+        {/* Basketball-only: the Ultra +1/+2/+3/4PT scorer and its stat panel. Other sports score
+            through their own module panel below, and record player stats on the statistician console. */}
+        {isBasketball && game && game.status !== "FINAL" ? (
           <div className="mt-6 grid gap-6 lg:grid-cols-2">
             {[homeSide, awaySide].map((team) => (
               <section key={team.id} className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">

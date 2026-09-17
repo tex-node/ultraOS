@@ -48,6 +48,20 @@ export function scoringActions(definition: SportDefinition): CaptureAction[] {
   return definition.events.filter((event) => event.scores === true).map(toAction);
 }
 
+// The catalog panel captures non-scoring events only when the scoreline is owned by a dedicated
+// scorer (basketball's recordScore, or another sport's scoring module). Otherwise a "Goal" button
+// would store a note that does not count, duplicating the real scoring control.
+export function nonScoringCapturePlan(
+  definition: SportDefinition,
+  options: { scoringHandledElsewhere: boolean },
+): CaptureCategoryPlan[] {
+  const plan = capturePlan(definition);
+  if (!options.scoringHandledElsewhere) return plan;
+  return plan
+    .map((group) => ({ ...group, actions: group.actions.filter((action) => !action.scores) }))
+    .filter((group) => group.actions.length > 0);
+}
+
 export function captureActionFor(definition: SportDefinition, key: string): CaptureAction | undefined {
   const event = definition.events.find((candidate) => candidate.key === key);
   return event ? toAction(event) : undefined;
