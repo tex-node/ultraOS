@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { BASKETBALL_PRESETS } from "@/lib/sports/basketball-formats";
 import type { SportSummary } from "@/lib/sports/registry";
 import { createTournament, type TournamentFormState } from "../actions";
 
@@ -107,6 +108,22 @@ export function TournamentWizard({ summaries }: { summaries: SportSummary[] }) {
               <option value="GROUP_STAGE">Group stage — seeded groups, round-robin within each</option>
             </select>
           </label>
+          {selected?.key === "BASKETBALL" ? (
+            <label className={`${labelClass} sm:col-span-2`}>
+              Basketball playing format
+              <select name="basketballPreset" defaultValue="ULTRA" className={inputClass}>
+                {BASKETBALL_PRESETS.map((preset) => (
+                  <option key={preset.key} value={preset.key}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-zinc-500">
+                Ultra is the league&apos;s 2 × 10 running-clock format. Standard formats play four quarters
+                with a stopped clock. Editable later on the competition&apos;s Format page.
+              </span>
+            </label>
+          ) : null}
         </div>
       </section>
 

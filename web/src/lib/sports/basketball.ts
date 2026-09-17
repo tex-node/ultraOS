@@ -90,6 +90,15 @@ export const BASKETBALL: SportDefinition = {
   defaultDivisions: ["Men's", "Women's"],
   capabilities: ["DRAFT", "SHOT_CLOCK", "ULTRA_TIME", "FOUR_POINT", "SUBSTITUTIONS", "SURFACE_VISION"],
   rules: [
+    // Structure/clock: these make a competition standard basketball (4 quarters, stopped clock)
+    // instead of the league's Ultra format. See lib/sports/basketball-formats.ts for presets.
+    { key: "PERIOD_COUNT", value: 2, label: "Periods per game (2 halves or 4 quarters)" },
+    { key: "PERIOD_MINUTES", value: 10, label: "Minutes per period" },
+    { key: "OVERTIME_MINUTES", value: 5, label: "Minutes per overtime period" },
+    { key: "SHOT_CLOCK_SECONDS", value: 20, label: "Shot clock (seconds, 0 for none)" },
+    { key: "CLOCK_MODE", value: "RUNNING", label: "Clock mode (RUNNING or STOPPAGE)" },
+    { key: "ULTRA_TIME_ENABLED", value: true, label: "Ultra Time enabled (Ultra format only)" },
+    { key: "FOUR_POINT_ENABLED", value: true, label: "Four-point shot enabled (Ultra format only)" },
     { key: "ULTRA_TIME_THRESHOLD_SECONDS", value: 60, label: "Ultra Time starts at" },
     { key: "ULTRA_TIME_MULTIPLIER", value: 2, label: "Ultra Time scoring multiplier" },
     { key: "FOUR_POINT_BASE_VALUE", value: 4, label: "Four-point shot value" },

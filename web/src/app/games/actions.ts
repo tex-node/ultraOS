@@ -6,7 +6,7 @@ import { z } from "zod";
 import { MissingOrganizationContextError, requireFixturePermission, requireSession } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
 import { remainingClockSeconds } from "@/lib/game-clock";
-import { remainingShotClockSeconds, ULTRA_RULES } from "@/lib/game-rules";
+import { remainingShotClockSeconds } from "@/lib/game-rules";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import {
   addShotStatDeltas,
@@ -20,6 +20,8 @@ import {
 } from "@/lib/ultra-scoring-engine";
 import { recalculateStandings } from "@/lib/standings-recalculate";
 import { getSportDefinition } from "@/lib/sports/registry";
+import { LEGACY_STRUCTURE, structureFromRules } from "@/lib/sports/game-structure";
+import { resolveSeasonRuleValues } from "@/lib/sports/rule-set-store";
 import { isLegalDelivery } from "@/lib/sports/innings-scoring";
 import { advanceKnockoutBracket } from "@/lib/sports/knockout-bracket";
 import { matchOutcome } from "@/lib/sports/match-result";
@@ -183,12 +185,33 @@ export async function startGame(fixtureId: string) {
   await withOrganizationContext(organizationId, async (tx) => {
     const fixture = await tx.fixture.findUniqueOrThrow({
       where: { id: fixtureId },
-      select: { status: true },
+      select: {
+        status: true,
+        seasonId: true,
+        division: { select: { competition: { select: { sport: { select: { id: true, slug: true } } } } } },
+      },
     });
     if (fixture.status === "CANCELLED" || fixture.status === "FINAL") {
       throw new Error("INVALID_FIXTURE");
     }
-    await tx.game.upsert({
+
+    // Resolve this competition's structure (periods, period length, shot clock, clock mode) from the
+    // season rule set, then the organization override, then the sport definition.
+    const sport = fixture.division.competition.sport;
+    const definition = getSportDefinition(sport.slug);
+    const structure = definition
+      ? structureFromRules({
+          structure: definition.structure,
+          rules: (await resolveSeasonRuleValues(tx, {
+            organizationId,
+            seasonId: fixture.seasonId,
+            sportId: sport.id,
+            definition,
+          })).values,
+        })
+      : LEGACY_STRUCTURE;
+
+    const game = await tx.game.upsert({
       where: { fixtureId },
       create: {
         organizationId,
@@ -196,6 +219,8 @@ export async function startGame(fixtureId: string) {
         status: "LIVE",
         startedAt: new Date(),
         clockStartedAt: new Date(),
+        clockSecondsRemaining: structure.periodSeconds,
+        shotClockSecondsRemaining: structure.shotClockSeconds,
         // A brand-new Game row only ever comes from starting the live scorer - an imported
         // result upserts directly with its own resultSource/statSource instead of going
         // through startGame. Genuinely native from the first event, so it's safe to mark here.
@@ -208,6 +233,50 @@ export async function startGame(fixtureId: string) {
         clockStartedAt: new Date(),
       },
     });
+
+    // Freeze the rules for this game once, so a played game stays explicable even if the rule set
+    // changes later. A reopened game keeps its original snapshot.
+    if (definition) {
+      const existingSnapshot = await tx.gameRuleSnapshot.findUnique({
+        where: { gameId: game.id },
+        select: { id: true },
+      });
+      if (!existingSnapshot) {
+        const ruleValues = (await resolveSeasonRuleValues(tx, {
+          organizationId,
+          seasonId: fixture.seasonId,
+          sportId: sport.id,
+          definition,
+        })).values;
+        await tx.gameRuleSnapshot.create({
+          data: {
+            organizationId,
+            gameId: game.id,
+            sportId: sport.id,
+            ruleSetName: `${definition.name} (${structure.periodCount} x ${Math.round(structure.periodSeconds / 60)})`,
+            ruleSetVersion: definition.version,
+            definitionVersion: definition.version,
+            ruleValues,
+            periodCount: structure.periodCount,
+            periodDurationSeconds: structure.periodSeconds,
+            overtimeDurationSeconds: structure.overtimeSeconds,
+            shotClockSeconds: structure.shotClockSeconds,
+            clockMode: structure.clockMode,
+            fourPointEnabled: ruleValues.FOUR_POINT_ENABLED !== false,
+            fourPointBaseValue: Number(ruleValues.FOUR_POINT_BASE_VALUE ?? 4),
+            ultraTimeEnabled: ruleValues.ULTRA_TIME_ENABLED !== false,
+            ultraTimeStartRemainingSeconds: Number(ruleValues.ULTRA_TIME_THRESHOLD_SECONDS ?? 60),
+            ultraTimeMultiplier: Number(ruleValues.ULTRA_TIME_MULTIPLIER ?? 2),
+            ultraTimeAppliesFinalPeriodOnly: true,
+            fourPointDefinitionType: "OPPOSITE_HALF_ORIGIN",
+            mandatorySubstitutionEnabled: false,
+            mandatorySubstitutionPeriod: structure.periodCount,
+            mandatorySubstitutionPolicy: "AT_LEAST_ONE_PER_HALF",
+          },
+        });
+      }
+    }
+
     await tx.fixture.update({
       where: { id: fixtureId },
       data: { status: "LIVE" },
@@ -273,18 +342,29 @@ export async function advancePeriod(gameId: string, fixtureId: string) {
     });
     assertGameIsMutable(game.status, game.fixture.status);
 
+    // Period length comes from this game's snapshot: a 4-quarter game resets to its own period
+    // length, and anything past the final period is an overtime (shorter) period.
+    const snapshot = game.ruleSnapshot;
+    const periodCount = snapshot?.periodCount ?? LEGACY_STRUCTURE.periodCount;
+    const nextPeriod = game.currentPeriod + 1;
+    const nextPeriodSeconds =
+      nextPeriod > periodCount
+        ? snapshot?.overtimeDurationSeconds ?? LEGACY_STRUCTURE.overtimeSeconds
+        : snapshot?.periodDurationSeconds ?? LEGACY_STRUCTURE.periodSeconds;
+    const nextShotClockSeconds = snapshot?.shotClockSeconds ?? LEGACY_STRUCTURE.shotClockSeconds;
+
     await syncUltraTimeState(
       tx,
-      { ...game, currentPeriod: game.currentPeriod + 1, status: "PAUSED" },
-      ULTRA_RULES.halfSeconds,
+      { ...game, currentPeriod: nextPeriod, status: "PAUSED" },
+      nextPeriodSeconds,
     );
     await tx.game.update({
       where: { id: gameId },
       data: {
         currentPeriod: { increment: 1 },
-        clockSecondsRemaining: ULTRA_RULES.halfSeconds,
+        clockSecondsRemaining: nextPeriodSeconds,
         clockStartedAt: null,
-        shotClockSecondsRemaining: ULTRA_RULES.shotClockSeconds,
+        shotClockSecondsRemaining: nextShotClockSeconds,
         shotClockStartedAt: null,
         status: "PAUSED",
       },
@@ -302,10 +382,11 @@ export async function controlShotClock(gameId: string, fixtureId: string, formDa
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await tx.game.findUniqueOrThrow({
       where: { id: gameId },
-      include: { fixture: { select: { status: true } } },
+      include: { fixture: { select: { status: true } }, ruleSnapshot: true },
     });
     assertGameIsMutable(game.status, game.fixture.status);
     if (game.status !== "LIVE") throw new Error("GAME_NOT_LIVE");
+    const shotClockSeconds = game.ruleSnapshot?.shotClockSeconds ?? LEGACY_STRUCTURE.shotClockSeconds;
 
     if (action === "START") {
       await tx.game.update({
@@ -324,7 +405,7 @@ export async function controlShotClock(gameId: string, fixtureId: string, formDa
       await tx.game.update({
         where: { id: gameId },
         data: {
-          shotClockSecondsRemaining: ULTRA_RULES.shotClockSeconds,
+          shotClockSecondsRemaining: shotClockSeconds,
           shotClockStartedAt: null,
         },
       });

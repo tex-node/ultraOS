@@ -3,8 +3,11 @@ import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { COMPETITION_FORMATS, formatLabel, resolveFormat } from "@/lib/sports/format";
+import { BASKETBALL_PRESETS, matchBasketballPreset } from "@/lib/sports/basketball-formats";
+import { getSportDefinition } from "@/lib/sports/registry";
+import { resolveSeasonRuleValues } from "@/lib/sports/rule-set-store";
 import { withOrganizationContext } from "@/lib/tenant-context";
-import { updateDivisionFormat } from "./actions";
+import { updateBasketballFormat, updateDivisionFormat } from "./actions";
 import { FormatForm } from "./format-form";
 
 export const dynamic = "force-dynamic";
@@ -16,13 +19,33 @@ export default async function CompetitionSettingsPage({ params }: { params: Prom
   const session = await requirePermissionOrRedirect("competition:manage", `/competitions/${id}/settings`);
   if (!session.user.organizationId) throw new MissingOrganizationContextError();
 
-  const competition = await withOrganizationContext(session.user.organizationId, (tx) =>
-    tx.competition.findUnique({
+  const data = await withOrganizationContext(session.user.organizationId, async (tx) => {
+    const competition = await tx.competition.findUnique({
       where: { id },
-      include: { sport: true, divisions: { orderBy: { name: "asc" } } },
-    }),
-  );
-  if (!competition) notFound();
+      include: {
+        sport: true,
+        divisions: { orderBy: { name: "asc" } },
+        seasons: { orderBy: { startDate: "desc" }, select: { id: true } },
+      },
+    });
+    if (!competition) return null;
+
+    // Which basketball format (if any) the competition's seasons are currently playing.
+    const definition = getSportDefinition(competition.sport.slug);
+    let basketballPreset: string | null = null;
+    if (definition && competition.sport.slug === "basketball" && competition.seasons[0]) {
+      const { values } = await resolveSeasonRuleValues(tx, {
+        organizationId: session.user.organizationId as string,
+        seasonId: competition.seasons[0].id,
+        sportId: competition.sportId,
+        definition,
+      });
+      basketballPreset = matchBasketballPreset(values)?.key ?? null;
+    }
+    return { competition, basketballPreset };
+  });
+  if (!data) notFound();
+  const { competition, basketballPreset } = data;
 
   return (
     <OperationsShell user={session.user}>
@@ -46,9 +69,45 @@ export default async function CompetitionSettingsPage({ params }: { params: Prom
           <FormatForm competitionId={competition.id} format={competition.format} groupCount={competition.groupCount} />
         </section>
 
+        {competition.sport.slug === "basketball" ? (
+          <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+            <h2 className="text-lg font-semibold">Basketball format</h2>
+            <p className="mt-1 text-sm text-zinc-400">
+              Ultra Basketball is the league&apos;s own format (2 × 10, running clock, Ultra Time, four-point
+              shot). Standard formats play four quarters with a stopped clock. This applies to every season
+              of this competition; games freeze the format at kick-off.
+            </p>
+            <p className="mt-2 text-sm text-zinc-300">
+              Current format: {basketballPreset ? BASKETBALL_PRESETS.find((preset) => preset.key === basketballPreset)?.label : "Custom / organisation default"}
+            </p>
+            <form action={updateBasketballFormat} className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <input type="hidden" name="competitionId" value={competition.id} />
+              <label className="block text-sm text-zinc-300">
+                Format
+                <select
+                  name="preset"
+                  defaultValue={basketballPreset ?? "ULTRA"}
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-[#050807] px-3 py-2 text-sm text-white"
+                >
+                  {BASKETBALL_PRESETS.map((preset) => (
+                    <option key={preset.key} value={preset.key}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs text-zinc-500">
+                  {BASKETBALL_PRESETS.find((preset) => preset.key === (basketballPreset ?? "ULTRA"))?.description}
+                </span>
+              </label>
+              <button className="rounded-lg bg-emerald-400 px-5 py-3 font-semibold text-zinc-950">
+                Save format
+              </button>
+            </form>
+          </section>
+        ) : null}
+
         <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
-          <h2 className="text-lg font-semibold">Divisions</h2>
-          <p className="mt-1 text-sm text-zinc-400">
+          <h2 className="text-lg font-semibold">Divisions</h2>          <p className="mt-1 text-sm text-zinc-400">
             An override applies to that division only. Leave it on “inherit” to follow the competition default.
           </p>
           {competition.divisions.length === 0 ? (

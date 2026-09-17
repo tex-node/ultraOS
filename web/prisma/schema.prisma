@@ -1875,6 +1875,14 @@ enum GameControlRole {
   STATISTICIAN
 }
 
+// How the game clock behaves. RUNNING = the clock keeps running through whistles (Ultra Basketball,
+// many amateur leagues); STOPPAGE = it stops at every whistle (standard/FIBA/NBA), so the operator
+// pauses and resumes around each stoppage.
+enum ClockMode {
+  RUNNING
+  STOPPAGE
+}
+
 model EventStaffAssignment {
   id             String        @id @default(cuid())
   organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
@@ -3197,6 +3205,7 @@ model RuleSet {
   periodDurationSeconds   Int @default(600)
   overtimeDurationSeconds Int @default(300)
   shotClockSeconds        Int @default(20)
+  clockMode               ClockMode @default(RUNNING)
 
   fourPointEnabled        Boolean                 @default(true)
   fourPointDefinitionType FourPointDefinitionType @default(OPPOSITE_HALF_ORIGIN)
@@ -3244,6 +3253,7 @@ model GameRuleSnapshot {
   periodDurationSeconds   Int
   overtimeDurationSeconds Int
   shotClockSeconds        Int
+  clockMode               ClockMode
 
   fourPointEnabled        Boolean
   fourPointDefinitionType FourPointDefinitionType

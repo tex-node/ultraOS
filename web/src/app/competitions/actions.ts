@@ -7,6 +7,8 @@ import { SeasonStatus } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
+import { getBasketballPreset } from "@/lib/sports/basketball-formats";
+import { upsertSeasonRuleSet } from "@/lib/sports/rule-set-store";
 import { requireSportDefinition } from "@/lib/sports/registry";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
@@ -20,6 +22,7 @@ const tournamentSchema = z.object({
   endDate: z.string().min(1, "Choose an end date."),
   divisions: z.string().trim().min(1, "Add at least one division."),
   format: z.enum(["ROUND_ROBIN", "KNOCKOUT", "GROUP_STAGE"]).optional(),
+  basketballPreset: z.string().optional(),
 });
 
 function slugify(value: string): string {
@@ -92,6 +95,20 @@ export async function createTournament(
         status: SeasonStatus.DRAFT,
       },
     });
+
+    // Basketball picks its playing format up front (Ultra / FIBA 4x10 / NBA 4x12); stored as this
+    // season's rule set so the clock, periods and shot clock follow it. Editable later on the
+    // competition's Format page.
+    const basketballPreset = getBasketballPreset(input.basketballPreset);
+    if (basketballPreset && definition.key === "BASKETBALL") {
+      await upsertSeasonRuleSet(tx, {
+        organizationId,
+        seasonId: season.id,
+        sportId: sport.id,
+        name: `${basketballPreset.label} · ${season.name}`,
+        ruleValues: basketballPreset.ruleValues,
+      });
+    }
 
     for (const divisionName of divisionNames) {
       const divisionSlug = slugify(divisionName);

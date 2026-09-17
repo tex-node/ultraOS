@@ -24,7 +24,16 @@ import { getGameReconciliation } from "../../stats-actions";
 import { GameClock } from "../../game-clock";
 import { canFixturePermission, requireFixturePermissionOrRedirect } from "@/lib/authorization";
 import { remainingClockSeconds } from "@/lib/game-clock";
-import { FINAL_PERIOD, isUltraTime, periodLabel, remainingShotClockSeconds, ULTRA_RULES } from "@/lib/game-rules";
+import { remainingShotClockSeconds } from "@/lib/game-rules";
+import {
+  LEGACY_STRUCTURE,
+  clockModeHint,
+  clockModeLabel,
+  isFinalPeriod,
+  periodLabelFor,
+  type ClockModeValue,
+} from "@/lib/sports/game-structure";
+import { effectiveRuleSnapshot, isUltraTimeUnderRules } from "@/lib/ultra-scoring-engine";
 import { getSportDefinition } from "@/lib/sports/registry";
 import { resolveFormat } from "@/lib/sports/format";
 import { chaseTarget, inningsConfig, isDelivery, isLegalDelivery, oversDisplay } from "@/lib/sports/innings-scoring";
@@ -51,6 +60,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
       awayEntrant: { select: { id: true, name: true } },
       game: {
         include: {
+          ruleSnapshot: true,
           events: {
             orderBy: { createdAt: "desc" },
             take: 20,
@@ -65,8 +75,23 @@ export default async function Live({ params, searchParams }: { params: Promise<{
   }));
   if (!fixture) notFound();
   const game = fixture.game;
-  const remainingSeconds = game ? remainingClockSeconds(game) : ULTRA_RULES.halfSeconds;
-  const ultraTime = game ? isUltraTime(game, remainingSeconds) : false;
+  // This game's frozen structure (periods, period length, shot clock, clock mode). Falls back to the
+  // legacy Ultra shape for games started before rule snapshots existed.
+  const snapshot = game?.ruleSnapshot ?? null;
+  const structure = snapshot
+    ? {
+        periodCount: snapshot.periodCount,
+        periodSeconds: snapshot.periodDurationSeconds,
+        overtimeSeconds: snapshot.overtimeDurationSeconds,
+        shotClockSeconds: snapshot.shotClockSeconds,
+        clockMode: snapshot.clockMode,
+      }
+    : LEGACY_STRUCTURE;
+  const remainingSeconds = game ? remainingClockSeconds(game) : structure.periodSeconds;
+  const ultraTime = game
+    ? isUltraTimeUnderRules(effectiveRuleSnapshot(snapshot), game.status, game.currentPeriod, remainingSeconds)
+    : false;
+  const fourPointEnabled = snapshot ? snapshot.fourPointEnabled : true;
   const shotClockRunning = Boolean(game?.shotClockStartedAt);
   const shotClockRemaining = game ? remainingShotClockSeconds(game) : 20;
   const definition = getSportDefinition(fixture.division.competition.sport.slug);
@@ -104,7 +129,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
       target: game.currentPeriod >= 2 ? chaseTarget(fixture.homeScore) : null,
     };
   }
-  const substitutionCheckDue = Boolean(game && game.currentPeriod >= FINAL_PERIOD && game.status !== "FINAL");
+  const substitutionCheckDue = Boolean(game && isFinalPeriod(game.currentPeriod, structure) && game.status !== "FINAL");
   const confirmations = substitutionCheckDue
     ? await withOrganizationContext(session.user.organizationId, (tx) => tx.auditLog.findMany({
         where: { action: "MANDATORY_SUBSTITUTION_CONFIRMED", entityType: "Game", entityId: game!.id },
@@ -154,11 +179,17 @@ export default async function Live({ params, searchParams }: { params: Promise<{
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-center">
             <TeamScore name={homeSide.label} score={fixture.homeScore} />
             <div>
-              <p className="text-xs text-zinc-500">{game ? periodLabel(game.currentPeriod, game.status) : "HALF 1"}</p>
+              <p className="text-xs text-zinc-500">{game ? periodLabelFor(game.currentPeriod, game.status, structure) : "Q1"}</p>
               <p className="mt-1 font-mono text-3xl font-bold sm:text-4xl">
                 {game ? <GameClock seconds={remainingSeconds} status={game.status} startedAt={game.clockStartedAt?.toISOString() ?? null} /> : "10:00"}
               </p>
               <p className="mt-1 text-xs text-emerald-400">{game?.status ?? "NOT STARTED"}</p>
+              {isBasketball ? (
+                <p className="mt-1 text-[10px] uppercase tracking-wider text-zinc-500" title={clockModeHint(structure.clockMode as ClockModeValue)}>
+                  {clockModeLabel(structure.clockMode as ClockModeValue)}
+                  {structure.clockMode === "STOPPAGE" ? " · pause at every whistle" : ""}
+                </p>
+              ) : null}
             </div>
             <TeamScore name={awaySide.label} score={fixture.awayScore} />
           </div>
@@ -241,10 +272,13 @@ export default async function Live({ params, searchParams }: { params: Promise<{
                       </SubmitButton>
                     ))}
                     {/* 4PT is visually distinct (violet, not emerald) - it's Ultra's own custom
-                        shot type, not "just another number" next to the standard 1/2/3. */}
-                    <SubmitButton name="points" value={4} pendingLabel="…" className={`${BIG_BTN} border-2 border-violet-300 bg-violet-500 text-white shadow-[0_0_12px_rgba(167,139,250,0.5)]`}>
-                      4PT{ultraTime ? <span className="block text-[10px] font-normal">→ 8</span> : null}
-                    </SubmitButton>
+                        shot type, not "just another number" next to the standard 1/2/3. Hidden when
+                        the format in play has no four-point shot. */}
+                    {fourPointEnabled ? (
+                      <SubmitButton name="points" value={4} pendingLabel="…" className={`${BIG_BTN} border-2 border-violet-300 bg-violet-500 text-white shadow-[0_0_12px_rgba(167,139,250,0.5)]`}>
+                        4PT{ultraTime ? <span className="block text-[10px] font-normal">→ 8</span> : null}
+                      </SubmitButton>
+                    ) : null}
                   </div>
                   <details className="mt-3">
                     <summary className="cursor-pointer text-xs text-zinc-500">Manual correction (prefer Undo last event above)</summary>
