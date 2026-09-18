@@ -135,12 +135,12 @@ export function OperationsShell({ children, user }: OperationsShellProps) {
             })}
           </nav>
           <div className="flex items-center gap-4">
-            <div className="text-right">
+            <Link href="/profile" className="text-right transition hover:opacity-80">
               <p className="text-sm font-medium">{user.name}</p>
               <p className="text-[10px] uppercase tracking-wider text-zinc-500">
                 {(user.roles?.length ? user.roles : [user.role]).join(" · ")}
               </p>
-            </div>
+            </Link>
             <form
               action={async () => {
                 "use server";

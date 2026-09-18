@@ -1,10 +1,14 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { startGame } from "@/app/games/actions";
-import { requirePermissionOrRedirect, MissingOrganizationContextError } from "@/lib/authorization";
+import { MissingOrganizationContextError } from "@/lib/authorization";
+import { gameControlRoleGrants, type GameControlGrantLike } from "@/lib/game-access";
 import { getCheckInStatuses } from "@/lib/game-day-checkin";
 import { remainingClockSeconds } from "@/lib/game-clock";
-import { periodLabel } from "@/lib/game-rules";
+import { hasPermission } from "@/lib/permissions";
+import { periodLabelFor } from "@/lib/sports/game-structure";
 import { formatLagosTime } from "@/lib/format-datetime";
 import { buildSystemHealth } from "@/lib/system-health-loader";
 import type { HealthStatus } from "@/lib/system-health";
@@ -17,24 +21,68 @@ const SLOT_MINUTES = 35;
 const STARTS_SOON_MINUTES = 5;
 
 export default async function GameDayControlCenter() {
-  // G.20: was requirePermission() directly, which throws an uncaught AuthenticationError for an
-  // anonymous request (rendered as a generic 500, discovered during the G.20 operations
-  // baseline) instead of a clean login redirect - the exact G.15/G.16 pattern already fixed for
-  // /games/[fixtureId]/live and /stats. Same fix, applied here now that it was found.
-  const session = await requirePermissionOrRedirect("game:operate", "/gameday");
-  if (!session.user.organizationId) throw new MissingOrganizationContextError();
+  // Reachable by an organization-wide game:operate holder, or by anyone holding a scoped
+  // game-control grant. Scoped staff only see the fixtures their grants cover.
+  const session = await auth();
+  if (!session?.user) redirect("/login?callbackUrl=/gameday");
+  const organizationId = session.user.organizationId;
+  if (!organizationId) throw new MissingOrganizationContextError();
+
+  const orgWide = hasPermission(session.user.roles, "game:operate");
+  const grants: GameControlGrantLike[] = orgWide
+    ? []
+    : await withOrganizationContext(organizationId, (tx) =>
+        tx.gameControlGrant.findMany({
+          where: { userId: session.user.id, revokedAt: null },
+          select: { role: true, competitionId: true, seasonId: true, eventId: true, revokedAt: true },
+        }),
+      );
+  const usableGrants = grants.filter((grant) => gameControlRoleGrants(grant.role, "game:operate"));
+
+  if (!orgWide && usableGrants.length === 0) {
+    return (
+      <OperationsShell user={session.user}>
+        <main className="mx-auto max-w-3xl px-6 py-16">
+          <h1 className="text-3xl font-semibold">Access required</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            You do not have game control for any tournament, season or event yet. Ask an administrator to
+            grant it from the Access page.
+          </p>
+        </main>
+      </OperationsShell>
+    );
+  }
+
+  // Fixtures a scoped user may see: anything matching one of their grants. An organization-wide grant
+  // (no scope) matches everything.
+  const scopeOr = orgWide
+    ? null
+    : usableGrants.map((grant) =>
+        grant.competitionId
+          ? { division: { competitionId: grant.competitionId } }
+          : grant.seasonId
+            ? { seasonId: grant.seasonId }
+            : grant.eventId
+              ? { eventId: grant.eventId }
+              : {},
+      );
+
   const now = new Date();
 
-  const { fixtures, incidentEntries, event, seasonClubs } = await withOrganizationContext(session.user.organizationId, async (tx) => {
+  const { fixtures, incidentEntries, event, seasonClubs } = await withOrganizationContext(organizationId, async (tx) => {
     const season = await tx.season.findFirst({ where: { status: "ACTIVE" }, orderBy: { startDate: "desc" } });
     const fixtures = season
     ? await tx.fixture.findMany({
-        where: { seasonId: season.id, status: { not: "CANCELLED" } },
+        where: {
+          seasonId: season.id,
+          status: { not: "CANCELLED" },
+          ...(scopeOr ? { OR: scopeOr } : {}),
+        },
         orderBy: { scheduledAt: "asc" },
         include: {
           homeSeasonClub: { include: { club: true } },
           awaySeasonClub: { include: { club: true } },
-          game: true,
+          game: { include: { ruleSnapshot: true } },
           venue: true,
         },
       })
@@ -44,7 +92,8 @@ export default async function GameDayControlCenter() {
       ? await tx.auditLog.findMany({ where: { entityType: "GameIncident", entityId: { in: gameIds } }, orderBy: { createdAt: "desc" } })
       : [];
     const event = await tx.event.findFirst({ where: { status: { in: ["PUBLISHED", "IN_PROGRESS"] } }, orderBy: { startTime: "asc" } });
-    const seasonClubs = season
+    // Team rosters are only needed by the check-in panel, which scoped staff do not get.
+    const seasonClubs = orgWide && season
       ? await tx.seasonClub!.findMany({ where: { seasonId: season.id, status: "ACTIVE" }, include: { club: true, headCoach: true, players: true }, orderBy: { club: { name: "asc" } } })
       : [];
     return { season, fixtures, incidentEntries, event, seasonClubs };
@@ -90,9 +139,9 @@ export default async function GameDayControlCenter() {
   // G.20 Part XII: reuses buildSystemHealth() unchanged - never a second monitoring truth. The
   // live fixture (if any) is passed explicitly so this reflects the same game the "Live now"
   // panel below shows, not a separately-discovered one.
-  const health = await buildSystemHealth(session.user.organizationId, live[0]?.game?.id);
+  const health = await buildSystemHealth(organizationId, live[0]?.game?.id);
 
-  const checkInStatuses = event ? await getCheckInStatuses(session.user.organizationId, event.id) : {};
+  const checkInStatuses = event ? await getCheckInStatuses(organizationId, event.id) : {};
   const clubReadiness = seasonClubs.map((seasonClub) => {
     const present = seasonClub.players.filter((p) => checkInStatuses[p.id]?.status === "PRESENT").length;
     const late = seasonClub.players.filter((p) => checkInStatuses[p.id]?.status === "LATE").length;
@@ -160,7 +209,7 @@ export default async function GameDayControlCenter() {
                   <Link key={fixture.id} href={`/games/${fixture.id}/live`} className="block">
                     <p className="font-semibold">{fixture.homeSeasonClub!.club.shortName} {fixture.homeScore} — {fixture.awayScore} {fixture.awaySeasonClub!.club.shortName}</p>
                     <p className="text-xs text-emerald-400">
-                      {periodLabel(fixture.game!.currentPeriod, fixture.game!.status)} · {Math.floor(remainingClockSeconds(fixture.game!) / 60)}:{(remainingClockSeconds(fixture.game!) % 60).toString().padStart(2, "0")} · {fixture.game!.status}
+                      {periodLabelFor(fixture.game!.currentPeriod, fixture.game!.status, { periodCount: fixture.game!.ruleSnapshot?.periodCount ?? 2 })} · {Math.floor(remainingClockSeconds(fixture.game!) / 60)}:{(remainingClockSeconds(fixture.game!) % 60).toString().padStart(2, "0")} · {fixture.game!.status}
                     </p>
                   </Link>
                 ))}

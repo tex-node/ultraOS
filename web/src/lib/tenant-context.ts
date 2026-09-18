@@ -13,7 +13,18 @@ export async function resolveActiveOrganizationId(userId: string): Promise<strin
     select: { organizationId: true },
     orderBy: { grantedAt: "asc" },
   });
-  return membership?.organizationId ?? null;
+  if (membership?.organizationId) return membership.organizationId;
+
+  // A game-control grant also puts the user inside an organization: an admin can hand someone one
+  // tournament's games without them holding any role grant, and they still need an organization
+  // context to sign in and reach the console. Without this, the Access dashboard's grants were
+  // unusable for anyone who was not already a member.
+  const grant = await prisma.gameControlGrant.findFirst({
+    where: { userId, revokedAt: null },
+    select: { organizationId: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return grant?.organizationId ?? null;
 }
 
 export class OrganizationNotFoundError extends Error {

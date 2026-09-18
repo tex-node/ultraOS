@@ -52,18 +52,37 @@ export function scoringActions(definition: SportDefinition): CaptureAction[] {
 // system-generated, and CORRECTION is handled by the correction flow, not by tapping a card.
 const NON_CAPTURE_CATEGORIES = new Set(["LIFECYCLE", "CORRECTION"]);
 
+// Events the basketball console already captures through its dedicated player-stat panel
+// (recordStatEvent). Rendering the same words in the catalog panel would offer two buttons for
+// "Turnover" that do different things - one records a player stat, the other a plain note.
+export const BASKETBALL_STAT_PANEL_KEYS = [
+  "REBOUND",
+  "OFFENSIVE_REBOUND",
+  "DEFENSIVE_REBOUND",
+  "ASSIST",
+  "STEAL",
+  "BLOCK",
+  "TURNOVER",
+  "FOUL",
+];
+
 // The catalog panel captures non-scoring events only when the scoreline is owned by a dedicated
 // scorer (basketball's recordScore, or another sport's scoring module). Otherwise a "Goal" button
-// would store a note that does not count, duplicating the real scoring control.
+// would store a note that does not count, duplicating the real scoring control. `excludeKeys` lets a
+// console drop events another panel already owns, so one word never means two things.
 export function nonScoringCapturePlan(
   definition: SportDefinition,
-  options: { scoringHandledElsewhere: boolean },
+  options: { scoringHandledElsewhere: boolean; excludeKeys?: readonly string[] },
 ): CaptureCategoryPlan[] {
+  const excluded = new Set(options.excludeKeys ?? []);
   return capturePlan(definition)
     .filter((group) => !NON_CAPTURE_CATEGORIES.has(group.category))
     .map((group) => ({
       ...group,
-      actions: options.scoringHandledElsewhere ? group.actions.filter((action) => !action.scores) : group.actions,
+      actions: group.actions.filter(
+        (action) =>
+          !excluded.has(action.key) && !(options.scoringHandledElsewhere && action.scores),
+      ),
     }))
     .filter((group) => group.actions.length > 0);
 }

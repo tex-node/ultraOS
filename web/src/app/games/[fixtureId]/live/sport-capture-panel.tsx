@@ -1,5 +1,5 @@
 import { SubmitButton } from "@/app/components/submit-button";
-import { nonScoringCapturePlan } from "@/lib/sports/capture-plan";
+import { BASKETBALL_STAT_PANEL_KEYS, nonScoringCapturePlan } from "@/lib/sports/capture-plan";
 import { resolveScoringModule } from "@/lib/sports/scoring-modules";
 import type { SportDefinition } from "@/lib/sports/types";
 import { recordSportEvent } from "../../actions";
@@ -29,7 +29,11 @@ export function SportCapturePanel({
 }) {
   // Basketball scores through recordScore, every other sport through its scoring module.
   const scoringHandledElsewhere = definition.key === "BASKETBALL" || resolveScoringModule(definition) !== null;
-  const plan = nonScoringCapturePlan(definition, { scoringHandledElsewhere });
+  const plan = nonScoringCapturePlan(definition, {
+    scoringHandledElsewhere,
+    // Basketball's dedicated stat panel already owns these, with player attribution.
+    excludeKeys: definition.key === "BASKETBALL" ? BASKETBALL_STAT_PANEL_KEYS : [],
+  });
 
   return (
     <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">

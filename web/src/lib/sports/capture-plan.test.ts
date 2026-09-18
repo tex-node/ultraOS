@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BASKETBALL } from "@/lib/sports/basketball";
 import { VOLLEYBALL } from "@/lib/sports/volleyball";
-import { captureActionFor, capturePlan, nonScoringCapturePlan, scoringActions } from "@/lib/sports/capture-plan";
+import { BASKETBALL_STAT_PANEL_KEYS, captureActionFor, capturePlan, nonScoringCapturePlan, scoringActions } from "@/lib/sports/capture-plan";
 
 test("capture plan groups actions by category in definition order", () => {
   const plan = capturePlan(VOLLEYBALL);
@@ -64,4 +64,17 @@ test("system categories never become scorer buttons", () => {
     const keys = plan.flatMap((group) => group.actions.map((action) => action.key));
     assert.equal(keys.some((key) => key.startsWith("GAME_") || key.startsWith("PERIOD_")), false);
   }
+});
+
+test("events owned by another panel are not offered twice", () => {
+  const plan = nonScoringCapturePlan(BASKETBALL, {
+    scoringHandledElsewhere: true,
+    excludeKeys: BASKETBALL_STAT_PANEL_KEYS,
+  });
+  const keys = plan.flatMap((group) => group.actions.map((action) => action.key));
+  for (const owned of BASKETBALL_STAT_PANEL_KEYS) {
+    assert.equal(keys.includes(owned), false, `${owned} must not appear in the catalog panel`);
+  }
+  // Whatever remains is genuinely catalog-only capture (e.g. shot attempts, timeouts).
+  assert.ok(keys.includes("TIMEOUT") || keys.includes("SHOT_ATTEMPT"));
 });
