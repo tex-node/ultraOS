@@ -202,7 +202,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
               </span>
               <form action={controlShotClock.bind(null, game.id, fixtureId)}><input type="hidden" name="action" value="START" /><SubmitButton className={`${BIG_BTN} border border-white/10 px-3`} disabled={game.status !== "LIVE" || shotClockRunning}>Start</SubmitButton></form>
               <form action={controlShotClock.bind(null, game.id, fixtureId)}><input type="hidden" name="action" value="STOP" /><SubmitButton className={`${BIG_BTN} border border-white/10 px-3`} disabled={game.status !== "LIVE" || !shotClockRunning}>Stop</SubmitButton></form>
-              <form action={controlShotClock.bind(null, game.id, fixtureId)}><input type="hidden" name="action" value="RESET" /><SubmitButton className={`${BIG_BTN} border border-white/10 px-3`} disabled={game.status !== "LIVE"}>Reset 20</SubmitButton></form>
+              <form action={controlShotClock.bind(null, game.id, fixtureId)}><input type="hidden" name="action" value="RESET" /><SubmitButton className={`${BIG_BTN} border border-white/10 px-3`} disabled={game.status !== "LIVE"}>Reset {structure.shotClockSeconds}</SubmitButton></form>
             </div>
           ) : null}
 
@@ -212,7 +212,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             ) : (
               <>
                 {game.status === "LIVE" ? <form action={pauseGame.bind(null, game.id, fixtureId)}><SubmitButton className={`${BIG_BTN} border border-white/10 px-5`}>Pause</SubmitButton></form> : game.status !== "FINAL" ? <form action={resumeGame.bind(null, game.id, fixtureId)}><SubmitButton className={`${BIG_BTN} bg-emerald-400 px-5 text-zinc-950`}>Resume</SubmitButton></form> : null}
-                {game.status !== "FINAL" ? <div className="flex flex-col items-center gap-1"><form action={advancePeriod.bind(null, game.id, fixtureId)}><SubmitButton className={`${BIG_BTN} border border-white/10 px-5`}>Next period</SubmitButton></form>{game.currentPeriod === 1 ? <p className="text-[10px] uppercase tracking-wider text-zinc-500">Halftime break: 2 min</p> : null}</div> : null}
+                {game.status !== "FINAL" ? <div className="flex flex-col items-center gap-1"><form action={advancePeriod.bind(null, game.id, fixtureId)}><SubmitButton className={`${BIG_BTN} border border-white/10 px-5`}>Next period</SubmitButton></form>{game.currentPeriod === 1 ? <p className="text-[10px] uppercase tracking-wider text-zinc-500">{structure.periodCount <= 2 ? "Halftime" : "Quarter"} break: 2 min</p> : null}</div> : null}
                 {game.status !== "FINAL" && game.events.length > 0 ? <form action={undoLastEvent.bind(null, game.id, fixtureId)}><SubmitButton pendingLabel="Undoing…" className={`${BIG_BTN} border border-amber-400/30 px-5 text-amber-300`}>Undo last event</SubmitButton></form> : null}
                 {game.status !== "FINAL" && canConfirmResult ? <form action={finalizeGame.bind(null, game.id, fixtureId)}><SubmitButton pendingLabel="Finalizing…" className={`${BIG_BTN} border border-rose-400/20 px-5 text-rose-300`}>Confirm final</SubmitButton></form> : null}
               </>

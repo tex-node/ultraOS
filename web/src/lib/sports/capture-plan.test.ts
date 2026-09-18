@@ -53,3 +53,15 @@ test("no catalog group is left empty after filtering", () => {
   const plan = nonScoringCapturePlan(BASKETBALL, { scoringHandledElsewhere: true });
   assert.ok(plan.every((group) => group.actions.length > 0));
 });
+
+test("system categories never become scorer buttons", () => {
+  for (const definition of [BASKETBALL, VOLLEYBALL]) {
+    const plan = nonScoringCapturePlan(definition, { scoringHandledElsewhere: true });
+    const categories = plan.map((group) => group.category);
+    assert.equal(categories.includes("LIFECYCLE"), false);
+    assert.equal(categories.includes("CORRECTION"), false);
+    // and no lifecycle/correction event keys leak through under another category
+    const keys = plan.flatMap((group) => group.actions.map((action) => action.key));
+    assert.equal(keys.some((key) => key.startsWith("GAME_") || key.startsWith("PERIOD_")), false);
+  }
+});

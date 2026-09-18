@@ -48,6 +48,10 @@ export function scoringActions(definition: SportDefinition): CaptureAction[] {
   return definition.events.filter((event) => event.scores === true).map(toAction);
 }
 
+// Categories the scorer console never renders as buttons: LIFECYCLE (game/period started, ended) is
+// system-generated, and CORRECTION is handled by the correction flow, not by tapping a card.
+const NON_CAPTURE_CATEGORIES = new Set(["LIFECYCLE", "CORRECTION"]);
+
 // The catalog panel captures non-scoring events only when the scoreline is owned by a dedicated
 // scorer (basketball's recordScore, or another sport's scoring module). Otherwise a "Goal" button
 // would store a note that does not count, duplicating the real scoring control.
@@ -55,10 +59,12 @@ export function nonScoringCapturePlan(
   definition: SportDefinition,
   options: { scoringHandledElsewhere: boolean },
 ): CaptureCategoryPlan[] {
-  const plan = capturePlan(definition);
-  if (!options.scoringHandledElsewhere) return plan;
-  return plan
-    .map((group) => ({ ...group, actions: group.actions.filter((action) => !action.scores) }))
+  return capturePlan(definition)
+    .filter((group) => !NON_CAPTURE_CATEGORIES.has(group.category))
+    .map((group) => ({
+      ...group,
+      actions: options.scoringHandledElsewhere ? group.actions.filter((action) => !action.scores) : group.actions,
+    }))
     .filter((group) => group.actions.length > 0);
 }
 
