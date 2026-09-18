@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { startGame } from "@/app/games/actions";
-import { MissingOrganizationContextError } from "@/lib/authorization";
+
 import { gameControlRoleGrants, type GameControlGrantLike } from "@/lib/game-access";
 import { getCheckInStatuses } from "@/lib/game-day-checkin";
 import { remainingClockSeconds } from "@/lib/game-clock";
@@ -26,7 +26,19 @@ export default async function GameDayControlCenter() {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/gameday");
   const organizationId = session.user.organizationId;
-  if (!organizationId) throw new MissingOrganizationContextError();
+  if (!organizationId) {
+    return (
+      <OperationsShell user={session.user}>
+        <main className="mx-auto max-w-3xl px-6 py-16">
+          <h1 className="text-3xl font-semibold">No league yet</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            Your account is not part of an organization, so there is no game day to show. Ask an
+            administrator to grant you game control.
+          </p>
+        </main>
+      </OperationsShell>
+    );
+  }
 
   const orgWide = hasPermission(session.user.roles, "game:operate");
   const grants: GameControlGrantLike[] = orgWide
