@@ -3836,3 +3836,49 @@ STAGE_5_5C: NOT_STARTED
 - The DB adapter is the only registration host. Routes continue to call the
   DB-backed `service.ts`, which is exactly what the adapter delegates to, so
   behavior is unchanged.
+
+### 2026-09-19 - Multi-Sport Data-Depth Phases (P8-P11) Planning
+
+**Objective**
+
+- Break the multi-sport feature taxonomy (soccer, American football, tennis, table tennis,
+  volleyball data tracking plus tournament-engine extensions) into product phases, and record them
+  in `documentation/PRODUCT_ROADMAP.md` with a tracker and an architecture mapping note.
+
+**Completed**
+
+- Added product phases P8 (American football end-to-end), P9 (table tennis end-to-end),
+  P10 (capture depth: soccer, tennis, volleyball), and P11 (tournament engine extensions:
+  Swiss, double elimination, ladders, H2H + discipline tiebreakers, cross-sport leaders,
+  POSTPONED state) with goals, deliverables, usability acceptance, and dependencies.
+- Added tracker rows P8.1-P11.5 and a mapping note showing where each element of the
+  proposed greenfield architecture already lives (Fixture/Game, GameEvent ledger,
+  scoring-module dispatch, standings engine, P7 offline).
+- Bumped the roadmap to product-0.3 (last_updated 2026-09-19).
+
+**Decisions**
+
+- No greenfield rebuild: the proposed `matches`/`match_events` tables, engine strategy, and
+  aggregation layer map 1:1 onto Fixture/Game, the GameEvent ledger, the code registry +
+  scoring-module dispatch, and recalculateStandings. New work is sport content only.
+- xG/xA ship as derived-only, methodology-documented metrics - never hand-entered.
+- Verified before writing: FixtureStatus has no POSTPONED (SCHEDULED/LIVE/FINAL/CANCELLED,
+  PAUSED lives on Game); the standings engine has no H2H/discipline tiebreaks; formats are
+  ROUND_ROBIN/KNOCKOUT/GROUP_STAGE only; per-sport point structures already live in
+  definitions (e.g. football 3/1/0).
+- American football and table tennis are the only genuinely new sports; everything else is
+  depth on onboarded sports.
+
+**Verification**
+
+- Schema facts checked against `prisma/schema.prisma` and `src/lib/standings-recalculate.ts`
+  before writing (no unverified claims in the roadmap).
+- Markdown only; no application code changed, so no typecheck/lint/test/build run is required.
+
+**Known issues**
+
+- None from this planning session.
+
+**Next step**
+
+- Start P8.1 (American football definition) or whichever phase the operator prioritizes.

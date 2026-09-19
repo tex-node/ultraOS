@@ -1,8 +1,8 @@
 ---
 title: Product Roadmap
 status: Active
-version: product-0.2
-last_updated: 2026-09-15
+version: product-0.3
+last_updated: 2026-09-19
 ---
 
 # Product Roadmap
@@ -68,6 +68,10 @@ These apply to every phase and every screen.
 | P5 | Stats & results presentation | Publish stats, standings, and match pages | `In progress` |
 | P6 | Multi-sport expansion | The same flow works for every sport | `In progress` |
 | P7 | Usability, offline, and scale | Intuitive, resilient, fast at real volume | `Not started` |
+| P8 | American football end-to-end | A new sport runs the full journey on definitions alone | `Not started` |
+| P9 | Table tennis end-to-end | A new individual sport runs the full journey on definitions alone | `Not started` |
+| P10 | Capture depth (soccer, tennis, volleyball) | Live depth stats per sport, all traceable to events | `Not started` |
+| P11 | Tournament engine extensions | Swiss/double-elim/ladder formats, H2H + discipline tiebreaks, cross-sport leaders | `Not started` |
 
 P0-P5 are partly delivered for basketball Season Zero; the roadmap makes them complete and sport-agnostic.
 
@@ -275,6 +279,140 @@ Usability acceptance:
 - Core flows pass an accessibility audit.
 - Capture remains responsive and lossless through simulated network loss.
 
+## 6b. Next phases: multi-sport data depth (P8–P11)
+
+The programme below turns the multi-sport taxonomy (soccer, American football, tennis, table
+tennis, volleyball) into product phases. Each phase is deliberately shaped so the only new code
+is sport content (a definition, its capture console, its standings config) — never a new
+architecture. The mapping table at the end shows where every element of that taxonomy already
+lives, so nothing gets rebuilt under a new name.
+
+### P8 — American football end-to-end (new sport)
+
+**Goal:** a genuinely new sport runs the whole journey — onboarding, schedule, capture,
+standings, presentation — with no engine change, proving the P6 exit criteria a second time.
+
+**Already exists to build on:** the code-registry + scoring-module dispatch pattern, the
+statistician live-console shape (header, roster strips, action log, reconciliation), period-based
+clock handling, and per-sport standings config.
+
+Deliverables:
+
+- American football definition: quarters, downs and distance, line of scrimmage, timeouts;
+  scoring values (TD 6, FG 3, safety 2, XP 1/2); standings on wins then points for/against.
+- Capture console in the statistician-console shape: drive/field-state header (quarter, clock,
+  down and distance, ball on, timeouts), passing / rushing / receiving / defense / special-teams
+  entry, all attributed to players and stored as ledger events.
+- Standings, match pages, and leaders for the sport.
+- One fully scored exhibition game as the acceptance evidence.
+
+Usability acceptance:
+
+- A scorer captures a full game on a tablet without training, same console shape as basketball.
+- Standings update on finalization; no stat is shown that cannot be traced to an event.
+
+Depends on: P1–P5 patterns; engine additive definition + scoring module + standings config.
+
+### P9 — Table tennis end-to-end (new individual sport)
+
+**Goal:** a new individual sport runs the whole journey, including entrant-based draws.
+
+**Already exists to build on:** the Entrant model (individual/pair), entrant-keyed fixtures and
+standings, the tennis scoring module as the nearest structural neighbour.
+
+Deliverables:
+
+- Table tennis definition: games to 11 (win by 2), best of 5/7 match length, alternating serve
+  (every 2 points, every point in deuce), expedite flag, binary win/loss standings on match
+  points → head-to-head → set ratio → point ratio.
+- Point-by-point capture with server indicator, stroke/error categorization (forehand/backhand,
+  loop/smash/chop, edge/net balls), rally length, and scoring streaks.
+- Entrant draws and knockout/bracket play for individuals.
+
+Usability acceptance:
+
+- A full best-of-5 match is captured point by point with the server always correct.
+- Service alternation and deuce handling need no scorer intervention to stay right.
+
+Depends on: P8 patterns; engine Entrant + scoring module (additive).
+
+### P10 — Capture depth: soccer, tennis, volleyball
+
+**Goal:** the sports already onboarded get their full live stat vocabulary, all traceable to
+ledger events. Nothing here changes the capture shape — it extends each sport's event catalog,
+derived metrics, and console panels.
+
+**Already exists to build on:** per-sport event catalogs and metric definitions, the live box
+score engine, x/y capture with zones (basketball), and the reports pages (box score,
+play-by-play, shot chart) as the presentation pattern to copy per sport.
+
+- **Soccer:** possession %, pass completion, dribbles, tackles/interceptions/clearances,
+  goalkeeping (saves, clean sheets, penalty saves), corners/offsides/free-kicks/penalty splits.
+  Expected goals (xG) and expected assists (xA) ship as **derived-only, methodology-documented**
+  metrics — never hand-entered, always recomputed from events. Head-to-head history and form
+  trends (last-N win rate, over/under thresholds) as derived views.
+- **Tennis:** serve splits (1st/2nd in %, points won), return splits, break/set/match points
+  saved and converted, rally-length bands (1–4, 5–8, 9+), forehand/backhand plus winners vs.
+  unforced errors, net points; 7-point and 10-point super-tiebreak variants.
+- **Volleyball:** rotation index R1–R6 with active lineup, libero swaps, substitution and
+  timeout counters, serve ratings 0–3, pass ratings 0–3, hitting efficiency
+  ((kills − errors) / attempts), digs/blocks splits, and zones 1–6 heatmaps from contact
+  coordinates.
+
+Usability acceptance (per sport):
+
+- A full match's depth stats are captured live by one statistician without leaving the console.
+- Every derived number links back to the events it came from; xG/xA show their methodology.
+
+Depends on: P4/P5 patterns; engine metric definitions + derived-stats extensions (additive).
+
+### P11 — Tournament engine extensions
+
+**Goal:** formats and fairness rules beyond round-robin/knockout/group-stage, without touching
+completed tournaments.
+
+**Already exists to build on:** the `CompetitionFormat` enum, per-division format/group-count
+overrides, the schedule generator with clash-aware slotting, bracket auto-advancement from
+winners, and per-sport standings config (e.g. football's 3/1/0 already lives in its definition).
+
+Deliverables:
+
+- **Swiss-system** and **double-elimination** formats plus custom ladders, as new enum values
+  with generators following the existing pure-function pattern.
+- **Head-to-head and discipline/fair-play tiebreakers** in the standings engine (currently
+  points/difference only), applied per the sport's configured order.
+- **Cross-sport leaders**: top scorers, assists leaders, MVP metrics, discipline leaders across
+  tournaments.
+- **Match states**: add `POSTPONED` to `FixtureStatus` (today: SCHEDULED/LIVE/FINAL/CANCELLED,
+  with PAUSED living on the game) with the postpone/cancel/reschedule-with-reason flow.
+
+Usability acceptance:
+
+- A Swiss tournament runs start to finish with correct pairings each round.
+- A tied table visibly shows which tiebreaker decided each place.
+- Postponing a fixture keeps its history and notifies affected teams.
+
+Depends on: P3/P5 patterns; engine format + standings extensions (additive).
+
+### Mapping note: the proposed greenfield architecture already exists
+
+An external multi-sport specification proposed new `matches` / `match_events` tables, a Redis
+aggregation layer, a separate mobile offline store, and an API gateway. The programme above does
+**not** rebuild those, because each already exists here under its established name:
+
+| Proposed concept | Existing equivalent | Notes |
+| --- | --- | --- |
+| `matches` table | `Fixture` + its live `Game` instance | Status states live here today |
+| `match_events` event-sourcing table | `GameEvent` ledger (sequence numbers, ACTIVE/VOIDED/CORRECTED status, audit, x/y/zone) | Scores and stats are already derived, never mutated in place; undo/redo rides on it |
+| Sport engine strategy | Code registry + scoring-module dispatch + per-sport standings config | Adding a sport = a definition + module, no engine change (P6 exit criteria) |
+| Standings/aggregation engine | `recalculateStandings` + derived-stats + reconciliation | Extended per phase, not replaced |
+| Offline-first store | P7 (offline-tolerant queueing) | Web-first; a separate native store is out of scope until P7 evidence demands it |
+| Redis live cache | Deferred | Current live surfaces poll/stream from the database; add a cache only on measured need |
+| API gateway | Existing Next.js routes + versioned `/api/v1` | No new gateway layer |
+
+Any future proposal that reintroduces a parallel table, cache, or engine must first show the
+existing equivalent cannot meet the requirement, per the change-control rule in section 10.
+
 ## 7. Progress tracker
 
 Reality check (2026-09-15): the engine (Stages 1–9) is implemented and applied to **staging and
@@ -340,6 +478,20 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | P7.5 | Performance for large tournaments | P7 | `Not started` | — |
 | P7.6 | Guided tours and contextual help | P7 | `Not started` | — |
 | P7.7 | Usability testing and fixes to closure | P7 | `Not started` | All |
+| P8.1 | American football definition (quarters, downs, scoring values, standings) | P8 | `Not started` | P1-P5 patterns |
+| P8.2 | American football capture console (drive/field state + phase entry) | P8 | `Not started` | P8.1 |
+| P8.3 | American football standings, leaders, and exhibition game evidence | P8 | `Not started` | P8.2 |
+| P9.1 | Table tennis definition (11-point games, serve alternation, expedite) | P9 | `Not started` | P8 patterns |
+| P9.2 | Table tennis point-by-point capture (serve, strokes, rally length, streaks) | P9 | `Not started` | P9.1 |
+| P9.3 | Table tennis entrant draws and standings (match → H2H → set → point) | P9 | `Not started` | P9.2 |
+| P10.1 | Soccer depth (possession, passing, goalkeeping, derived xG/xA, H2H, trends) | P10 | `Not started` | P4/P5 patterns |
+| P10.2 | Tennis depth (serve/return splits, key points, rally bands, tiebreak variants) | P10 | `Not started` | P10.1 |
+| P10.3 | Volleyball depth (rotation, libero, ratings 0–3, efficiency, zones 1–6) | P10 | `Not started` | P10.1 |
+| P11.1 | Swiss-system format | P11 | `Not started` | P3 patterns |
+| P11.2 | Double elimination and custom ladders | P11 | `Not started` | P11.1 |
+| P11.3 | H2H and discipline/fair-play tiebreakers in standings | P11 | `Not started` | P5 patterns |
+| P11.4 | Cross-sport leaders (scorers, assists, MVP, discipline) | P11 | `Not started` | P5.3 |
+| P11.5 | POSTPONED match state with reason and history | P11 | `Not started` | P3.4 |
 
 ## 8. Relationship to the engine roadmap
 
