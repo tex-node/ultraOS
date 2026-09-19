@@ -2,10 +2,14 @@
 
 import Link from "next/link";
 
-// One boundary for the whole app (nested route segments may define their own and take precedence).
-// A missing organization is not a bug: it happens to any signed-in account that belongs to no
-// league - for example a brand-new user, or one whose grant was revoked. It used to render as a
-// generic 500 ("Something went wrong"); now it explains itself.
+// Server-thrown errors reach a client boundary with only their message (and digest) - custom
+// classes do not survive serialization in production. So match the missing-organization error by
+// its message text as well as its class name; the name check still works in development.
+function isMissingOrganizationError(error: { name?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  if (error.name === "MissingOrganizationContextError") return true;
+  return (error.message ?? "").includes("no resolved organization context");
+}
 export default function AppError({
   error,
   reset,
@@ -13,7 +17,7 @@ export default function AppError({
   error: Error & { digest?: string; name?: string };
   reset: () => void;
 }) {
-  if (error?.name === "MissingOrganizationContextError") {
+  if (isMissingOrganizationError(error)) {
     return (
       <div className="min-h-screen bg-[#050807] text-white">
         <main className="mx-auto max-w-3xl px-6 py-16">
