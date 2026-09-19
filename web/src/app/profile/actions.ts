@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { compare, hash } from "bcryptjs";
+import { signIn } from "@/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { requireSession } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
@@ -45,7 +46,11 @@ export async function changePassword(
 
   const passwordHash = await hash(newPassword, 12);
   await prisma.$transaction(async (tx) => {
-    await tx.user.update({ where: { id: user.id }, data: { passwordHash } });
+    await tx.user.update({
+      where: { id: user.id },
+      // Bump the version so every other device's session stops matching (see lib/session-version).
+      data: { passwordHash, sessionVersion: { increment: 1 } },
+    });
     await writeAuditLog(tx, {
       userId: user.id,
       action: "PASSWORD_CHANGED",
@@ -55,6 +60,16 @@ export async function changePassword(
       details: { hadPassword: Boolean(user.passwordHash) },
     });
   });
+
+  // Re-issue this device's session with the new version, so the change signs out every OTHER
+  // device - not the one you just used. If this refresh fails, just sign in again.
+  if (session.user.email) {
+    await signIn("credentials", {
+      email: session.user.email,
+      password: newPassword,
+      redirect: false,
+    });
+  }
 
   revalidatePath("/profile");
   return { ok: true };

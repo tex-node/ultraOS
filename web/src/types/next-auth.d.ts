@@ -9,6 +9,9 @@ declare module "next-auth" {
     // an account with no org-scoped role grant (should not occur for an active real user; see
     // tenant-context.ts's doc comment).
     organizationId: string | null;
+    // Session version carried at sign-in; checked against the row on every page load so a
+    // password change signs out every other device (see lib/session-version.ts).
+    sessionVersion: number;
   }
 
   interface Session {
@@ -27,5 +30,7 @@ declare module "next-auth/jwt" {
     role: UserRole;
     roles: UserRole[];
     organizationId: string | null;
+    // Carried at sign-in; checked against the user's row on every page load.
+    sessionVersion?: number;
   }
 }

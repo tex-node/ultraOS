@@ -39,7 +39,7 @@ export function ChangePasswordForm({ hasPassword }: { hasPassword: boolean }) {
       ) : null}
       {state.ok ? (
         <p className="sm:col-span-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-          Password updated. Other devices stay signed in until their session expires.
+          Password updated. Every other device is signed out.
         </p>
       ) : null}
 

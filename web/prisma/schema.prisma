@@ -601,6 +601,9 @@ model User {
   emailVerified                DateTime?
   image                        String?
   passwordHash                 String?
+  // Session version: bumped whenever the password changes, so every other device's JWT stops
+  // matching and is signed out on its next page load (see auth.ts's session version check).
+  sessionVersion               Int                    @default(0)
   role                         UserRole                 @default(FAN)
   isActive                     Boolean                  @default(true)
   roles                        UserRoleAssignment[]     @relation("AssignedUserRoles")

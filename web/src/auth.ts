@@ -6,6 +6,7 @@ import { z } from "zod";
 import { UserRole } from "@/generated/prisma/enums";
 import { primaryRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { sessionVersionMatches } from "@/lib/session-version";
 import { upsertRoleAssignment } from "@/lib/user-roles";
 import { resolveActiveOrganizationId } from "@/lib/tenant-context";
 
@@ -38,6 +39,7 @@ async function getSessionUser(email: string) {
     role: primaryRole(roles.length > 0 ? roles : [user.role]),
     roles: roles.length > 0 ? roles : [user.role, UserRole.FAN],
     organizationId: await resolveActiveOrganizationId(user.id),
+    sessionVersion: user.sessionVersion,
   };
 }
 
@@ -137,6 +139,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.role = sessionUser.role;
           token.roles = sessionUser.roles;
           token.organizationId = sessionUser.organizationId;
+          token.sessionVersion = sessionUser.sessionVersion;
         }
         return token;
       }
@@ -146,24 +149,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = user.role;
         token.roles = user.roles;
         token.organizationId = user.organizationId;
+        token.sessionVersion = typeof user.sessionVersion === "number" ? user.sessionVersion : 0;
       }
       return token;
     },
-    session({ session, token }) {
+    async session({ session, token }) {
       if (
-        session.user &&
-        typeof token.id === "string" &&
-        Object.values(UserRole).includes(token.role as UserRole)
+        !session.user ||
+        typeof token.id !== "string" ||
+        !Object.values(UserRole).includes(token.role as UserRole)
       ) {
-        session.user.id = token.id;
-        session.user.role = token.role as UserRole;
-        session.user.roles = Array.isArray(token.roles)
-          ? token.roles.filter((role): role is UserRole =>
-              Object.values(UserRole).includes(role as UserRole),
-            )
-          : [token.role as UserRole];
-        session.user.organizationId = typeof token.organizationId === "string" ? token.organizationId : null;
+        return session;
       }
+
+      // Revocation on password change: the token is only valid while the version it carries
+      // still matches the user's row. A mismatch means the password changed on another device
+      // (or the account was otherwise rotated) - treat the session as signed out.
+      const current = await prisma.user.findUnique({
+        where: { id: token.id },
+        select: { sessionVersion: true },
+      });
+      if (!current || !sessionVersionMatches({ sessionVersion: token.sessionVersion }, current.sessionVersion)) {
+        return { ...session, user: undefined };
+      }
+
+      session.user.id = token.id;
+      session.user.role = token.role as UserRole;
+      session.user.roles = Array.isArray(token.roles)
+        ? token.roles.filter((role): role is UserRole =>
+            Object.values(UserRole).includes(role as UserRole),
+          )
+        : [token.role as UserRole];
+      session.user.organizationId = typeof token.organizationId === "string" ? token.organizationId : null;
       return session;
     },
   },
