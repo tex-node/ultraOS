@@ -1,13 +1,50 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { changePassword, type PasswordFormState } from "./actions";
 
 const inputClass = "mt-1 w-full rounded-lg border border-white/10 bg-[#050807] px-3 py-2 text-sm text-white";
 const labelClass = "block text-sm text-zinc-300";
 
-export function ChangePasswordForm({ hasPassword }: { hasPassword: boolean }) {
+export function ChangePasswordForm({ hasPassword, email }: { hasPassword: boolean; email: string }) {
   const [state, action, pending] = useActionState<PasswordFormState, FormData>(changePassword, {});
+  const [reauthNote, setReauthNote] = useState<string | null>(null);
+  const newPasswordRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+
+  // The password change signs out every other device - and this one too, since its token carries
+  // the old version. Re-authenticate here with the new password so you stay signed in; nothing
+  // about the update waits on it.
+  useEffect(() => {
+    if (!state.ok || reauthNote) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await signIn("credentials", {
+          email,
+          password: newPasswordRef.current?.value ?? "",
+          redirect: false,
+        });
+        if (!cancelled) {
+          setReauthNote(
+            result?.error
+              ? "Password updated, but this device could not stay signed in automatically. Please sign in again."
+              : null,
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setReauthNote("Password updated, but this device could not stay signed in automatically. Please sign in again.");
+        }
+      }
+      router.refresh();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.ok, email, reauthNote, router]);
 
   return (
     <form action={action} className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -24,7 +61,7 @@ export function ChangePasswordForm({ hasPassword }: { hasPassword: boolean }) {
       )}
       <label className={labelClass}>
         New password
-        <input name="newPassword" type="password" required minLength={8} autoComplete="new-password" className={inputClass} />
+        <input name="newPassword" type="password" required minLength={8} autoComplete="new-password" ref={newPasswordRef} className={inputClass} />
         <span className="mt-1 block text-xs text-zinc-500">At least 8 characters.</span>
       </label>
       <label className={labelClass}>
@@ -40,6 +77,11 @@ export function ChangePasswordForm({ hasPassword }: { hasPassword: boolean }) {
       {state.ok ? (
         <p className="sm:col-span-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
           Password updated. Every other device is signed out.
+        </p>
+      ) : null}
+      {reauthNote ? (
+        <p role="alert" className="sm:col-span-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          {reauthNote}
         </p>
       ) : null}
 

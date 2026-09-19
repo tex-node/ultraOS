@@ -73,7 +73,7 @@ export default async function ProfilePage() {
 
         <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
           <h2 className="text-lg font-semibold">Password</h2>
-          <ChangePasswordForm hasPassword={Boolean(user.passwordHash)} />
+          <ChangePasswordForm hasPassword={Boolean(user.passwordHash)} email={user.email} />
         </section>
 
         <p className="mt-6 text-xs text-zinc-500">

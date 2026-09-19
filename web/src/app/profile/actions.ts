@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { compare, hash } from "bcryptjs";
-import { signIn } from "@/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { requireSession } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
@@ -61,16 +60,9 @@ export async function changePassword(
     });
   });
 
-  // Re-issue this device's session with the new version, so the change signs out every OTHER
-  // device - not the one you just used. If this refresh fails, just sign in again.
-  if (session.user.email) {
-    await signIn("credentials", {
-      email: session.user.email,
-      password: newPassword,
-      redirect: false,
-    });
-  }
-
+  // Re-issuing this device's session happens on the client (change-password-form calls
+  // credentials sign-in with the new password), because calling signIn inside this action leaves the
+  // submission hanging. Every other device keeps its old token and is signed out on its next load.
   revalidatePath("/profile");
   return { ok: true };
 }
