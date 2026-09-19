@@ -1,0 +1,98 @@
+// American football definition. Standard four-quarter game with downs, a running play clock that
+// stops (STOPPAGE), and the usual scoring values. One invariant matters more than anything else
+// in this file: exactly one event per touchdown carries scores:true (the ball carrier's), so a
+// single touchdown can never count twice. The passer's touchdown credit is a non-scoring stat
+// event (PASSING_TOUCHDOWN) on purpose.
+
+import type { SportDefinition } from "./types";
+
+export const AMERICAN_FOOTBALL: SportDefinition = {
+  key: "AMERICAN_FOOTBALL",
+  slug: "american-football",
+  name: "American Football",
+  version: 1,
+  entities: ["TEAM"],
+  structure: {
+    periodType: "QUARTER",
+    periodCount: 4,
+    periodDurationSeconds: 900,
+    overtimeDurationSeconds: 600,
+    clock: "STOPPAGE",
+  },
+  scoring: {
+    unit: "point",
+    values: [6, 3, 2, 1],
+    winCondition: "HIGHEST_SCORE",
+    drawsAllowed: true,
+  },
+  events: [
+    { key: "TOUCHDOWN_RUSH", label: "Rushing touchdown", category: "SCORING", scores: true, pointValues: [6], producesMetrics: ["touchdowns", "rushingTouchdowns", "points"] },
+    { key: "TOUCHDOWN_RECEPTION", label: "Receiving touchdown", category: "SCORING", scores: true, pointValues: [6], producesMetrics: ["touchdowns", "receivingTouchdowns", "points"] },
+    { key: "TOUCHDOWN_RETURN", label: "Return touchdown", category: "SCORING", scores: true, pointValues: [6], producesMetrics: ["touchdowns", "returnTouchdowns", "points"] },
+    { key: "FIELD_GOAL", label: "Field goal", category: "SCORING", scores: true, pointValues: [3], producesMetrics: ["fieldGoals", "points"] },
+    { key: "EXTRA_POINT", label: "Extra point", category: "SCORING", scores: true, pointValues: [1], producesMetrics: ["extraPoints", "points"] },
+    { key: "TWO_POINT_CONVERSION", label: "Two-point conversion", category: "SCORING", scores: true, pointValues: [2], producesMetrics: ["twoPointConversions", "points"] },
+    { key: "SAFETY", label: "Safety", category: "SCORING", scores: true, pointValues: [2], producesMetrics: ["safeties", "points"] },
+    { key: "PASS_COMPLETE", label: "Pass complete", category: "PASSING", producesMetrics: ["completions", "attempts"] },
+    { key: "PASS_INCOMPLETE", label: "Pass incomplete", category: "PASSING", producesMetrics: ["attempts"] },
+    { key: "PASSING_TOUCHDOWN", label: "Passing touchdown", category: "PASSING", producesMetrics: ["passingTouchdowns"] },
+    { key: "INTERCEPTION_THROWN", label: "Interception thrown", category: "PASSING", producesMetrics: ["interceptionsThrown"] },
+    { key: "SACK_TAKEN", label: "Sack taken", category: "PASSING", producesMetrics: ["sacksTaken"] },
+    { key: "RUSH_ATTEMPT", label: "Rush attempt", category: "RUSHING", producesMetrics: ["rushAttempts"] },
+    { key: "FUMBLE_LOST", label: "Fumble lost", category: "RUSHING", producesMetrics: ["fumblesLost"] },
+    { key: "RECEPTION", label: "Reception", category: "RECEIVING", producesMetrics: ["receptions"] },
+    { key: "TARGET", label: "Target", category: "RECEIVING", producesMetrics: ["targets"] },
+    { key: "TACKLE_SOLO", label: "Solo tackle", category: "DEFENSE", producesMetrics: ["tackles", "soloTackles"] },
+    { key: "TACKLE_ASSIST", label: "Assisted tackle", category: "DEFENSE", producesMetrics: ["tackles", "assistedTackles"] },
+    { key: "SACK", label: "Sack", category: "DEFENSE", producesMetrics: ["sacks"] },
+    { key: "INTERCEPTION", label: "Interception", category: "DEFENSE", producesMetrics: ["interceptions"] },
+    { key: "FUMBLE_FORCED", label: "Forced fumble", category: "DEFENSE", producesMetrics: ["fumblesForced"] },
+    { key: "FUMBLE_RECOVERED", label: "Fumble recovery", category: "DEFENSE", producesMetrics: ["fumblesRecovered"] },
+    { key: "FIELD_GOAL_ATTEMPT", label: "Field goal attempt", category: "SPECIAL_TEAMS", producesMetrics: ["fieldGoalAttempts"] },
+    { key: "EXTRA_POINT_ATTEMPT", label: "Extra point attempt", category: "SPECIAL_TEAMS", producesMetrics: ["extraPointAttempts"] },
+    { key: "PUNT", label: "Punt", category: "SPECIAL_TEAMS", producesMetrics: ["punts"] },
+    { key: "TOUCHBACK", label: "Touchback", category: "SPECIAL_TEAMS", producesMetrics: ["touchbacks"] },
+    { key: "PENALTY", label: "Penalty", category: "DISCIPLINE", producesMetrics: ["penalties"] },
+    { key: "SUBSTITUTION", label: "Substitution", category: "LINEUP" },
+  ],
+  metrics: [
+    { key: "points", label: "Points", valueType: "COUNT", subject: "PLAYER", aggregation: "SUM", category: "SCORING", derivedFromEventKeys: ["TOUCHDOWN_RUSH", "TOUCHDOWN_RECEPTION", "TOUCHDOWN_RETURN", "FIELD_GOAL", "EXTRA_POINT", "TWO_POINT_CONVERSION", "SAFETY"], sortOrder: 1 },
+    { key: "touchdowns", label: "Touchdowns", valueType: "COUNT", subject: "PLAYER", aggregation: "SUM", category: "SCORING", derivedFromEventKeys: ["TOUCHDOWN_RUSH", "TOUCHDOWN_RECEPTION", "TOUCHDOWN_RETURN"], sortOrder: 2 },
+    { key: "passingTouchdowns", label: "Passing touchdowns", valueType: "COUNT", subject: "PLAYER", aggregation: "SUM", category: "PASSING", derivedFromEventKeys: ["PASSING_TOUCHDOWN"], sortOrder: 3 },
+    { key: "completions", label: "Completions", valueType: "COUNT", subject: "PLAYER", aggregation: "SUM", category: "PASSING", derivedFromEventKeys: ["PASS_COMPLETE"], sortOrder: 4 },
+    { key: "attempts", label: "Pass attempts", valueType: "COUNT", subject: "PLAYER", aggregation: "SUM", category: "PASSING", derivedFromEventKeys: ["PASS_COMPLETE", "PASS_INCOMPLETE"], sortOrder: 5 },
+    { key: "interceptionsThrown", label: "Interceptions thrown", valueType: "COUNT", subject: "PLAYER", aggregation: "SUM", category: "PASSING", derivedFromEventKeys: ["INTERCEPTION_THROWN"], sortOrder: 6 },
+    { key: "receptions", label: "Receptions", valueType: "COUNT", subject: "PLAYER", aggregation: "SUM", category: "RECEIVING", derivedFromEventKeys: ["RECEPTION"], sortOrder: 7 },
+    { key: "targets", label: "Targets", valueType: "COUNT", subject: "PLAYER", aggregation: "SUM", category: "RECEIVING", derivedFromEventKeys: ["TARGET"], sortOrder: 8 },
+    { key: "tackles", label: "Tackles", valueType: "COUNT", subject: "PLAYER", aggregation: "SUM", category: "DEFENSE", derivedFromEventKeys: ["TACKLE_SOLO", "TACKLE_ASSIST"], sortOrder: 9 },
+    { key: "sacks", label: "Sacks", valueType: "COUNT", subject: "PLAYER", aggregation: "SUM", category: "DEFENSE", derivedFromEventKeys: ["SACK"], sortOrder: 10 },
+    { key: "interceptions", label: "Interceptions", valueType: "COUNT", subject: "PLAYER", aggregation: "SUM", category: "DEFENSE", derivedFromEventKeys: ["INTERCEPTION"], sortOrder: 11 },
+    { key: "fieldGoals", label: "Field goals", valueType: "COUNT", subject: "PLAYER", aggregation: "SUM", category: "SPECIAL_TEAMS", derivedFromEventKeys: ["FIELD_GOAL"], sortOrder: 12 },
+    { key: "points", label: "Points", valueType: "COUNT", subject: "ENTRANT", aggregation: "SUM", category: "SCORING", sortOrder: 1 },
+    { key: "touchdowns", label: "Touchdowns", valueType: "COUNT", subject: "ENTRANT", aggregation: "SUM", category: "SCORING", sortOrder: 2 },
+    { key: "tackles", label: "Tackles", valueType: "COUNT", subject: "ENTRANT", aggregation: "SUM", category: "DEFENSE", sortOrder: 3 },
+  ],
+  standings: {
+    outcomes: ["WIN", "DRAW", "LOSS"],
+    primaryPoints: { model: "WIN_DRAW_LOSS", win: 2, draw: 1, loss: 0 },
+    tiebreak: ["LEAGUE_POINTS", "WINS", "POINT_DIFFERENCE", "POINTS_FOR", "HEAD_TO_HEAD", "NAME"],
+  },
+  roster: {
+    minRoster: 11,
+    maxRoster: 45,
+    activeCount: 11,
+    substitutesAllowed: true,
+    positions: ["Quarterback", "Running Back", "Wide Receiver", "Tight End", "Offensive Line", "Defensive Line", "Linebacker", "Defensive Back", "Kicker", "Punter"],
+  },
+  surface: { type: "FIELD", lengthM: 110, widthM: 49 },
+  defaultDivisions: ["Men's", "Women's"],
+  capabilities: ["SUBSTITUTIONS", "EXTRA_TIME"],
+  rules: [
+    { key: "DOWNS_PER_SERIES", value: 4, label: "Downs per series" },
+    { key: "OVERTIME_ENABLED", value: true, label: "Overtime in tied knockout matches" },
+    { key: "TWO_POINT_CONVERSION_ENABLED", value: true, label: "Two-point conversions allowed" },
+  ],
+  constraints: [
+    { key: "SCORING_EVENT_REQUIRES_ACTOR", label: "Scoring events must name a player or entrant", context: "EVENT", severity: "BLOCK" },
+  ],
+};
