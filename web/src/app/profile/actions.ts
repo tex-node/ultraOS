@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { compare, hash } from "bcryptjs";
 import { writeAuditLog } from "@/lib/audit";
@@ -63,6 +62,8 @@ export async function changePassword(
   // Re-issuing this device's session happens on the client (change-password-form calls
   // credentials sign-in with the new password), because calling signIn inside this action leaves the
   // submission hanging. Every other device keeps its old token and is signed out on its next load.
-  revalidatePath("/profile");
+  // No revalidatePath here, deliberately: re-rendering the page server-side would run with this
+  // request's still-old token, fail the version check, and bounce to /login before the client can
+  // re-authenticate. The form re-signs in and refreshes itself instead.
   return { ok: true };
 }
