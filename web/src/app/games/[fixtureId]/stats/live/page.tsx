@@ -9,7 +9,7 @@ import {
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { LEGACY_STRUCTURE, periodLabelFor } from "@/lib/sports/game-structure";
 import { withOrganizationContext } from "@/lib/tenant-context";
-import { getGameLineup } from "../../../stats-actions";
+import { getGameLineup, getGameReconciliation } from "../../../stats-actions";
 import { StatLiveConsole, type LiveEvent, type LiveTeam } from "./stat-live-console";
 
 export const dynamic = "force-dynamic";
@@ -92,6 +92,14 @@ export default async function StatLivePage({ params }: { params: Promise<{ fixtu
     : LEGACY_STRUCTURE;
 
   const lineup = await getGameLineup(game.id);
+  const reconciliation = await getGameReconciliation(game.id);
+  const timeoutCounts = await withOrganizationContext(organizationId, (tx) =>
+    tx.gameEvent.groupBy({
+      by: ["seasonClubId"],
+      where: { gameId: game.id, eventType: "TIMEOUT", status: "ACTIVE" },
+      _count: { _all: true },
+    }),
+  );
   const startersConfirmed = {
     home: (lineup.get(homeId)?.size ?? 0) > 0,
     away: (lineup.get(awayId)?.size ?? 0) > 0,
@@ -111,6 +119,22 @@ export default async function StatLivePage({ params }: { params: Promise<{ fixtu
   });
 
   const possessionEvent = game.events.find((event) => event.typeKey === "POSSESSION" || event.typeKey === "JUMP_BALL") ?? null;
+
+  const timeouts = {
+    home: timeoutCounts.find((row) => row.seasonClubId === homeId)?._count._all ?? 0,
+    away: timeoutCounts.find((row) => row.seasonClubId === awayId)?._count._all ?? 0,
+  };
+
+  const lastVerificationEvent = game.events.find((event) => event.typeKey === "SCORE_VERIFIED") ?? null;
+  const lastVerificationData = (lastVerificationEvent?.data ?? {}) as { comparison?: { allMatch?: boolean } };
+  const lastVerification = lastVerificationEvent
+    ? {
+        allMatch: lastVerificationData.comparison?.allMatch ?? true,
+        description: lastVerificationEvent.description,
+        period: lastVerificationEvent.period,
+        clockSeconds: lastVerificationEvent.clockSeconds,
+      }
+    : null;
 
   const events: LiveEvent[] = game.events.map((event) => ({
     id: event.id,
@@ -154,6 +178,10 @@ export default async function StatLivePage({ params }: { params: Promise<{ fixtu
           startersConfirmed={startersConfirmed}
           teams={[toTeam(homeSC), toTeam(awaySC)]}
           possessionTeamId={possessionEvent?.seasonClubId ?? null}
+          timeouts={timeouts}
+          official={{ home: reconciliation.home.officialScore, away: reconciliation.away.officialScore }}
+          statScore={{ home: reconciliation.home.statisticalScore, away: reconciliation.away.statisticalScore }}
+          lastVerification={lastVerification}
           events={events}
         />
       </main>

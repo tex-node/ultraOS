@@ -12,6 +12,7 @@ import {
   recordStatisticianStat,
   recordWaveSubstitution,
   undoLastStatisticianEvent,
+  verifyScoreboard,
   voidStatisticianEvent,
 } from "../../../stats-actions";
 import { pauseGame, resumeGame } from "../../../actions";
@@ -65,6 +66,10 @@ export function StatLiveConsole({
   startersConfirmed,
   teams,
   possessionTeamId,
+  timeouts,
+  official,
+  statScore,
+  lastVerification,
   events,
 }: {
   gameId: string;
@@ -81,6 +86,10 @@ export function StatLiveConsole({
   startersConfirmed: { home: boolean; away: boolean };
   teams: [LiveTeam, LiveTeam];
   possessionTeamId: string | null;
+  timeouts: { home: number; away: number };
+  official: { home: number; away: number };
+  statScore: { home: number; away: number };
+  lastVerification: { allMatch: boolean; description: string; period: number; clockSeconds: number } | null;
   events: LiveEvent[];
 }) {
   const [selectedTeamId, setSelectedTeamId] = useState(teams[0].id);
@@ -191,8 +200,42 @@ export function StatLiveConsole({
               </form>
             </>
           ) : null}
+          <p className="mt-3 w-full text-center text-xs text-zinc-500">
+            Timeouts {teams[0].shortName} {timeouts.home} · {teams[1].shortName} {timeouts.away}
+            {lastVerification ? (
+              <span className={lastVerification.allMatch ? "text-emerald-300" : "text-rose-300"}>
+                {" "}· Score {lastVerification.allMatch ? "verified" : "MISMATCH"} (P{lastVerification.period} {mmss(lastVerification.clockSeconds)})
+              </span>
+            ) : null}
+          </p>
         </div>
       </section>
+
+      {/* timeouts + scoreboard verification */}
+      {isMutable ? (
+        <section className={`${CARD} mt-6`}>
+          <h3 className="font-semibold">Verify against the venue scoreboard</h3>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            During a timeout or stoppage, read the building&apos;s board and confirm the app matches it. Official{" "}
+            {official.home}–{official.away} · Statistician {statScore.home}–{statScore.away}.
+          </p>
+          <form action={verifyScoreboard.bind(null, gameId, fixtureId)} className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_2fr_auto] sm:items-end">
+            <label className="text-xs text-zinc-400">
+              Venue home
+              <input name="venueHomeScore" type="number" min={0} max={300} required defaultValue={official.home} className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white" />
+            </label>
+            <label className="text-xs text-zinc-400">
+              Venue away
+              <input name="venueAwayScore" type="number" min={0} max={300} required defaultValue={official.away} className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white" />
+            </label>
+            <label className="text-xs text-zinc-400">
+              Note (optional)
+              <input name="note" placeholder="e.g. checked at the media timeout" className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white" />
+            </label>
+            <SubmitButton pendingLabel="…" className={`${BIG_BTN} border border-emerald-400/30 px-5 text-sm text-emerald-300`}>Verify</SubmitButton>
+          </form>
+        </section>
+      ) : null}
 
       {/* starters gate */}
       {!startersConfirmed.home || !startersConfirmed.away ? (

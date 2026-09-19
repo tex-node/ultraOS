@@ -21,6 +21,7 @@ import {
   scoreShot,
 } from "@/lib/ultra-scoring-engine";
 import { reconcileGameScore, type GameReconciliation } from "@/lib/reconciliation";
+import { compareScores, verificationSummary } from "@/lib/sports/score-verify";
 import { requireSeasonClubId } from "@/lib/sports/fixture-sides";
 import { COURT_LENGTH_FT, COURT_WIDTH_FT, shotZone } from "@/lib/sports/shot-zones";
 import {
@@ -592,6 +593,72 @@ export async function flipPossession(gameId: string, fixtureId: string, formData
         source: STATISTICIAN_SOURCE,
         createdById: session.user.id,
       },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/stats`);
+  revalidatePath(`/games/${fixtureId}/stats/live`);
+  revalidatePath(`/games/${fixtureId}/live`);
+}
+
+const verifyScoreboardSchema = z.object({
+  venueHomeScore: z.coerce.number().int().min(0).max(300),
+  venueAwayScore: z.coerce.number().int().min(0).max(300),
+  note: z.string().trim().max(280).optional(),
+});
+
+// Scoreboard verification: during a timeout or stoppage, confirm the in-app score against the
+// venue's physical scoreboard. Compares all three numbers - official (scorer), statistician
+// (this ledger, derived fresh), venue (typed in) - and records the outcome as a ledger event so
+// the check itself is auditable. A mismatch never rewrites anything; it just says so loudly.
+export async function verifyScoreboard(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
+  const input = verifyScoreboardSchema.parse(Object.fromEntries(formData.entries()));
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
+    const homeId = requireSeasonClubId(game.fixture, "HOME");
+    const awayId = requireSeasonClubId(game.fixture, "AWAY");
+
+    const events = await loadActiveStatisticianEvents(tx, gameId);
+    const teamStats = deriveTeamStats(derivePlayerStats(events));
+    const official = { home: game.fixture.homeScore, away: game.fixture.awayScore };
+    const statistician = { home: deriveTeamScore(teamStats, homeId), away: deriveTeamScore(teamStats, awayId) };
+    const venue = { home: input.venueHomeScore, away: input.venueAwayScore };
+    const comparison = compareScores(official, statistician, venue);
+
+    const remaining = remainingClockSeconds(game);
+    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
+
+    await tx.gameEvent.create({
+      data: {
+        organizationId,
+        gameId,
+        eventType: "NOTE",
+        typeKey: "SCORE_VERIFIED",
+        period: game.currentPeriod,
+        clockSeconds: remaining,
+        description: verificationSummary(official, statistician, venue, comparison),
+        sequenceNumber,
+        source: STATISTICIAN_SOURCE,
+        createdById: session.user.id,
+        data: {
+          official,
+          statistician,
+          venue,
+          comparison,
+          note: input.note?.trim() || null,
+        },
+      },
+    });
+
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "SCOREBOARD_VERIFIED",
+      entityType: "Game",
+      entityId: gameId,
+      details: { fixtureId, official, statistician, venue, allMatch: comparison.allMatch },
     });
   });
 
