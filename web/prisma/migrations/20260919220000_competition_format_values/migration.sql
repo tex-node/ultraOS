@@ -10,7 +10,6 @@ ALTER TABLE "Competition" ALTER COLUMN "format" DROP DEFAULT;
 ALTER TABLE "Competition" ALTER COLUMN "format" TYPE "CompetitionFormat_new" USING "format"::text::"CompetitionFormat_new";
 ALTER TYPE "CompetitionFormat" RENAME TO "CompetitionFormat_old";
 ALTER TYPE "CompetitionFormat_new" RENAME TO "CompetitionFormat";
+ALTER TABLE "Division" ALTER COLUMN "format" TYPE "CompetitionFormat" USING "format"::text::"CompetitionFormat";
 DROP TYPE "CompetitionFormat_old";
 ALTER TABLE "Competition" ALTER COLUMN "format" SET DEFAULT 'ROUND_ROBIN';
-
-ALTER TABLE "Division" ALTER COLUMN "format" TYPE "CompetitionFormat" USING "format"::text::"CompetitionFormat";
