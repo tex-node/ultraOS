@@ -23,10 +23,17 @@ export class AuthorizationError extends Error {
 // backfilled in Stage 5.1, and every new sign-up gets an org-scoped grant) - thrown rather than
 // silently falling back to Neon Ultra, since a mutating action must never guess which
 // organization it's operating in.
+//
+// Rendering note: constructing this error redirects to /no-league instead of throwing a 500. A
+// missing organization is a normal account state (brand-new user, revoked grant), not a bug, and
+// production error boundaries cannot match it (server error classes do not survive serialization
+// to the client). One redirect here covers every org-gated page and action with no per-site
+// changes; the Error subclass shape is kept so construction outside a request still fails loudly.
 export class MissingOrganizationContextError extends Error {
   constructor() {
     super("Signed-in user has no resolved organization context.");
     this.name = "MissingOrganizationContextError";
+    redirect("/no-league");
   }
 }
 
