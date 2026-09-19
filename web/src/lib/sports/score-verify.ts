@@ -34,6 +34,6 @@ export function verificationSummary(
   comparison: ScoreComparison,
 ): string {
   const format = (pair: ScorePair) => `${pair.home}-${pair.away}`;
-  const base = `Official ${format(official)} · Statistician ${format(statistician)} · Venue ${format(venue)}`;
-  return comparison.allMatch ? `${base} — all match` : `${base} — MISMATCH`;
+  const base = `Official ${format(official)} Â· Statistician ${format(statistician)} Â· Venue ${format(venue)}`;
+  return comparison.allMatch ? `${base} â€” all match` : `${base} â€” MISMATCH`;
 }
