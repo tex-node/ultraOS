@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { requireSession } from "@/lib/authorization";
 import { withOrganizationContext } from "@/lib/tenant-context";
@@ -9,6 +11,8 @@ export const dynamic = "force-dynamic";
 // points, and every card its type, so top scorers and discipline leaders need no precomputed
 // tables and automatically respect voids and corrections.
 export default async function LeadersPage() {
+  const rawSession = await auth();
+  if (!rawSession?.user) redirect("/login?callbackUrl=/leaders");
   const session = await requireSession();
   if (!session.user.organizationId) {
     return (
