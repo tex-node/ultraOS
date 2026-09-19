@@ -21,6 +21,8 @@ import {
   scoreShot,
 } from "@/lib/ultra-scoring-engine";
 import { reconcileGameScore, type GameReconciliation } from "@/lib/reconciliation";
+import { requireSeasonClubId } from "@/lib/sports/fixture-sides";
+import { COURT_LENGTH_FT, COURT_WIDTH_FT, shotZone } from "@/lib/sports/shot-zones";
 import {
   derivePlayerStats,
   deriveTeamStats,
@@ -113,6 +115,10 @@ const shotSchema = z.object({
   playerId: z.string().min(1),
   shotValue: z.coerce.number().int().min(1).max(4),
   made: z.enum(["true", "false"]),
+  // Click-to-log coordinates from the court graphic, in feet (see lib/sports/shot-zones). Optional:
+  // free throws are logged from the line without clicking.
+  x: z.coerce.number().min(0).max(COURT_WIDTH_FT).optional(),
+  y: z.coerce.number().min(0).max(COURT_LENGTH_FT).optional(),
 });
 
 // Records one shot attempt (make or miss) into the statistician's own ledger. Deliberately
@@ -124,11 +130,19 @@ export async function recordStatisticianShot(gameId: string, fixtureId: string, 
 
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    if (![game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!].includes(input.seasonClubId)) {
+    const homeId = requireSeasonClubId(game.fixture, "HOME");
+    const awayId = requireSeasonClubId(game.fixture, "AWAY");
+    if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
       throw new Error("INVALID_TEAM");
     }
     const player = await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } });
     if (!player) throw new Error("INVALID_PLAYER");
+
+    // The zone is derived server-side from the coordinates, so the console preview and the ledger
+    // can never disagree. Free throws logged without a click come from the line.
+    if ((input.x === undefined) !== (input.y === undefined)) throw new Error("LOCATION_INCOMPLETE");
+    const courtZone =
+      input.x !== undefined && input.y !== undefined ? shotZone(input.x, input.y) : input.shotValue === 1 ? "FREE_THROW" : null;
 
     const remaining = remainingClockSeconds(game);
     const shot = scoreShot({
@@ -163,9 +177,12 @@ export async function recordStatisticianShot(gameId: string, fixtureId: string, 
         made,
         isFourPointAttempt: input.shotValue === 4,
         isUltraTime: shot.isUltraTime,
+        x: input.x ?? null,
+        y: input.y ?? null,
+        courtZone,
         period: game.currentPeriod,
         clockSeconds: remaining,
-        description: `${player.athlete.firstName} ${player.athlete.lastName} — ${input.shotValue}PT ${made ? "MADE" : "MISS"}${shot.isUltraTime ? ` (Ultra Time ×${shot.multiplier})` : ""}`,
+        description: `${player.athlete.firstName} ${player.athlete.lastName} — ${input.shotValue}PT ${made ? "MADE" : "MISS"}${courtZone ? ` (${courtZone.replace(/_/g, " ")})` : ""}${shot.isUltraTime ? ` (Ultra Time ×${shot.multiplier})` : ""}`,
         sequenceNumber,
         source: STATISTICIAN_SOURCE,
         createdById: session.user.id,
@@ -193,7 +210,9 @@ export async function recordStatisticianStat(gameId: string, fixtureId: string, 
 
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    if (![game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!].includes(input.seasonClubId)) {
+    const homeId = requireSeasonClubId(game.fixture, "HOME");
+    const awayId = requireSeasonClubId(game.fixture, "AWAY");
+    if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
       throw new Error("INVALID_TEAM");
     }
     const player = await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } });
@@ -233,6 +252,7 @@ export async function recordStatisticianStat(gameId: string, fixtureId: string, 
   });
 
   revalidatePath(`/games/${fixtureId}/stats`);
+  revalidatePath(`/games/${fixtureId}/stats/live`);
 }
 
 const substitutionSchema = z.object({
@@ -252,7 +272,9 @@ export async function recordSubstitution(gameId: string, fixtureId: string, form
 
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    if (![game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!].includes(input.seasonClubId)) {
+    const homeId = requireSeasonClubId(game.fixture, "HOME");
+    const awayId = requireSeasonClubId(game.fixture, "AWAY");
+    if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
       throw new Error("INVALID_TEAM");
     }
     const [playerIn, playerOut] = await Promise.all([
@@ -300,6 +322,282 @@ export async function recordSubstitution(gameId: string, fixtureId: string, form
   });
 
   revalidatePath(`/games/${fixtureId}/stats`);
+  revalidatePath(`/games/${fixtureId}/stats/live`);
+}
+
+const waveSubstitutionSchema = z.object({
+  seasonClubId: z.string(),
+  playerInIds: z.array(z.string().min(1)).min(1).max(5),
+  playerOutIds: z.array(z.string().min(1)).min(1).max(5),
+});
+
+// Wave substitution: one to five swaps recorded atomically in a single transaction, each validated
+// against the evolving lineup in order - so a wave can rotate the whole five without the intermediate
+// states ever failing the single-swap check. "Switch to wave sub" in the console is just this action
+// with five pairs; a partial wave (1-4 pairs) is equally valid.
+export async function recordWaveSubstitution(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
+  const raw = Object.fromEntries(formData.entries());
+  const input = waveSubstitutionSchema.parse({
+    seasonClubId: raw.seasonClubId,
+    playerInIds: formData.getAll("playerInIds").map(String),
+    playerOutIds: formData.getAll("playerOutIds").map(String),
+  });
+  if (input.playerInIds.length !== input.playerOutIds.length) throw new Error("WAVE_MISMATCHED_PAIRS");
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
+    const homeId = requireSeasonClubId(game.fixture, "HOME");
+    const awayId = requireSeasonClubId(game.fixture, "AWAY");
+    if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
+      throw new Error("INVALID_TEAM");
+    }
+
+    const allIds = [...input.playerInIds, ...input.playerOutIds];
+    if (new Set(allIds).size !== allIds.length) throw new Error("WAVE_DUPLICATE_PLAYER");
+    const rostered = await tx.player.findMany({
+      where: { id: { in: allIds }, seasonClubId: input.seasonClubId },
+      include: { athlete: true },
+    });
+    if (rostered.length !== allIds.length) throw new Error("WAVE_PLAYER_NOT_ROSTERED");
+    const byId = new Map(rostered.map((player) => [player.id, player]));
+
+    const starters = await tx.gameStarter.findMany({ where: { gameId }, select: { seasonClubId: true, playerId: true } });
+    if (starters.length === 0) throw new Error("STARTING_FIVE_NOT_CONFIRMED");
+    const activeSubs = await tx.gameEvent.findMany({
+      where: { gameId, eventType: "SUBSTITUTION", status: "ACTIVE" },
+      orderBy: { sequenceNumber: "asc" },
+      select: { seasonClubId: true, playerId: true, substitutedOutPlayerId: true, sequenceNumber: true },
+    });
+    const lineup = deriveLineup(
+      starters.map((starter) => ({ seasonClubId: starter.seasonClubId, playerId: starter.playerId })),
+      activeSubs.map((sub) => ({ seasonClubId: sub.seasonClubId!, playerInId: sub.playerId!, playerOutId: sub.substitutedOutPlayerId!, sequenceNumber: sub.sequenceNumber! })),
+    );
+
+    const remaining = remainingClockSeconds(game);
+    let sequence = game.nextEventSequence;
+    const createdIds: string[] = [];
+    for (let index = 0; index < input.playerInIds.length; index += 1) {
+      const playerInId = input.playerInIds[index];
+      const playerOutId = input.playerOutIds[index];
+      const validation = validateSubstitution(lineup, input.seasonClubId, playerInId, playerOutId);
+      if (!validation.valid) throw new Error(`SUBSTITUTION_INVALID_${validation.error}`);
+      const playerIn = byId.get(playerInId)!;
+      const playerOut = byId.get(playerOutId)!;
+      const sequenceNumber = await nextSequence(tx, gameId, sequence);
+      sequence += 1;
+      const created = await tx.gameEvent.create({
+        data: {
+          organizationId,
+          gameId,
+          seasonClubId: input.seasonClubId,
+          playerId: playerIn.id,
+          substitutedOutPlayerId: playerOut.id,
+          eventType: "SUBSTITUTION",
+          period: game.currentPeriod,
+          clockSeconds: remaining,
+          description: `Substitution: ${playerOut.athlete.firstName} ${playerOut.athlete.lastName} OUT, ${playerIn.athlete.firstName} ${playerIn.athlete.lastName} IN (wave ${index + 1}/${input.playerInIds.length})`,
+          sequenceNumber,
+          source: STATISTICIAN_SOURCE,
+          createdById: session.user.id,
+        },
+        select: { id: true },
+      });
+      createdIds.push(created.id);
+      lineup.get(input.seasonClubId)!.delete(playerOutId);
+      lineup.get(input.seasonClubId)!.add(playerInId);
+    }
+
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "WAVE_SUBSTITUTION_RECORDED",
+      entityType: "Game",
+      entityId: gameId,
+      details: { fixtureId, seasonClubId: input.seasonClubId, count: createdIds.length, eventIds: createdIds },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/stats`);
+  revalidatePath(`/games/${fixtureId}/stats/live`);
+  revalidatePath(`/games/${fixtureId}/live`);
+}
+
+// Voids one specific ACTIVE statistician event by id (the action log's trash icon). Never touches
+// scorer-sourced events and never deletes the row - VOIDED events are excluded from replay, so the
+// reconciliation panel updates correctly without losing audit history.
+export async function voidStatisticianEvent(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
+  const eventId = z.string().min(1).parse(formData.get("eventId"));
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
+
+    const target = await tx.gameEvent.findFirst({
+      where: { id: eventId, gameId, source: STATISTICIAN_SOURCE, status: "ACTIVE" },
+    });
+    if (!target) throw new Error("EVENT_NOT_VOIDABLE");
+
+    await tx.gameEvent.update({
+      where: { id: target.id },
+      data: { status: "VOIDED", correctedAt: new Date(), correctedById: session.user.id, correctionReason: "OPERATOR_VOID" },
+    });
+
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "STATISTICIAN_EVENT_VOIDED",
+      entityType: "GameEvent",
+      entityId: target.id,
+      details: { fixtureId, gameId, voidedEventType: target.eventType, voidedDescription: target.description },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/stats`);
+  revalidatePath(`/games/${fixtureId}/stats/live`);
+  revalidatePath(`/games/${fixtureId}/live`);
+}
+
+const timeoutSchema = z.object({
+  seasonClubId: z.string().optional(),
+});
+
+// Records a timeout (team or, with no side, an officials timeout) into the statistician ledger.
+// Never touches the clock - the operator stops it separately, which is also what the scoreboard
+// verification prompt hangs off.
+export async function recordGameTimeout(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
+  const input = timeoutSchema.parse(Object.fromEntries(formData.entries()));
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
+    if (input.seasonClubId) {
+      const homeId = requireSeasonClubId(game.fixture, "HOME");
+      const awayId = requireSeasonClubId(game.fixture, "AWAY");
+      if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
+        throw new Error("INVALID_TEAM");
+      }
+    }
+
+    const remaining = remainingClockSeconds(game);
+    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
+    const side = !input.seasonClubId
+      ? "Officials"
+      : input.seasonClubId === game.fixture.homeSeasonClubId
+        ? "Home"
+        : "Away";
+
+    await tx.gameEvent.create({
+      data: {
+        organizationId,
+        gameId,
+        seasonClubId: input.seasonClubId ?? null,
+        eventType: "TIMEOUT",
+        period: game.currentPeriod,
+        clockSeconds: remaining,
+        description: `Timeout — ${side}`,
+        sequenceNumber,
+        source: STATISTICIAN_SOURCE,
+        createdById: session.user.id,
+      },
+    });
+
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "STATISTICIAN_TIMEOUT_RECORDED",
+      entityType: "Game",
+      entityId: gameId,
+      details: { fixtureId, seasonClubId: input.seasonClubId ?? null },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/stats`);
+  revalidatePath(`/games/${fixtureId}/stats/live`);
+  revalidatePath(`/games/${fixtureId}/live`);
+}
+
+const sideSchema = z.object({
+  seasonClubId: z.string().min(1),
+});
+
+// Opening tip and possession arrow. Recorded as ledger notes (no GameEventType exists for them),
+// so the current possession is always derived from the most recent one - never stored state that
+// can drift from the history.
+export async function recordJumpBall(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
+  const input = sideSchema.parse(Object.fromEntries(formData.entries()));
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
+    const homeId = requireSeasonClubId(game.fixture, "HOME");
+    const awayId = requireSeasonClubId(game.fixture, "AWAY");
+    if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
+      throw new Error("INVALID_TEAM");
+    }
+
+    const remaining = remainingClockSeconds(game);
+    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
+    const side = input.seasonClubId === homeId ? "Home" : "Away";
+
+    await tx.gameEvent.create({
+      data: {
+        organizationId,
+        gameId,
+        seasonClubId: input.seasonClubId,
+        eventType: "NOTE",
+        typeKey: "JUMP_BALL",
+        period: game.currentPeriod,
+        clockSeconds: remaining,
+        description: `Jump ball won by ${side} — possession arrow to ${side}`,
+        sequenceNumber,
+        source: STATISTICIAN_SOURCE,
+        createdById: session.user.id,
+      },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/stats`);
+  revalidatePath(`/games/${fixtureId}/stats/live`);
+  revalidatePath(`/games/${fixtureId}/live`);
+}
+
+export async function flipPossession(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
+  const input = sideSchema.parse(Object.fromEntries(formData.entries()));
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
+    const homeId = requireSeasonClubId(game.fixture, "HOME");
+    const awayId = requireSeasonClubId(game.fixture, "AWAY");
+    if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
+      throw new Error("INVALID_TEAM");
+    }
+
+    const remaining = remainingClockSeconds(game);
+    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
+    const side = input.seasonClubId === homeId ? "Home" : "Away";
+
+    await tx.gameEvent.create({
+      data: {
+        organizationId,
+        gameId,
+        seasonClubId: input.seasonClubId,
+        eventType: "NOTE",
+        typeKey: "POSSESSION",
+        period: game.currentPeriod,
+        clockSeconds: remaining,
+        description: `Possession arrow to ${side}`,
+        sequenceNumber,
+        source: STATISTICIAN_SOURCE,
+        createdById: session.user.id,
+      },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/stats`);
+  revalidatePath(`/games/${fixtureId}/stats/live`);
+  revalidatePath(`/games/${fixtureId}/live`);
 }
 
 const startingFiveSchema = z.object({
@@ -321,7 +619,9 @@ export async function confirmStartingFive(gameId: string, fixtureId: string, for
 
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    if (![game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!].includes(input.seasonClubId)) {
+    const homeId = requireSeasonClubId(game.fixture, "HOME");
+    const awayId = requireSeasonClubId(game.fixture, "AWAY");
+    if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
       throw new Error("INVALID_TEAM");
     }
     const uniqueIds = new Set(input.playerIds);
@@ -344,6 +644,7 @@ export async function confirmStartingFive(gameId: string, fixtureId: string, for
   });
 
   revalidatePath(`/games/${fixtureId}/stats`);
+  revalidatePath(`/games/${fixtureId}/stats/live`);
 }
 
 // Voids the statistician's own most recent ACTIVE event. Never touches scorer-sourced events
@@ -378,6 +679,7 @@ export async function undoLastStatisticianEvent(gameId: string, fixtureId: strin
   });
 
   revalidatePath(`/games/${fixtureId}/stats`);
+  revalidatePath(`/games/${fixtureId}/stats/live`);
 }
 
 async function loadActiveStatisticianEvents(client: Prisma.TransactionClient | typeof prisma, gameId: string): Promise<DerivableEvent[]> {
