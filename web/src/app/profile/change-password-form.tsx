@@ -9,42 +9,45 @@ const inputClass = "mt-1 w-full rounded-lg border border-white/10 bg-[#050807] p
 const labelClass = "block text-sm text-zinc-300";
 
 export function ChangePasswordForm({ hasPassword, email }: { hasPassword: boolean; email: string }) {
-  const [state, action, pending] = useActionState<PasswordFormState, FormData>(changePassword, {});
+  // The new password is captured synchronously when the form is submitted: reading it from the DOM
+  // after the action resolves races with re-renders that may already have cleared the inputs.
+  const submittedPasswordRef = useRef<string | null>(null);
+  const submitWithCapture = async (previous: PasswordFormState, formData: FormData) => {
+    submittedPasswordRef.current = String(formData.get("newPassword") ?? "");
+    return changePassword(previous, formData);
+  };
+  const [state, action, pending] = useActionState<PasswordFormState, FormData>(submitWithCapture, {});
   const [reauthNote, setReauthNote] = useState<string | null>(null);
-  const newPasswordRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   // The password change signs out every other device - and this one too, since its token carries
-  // the old version. Re-authenticate here with the new password so you stay signed in; nothing
-  // about the update waits on it.
+  // the old version. Re-authenticate here with the captured value so you stay signed in. The page
+  // is refreshed only once the new session exists; on any failure it stays put with a plain
+  // "sign in again" note instead of bouncing to /login.
   useEffect(() => {
-    if (!state.ok || reauthNote) return;
+    if (!state.ok) return;
     let cancelled = false;
     (async () => {
       try {
         const result = await signIn("credentials", {
           email,
-          password: newPasswordRef.current?.value ?? "",
+          password: submittedPasswordRef.current ?? "",
           redirect: false,
         });
-        if (!cancelled) {
-          setReauthNote(
-            result?.error
-              ? "Password updated, but this device could not stay signed in automatically. Please sign in again."
-              : null,
-          );
+        if (cancelled) return;
+        if (!result?.error) {
+          router.refresh();
+          return;
         }
       } catch {
-        if (!cancelled) {
-          setReauthNote("Password updated, but this device could not stay signed in automatically. Please sign in again.");
-        }
+        if (cancelled) return;
       }
-      router.refresh();
+      setReauthNote("Password updated. Please sign in again to continue.");
     })();
     return () => {
       cancelled = true;
     };
-  }, [state.ok, email, reauthNote, router]);
+  }, [state.ok, email, router]);
 
   return (
     <form action={action} className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -61,7 +64,7 @@ export function ChangePasswordForm({ hasPassword, email }: { hasPassword: boolea
       )}
       <label className={labelClass}>
         New password
-        <input name="newPassword" type="password" required minLength={8} autoComplete="new-password" ref={newPasswordRef} className={inputClass} />
+        <input name="newPassword" type="password" required minLength={8} autoComplete="new-password" className={inputClass} />
         <span className="mt-1 block text-xs text-zinc-500">At least 8 characters.</span>
       </label>
       <label className={labelClass}>
