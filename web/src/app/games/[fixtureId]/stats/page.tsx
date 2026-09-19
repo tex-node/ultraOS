@@ -167,14 +167,26 @@ export default async function StatisticianConsole({
               </div>
             ))}
           </div>
-          <form action={verifyStatistics.bind(null, game.id, fixtureId)} className="mt-4 flex flex-col gap-2 sm:flex-row">
-            {reconciliation.overallStatus === "MISMATCH" ? (
-              <input name="overrideReason" required minLength={5} placeholder="Reason to verify despite mismatch (required)" className="min-h-[44px] flex-1 rounded-lg bg-black/30 p-3 text-sm text-zinc-100" />
-            ) : null}
-            <SubmitButton pendingLabel="Verifying…" className={`${BIG_BTN} border border-white/20 px-5`}>
-              {game.statisticsVerifiedAt ? "Re-verify statistics" : "Verify statistics"}
-            </SubmitButton>
-          </form>
+          {reconciliation.overallStatus === "UNAVAILABLE" ? (
+            <p className="mt-4 text-sm text-zinc-300">
+              Nothing to verify yet — the statistician ledger is empty, and verification compares that
+              independent record against the official {reconciliation.home.officialScore}–
+              {reconciliation.away.officialScore}. Record stats on the{" "}
+              <Link href={`/games/${fixtureId}/stats/live`} className="text-amber-300 underline">
+                live stat console
+              </Link>{" "}
+              first.
+            </p>
+          ) : (
+            <form action={verifyStatistics.bind(null, game.id, fixtureId)} className="mt-4 flex flex-col gap-2 sm:flex-row">
+              {reconciliation.overallStatus === "MISMATCH" ? (
+                <input name="overrideReason" required minLength={5} placeholder="Reason to verify despite mismatch (required)" className="min-h-[44px] flex-1 rounded-lg bg-black/30 p-3 text-sm text-zinc-100" />
+              ) : null}
+              <SubmitButton pendingLabel="Verifying…" className={`${BIG_BTN} border border-white/20 px-5`}>
+                {game.statisticsVerifiedAt ? "Re-verify statistics" : "Verify statistics"}
+              </SubmitButton>
+            </form>
+          )}
           {game.statisticsVerifiedAt ? (
             <p className="mt-2 text-xs opacity-70">Last verified {game.statisticsVerifiedAt.toLocaleString()} — PlayerStat/TeamStat materialized from this ledger.</p>
           ) : null}
