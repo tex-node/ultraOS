@@ -478,7 +478,7 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | P7.5 | Performance for large tournaments | P7 | `Not started` | — |
 | P7.6 | Guided tours and contextual help | P7 | `Not started` | — |
 | P7.7 | Usability testing and fixes to closure | P7 | `Not started` | All |
-| P8.1 | American football definition (quarters, downs, scoring values, standings) | P8 | `Not started` | P1-P5 patterns |
+| P8.1 | American football definition (quarters, downs, scoring values, standings) | P8 | `Done` | P1-P5 patterns |
 | P8.2 | American football capture console (drive/field state + phase entry) | P8 | `Not started` | P8.1 |
 | P8.3 | American football standings, leaders, and exhibition game evidence | P8 | `Not started` | P8.2 |
 | P9.1 | Table tennis definition (11-point games, serve alternation, expedite) | P9 | `Not started` | P8 patterns |
