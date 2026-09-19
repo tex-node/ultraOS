@@ -40,7 +40,7 @@ import type { Prisma } from "@/generated/prisma/client";
 const STATISTICIAN_SOURCE = "ULTRA_NATIVE_LIVE_STATISTICIAN" as const;
 
 function assertGameIsMutable(status: string, fixtureStatus: string) {
-  if (status === "FINAL" || fixtureStatus === "FINAL" || fixtureStatus === "CANCELLED") {
+  if (status === "FINAL" || fixtureStatus === "FINAL" || fixtureStatus === "CANCELLED" || fixtureStatus === "POSTPONED") {
     throw new Error("GAME_NOT_MUTABLE");
   }
 }
@@ -988,7 +988,7 @@ async function loadFinalGameForCorrection(tx: Prisma.TransactionClient, gameId: 
   await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
   const game = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true, ruleSnapshot: true } });
   if (game.fixtureId !== fixtureId) throw new Error("INVALID_EVENT");
-  if (game.fixture.status === "CANCELLED") throw new Error("GAME_NOT_MUTABLE");
+  if (game.fixture.status === "CANCELLED" || game.fixture.status === "POSTPONED") throw new Error("GAME_NOT_MUTABLE");
   // Deliberately the opposite gate from loadMutableGame(): this workflow exists specifically
   // for a FINAL game. A still-live game should use the ordinary undo/void/re-record flow above
   // instead - routing a live correction through here would bypass loadMutableGame's LIVE/PAUSED

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { AMERICAN_FOOTBALL } from "@/lib/sports/american-football";
 import { BASKETBALL } from "@/lib/sports/basketball";
 import { CRICKET } from "@/lib/sports/cricket";
 import { FOOTBALL } from "@/lib/sports/football";
@@ -21,9 +22,10 @@ test("the registry dispatches one module per scoring family", () => {
   assert.equal(resolveScoringModule(VOLLEYBALL)?.kind, "SETS");
   assert.equal(resolveScoringModule(FOOTBALL)?.kind, "GOALS");
   assert.equal(resolveScoringModule(CRICKET)?.kind, "RUNS");
-  assert.equal(resolveScoringModule(TENNIS)?.kind, "TENNIS");
-  assert.equal(resolveScoringModule(BASKETBALL), null); // basketball keeps its dedicated scorer
-  assert.deepEqual(SCORING_MODULES.map((module) => module.kind), ["TENNIS", "SETS", "GOALS", "RUNS"]);
+assert.equal(resolveScoringModule(TENNIS)?.kind, "TENNIS");
+assert.equal(resolveScoringModule(AMERICAN_FOOTBALL)?.kind, "POINTS");
+assert.equal(resolveScoringModule(BASKETBALL), null); // basketball keeps its dedicated scorer
+assert.deepEqual(SCORING_MODULES.map((module) => module.kind), ["TENNIS", "SETS", "GOALS", "RUNS", "POINTS"]);
 });
 
 test("volleyball adds a rally point to the current set without finalizing early", () => {
@@ -77,4 +79,29 @@ test("cricket concludes the chase when the target is reached", () => {
   assert.equal(result.awayScore, 155);
   assert.equal(result.finalize, true);
   assert.equal(result.finalizeWinner, "AWAY");
+});
+
+test("american football credits varied point values and rejects forged ones", () => {
+  const scoringModule = resolveScoringModule(AMERICAN_FOOTBALL)!;
+  assert.equal(scoringModule.key, "POINTS");
+
+  const touchdown = scoringModule.apply(AMERICAN_FOOTBALL, { ...baseInput, typeKey: "TOUCHDOWN_RUSH", points: 6 });
+  assert.equal(touchdown.ok, true);
+  if (!touchdown.ok) return;
+  assert.equal(touchdown.homeScore, 6);
+  assert.equal(touchdown.points, 6);
+  assert.equal(touchdown.finalize, false);
+
+  const fieldGoal = scoringModule.apply(AMERICAN_FOOTBALL, { ...baseInput, seasonClubId: "a", typeKey: "FIELD_GOAL", points: 3 });
+  assert.equal(fieldGoal.ok, true);
+  if (!fieldGoal.ok) return;
+  assert.equal(fieldGoal.awayScore, 3);
+
+  const forged = scoringModule.apply(AMERICAN_FOOTBALL, { ...baseInput, typeKey: "FIELD_GOAL", points: 6 });
+  assert.equal(forged.ok, false);
+  if (forged.ok) return;
+  assert.equal(forged.reason, "SCORE_MISMATCH");
+
+  const unknown = scoringModule.apply(AMERICAN_FOOTBALL, { ...baseInput, typeKey: "TOUCHDOWN_DANCE" });
+  assert.equal(unknown.ok, false);
 });

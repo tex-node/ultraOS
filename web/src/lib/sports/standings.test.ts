@@ -159,3 +159,60 @@ test("rankTiebreak records the deciding key below the leader", () => {
   assert.equal(rows[0].rankTiebreak, null);
   assert.equal(rows[1].rankTiebreak, "LEAGUE_POINTS");
 });
+
+test("head-to-head reorders teams tied on points, difference and goals", () => {
+  const teams = [
+    { entrantId: "zebra", name: "Zebra" },
+    { entrantId: "alpha", name: "Alpha" },
+    { entrantId: "c", name: "C" },
+  ];
+  const results = [
+    { homeEntrantId: "zebra", awayEntrantId: "alpha", homeScore: 2, awayScore: 1 },
+    { homeEntrantId: "zebra", awayEntrantId: "c", homeScore: 0, awayScore: 1 },
+    { homeEntrantId: "alpha", awayEntrantId: "c", homeScore: 1, awayScore: 0 },
+  ];
+  const rows = computeStandings(FOOTBALL, teams, results);
+  // Level on points, difference and goals; name order would put Alpha first.
+  assert.deepEqual(rows.map((row) => row.entrantId), ["zebra", "alpha", "c"]);
+  assert.equal(rows[1].rankTiebreak, "HEAD_TO_HEAD");
+});
+
+test("head-to-head with no mutual match falls through to the next key", () => {
+  const teams = [
+    { entrantId: "d", name: "D" },
+    { entrantId: "b", name: "B" },
+    { entrantId: "a", name: "A" },
+    { entrantId: "c", name: "C" },
+  ];
+  const results = [
+    { homeEntrantId: "a", awayEntrantId: "c", homeScore: 2, awayScore: 0 },
+    { homeEntrantId: "a", awayEntrantId: "d", homeScore: 0, awayScore: 2 },
+    { homeEntrantId: "b", awayEntrantId: "c", homeScore: 3, awayScore: 1 },
+    { homeEntrantId: "b", awayEntrantId: "d", homeScore: 1, awayScore: 3 },
+  ];
+  const rows = computeStandings(FOOTBALL, teams, results);
+  // a and b tie on points and difference but never met: goals decide, not head-to-head.
+  assert.deepEqual(rows.map((row) => row.entrantId), ["d", "b", "a", "c"]);
+  assert.equal(rows[2].rankTiebreak, "GOALS_FOR");
+});
+
+test("fair play puts fewer card points first", () => {
+  const definition = {
+    ...FOOTBALL,
+    standings: { ...FOOTBALL.standings, tiebreak: ["LEAGUE_POINTS", "FAIR_PLAY", "NAME"] as ("LEAGUE_POINTS" | "FAIR_PLAY" | "NAME")[] },
+  };
+  const rows = computeStandings(
+    definition,
+    [
+      { entrantId: "a", name: "A" },
+      { entrantId: "b", name: "B" },
+    ],
+    [
+      { homeEntrantId: "a", awayEntrantId: "b", homeScore: 0, awayScore: 0 },
+      { homeEntrantId: "a", awayEntrantId: "b", homeScore: 1, awayScore: 1 },
+    ],
+    { fairPlay: new Map([["a", 5], ["b", 2]]) },
+  );
+  assert.deepEqual(rows.map((row) => row.entrantId), ["b", "a"]);
+  assert.equal(rows[1].rankTiebreak, "FAIR_PLAY");
+});

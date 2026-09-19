@@ -40,7 +40,9 @@ export function ScoreCapturePanel({
         ? "Goal scoring"
         : scoringModule.kind === "TENNIS"
           ? "Point scoring"
-          : "Run scoring";
+          : scoringModule.kind === "POINTS"
+            ? "Scoring"
+            : "Run scoring";
 
   const actionButtons = (teamId: string) => (
     <div className="mt-3 flex flex-wrap gap-2">
@@ -49,6 +51,7 @@ export function ScoreCapturePanel({
           <input type="hidden" name="seasonClubId" value={teamId} />
           <input type="hidden" name="typeKey" value={action.typeKey} />
           {action.runs !== undefined ? <input type="hidden" name="runs" value={action.runs} /> : null}
+          {action.points !== undefined ? <input type="hidden" name="points" value={action.points} /> : null}
           <SubmitButton pendingLabel="…" className={`${BIG_BTN} border border-emerald-400/30 px-4 text-xs text-emerald-300`}>
             {action.label}
           </SubmitButton>

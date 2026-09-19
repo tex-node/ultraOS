@@ -21,7 +21,7 @@ export default async function PublicLive() {
         // G.19 Part III: a REHEARSAL (or any non-PRODUCTION) fixture must never surface here,
         // in any of the three states below - the G.18 rehearsal found this query had no such
         // filter at all.
-        where: { seasonId: activeSeason.id, status: { not: "CANCELLED" }, ...productionPresentationFixtureWhere() },
+        where: { seasonId: activeSeason.id, status: { notIn: ["CANCELLED", "POSTPONED"] }, ...productionPresentationFixtureWhere() },
         orderBy: { scheduledAt: "asc" },
         include: {
           homeSeasonClub: { include: { club: true } },

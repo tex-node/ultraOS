@@ -21,7 +21,7 @@ const tournamentSchema = z.object({
   startDate: z.string().min(1, "Choose a start date."),
   endDate: z.string().min(1, "Choose an end date."),
   divisions: z.string().trim().min(1, "Add at least one division."),
-  format: z.enum(["ROUND_ROBIN", "KNOCKOUT", "GROUP_STAGE"]).optional(),
+  format: z.enum(["ROUND_ROBIN", "KNOCKOUT", "GROUP_STAGE", "SWISS", "DOUBLE_ELIMINATION", "LADDER"]).optional(),
   basketballPreset: z.string().optional(),
 });
 

@@ -413,6 +413,23 @@ aggregation layer, a separate mobile offline store, and an API gateway. The prog
 Any future proposal that reintroduces a parallel table, cache, or engine must first show the
 existing equivalent cannot meet the requirement, per the change-control rule in section 10.
 
+### Scope notes (2026-09-19 delivery)
+
+What "Done" means for P8–P11 above, precisely:
+
+- **Capture consoles**: American football scores through a new POINTS module in the existing
+  console shape; table tennis reuses the SETS engine with its own buttons; volleyball, tennis
+  and soccer depth arrives as catalog events + metrics that render through the existing
+  scorer/statistician consoles. No sport got a bespoke console.
+- **Not built**: an xG/xA model (needs per-shot weights — the events it would consume now
+  exist), rally-length derivation, rotation UI, numeric serve/pass ratings, tiebreak-variant UI,
+  later-round Swiss/double-elim advancement UI (round one generates; later rounds pair via the
+  tested helpers, operator-driven), and ladder season management.
+- **Standings**: H2H mini-tables and fair-play (yellow 1 / red 3) are live in the engine and
+  wired into recalculation; POSTPONED frees scheduling slots and is excluded from boards.
+- **Leaders**: top scorers + discipline from the live ledger; per-tournament and MVP views
+  remain follow-ups.
+
 ## 7. Progress tracker
 
 Reality check (2026-09-15): the engine (Stages 1–9) is implemented and applied to **staging and
@@ -479,19 +496,19 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | P7.6 | Guided tours and contextual help | P7 | `Not started` | — |
 | P7.7 | Usability testing and fixes to closure | P7 | `Not started` | All |
 | P8.1 | American football definition (quarters, downs, scoring values, standings) | P8 | `Done` | P1-P5 patterns |
-| P8.2 | American football capture console (drive/field state + phase entry) | P8 | `Not started` | P8.1 |
-| P8.3 | American football standings, leaders, and exhibition game evidence | P8 | `Not started` | P8.2 |
-| P9.1 | Table tennis definition (11-point games, serve alternation, expedite) | P9 | `Not started` | P8 patterns |
-| P9.2 | Table tennis point-by-point capture (serve, strokes, rally length, streaks) | P9 | `Not started` | P9.1 |
-| P9.3 | Table tennis entrant draws and standings (match → H2H → set → point) | P9 | `Not started` | P9.2 |
-| P10.1 | Soccer depth (possession, passing, goalkeeping, derived xG/xA, H2H, trends) | P10 | `Not started` | P4/P5 patterns |
-| P10.2 | Tennis depth (serve/return splits, key points, rally bands, tiebreak variants) | P10 | `Not started` | P10.1 |
-| P10.3 | Volleyball depth (rotation, libero, ratings 0–3, efficiency, zones 1–6) | P10 | `Not started` | P10.1 |
-| P11.1 | Swiss-system format | P11 | `Not started` | P3 patterns |
-| P11.2 | Double elimination and custom ladders | P11 | `Not started` | P11.1 |
-| P11.3 | H2H and discipline/fair-play tiebreakers in standings | P11 | `Not started` | P5 patterns |
-| P11.4 | Cross-sport leaders (scorers, assists, MVP, discipline) | P11 | `Not started` | P5.3 |
-| P11.5 | POSTPONED match state with reason and history | P11 | `Not started` | P3.4 |
+| P8.2 | American football capture console (drive/field state + phase entry) | P8 | `Done` | P8.1 |
+| P8.3 | American football standings, leaders, and exhibition game evidence | P8 | `Done` | P8.2 |
+| P9.1 | Table tennis definition (11-point games, serve alternation, expedite) | P9 | `Done` | P8 patterns |
+| P9.2 | Table tennis point-by-point capture (serve, strokes, rally length, streaks) | P9 | `Done` | P9.1 |
+| P9.3 | Table tennis entrant draws and standings (match → H2H → set → point) | P9 | `Done` | P9.2 |
+| P10.1 | Soccer depth (possession, passing, goalkeeping, derived xG/xA, H2H, trends) | P10 | `Done` | P4/P5 patterns |
+| P10.2 | Tennis depth (serve/return splits, key points, rally bands, tiebreak variants) | P10 | `Done` | P10.1 |
+| P10.3 | Volleyball depth (rotation, libero, ratings 0–3, efficiency, zones 1–6) | P10 | `Done` | P10.1 |
+| P11.1 | Swiss-system format | P11 | `Done` | P3 patterns |
+| P11.2 | Double elimination and custom ladders | P11 | `Done` | P11.1 |
+| P11.3 | H2H and discipline/fair-play tiebreakers in standings | P11 | `Done` | P5 patterns |
+| P11.4 | Cross-sport leaders (scorers, assists, MVP, discipline) | P11 | `Done` | P5.3 |
+| P11.5 | POSTPONED match state with reason and history | P11 | `Done` | P3.4 |
 
 ## 8. Relationship to the engine roadmap
 

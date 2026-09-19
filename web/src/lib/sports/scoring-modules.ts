@@ -9,9 +9,9 @@ import { applyDelivery, battingSide, chaseTarget, inningsConfig, isInningsComple
 import { evaluateSets, setScoringConfig } from "./set-scoring";
 import { awardPoint, evaluateTennis, isSetComplete, tennisConfig } from "./tennis-scoring";
 
-export type ScoringModuleKind = "SETS" | "GOALS" | "RUNS" | "TENNIS";
+export type ScoringModuleKind = "SETS" | "GOALS" | "RUNS" | "TENNIS" | "POINTS";
 
-export type ScoringAction = { typeKey: string; label: string; runs?: number };
+export type ScoringAction = { typeKey: string; label: string; runs?: number; points?: number };
 
 export type ScoringModuleInput = {
   homeSeasonClubId: string;
@@ -25,6 +25,9 @@ export type ScoringModuleInput = {
   seasonClubId: string;
   typeKey?: string;
   runs?: number;
+  // Points-family sports: the console posts the labeled value, and the module verifies it against
+  // its own table so a forged value can never change the score by a different amount.
+  points?: number;
   // Tennis: the current game's point counts (deuce/advantage tracked by the tennis rules). Omitted
   // for other modules.
   tennisPoints?: { home: number; away: number };
@@ -64,12 +67,13 @@ const volleyballModule: SportScoringModule = {
   key: "VOLLEYBALL_SETS",
   kind: "SETS",
   supports: (definition) => setScoringConfig(definition) !== null,
-  actions: () => [
-    { typeKey: "RALLY_POINT", label: "Point" },
-    { typeKey: "ACE", label: "Ace" },
-    { typeKey: "KILL", label: "Kill" },
-    { typeKey: "BLOCK", label: "Block" },
-  ],
+  // Point buttons come from the definition's own scoring events, in definition order - so
+  // volleyball shows Point/Ace/Kill/Block and table tennis shows its own stroke winners, while
+  // the engine (+1 rally point, win-by-two, deciding game) stays shared.
+  actions: (definition) =>
+    definition.events
+      .filter((event) => event.scores === true)
+      .map((event) => ({ typeKey: event.key, label: event.label })),
   apply: (definition, input) => {
     const config = setScoringConfig(definition);
     if (!config) return missingSport();
@@ -297,7 +301,50 @@ const tennisModule: SportScoringModule = {
   },
 };
 
-export const SCORING_MODULES: SportScoringModule[] = [tennisModule, volleyballModule, footballModule, cricketModule];
+const POINTS_VALUES: Record<string, { label: string; points: number }> = {
+  TOUCHDOWN_RUSH: { label: "Rush TD +6", points: 6 },
+  TOUCHDOWN_RECEPTION: { label: "Rec TD +6", points: 6 },
+  TOUCHDOWN_RETURN: { label: "Return TD +6", points: 6 },
+  FIELD_GOAL: { label: "Field goal +3", points: 3 },
+  EXTRA_POINT: { label: "Extra point +1", points: 1 },
+  TWO_POINT_CONVERSION: { label: "2PT conv. +2", points: 2 },
+  SAFETY: { label: "Safety +2", points: 2 },
+};
+
+const pointsModule: SportScoringModule = {
+  key: "POINTS",
+  kind: "POINTS",
+  // Quarter-based point sports. Basketball also scores in points but keeps its dedicated scorer
+  // (halves), so the period type is what distinguishes this family.
+  supports: (definition) => definition.scoring.unit === "point" && definition.structure.periodType === "QUARTER",
+  actions: () =>
+    Object.entries(POINTS_VALUES).map(([typeKey, { label, points }]) => ({ typeKey, label, points })),
+  apply: (_definition, input) => {
+    const home = input.homeSeasonClubId!;
+    const away = input.awaySeasonClubId!;
+    if (input.seasonClubId !== home && input.seasonClubId !== away) return { ok: false, reason: "INVALID_TEAM" };
+    const typeKey = input.typeKey ?? "TOUCHDOWN_RUSH";
+    const spec = POINTS_VALUES[typeKey];
+    if (!spec) return { ok: false, reason: "UNKNOWN_SCORE" };
+    // A safety is credited to the side the operator picks (the benefiting team), like an own goal.
+    const points = input.points ?? spec.points;
+    if (points !== spec.points) return { ok: false, reason: "SCORE_MISMATCH" };
+    const isHome = input.seasonClubId === home;
+    return {
+      ok: true,
+      homeScore: input.homeScore + (isHome ? points : 0),
+      awayScore: input.awayScore + (isHome ? 0 : points),
+      period: null,
+      points,
+      typeKey,
+      eventKind: "SCORE",
+      finalize: false,
+      finalizeWinner: null,
+    };
+  },
+};
+
+export const SCORING_MODULES: SportScoringModule[] = [tennisModule, volleyballModule, footballModule, cricketModule, pointsModule];
 
 export function resolveScoringModule(definition: SportDefinition): SportScoringModule | null {
   return SCORING_MODULES.find((candidate) => candidate.supports(definition)) ?? null;

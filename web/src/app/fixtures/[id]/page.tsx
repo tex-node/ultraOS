@@ -5,6 +5,7 @@ import { OperationsShell } from "@/app/components/operations-shell";
 import {
   addFixtureOfficial,
   cancelFixture,
+  postponeFixture,
   removeFixtureOfficial,
 } from "../actions";
 import { requireSession } from "@/lib/authorization";
@@ -56,8 +57,9 @@ export default async function FixturePage({
           {canManage ? (
             <div className="mt-6 flex justify-center gap-2">
               <Link href={`/fixtures/${id}/edit`} className="rounded-xl border border-white/10 px-4 py-2">Edit</Link>
+              {!fixture.game && fixture.status === "SCHEDULED" ? <form action={postponeFixture.bind(null,id)}><button className="rounded-xl border border-amber-400/20 px-4 py-2 text-amber-300">Postpone</button></form> : null}
               {!fixture.game && fixture.status !== "CANCELLED" ? <form action={cancelFixture.bind(null,id)}><button className="rounded-xl border border-rose-400/20 px-4 py-2 text-rose-300">Cancel</button></form> : null}
-              {fixture.status !== "CANCELLED" ? <Link href={`/games/${id}/live`} className="rounded-xl bg-emerald-400 px-4 py-2 font-semibold text-zinc-950">Game center</Link> : null}
+              {fixture.status !== "CANCELLED" && fixture.status !== "POSTPONED" ? <Link href={`/games/${id}/live`} className="rounded-xl bg-emerald-400 px-4 py-2 font-semibold text-zinc-950">Game center</Link> : null}
             </div>
           ) : null}
         </section>

@@ -42,6 +42,6 @@ test("standings start on league points with head-to-head before name", () => {
   assert.ok(AMERICAN_FOOTBALL.standings.tiebreak.includes("HEAD_TO_HEAD"));
 });
 
-test("no scoring module claims it yet - capture arrives in P8.2", () => {
-  assert.equal(resolveScoringModule(AMERICAN_FOOTBALL), null);
+test("the POINTS scoring module claims it", () => {
+  assert.equal(resolveScoringModule(AMERICAN_FOOTBALL)?.key, "POINTS");
 });

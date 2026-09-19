@@ -3,7 +3,14 @@
 // A division may override its competition's format and group count; NULL means "inherit". Every read
 // path must resolve through this helper so the override and the default can never drift apart.
 
-export const COMPETITION_FORMATS = ["ROUND_ROBIN", "KNOCKOUT", "GROUP_STAGE"] as const;
+export const COMPETITION_FORMATS = [
+  "ROUND_ROBIN",
+  "KNOCKOUT",
+  "GROUP_STAGE",
+  "SWISS",
+  "DOUBLE_ELIMINATION",
+  "LADDER",
+] as const;
 export type CompetitionFormatValue = (typeof COMPETITION_FORMATS)[number];
 
 export const DEFAULT_FORMAT: CompetitionFormatValue = "ROUND_ROBIN";
@@ -12,7 +19,7 @@ export const MIN_GROUP_COUNT = 2;
 export const MAX_GROUP_COUNT = 16;
 
 export function isCompetitionFormat(value: string | null | undefined): value is CompetitionFormatValue {
-  return value === "ROUND_ROBIN" || value === "KNOCKOUT" || value === "GROUP_STAGE";
+  return (COMPETITION_FORMATS as readonly string[]).includes(value ?? "");
 }
 
 // Clamp a stored/requested group count into the supported range, falling back to the default.
@@ -61,5 +68,15 @@ export function resolveFormat(input: {
 export function formatLabel(format: CompetitionFormatValue): string {
   if (format === "KNOCKOUT") return "Knockout";
   if (format === "GROUP_STAGE") return "Group stage";
+  if (format === "SWISS") return "Swiss";
+  if (format === "DOUBLE_ELIMINATION") return "Double elimination";
+  if (format === "LADDER") return "Ladder";
   return "League (round-robin)";
+}
+
+// Single- and double-elimination share knockout semantics: a level final score is never a valid
+// result (extra time/penalties resolve it), the winners side auto-advances, and the shootout
+// panel applies where the sport allows penalties.
+export function isKnockoutFormat(format: CompetitionFormatValue): boolean {
+  return format === "KNOCKOUT" || format === "DOUBLE_ELIMINATION";
 }

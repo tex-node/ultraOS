@@ -31,6 +31,9 @@ enum CompetitionFormat {
   ROUND_ROBIN
   KNOCKOUT
   GROUP_STAGE
+  SWISS
+  DOUBLE_ELIMINATION
+  LADDER
 }
 
 enum ClubStatus {
@@ -108,6 +111,7 @@ enum FixtureStatus {
   LIVE
   FINAL
   CANCELLED
+  POSTPONED
 }
 
 enum GameStatus {

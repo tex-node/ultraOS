@@ -25,7 +25,7 @@ import { resolveSeasonRuleValues } from "@/lib/sports/rule-set-store";
 import { isLegalDelivery } from "@/lib/sports/innings-scoring";
 import { advanceKnockoutBracket } from "@/lib/sports/knockout-bracket";
 import { matchOutcome } from "@/lib/sports/match-result";
-import { resolveFormat } from "@/lib/sports/format";
+import { isKnockoutFormat, resolveFormat } from "@/lib/sports/format";
 import { requireSeasonClubId } from "@/lib/sports/fixture-sides";
 import { shootoutWinner, type ShootoutKick } from "@/lib/sports/shootout";
 import { resolveScoringModule } from "@/lib/sports/scoring-modules";
@@ -37,7 +37,8 @@ function assertGameIsMutable(status: string, fixtureStatus: string) {
   if (
     status === "FINAL" ||
     fixtureStatus === "FINAL" ||
-    fixtureStatus === "CANCELLED"
+    fixtureStatus === "CANCELLED" ||
+    fixtureStatus === "POSTPONED"
   ) {
     throw new Error("GAME_NOT_MUTABLE");
   }
@@ -191,7 +192,7 @@ export async function startGame(fixtureId: string) {
         division: { select: { competition: { select: { sport: { select: { id: true, slug: true } } } } } },
       },
     });
-    if (fixture.status === "CANCELLED" || fixture.status === "FINAL") {
+    if (fixture.status === "CANCELLED" || fixture.status === "POSTPONED" || fixture.status === "FINAL") {
       throw new Error("INVALID_FIXTURE");
     }
 
@@ -962,11 +963,12 @@ export async function finalizeGame(gameId: string, fixtureId: string) {
   );
   assertGameIsMutable(current.status, current.fixture.status);
   const definition = getSportDefinition(current.fixture.division.competition.sport.slug);
-  const knockout =
+  const knockout = isKnockoutFormat(
     resolveFormat({
       divisionFormat: current.fixture.division.format,
       competitionFormat: current.fixture.division.competition.format,
-    }).format === "KNOCKOUT";
+    }).format,
+  );
   const outcome = definition
     ? matchOutcome(definition, current.fixture.homeScore, current.fixture.awayScore, { knockout })
     : null;
@@ -1392,6 +1394,7 @@ const scoringInput = z.object({
   seasonClubId: z.string().min(1),
   typeKey: z.string().optional(),
   runs: z.coerce.number().int().min(0).max(6).optional(),
+  points: z.coerce.number().int().min(0).max(8).optional(),
   playerId: z.string().optional(),
   description: z.string().optional(),
 });
@@ -1480,9 +1483,10 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
       periodScores: game.periodScores.map((score) => ({ period: score.period, home: score.homeScore, away: score.awayScore })),
       periodWickets,
       periodBalls,
-      seasonClubId: input.seasonClubId,
-      typeKey: input.typeKey,
-      runs: input.runs,
+seasonClubId: input.seasonClubId,
+typeKey: input.typeKey,
+runs: input.runs,
+points: input.points,
       tennisPoints,
     });
     if (!result.ok) throw new Error(result.reason);
@@ -1622,11 +1626,12 @@ export async function recordShootoutKick(gameId: string, fixtureId: string, form
     assertGameIsMutable(game.status, game.fixture.status);
     if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
 
-    const isKnockout =
+    const isKnockout = isKnockoutFormat(
       resolveFormat({
         divisionFormat: game.fixture.division.format,
         competitionFormat: game.fixture.division.competition.format,
-      }).format === "KNOCKOUT";
+      }).format,
+    );
     if (!isKnockout) throw new Error("NOT_KNOCKOUT");
     const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
     if (!definition) throw new Error("UNKNOWN_SPORT");

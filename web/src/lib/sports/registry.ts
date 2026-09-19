@@ -15,6 +15,7 @@ import { FOOTBALL } from "./football";
 import { CRICKET } from "./cricket";
 import { TENNIS } from "./tennis";
 import { AMERICAN_FOOTBALL } from "./american-football";
+import { TABLE_TENNIS } from "./table-tennis";
 import { isKnownValidator } from "./validators";
 
 export const SPORT_DEFINITIONS = {
@@ -24,6 +25,7 @@ export const SPORT_DEFINITIONS = {
   CRICKET,
   TENNIS,
   AMERICAN_FOOTBALL,
+  TABLE_TENNIS,
 } as const;
 
 export type SportKey = keyof typeof SPORT_DEFINITIONS;

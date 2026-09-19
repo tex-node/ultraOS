@@ -144,6 +144,7 @@ export function computeStandings(
   definition: SportDefinition,
   entrants: StandingsEntrant[],
   results: StandingsResult[],
+  options: StandingsOptions = {},
 ): StandingRow[] {
   const rows = new Map(entrants.map((entrant) => [entrant.entrantId, initRow(entrant)]));
 
@@ -187,8 +188,121 @@ export function computeStandings(
     finalizeSecondary(row);
   }
 
+  if (options.fairPlay) {
+    for (const row of rows.values()) {
+      row.secondary.FAIR_PLAY_POINTS = options.fairPlay.get(row.entrantId) ?? 0;
+    }
+  }
+
   const sorted = rankStandingRows(definition, [...rows.values()]);
-  return sorted;
+  return applyHeadToHead(definition, sorted, results);
+}
+
+export type StandingsOptions = {
+  // Fair-play points by entrant id (fewer is better). Populated by the caller from card events;
+  // the engine itself never reads the event log.
+  fairPlay?: Map<string, number>;
+};
+
+// Head-to-head mini-table: league points earned in matches played strictly between the tied
+// group, using the sport's own win/draw values (3/1 fallback for models without them). Draws
+// only count where the sport allows them.
+export function headToHeadPoints(
+  definition: SportDefinition,
+  groupIds: string[],
+  results: StandingsResult[],
+): Map<string, number> {
+  const points = new Map(groupIds.map((id) => [id, 0]));
+  const inGroup = new Set(groupIds);
+  const primary = definition.standings.primaryPoints;
+  const winPoints = primary.model === "WIN_DRAW_LOSS" ? primary.win : primary.model === "CRICKET" ? primary.win : 3;
+  const drawPoints =
+    primary.model === "WIN_DRAW_LOSS"
+      ? primary.draw
+      : primary.model === "CRICKET"
+        ? (primary.tie ?? primary.draw)
+        : 1;
+
+  for (const result of results) {
+    if (!inGroup.has(result.homeEntrantId) || !inGroup.has(result.awayEntrantId)) continue;
+    if (result.homeScore > result.awayScore) {
+      points.set(result.homeEntrantId, points.get(result.homeEntrantId)! + winPoints);
+    } else if (result.awayScore > result.homeScore) {
+      points.set(result.awayEntrantId, points.get(result.awayEntrantId)! + winPoints);
+    } else if (definition.scoring.drawsAllowed) {
+      points.set(result.homeEntrantId, points.get(result.homeEntrantId)! + drawPoints);
+      points.set(result.awayEntrantId, points.get(result.awayEntrantId)! + drawPoints);
+    }
+  }
+  return points;
+}
+
+function tiedBeforeHeadToHead(definition: SportDefinition, a: StandingRow, b: StandingRow): boolean {
+  const chain = definition.standings.tiebreak;
+  const headToHeadAt = chain.indexOf("HEAD_TO_HEAD");
+  const before = headToHeadAt === -1 ? chain : chain.slice(0, headToHeadAt);
+  return before.every((key) => {
+    if (key === "NAME") return true;
+    return tiebreakValue(a, key) === tiebreakValue(b, key);
+  });
+}
+
+function compareAfterHeadToHead(definition: SportDefinition, a: StandingRow, b: StandingRow): number {
+  const chain = definition.standings.tiebreak;
+  const rest = chain.slice(chain.indexOf("HEAD_TO_HEAD") + 1);
+  for (const key of rest) {
+    if (key === "NAME") return a.name.localeCompare(b.name);
+    if (key === "HEAD_TO_HEAD") continue;
+    const difference = tiebreakValue(b, key) - tiebreakValue(a, key);
+    if (difference !== 0) return difference;
+  }
+  return a.name.localeCompare(b.name);
+}
+
+// Applies HEAD_TO_HEAD where a definition lists it: consecutive rows tied on every key before it
+// are re-sorted by their mini-table, then by the keys after it. Groups with no mutual matches
+// keep their base order, so a missing head-to-head falls through instead of guessing.
+export function applyHeadToHead(
+  definition: SportDefinition,
+  sorted: StandingRow[],
+  results: StandingsResult[],
+): StandingRow[] {
+  if (!definition.standings.tiebreak.includes("HEAD_TO_HEAD")) return sorted;
+
+  const out: StandingRow[] = [];
+  let index = 0;
+  while (index < sorted.length) {
+    let end = index + 1;
+    while (end < sorted.length && tiedBeforeHeadToHead(definition, sorted[index], sorted[end])) {
+      end += 1;
+    }
+    const group = sorted.slice(index, end);
+    if (group.length > 1) {
+      const points = headToHeadPoints(
+        definition,
+        group.map((row) => row.entrantId),
+        results,
+      );
+      group.sort(
+        (a, b) =>
+          points.get(b.entrantId)! - points.get(a.entrantId)! || compareAfterHeadToHead(definition, a, b),
+      );
+      for (let i = 1; i < group.length; i += 1) {
+        if (points.get(group[i].entrantId) !== points.get(group[i - 1].entrantId)) {
+          group[i].rankTiebreak = "HEAD_TO_HEAD";
+        } else {
+          const rest = definition.standings.tiebreak.slice(definition.standings.tiebreak.indexOf("HEAD_TO_HEAD") + 1);
+          group[i].rankTiebreak = rest.find((key) => key !== "NAME" && tiebreakValue(group[i], key) !== tiebreakValue(group[i - 1], key)) ?? group[i].rankTiebreak;
+        }
+      }
+    }
+    out.push(...group);
+    index = end;
+  }
+  out.forEach((row, i) => {
+    row.rank = i + 1;
+  });
+  return out;
 }
 
 // Sorts rows by the sport's tiebreak chain and assigns rank + the deciding tiebreak key. Exported
@@ -254,6 +368,10 @@ function tiebreakValue(row: StandingRow, key: string): number {
       return row.secondary.GAME_RATIO ?? 0;
     case "NET_RUN_RATE":
       return row.secondary.NET_RUN_RATE ?? 0;
+    // Fewer fair-play points (cards) is better; negated so the shared descending comparator
+    // applies. Populated by the caller when card events exist - see recalculateStandings.
+    case "FAIR_PLAY":
+      return -(row.secondary.FAIR_PLAY_POINTS ?? 0);
     default:
       return 0;
   }
@@ -306,6 +424,7 @@ export function computeSeasonStandings(
   definition: SportDefinition,
   teams: SeasonStandingTeam[],
   fixtures: SeasonStandingFixture[],
+  fairPlay?: Map<string, number>,
 ): ComputedStandingRow[] {
   const entrants: StandingsEntrant[] = teams.map((team) => ({ entrantId: team.seasonClubId, name: team.name }));
   const results: StandingsResult[] = fixtures.map((fixture) => ({
@@ -316,7 +435,7 @@ export function computeSeasonStandings(
     secondary: secondaryForFixture(definition, fixture),
   }));
 
-  const rows = computeStandings(definition, entrants, results);
+  const rows = computeStandings(definition, entrants, results, fairPlay ? { fairPlay } : undefined);
   const teamBySeasonClub = new Map(teams.map((team) => [team.seasonClubId, team]));
   return rows.map((row) => ({
     ...row,

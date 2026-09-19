@@ -49,8 +49,30 @@ async function upsertStanding(
   }
 }
 
-export async function recalculateStandings(
-  tx: Prisma.TransactionClient,
+// Fair-play points by seasonClubId from card events in this season's games: yellow 1, red 3,
+// fewer is better. Only sports whose catalog issues cards produce any; everyone else maps to
+// zero and the FAIR_PLAY tiebreak key is a no-op for them.
+async function buildFairPlayMap(tx: Prisma.TransactionClient, seasonId: string): Promise<Map<string, number>> {
+const rows = await tx.gameEvent.groupBy({
+by: ["seasonClubId", "typeKey"],
+where: {
+status: "ACTIVE",
+seasonClubId: { not: null },
+typeKey: { in: ["YELLOW_CARD", "RED_CARD"] },
+game: { fixture: { seasonId } },
+},
+_count: { _all: true },
+});
+const points = new Map<string, number>();
+for (const row of rows) {
+if (!row.seasonClubId) continue;
+const value = row.typeKey === "RED_CARD" ? 3 : 1;
+points.set(row.seasonClubId, (points.get(row.seasonClubId) ?? 0) + value * row._count._all);
+}
+return points;
+}
+
+export async function recalculateStandings(  tx: Prisma.TransactionClient,
   organizationId: string,
   seasonId: string,
 ) {
@@ -85,20 +107,21 @@ export async function recalculateStandings(
     }),
   ]);
 
-  if (teams.length > 0) {
-    const teamFixtures = fixtures
-      .filter((fixture) => fixture.homeSeasonClubId && fixture.awaySeasonClubId)
-      .map((fixture) => ({
-        homeSeasonClubId: fixture.homeSeasonClubId!,
-        awaySeasonClubId: fixture.awaySeasonClubId!,
-        homeScore: fixture.homeScore,
-        awayScore: fixture.awayScore,
-      }));
-    const computed = computeSeasonStandings(
-      definition,
-      teams.map((team) => ({ seasonClubId: team.id, name: team.club.name, entrantId: team.entrant?.id ?? null })),
-      teamFixtures,
-    );
+if (teams.length > 0) {
+const teamFixtures = fixtures
+.filter((fixture) => fixture.homeSeasonClubId && fixture.awaySeasonClubId)
+.map((fixture) => ({
+homeSeasonClubId: fixture.homeSeasonClubId!,
+awaySeasonClubId: fixture.awaySeasonClubId!,
+homeScore: fixture.homeScore,
+awayScore: fixture.awayScore,
+}));
+const computed = computeSeasonStandings(
+definition,
+teams.map((team) => ({ seasonClubId: team.id, name: team.club.name, entrantId: team.entrant?.id ?? null })),
+teamFixtures,
+await buildFairPlayMap(tx, seasonId),
+);
     for (const row of computed) {
       await upsertStanding(tx, organizationId, seasonId, { seasonClubId: row.seasonClubId, entrantId: row.entrantId }, row);
     }

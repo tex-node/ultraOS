@@ -100,6 +100,7 @@ export type StandingsTiebreakKey =
   | "POINT_DIFFERENCE"
   | "POINTS_FOR"
   | "HEAD_TO_HEAD"
+  | "FAIR_PLAY"
   | "GOAL_DIFFERENCE"
   | "GOALS_FOR"
   | "SET_RATIO"

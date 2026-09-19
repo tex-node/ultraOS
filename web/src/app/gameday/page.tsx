@@ -87,7 +87,7 @@ export default async function GameDayControlCenter() {
     ? await tx.fixture.findMany({
         where: {
           seasonId: season.id,
-          status: { not: "CANCELLED" },
+          status: { notIn: ["CANCELLED", "POSTPONED"] },
           ...(scopeOr ? { OR: scopeOr } : {}),
         },
         orderBy: { scheduledAt: "asc" },

@@ -3882,3 +3882,60 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - Start P8.1 (American football definition) or whichever phase the operator prioritizes.
+### 2026-09-19 - Multi-Sport Program P8-P11 Delivery
+
+**Objective**
+
+- Deliver the remaining roadmap phases: American-football capture (P8.2), table tennis (P9),
+  capture depth for soccer/tennis/volleyball (P10), and tournament engine extensions plus
+  cross-sport leaders (P11). End with working capture for American football, volleyball,
+  tennis, table tennis and soccer.
+
+**Completed**
+
+- P8.2: POINTS scoring module (quarter-based point sports; server-verified values, forged
+  values rejected), wired through recordScoringEvent and the console (title + hidden input).
+- P9: table tennis definition (11-point games, win by 2, best of 5, INDIVIDUAL entrants) plus
+  SETS-module reuse with definition-driven point buttons (volleyball labels preserved).
+- P10: catalog + metric depth for soccer (possession/passing/defence/goalkeeping),
+  tennis (serve splits, stroke winners, forced errors, net points, break points saved) and
+  volleyball (dump, block assists/errors, dig errors, serve receive, libero swap).
+- P11.1/P11.2: Swiss pairings (score groups, rematch avoidance, byes), double-elimination
+  draw + losers-round pairing, ladder pairing + climb rule; formats wired into the enum,
+  wizard/settings selects, first-round generation, and winners-side auto-advancement.
+- P11.3: head-to-head mini-table tiebreak and FAIR_PLAY key in the standings engine, with
+  card aggregation (yellow 1, red 3) wired into recalculation.
+- P11.4: cross-sport Leaders page (top scorers, discipline) from the live ledger, in nav.
+- P11.5: POSTPONED state - migration was authored earlier but never committed or applied;
+  committed it here with the full handling (frees slots, excluded from boards and consoles,
+  postpone action, fixture-form option).
+- Roadmap tracker P8.2-P11.5 marked Done with explicit scope notes; version remains
+  product-0.3.
+
+**Decisions**
+
+- No bespoke consoles: every sport scores through the shared module + catalog panels.
+- Double-elimination losers rounds stay operator-paired (auto-advancing them would freeze
+  wrong pairings on upsets); winners side reuses knockout advancement.
+- xG/xA, rally derivation, rotation UI, numeric ratings and later-round UIs are documented
+  follow-ups, not silent gaps.
+- Shell heredocs on this box emit Windows-1252 bytes (broke a staging build); all new
+  files are strict-UTF-8-audited before commit from here on.
+
+**Verification**
+
+- typecheck 0 errors; lint 0 errors (6 pre-existing warnings); 669 tests / 668 pass.
+- New tests: AF module (values, forgery rejection), table tennis (registration, 11-point
+  game, button labels), Swiss/double-elim/ladder pairing, H2H override + fall-through,
+  fair play, format dispatch.
+- Both environments compiled; migrations applied; smoke checks passed.
+
+**Known issues**
+
+- The five sports consoles have not been clicked through on a live game in this round;
+  exercise on the next live fixture per sport.
+
+**Next step**
+
+- Per-tournament leaders/MVP views, xG methodology, and later-round bracket UI - or
+  whichever follow-up the operator prioritizes.

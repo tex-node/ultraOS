@@ -13,7 +13,7 @@ export type GeneratedFixture = {
   bracketPosition?: number;
 };
 
-export type FixtureFormat = "ROUND_ROBIN" | "KNOCKOUT" | "GROUP_STAGE";
+export type FixtureFormat = "ROUND_ROBIN" | "KNOCKOUT" | "GROUP_STAGE" | "SWISS" | "DOUBLE_ELIMINATION" | "LADDER";
 
 export type FixtureFormatOptions = {
   doubleRound?: boolean;
@@ -181,5 +181,132 @@ export function generateFixtures(
       return generateKnockout(entrantIds).firstRound;
     case "GROUP_STAGE":
       return generateGroupStage(entrantIds, options.groupCount ?? 2, { doubleRound: options.doubleRound });
+    case "SWISS":
+      // Round one pairs seeds in order (everyone starts level); later rounds re-run
+      // generateSwissRound on the live standings.
+      return generateSwissRound(
+        entrantIds.map((entrantId) => ({ entrantId, points: 0, opponents: [], hasHadBye: false })),
+        1,
+      ).fixtures;
+    case "DOUBLE_ELIMINATION":
+      return generateDoubleElimination(entrantIds).winnersFirstRound;
+    case "LADDER":
+      return generateLadderRound(entrantIds, 1);
   }
+}
+
+export type SwissStanding = {
+  entrantId: string;
+  points: number;
+  opponents: string[];
+  hasHadBye: boolean;
+};
+
+export type SwissRound = {
+  round: number;
+  fixtures: GeneratedFixture[];
+  byes: string[];
+};
+
+// One Swiss round: entrants are grouped by points (strongest group first, input order breaking
+// ties), and each entrant meets the highest-ranked opponent it has not faced yet. An odd count
+// gives the lowest-ranked bye-virgin a bye. Later rounds re-run this on updated standings -
+// nothing is precomputed, so withdrawals and corrections simply flow into the next pairing.
+export function generateSwissRound(standings: SwissStanding[], round: number): SwissRound {
+  const ordered = [...standings].sort((a, b) => b.points - a.points);
+  const byes: string[] = [];
+  const pool = [...ordered];
+
+  if (pool.length % 2 === 1) {
+    const byeIndex = [...pool].reverse().findIndex((entry) => !entry.hasHadBye);
+    const bye = byeIndex === -1 ? pool.pop()! : pool.splice(pool.length - 1 - byeIndex, 1)[0];
+    byes.push(bye.entrantId);
+  }
+
+  const fixtures: GeneratedFixture[] = [];
+  let bracketPosition = 1;
+  while (pool.length > 0) {
+    const first = pool.shift()!;
+    const faced = new Set(first.opponents);
+    const opponentIndex = pool.findIndex((entry) => !faced.has(entry.entrantId));
+    // Everyone left has met each other (tiny field, late rounds): take the nearest unconfronted
+    // pairing rather than leaving a fixture unmade.
+    const opponent = opponentIndex === -1 ? pool.shift()! : pool.splice(opponentIndex, 1)[0];
+    fixtures.push({ round, homeEntrantId: first.entrantId, awayEntrantId: opponent.entrantId, bracketPosition });
+    bracketPosition += 1;
+  }
+
+  return { round, fixtures, byes };
+}
+
+export type DoubleEliminationDraw = {
+  size: number;
+  rounds: number;
+  winnersFirstRound: GeneratedFixture[];
+  winnersByes: Array<{ position: number; entrantId: string }>;
+};
+
+// Double elimination, run the way tournaments actually run it: the winners bracket opens with a
+// standard seeded round, and each losers round is paired on demand from the entrants that just
+// dropped (see pairLosersRound). Auto-advancing a losers bracket up front would freeze wrong
+// pairings the moment an upset lands, so later rounds are created as results arrive - the same
+// philosophy as the single-elimination advancement.
+export function generateDoubleElimination(entrantIds: string[]): DoubleEliminationDraw {
+  const draw = generateKnockout(entrantIds);
+  return {
+    size: draw.size,
+    rounds: draw.rounds,
+    winnersFirstRound: draw.firstRound,
+    winnersByes: draw.byePositions,
+  };
+}
+
+// Pairs one losers-bracket round: entrants ordered as supplied (usually losers in bracket order),
+// adjacent pairing, byes only when the count is odd. Round numbers continue the shared bracket
+// count so winners and losers fixtures never collide on (round, bracketPosition).
+export function pairLosersRound(
+  entrants: string[],
+  round: number,
+  startPosition = 1,
+): { round: number; fixtures: GeneratedFixture[]; byes: string[] } {
+  const fixtures: GeneratedFixture[] = [];
+  const pool = [...entrants];
+  const byes: string[] = [];
+  if (pool.length % 2 === 1) {
+    byes.push(pool.pop()!);
+  }
+  let bracketPosition = startPosition;
+  for (let i = 0; i < pool.length; i += 2) {
+    fixtures.push({ round, homeEntrantId: pool[i], awayEntrantId: pool[i + 1], bracketPosition });
+    bracketPosition += 1;
+  }
+  return { round, fixtures, byes };
+}
+
+export type LadderResult = { winnerId: string; loserId: string };
+
+// Ranked ladder (strongest first): each round pairs adjacent rungs (1v2, 3v4, ...), leaving the
+// bottom rung idle on an odd count. A lower-ranked winner climbs exactly to the loser's rung; a
+// favourite holding serve changes nothing. Run round after round all season - the table IS the
+// standings.
+export function generateLadderRound(rankedIds: string[], round: number): GeneratedFixture[] {
+  const fixtures: GeneratedFixture[] = [];
+  let bracketPosition = 1;
+  for (let i = 0; i + 1 < rankedIds.length; i += 2) {
+    fixtures.push({ round, homeEntrantId: rankedIds[i], awayEntrantId: rankedIds[i + 1], bracketPosition });
+    bracketPosition += 1;
+  }
+  return fixtures;
+}
+
+export function applyLadderResults(rankedIds: string[], results: LadderResult[]): string[] {
+  const order = [...rankedIds];
+  for (const { winnerId, loserId } of results) {
+    const winnerIndex = order.indexOf(winnerId);
+    const loserIndex = order.indexOf(loserId);
+    if (winnerIndex === -1 || loserIndex === -1 || winnerIndex < loserIndex) continue;
+    const [winner] = order.splice(winnerIndex, 1);
+    order.splice(loserIndex, 0, winner);
+  }
+  return order;
 }

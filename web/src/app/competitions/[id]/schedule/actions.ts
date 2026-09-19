@@ -5,7 +5,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
-import { generateFixtures, generateKnockout, type GeneratedFixture } from "@/lib/sports/fixtures";
+import { generateDoubleElimination, generateFixtures, generateKnockout, type GeneratedFixture } from "@/lib/sports/fixtures";
 import { sideSeasonClubId } from "@/lib/sports/fixture-sides";
 import { resolveFormat } from "@/lib/sports/format";
 import { allocateSlot, parseGameDays, playDatesForRound } from "@/lib/sports/schedule-slots";
@@ -87,25 +87,33 @@ export async function generateSchedule(
     });
 
     // Knockout draws carry byes - round-1 positions with no fixture whose entrant auto-advances.
-    // They are persisted on the division so the bracket can be advanced as results arrive.
+    // They are persisted on the division so the bracket can be advanced as results arrive. A
+    // double-elimination draw opens the same way (its winners bracket advances identically; the
+    // losers bracket is paired round by round with pairLosersRound).
     let pairs: GeneratedFixture[];
     let knockoutByes: Record<string, { seasonClubId: string | null; entrantId: string | null }> | null = null;
-    if (format === "KNOCKOUT") {
-      const draw = generateKnockout(teamIds);
-      pairs = draw.firstRound;
-      knockoutByes = Object.fromEntries(
-        draw.byePositions.map((bye) => [
+    const toByeMap = (byePositions: Array<{ position: number; entrantId: string }>) =>
+      Object.fromEntries(
+        byePositions.map((bye) => [
           String(bye.position),
           { seasonClubId: bye.entrantId, entrantId: entrantBySeasonClub.get(bye.entrantId) ?? null },
         ]),
       );
+    if (format === "KNOCKOUT") {
+      const draw = generateKnockout(teamIds);
+      pairs = draw.firstRound;
+      knockoutByes = toByeMap(draw.byePositions);
+    } else if (format === "DOUBLE_ELIMINATION") {
+      const draw = generateDoubleElimination(teamIds);
+      pairs = draw.winnersFirstRound;
+      knockoutByes = toByeMap(draw.winnersByes);
     } else {
       pairs = generateFixtures(format, teamIds, { doubleRound, groupCount });
     }
 
     // Existing fixtures for the season, for clash detection.
     const existing = await tx.fixture.findMany({
-      where: { seasonId: season.id, status: { not: "CANCELLED" } },
+      where: { seasonId: season.id, status: { notIn: ["CANCELLED", "POSTPONED"] } },
       select: { venueId: true, scheduledAt: true, homeSeasonClubId: true, awaySeasonClubId: true, homeEntrantId: true, awayEntrantId: true },
     });
     const venueSlots = new Set(existing.map((fixture) => `${fixture.venueId}|${fixture.scheduledAt.toISOString()}`));

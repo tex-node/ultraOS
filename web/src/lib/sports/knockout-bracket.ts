@@ -7,7 +7,7 @@
 
 import type { Prisma } from "@/generated/prisma/client";
 import { bracketSize, planNextRound, type BracketMatch, type BracketParticipant } from "./knockout-advance";
-import { resolveFormat } from "./format";
+import { isKnockoutFormat, resolveFormat } from "./format";
 
 export type BracketFixtureRef = {
   id: string;
@@ -33,7 +33,13 @@ export async function advanceKnockoutBracket(
     where: { id: fixture.divisionId },
     select: { format: true, knockoutByes: true, competition: { select: { format: true } } },
   });
-  if (resolveFormat({ divisionFormat: division.format, competitionFormat: division.competition.format }).format !== "KNOCKOUT") {
+  // Double elimination advances its winners bracket identically; the losers bracket is paired
+  // round by round with pairLosersRound instead.
+  const bracketFormat = resolveFormat({
+    divisionFormat: division.format,
+    competitionFormat: division.competition.format,
+  }).format;
+  if (!isKnockoutFormat(bracketFormat)) {
     return [];
   }
 
@@ -42,7 +48,7 @@ export async function advanceKnockoutBracket(
       divisionId: fixture.divisionId,
       seasonId: fixture.seasonId, // a division is reused across seasons; brackets are per season
       round: { not: null },
-      status: { not: "CANCELLED" },
+      status: { notIn: ["CANCELLED", "POSTPONED"] },
     },
     select: {
       round: true,
@@ -98,7 +104,7 @@ export async function advanceKnockoutBracket(
         if (side) or.push({ homeEntrantId: side, scheduledAt }, { awayEntrantId: side, scheduledAt });
       }
       const clash = await tx.fixture.findFirst({
-        where: { seasonId: fixture.seasonId, status: { not: "CANCELLED" }, OR: or },
+        where: { seasonId: fixture.seasonId, status: { notIn: ["CANCELLED", "POSTPONED"] }, OR: or },
         select: { id: true },
       });
       if (!clash) break;

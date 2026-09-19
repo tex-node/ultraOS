@@ -26,6 +26,9 @@ export function FormatForm({
           <option value="ROUND_ROBIN">League (round-robin) — every team plays every other</option>
           <option value="KNOCKOUT">Knockout — single elimination (extra time &amp; penalties)</option>
           <option value="GROUP_STAGE">Group stage — seeded groups, round-robin within each</option>
+          <option value="SWISS">Swiss — paired by record each round, no eliminations</option>
+          <option value="DOUBLE_ELIMINATION">Double elimination — two losses to go out</option>
+          <option value="LADDER">Ladder — challenge the rung above, climb by winning</option>
         </select>
       </label>
       <label className={labelClass}>

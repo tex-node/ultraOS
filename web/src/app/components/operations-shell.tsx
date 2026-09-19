@@ -46,6 +46,7 @@ const navigation: NavEntry[] = [
       { href: "/participants/all-star-roster", label: "All-Star Rosters" },
       { href: "/tryouts", label: "Tryouts" },
       { href: "/standings", label: "Standings" },
+      { href: "/leaders", label: "Leaders" },
     ],
   },
   {
