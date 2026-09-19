@@ -120,6 +120,9 @@ const shotSchema = z.object({
   // free throws are logged from the line without clicking.
   x: z.coerce.number().min(0).max(COURT_WIDTH_FT).optional(),
   y: z.coerce.number().min(0).max(COURT_LENGTH_FT).optional(),
+  // Links this free throw to the foul that awarded it, so the console can show pending FTs
+  // (awarded minus recorded) and voiding an FT reopens its slot.
+  causedByEventId: z.string().optional(),
 });
 
 // Records one shot attempt (make or miss) into the statistician's own ledger. Deliberately
@@ -155,6 +158,18 @@ export async function recordStatisticianShot(gameId: string, fixtureId: string, 
     });
     if (!shot.valid) throw new Error(shot.error);
 
+    // A linked free throw must point at a foul from this same game that actually awarded FTs.
+    let causedByEventId: string | undefined;
+    if (input.causedByEventId) {
+      if (input.shotValue !== 1) throw new Error("LINKED_SHOT_MUST_BE_FREE_THROW");
+      const foul = await tx.gameEvent.findFirst({
+        where: { id: input.causedByEventId, gameId, eventType: "FOUL", status: "ACTIVE" },
+        select: { id: true, freeThrowsAwarded: true },
+      });
+      if (!foul || !foul.freeThrowsAwarded) throw new Error("INVALID_FOUL_LINK");
+      causedByEventId = foul.id;
+    }
+
     const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
     const eventType =
       input.shotValue === 1
@@ -181,6 +196,7 @@ export async function recordStatisticianShot(gameId: string, fixtureId: string, 
         x: input.x ?? null,
         y: input.y ?? null,
         courtZone,
+        causedByEventId,
         period: game.currentPeriod,
         clockSeconds: remaining,
         description: `${player.athlete.firstName} ${player.athlete.lastName} — ${input.shotValue}PT ${made ? "MADE" : "MISS"}${courtZone ? ` (${courtZone.replace(/_/g, " ")})` : ""}${shot.isUltraTime ? ` (Ultra Time ×${shot.multiplier})` : ""}`,
@@ -197,12 +213,19 @@ export async function recordStatisticianShot(gameId: string, fixtureId: string, 
 
 const OTHER_STAT_TYPES = ["OFFENSIVE_REBOUND", "DEFENSIVE_REBOUND", "ASSIST", "STEAL", "BLOCK", "TURNOVER", "FOUL"] as const;
 
+const emptyToUndefined = (v: unknown) => (v === "" ? undefined : v);
+
 const otherStatSchema = z.object({
   seasonClubId: z.string(),
-  playerId: z.string().min(1),
+  playerId: z.string().optional(),
   eventType: z.enum(OTHER_STAT_TYPES),
   fouledPlayerId: z.string().optional(),
-  foulType: z.preprocess((v) => (v === "" ? undefined : v), z.enum(["PERSONAL", "TECHNICAL", "FLAGRANT", "OFFENSIVE"]).optional()),
+  foulType: z.preprocess(emptyToUndefined, z.enum(["PERSONAL", "TECHNICAL", "FLAGRANT", "OFFENSIVE"]).optional()),
+  // NCAA-style foul depth (stats Phase 3): who the foul was assessed to, Class A/B for technicals,
+  // and how many free throws it awarded (drives the pending-FT list on the console).
+  foulTarget: z.preprocess(emptyToUndefined, z.enum(["PLAYER", "BENCH", "COACH"]).optional()),
+  technicalClass: z.preprocess(emptyToUndefined, z.enum(["CLASS_A", "CLASS_B"]).optional()),
+  freeThrowsAwarded: z.preprocess(emptyToUndefined, z.coerce.number().int().min(0).max(3).optional()),
 });
 
 export async function recordStatisticianStat(gameId: string, fixtureId: string, formData: FormData) {
@@ -216,34 +239,63 @@ export async function recordStatisticianStat(gameId: string, fixtureId: string, 
     if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
       throw new Error("INVALID_TEAM");
     }
-    const player = await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } });
-    if (!player) throw new Error("INVALID_PLAYER");
+    const target = input.eventType === "FOUL" ? (input.foulTarget ?? "PLAYER") : "PLAYER";
+    const player = input.playerId
+      ? await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } })
+      : null;
+    if (!player && (input.eventType !== "FOUL" || target === "PLAYER")) {
+      throw new Error("INVALID_PLAYER");
+    }
 
     let fouledPlayerId: string | undefined;
     if (input.eventType === "FOUL" && input.fouledPlayerId) {
       const fouledPlayer = await tx.player.findFirst({
-        where: { id: input.fouledPlayerId, seasonClubId: { in: [game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!] } },
+        where: { id: input.fouledPlayerId, seasonClubId: { in: [homeId, awayId] } },
       });
       if (!fouledPlayer) throw new Error("INVALID_FOULED_PLAYER");
       fouledPlayerId = fouledPlayer.id;
     }
 
+    // Class A/B only exists on technicals; bench/coach fouls carry no player.
+    const foulTarget = input.eventType === "FOUL" ? target : undefined;
+    if (input.technicalClass && (input.eventType !== "FOUL" || input.foulType !== "TECHNICAL")) {
+      throw new Error("INVALID_TECHNICAL_CLASS");
+    }
+    const technicalClass = input.eventType === "FOUL" && input.foulType === "TECHNICAL" ? input.technicalClass : undefined;
+    const freeThrowsAwarded = input.eventType === "FOUL" ? (input.freeThrowsAwarded ?? 0) : 0;
+
     const remaining = remainingClockSeconds(game);
     const ultraTime = isUltraTimeUnderRules(effectiveRuleSnapshot(game.ruleSnapshot), game.status, game.currentPeriod, remaining);
     const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
+
+    const foulLabel =
+      input.eventType !== "FOUL"
+        ? null
+        : [
+            input.foulType === "TECHNICAL" && technicalClass ? `Technical foul (Class ${technicalClass === "CLASS_A" ? "A" : "B"})` : (input.foulType ?? "Foul"),
+            foulTarget === "BENCH" ? "bench" : foulTarget === "COACH" ? "coaching staff" : null,
+          ]
+            .filter(Boolean)
+            .join(" — ");
 
     await tx.gameEvent.create({
       data: {
         organizationId,
         gameId,
         seasonClubId: input.seasonClubId,
-        playerId: player.id,
+        playerId: player?.id ?? null,
         fouledPlayerId: input.eventType === "FOUL" ? fouledPlayerId : undefined,
         foulType: input.eventType === "FOUL" ? input.foulType || undefined : undefined,
+        technicalClass,
+        foulTarget,
+        freeThrowsAwarded: input.eventType === "FOUL" && freeThrowsAwarded > 0 ? freeThrowsAwarded : null,
         eventType: input.eventType,
         period: game.currentPeriod,
         clockSeconds: remaining,
-        description: `${player.athlete.firstName} ${player.athlete.lastName} — ${input.eventType.replaceAll("_", " ")}`,
+        description:
+          input.eventType === "FOUL"
+            ? `${foulLabel}${player ? ` — ${player.athlete.firstName} ${player.athlete.lastName}` : ""}${freeThrowsAwarded > 0 ? ` · ${freeThrowsAwarded} FT${freeThrowsAwarded === 1 ? "" : "s"}` : ""}`
+            : `${player!.athlete.firstName} ${player!.athlete.lastName} — ${input.eventType.replaceAll("_", " ")}`,
         sequenceNumber,
         isUltraTime: ultraTime,
         source: STATISTICIAN_SOURCE,

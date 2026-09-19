@@ -19,10 +19,12 @@ export function CourtSvg({
   onSelect,
   pending,
   dots,
+  interactive = true,
 }: {
   onSelect: (point: CourtPoint) => void;
   pending: CourtPoint | null;
   dots: CourtDot[];
+  interactive?: boolean;
 }) {
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGSVGElement>) => {
@@ -40,8 +42,8 @@ export function CourtSvg({
   return (
     <svg
       viewBox={"0 0 " + VIEW_W + " " + VIEW_H}
-      onClick={handleClick}
-      className="h-auto w-full cursor-crosshair touch-manipulation rounded-xl"
+      onClick={interactive ? handleClick : undefined}
+      className={"h-auto w-full rounded-xl " + (interactive ? "cursor-crosshair touch-manipulation" : "")}
       role="application"
       aria-label="Basketball court. Activate to log a shot location."
     >

@@ -218,6 +218,21 @@ enum FoulType {
   OFFENSIVE
 }
 
+// NCAA technical-foul classes: Class A (unsportsmanlike conduct - counts toward disqualification
+// totals) vs Class B (administrative - rim hanging, delay, etc.).
+enum TechnicalClass {
+  CLASS_A
+  CLASS_B
+}
+
+// Who a foul was assessed to. PLAYER is the on-court offender; BENCH and COACH cover bench and
+// coaching-staff technicals, which have no single playerId.
+enum FoulTarget {
+  PLAYER
+  BENCH
+  COACH
+}
+
 enum ScoutReportVisibility {
   PRIVATE
   CLUB
@@ -3316,6 +3331,18 @@ model GameEvent {
   fouledPlayerId               String?
   fouledPlayer                 Player?                       @relation("GameEventFouledPlayer", fields: [fouledPlayerId], references: [id], onDelete: SetNull)
   foulType                     FoulType?
+  // NCAA-style foul depth (stats Phase 3): Class A vs Class B technicals, and who the foul was
+  // assessed to - a player, the bench, or the coaching staff. technicalClass is only meaningful
+  // on TECHNICAL fouls; foulTarget defaults to PLAYER for every legacy row.
+  technicalClass               TechnicalClass?
+  foulTarget                   FoulTarget?                   @default(PLAYER)
+  // Free-throw sequencing: a foul awards N free throws (freeThrowsAwarded), and each resulting FT
+  // points back at the foul via causedByEventId. Pending FTs are derived (awarded minus linked),
+  // never stored counters, so voiding an FT automatically reopens its slot.
+  freeThrowsAwarded            Int?
+  causedByEventId              String?
+  causedBy                     GameEvent?                    @relation("EventCausation", fields: [causedByEventId], references: [id], onDelete: SetNull)
+  causedEvents                 GameEvent[]                   @relation("EventCausation")
   eventType                    GameEventType
   // Multi-sport Stage 6 (S6.1): the sport-definition event key (SportEventDefinition.key) and an
   // opaque sport-specific payload. Nullable/additive; the legacy `eventType` enum remains for

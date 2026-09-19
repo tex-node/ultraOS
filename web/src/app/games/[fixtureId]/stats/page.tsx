@@ -115,6 +115,7 @@ export default async function StatisticianConsole({
           <Link href={`/fixtures/${fixtureId}`} className="text-sm text-zinc-400">Back to fixture</Link>
           <div className="flex gap-4">
             <Link href={`/games/${fixtureId}/stats/reconciliation`} className="text-sm text-violet-400">Native vs. official reconciliation</Link>
+            <Link href={`/games/${fixtureId}/stats/reports`} className="text-sm text-amber-300">Reports</Link>
             <Link href={`/games/${fixtureId}/stats/live`} className="text-sm text-amber-300">Live stat console</Link>
             <Link href={`/games/${fixtureId}/live`} className="text-sm text-emerald-400">Open scorer console</Link>
           </div>

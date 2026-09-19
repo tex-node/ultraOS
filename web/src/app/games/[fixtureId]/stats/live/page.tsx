@@ -100,6 +100,46 @@ export default async function StatLivePage({ params }: { params: Promise<{ fixtu
       _count: { _all: true },
     }),
   );
+
+  // Pending free throws: fouls that awarded FTs, minus the FTs already recorded against them.
+  // Derived, never stored - voiding an FT reopens its slot automatically.
+  const pendingFreeThrows = await withOrganizationContext(organizationId, (tx) =>
+    (async () => {
+      const [fouls, linked] = await Promise.all([
+        tx.gameEvent.findMany({
+          where: { gameId: game.id, eventType: "FOUL", status: "ACTIVE", freeThrowsAwarded: { gt: 0 } },
+          orderBy: { sequenceNumber: "asc" },
+          select: {
+            id: true,
+            description: true,
+            period: true,
+            clockSeconds: true,
+            seasonClubId: true,
+            freeThrowsAwarded: true,
+            player: { select: { athlete: { select: { firstName: true, lastName: true } } } },
+          },
+        }),
+        tx.gameEvent.groupBy({
+          by: ["causedByEventId"],
+          where: { gameId: game.id, status: "ACTIVE", causedByEventId: { not: null } },
+          _count: { _all: true },
+        }),
+      ]);
+      const recordedByFoul = new Map(linked.map((row) => [row.causedByEventId as string, row._count._all]));
+      return fouls
+        .map((foul) => ({
+          foulId: foul.id,
+          description: foul.description,
+          period: foul.period,
+          clockSeconds: foul.clockSeconds,
+          teamId: foul.seasonClubId,
+          playerName: foul.player ? `${foul.player.athlete.firstName} ${foul.player.athlete.lastName}` : null,
+          awarded: foul.freeThrowsAwarded ?? 0,
+          recorded: recordedByFoul.get(foul.id) ?? 0,
+        }))
+        .filter((row) => row.recorded < row.awarded);
+    })(),
+  );
   const startersConfirmed = {
     home: (lineup.get(homeId)?.size ?? 0) > 0,
     away: (lineup.get(awayId)?.size ?? 0) > 0,
@@ -159,6 +199,7 @@ export default async function StatLivePage({ params }: { params: Promise<{ fixtu
           <Link href={`/fixtures/${fixtureId}`} className="text-sm text-zinc-400">Back to fixture</Link>
           <div className="flex gap-4">
             <Link href={`/games/${fixtureId}/stats`} className="text-sm text-zinc-400">Statistician console</Link>
+            <Link href={`/games/${fixtureId}/stats/reports`} className="text-sm text-amber-300">Reports</Link>
             <Link href={`/games/${fixtureId}/stats/reconciliation`} className="text-sm text-violet-400">Reconciliation</Link>
             <Link href={`/games/${fixtureId}/live`} className="text-sm text-emerald-400">Open scorer console</Link>
           </div>
@@ -182,6 +223,7 @@ export default async function StatLivePage({ params }: { params: Promise<{ fixtu
           official={{ home: reconciliation.home.officialScore, away: reconciliation.away.officialScore }}
           statScore={{ home: reconciliation.home.statisticalScore, away: reconciliation.away.statisticalScore }}
           lastVerification={lastVerification}
+          pendingFreeThrows={pendingFreeThrows}
           events={events}
         />
       </main>

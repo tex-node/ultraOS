@@ -70,6 +70,7 @@ export function StatLiveConsole({
   official,
   statScore,
   lastVerification,
+  pendingFreeThrows,
   events,
 }: {
   gameId: string;
@@ -90,6 +91,16 @@ export function StatLiveConsole({
   official: { home: number; away: number };
   statScore: { home: number; away: number };
   lastVerification: { allMatch: boolean; description: string; period: number; clockSeconds: number } | null;
+  pendingFreeThrows: {
+    foulId: string;
+    description: string;
+    period: number;
+    clockSeconds: number;
+    teamId: string | null;
+    playerName: string | null;
+    awarded: number;
+    recorded: number;
+  }[];
   events: LiveEvent[];
 }) {
   const [selectedTeamId, setSelectedTeamId] = useState(teams[0].id);
@@ -365,6 +376,13 @@ export function StatLiveConsole({
           <SubmitButton pendingLabel="�" disabled={!effectivePlayerId || (shotValue !== 1 && !pending)} className={`${BIG_BTN} flex-1 border border-rose-400/40 px-5 text-rose-300 disabled:opacity-40`} name="made" value="false">Missed</SubmitButton>
         </form>
         <OtherStats gameId={gameId} fixtureId={fixtureId} teamId={team.id} playerId={effectivePlayerId} />
+        <FoulPanel
+          gameId={gameId}
+          fixtureId={fixtureId}
+          team={team}
+          allPlayers={[...teams[0].players, ...teams[1].players]}
+        />
+        <PendingFreeThrows gameId={gameId} fixtureId={fixtureId} teams={teams} rows={pendingFreeThrows} />
       </section>
 
       {/* action log */}
@@ -400,7 +418,145 @@ export function StatLiveConsole({
   );
 }
 
+function FoulPanel({
+  gameId,
+  fixtureId,
+  team,
+  allPlayers,
+}: {
+  gameId: string;
+  fixtureId: string;
+  team: LiveTeam;
+  allPlayers: { id: string; name: string }[];
+}) {
+  const [target, setTarget] = useState("PLAYER");
+  const [foulType, setFoulType] = useState("PERSONAL");
+  return (
+    <form
+      action={recordStatisticianStat.bind(null, gameId, fixtureId)}
+      className="mt-4 rounded-xl border border-white/[.06] p-4"
+    >
+      <input type="hidden" name="seasonClubId" value={team.id} />
+      <input type="hidden" name="eventType" value="FOUL" />
+      <h4 className="text-sm font-semibold">Foul — {team.name}</h4>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label className="text-xs text-zinc-400">
+          Assessed to
+          <select name="foulTarget" value={target} onChange={(e) => setTarget(e.target.value)} className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white">
+            <option value="PLAYER">Player</option>
+            <option value="BENCH">Bench</option>
+            <option value="COACH">Coaching staff</option>
+          </select>
+        </label>
+        {target === "PLAYER" ? (
+          <label className="text-xs text-zinc-400">
+            Player
+            <select name="playerId" className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white">
+              {team.players.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <label className="text-xs text-zinc-400">
+          Type
+          <select name="foulType" value={foulType} onChange={(e) => setFoulType(e.target.value)} className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white">
+            <option value="PERSONAL">Personal</option>
+            <option value="TECHNICAL">Technical</option>
+            <option value="FLAGRANT">Flagrant</option>
+            <option value="OFFENSIVE">Offensive</option>
+          </select>
+        </label>
+        {foulType === "TECHNICAL" ? (
+          <label className="text-xs text-zinc-400">
+            Class
+            <select name="technicalClass" defaultValue="CLASS_A" className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white">
+              <option value="CLASS_A">Class A (unsportsmanlike)</option>
+              <option value="CLASS_B">Class B (administrative)</option>
+            </select>
+          </label>
+        ) : null}
+        <label className="text-xs text-zinc-400">
+          Fouled player (optional)
+          <select name="fouledPlayerId" defaultValue="" className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white">
+            <option value="">None / unknown</option>
+            {allPlayers.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-zinc-400">
+          FTs awarded
+          <input name="freeThrowsAwarded" type="number" min={0} max={3} defaultValue={0} className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white" />
+        </label>
+      </div>
+      <SubmitButton pendingLabel="…" className={`${BIG_BTN} mt-3 border border-rose-400/30 px-5 text-sm text-rose-300`}>
+        Record foul
+      </SubmitButton>
+    </form>
+  );
+}
+
+function PendingFreeThrows({
+  gameId,
+  fixtureId,
+  teams,
+  rows,
+}: {
+  gameId: string;
+  fixtureId: string;
+  teams: [LiveTeam, LiveTeam];
+  rows: {
+    foulId: string;
+    description: string;
+    teamId: string | null;
+    awarded: number;
+    recorded: number;
+  }[];
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="mt-4 rounded-xl border border-amber-400/20 p-4">
+      <h4 className="text-sm font-semibold text-amber-200">Pending free throws</h4>
+      <div className="mt-3 grid gap-3">
+        {rows.map((row) => {
+          const team = teams.find((t) => t.id === row.teamId);
+          if (!team) return null;
+          return (
+            <form
+              key={row.foulId}
+              action={recordStatisticianShot.bind(null, gameId, fixtureId)}
+              className="grid gap-2 rounded-lg border border-white/[.06] p-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end"
+            >
+              <input type="hidden" name="seasonClubId" value={team.id} />
+              <input type="hidden" name="shotValue" value={1} />
+              <input type="hidden" name="causedByEventId" value={row.foulId} />
+              <div className="sm:col-span-2">
+                <p className="text-xs text-zinc-400">{row.description}</p>
+                <p className="text-sm font-semibold text-zinc-200">
+                  FT {row.recorded + 1} of {row.awarded}
+                </p>
+              </div>
+              <select name="playerId" className="min-h-[48px] rounded-lg bg-white/[.05] p-3 text-sm text-white" required>
+                <option value="">Shooter</option>
+                {team.players.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <SubmitButton pendingLabel="…" name="made" value="true" className={`${BIG_BTN} border border-emerald-400/40 px-4 text-xs text-emerald-300`}>Made</SubmitButton>
+                <SubmitButton pendingLabel="…" name="made" value="false" className={`${BIG_BTN} border border-rose-400/40 px-4 text-xs text-rose-300`}>Missed</SubmitButton>
+              </div>
+            </form>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function OtherStats({ gameId, fixtureId, teamId, playerId }: { gameId: string; fixtureId: string; teamId: string; playerId: string }) {
+  // FOUL lives in the dedicated foul panel (target, Class A/B, FTs awarded), not here.
   const stats = [
     ["OFFENSIVE_REBOUND", "O-REB"],
     ["DEFENSIVE_REBOUND", "D-REB"],
@@ -408,7 +564,6 @@ function OtherStats({ gameId, fixtureId, teamId, playerId }: { gameId: string; f
     ["STEAL", "STL"],
     ["BLOCK", "BLK"],
     ["TURNOVER", "TO"],
-    ["FOUL", "FOUL"],
   ] as const;
   return (
     <div className="mt-4 grid grid-cols-4 gap-2">
