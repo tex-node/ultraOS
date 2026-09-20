@@ -3993,3 +3993,31 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - F3 fan discovery hub.
+
+### 2026-09-20 - F3 Fan Discovery Hub
+
+**Objective**
+
+- Deliver the global fan home (`/`) with live hero, tournament grid, filters, and search.
+
+**Completed**
+
+- `/` is now the public discovery hub (no login): live-now hero with Watch live
+  (scoreboard) links, upcoming fallback, quick actions, sport chips, city selector,
+  team/tournament/venue search, and tournament cards with status pills linking to
+  sub-sites. Portal logo now points at `/`. Roadmap F3.1/F3.2 marked Done.
+
+**Decisions**
+
+- Authed users land on the hub like everyone else (`/dashboard` still exists for
+  bookmarks; organizers use "Organize an Event" → `/admin`).
+- In-venue food ordering stays an F5 item — the hub ships only honest, working links.
+
+**Verification**
+
+- Typecheck, lint clean; 5 new filter tests pass; staging release verified: hub and
+  every filter/search combination 200, `?sport=tennis` correctly isolates tennis.
+
+**Next step**
+
+- F4 ticketing depth + gate operations.
