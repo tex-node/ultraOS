@@ -18,7 +18,15 @@ enum UserRole {
   VENDOR
   MEDIA
   VOLUNTEER
+  GATE_MANAGER
   FAN
+}
+
+// F4 ticketing depth: pass tiers ride on zone inventory. Null = a regular single-event
+// zone; DAY_PASS/TOURNAMENT_PASS zones carry a validity window checked at the gate.
+enum PassTier {
+  DAY_PASS
+  TOURNAMENT_PASS
 }
 
 enum SeasonStatus {
@@ -2521,6 +2529,10 @@ model SeatZone {
   fanClubEarlyAccessAt DateTime?
   fanClubDiscountBps   Int               @default(0)
   isActive             Boolean           @default(true)
+  // F4 ticketing depth: pass tier + validity window. Null tier = regular zone.
+  passTier             PassTier?
+  passValidFrom        DateTime?
+  passValidTo          DateTime?
   reservations         SeatReservation[]
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
@@ -2559,6 +2571,9 @@ model SeatReservation {
   paymentStatus    PaymentStatus     @default(UNPAID)
   paymentReference String?
   paidAt           DateTime?
+  // F4 ticketing depth: optional promo code applied at reservation time.
+  promoCodeId      String?
+  promoCode        PromoCode?        @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
   ticket           Ticket?
   order            Order?
   createdAt        DateTime          @default(now())
@@ -3028,8 +3043,9 @@ model PromoCode {
   redemptionCount   Int              @default(0)
   startsAt          DateTime?
   endsAt            DateTime?
-  isActive          Boolean          @default(true)
+  isActive          Boolean           @default(true)
   orders            Order[]
+  reservations      SeatReservation[]
   sponsorCampaignId String?
   sponsorCampaign   SponsorCampaign? @relation(fields: [sponsorCampaignId], references: [id], onDelete: SetNull)
   createdAt         DateTime         @default(now())

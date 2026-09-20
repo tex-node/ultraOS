@@ -59,6 +59,16 @@ export default async function CheckInRecordPage({
           <Record title="Fan ticket" status={ticket.status}>
             <p>{ticket.reservation.user?.name ?? ticket.reservation.guestName ?? "Guest fan"}</p>
             <p className="text-zinc-400">{ticket.reservation.event.name} · {ticket.reservation.seatZone.name} · {ticket.reservation.quantity} admission</p>
+            {ticket.reservation.seatZone.passTier ? (
+              <p className="font-semibold text-cyan-300">
+                {ticket.reservation.seatZone.passTier === "DAY_PASS" ? "Day pass" : "Full-tournament pass"}
+                {ticket.reservation.seatZone.passValidFrom || ticket.reservation.seatZone.passValidTo ? (
+                  <span className="font-normal text-zinc-400">
+                    {" "}· valid{ticket.reservation.seatZone.passValidFrom ? ` from ${ticket.reservation.seatZone.passValidFrom.toLocaleString()}` : ""}{ticket.reservation.seatZone.passValidTo ? ` to ${ticket.reservation.seatZone.passValidTo.toLocaleString()}` : ""}
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
             <p className="text-zinc-400">{formatNaira(ticket.reservation.totalKobo)} · {ticket.reservation.paymentStatus}</p>
             {ticket.status === "ACTIVE" && (ticket.reservation.totalKobo === 0 || ticket.reservation.paymentStatus === "PAID") ? <form action={checkInTicket.bind(null,ticket.id,code)}><button className="mt-6 w-full rounded-xl bg-emerald-400 p-4 font-semibold text-zinc-950">Confirm venue entry</button></form> : null}
             {ticket.checkIns[0] ? <p className="mt-4 text-sm text-emerald-300">Checked in {ticket.checkIns[0].checkedInAt.toLocaleString()}</p> : null}

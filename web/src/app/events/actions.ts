@@ -133,6 +133,9 @@ const zoneSchema = z.object({
   fanClubId: z.string(),
   fanClubEarlyAccessAt: z.string(),
   fanClubDiscountPercent: z.coerce.number().min(0).max(100),
+  passTier: z.enum(["DAY_PASS", "TOURNAMENT_PASS"]).or(z.literal("")).optional(),
+  passValidFrom: z.string().optional(),
+  passValidTo: z.string().optional(),
 });
 
 export async function createSeatZone(eventId: string, formData: FormData) {
@@ -179,6 +182,9 @@ export async function createSeatZone(eventId: string, formData: FormData) {
           ? new Date(input.fanClubEarlyAccessAt)
           : null,
         fanClubDiscountBps: Math.round(input.fanClubDiscountPercent * 100),
+        passTier: input.passTier || null,
+        passValidFrom: input.passValidFrom ? new Date(input.passValidFrom) : null,
+        passValidTo: input.passValidTo ? new Date(input.passValidTo) : null,
       },
     });
     await writeAuditLog(tx, {
@@ -193,6 +199,7 @@ export async function createSeatZone(eventId: string, formData: FormData) {
         capacity: zone.capacity,
         priceKobo: zone.priceKobo,
         fanClubId: zone.fanClubId,
+        passTier: zone.passTier,
       },
     });
   });

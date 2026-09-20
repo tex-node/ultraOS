@@ -12,6 +12,10 @@ import { z } from "zod";
 import { formDataToRecord } from "@/lib/club-validation";
 import { prisma } from "@/lib/prisma";
 import {
+  checkPromoForEvent,
+  promoDiscountKobo,
+} from "@/lib/ticketing";
+import {
   resolvePublicResourceLocator,
   upsertPublicTokenLocator,
 } from "@/lib/public-locators";
@@ -22,6 +26,7 @@ const reservationSchema = z.object({
   guestName: z.string().trim().min(2).max(100),
   guestEmail: z.string().trim().email(),
   guestPhone: z.string().trim().min(7).max(30),
+  promoCode: z.string().trim().max(40).optional(),
 });
 
 export async function reserveZone(eventId: string, formData: FormData) {
@@ -90,7 +95,40 @@ export async function reserveZone(eventId: string, formData: FormData) {
         0,
         zone.priceKobo - Math.floor((zone.priceKobo * discountBps) / 10000),
       );
-      const totalKobo = unitPriceKobo * input.quantity;
+      const grossKobo = unitPriceKobo * input.quantity;
+
+      // Optional promo code: same rules as wallet orders (active, this event or global,
+      // inside its window, redemptions remaining) plus an explicit same-organization check,
+      // since PromoCode.code is globally unique. Fan-club discount applies first, promo second.
+      const promoInput = input.promoCode?.trim().toUpperCase() || null;
+      const promoRow = promoInput
+        ? await tx.promoCode.findFirst({
+            where: {
+              code: promoInput,
+              isActive: true,
+              OR: [{ eventId: null }, { eventId }],
+              AND: [
+                { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+                { OR: [{ endsAt: null }, { endsAt: { gte: now } }] },
+              ],
+            },
+          })
+        : null;
+      const promoCheck = promoRow
+        ? checkPromoForEvent(promoRow, { eventId, organizationId: eventLookup.organizationId })
+        : null;
+      if (promoInput && (!promoCheck || !promoCheck.ok)) {
+        throw new Error(promoCheck && !promoCheck.ok ? promoCheck.reason : "INVALID_PROMO");
+      }
+      if (promoCheck?.ok) {
+        const claimed = await tx.promoCode.updateMany({
+          where: { id: promoCheck.promo.id, redemptionCount: promoCheck.promo.redemptionCount },
+          data: { redemptionCount: { increment: 1 } },
+        });
+        if (claimed.count !== 1) throw new Error("PROMO_CHANGED");
+      }
+      const promoDiscount = promoCheck?.ok ? promoDiscountKobo(grossKobo, promoCheck.promo.discountBps) : 0;
+      const totalKobo = grossKobo - promoDiscount;
       const reservation = await tx.seatReservation.create({
         data: {
           organizationId: eventLookup.organizationId,
@@ -104,6 +142,7 @@ export async function reserveZone(eventId: string, formData: FormData) {
           quantity: input.quantity,
           unitPriceKobo,
           totalKobo,
+          promoCodeId: promoCheck?.ok ? promoCheck.promo.id : null,
           paymentStatus: totalKobo === 0 ? "PAID" : "UNPAID",
           paidAt: totalKobo === 0 ? now : null,
           // organizationId is deliberately omitted here - Ticket.reservation is now a composite

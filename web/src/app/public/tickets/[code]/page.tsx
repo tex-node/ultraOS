@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { createWalletOrder } from "../actions";
+import { EmailTicketForm } from "./email-ticket-form";
 import { PublicTokenLocatorType } from "@/generated/prisma/enums";
 import { formatNaira } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
@@ -65,6 +66,7 @@ export default async function TicketPage({
           <Image src={`/api/qr/${ticket.code}`} alt="Ticket QR code" width={280} height={280} className="mx-auto mt-6" unoptimized />
           <p className="mt-3 break-all text-center font-mono text-xs text-zinc-500">{ticket.code}</p>
           <p className="mt-4 text-center text-sm">{formatNaira(ticket.reservation.totalKobo)} · {ticket.reservation.paymentStatus}</p>
+          <EmailTicketForm code={ticket.code} emailConfigured={Boolean(process.env.SMTP_HOST)} />
         </section>
         <section>
           <p className="text-xs uppercase tracking-[.2em] text-emerald-400">Fan wallet</p>

@@ -50,7 +50,8 @@ const sections: NavSection[] = [
     links: [
       { href: "/vendors", label: "Vendors", adminOnly: true },
       { href: "/orders", label: "Orders", adminOnly: true },
-      { href: "/check-in", label: "Check-in", adminOnly: true },
+      { href: "/check-in", label: "Gate Scanner" },
+      { href: "/qr-operations", label: "QR Ops", adminOnly: true },
     ],
   },
   {

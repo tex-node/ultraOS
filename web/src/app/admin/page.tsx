@@ -13,6 +13,7 @@ const cards = [
   { href: "/fixtures", title: "Scheduler", body: "Generate and adjust fixtures across venues and timeslots." },
   { href: "/gameday", title: "Live scorekeeping", body: "Match-day command: open scorepads, track live games, finalize results." },
   { href: "/events", title: "Ticketing & access", body: "Inventory, pricing tiers, discount codes, gate check-in." },
+  { href: "/check-in", title: "Gate scanner", body: "Validate tickets and QR codes at venue entry." },
   { href: "/vendors", title: "Vendors & concessions", body: "Onboard vendors, approve menus, track orders and payouts." },
   { href: "/access", title: "Staff access", body: "Grant tournament-scoped game control without league-wide roles." },
 ];

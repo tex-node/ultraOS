@@ -241,12 +241,15 @@ export default async function EventDetailPage({
           </Panel>
 
           <Panel title="Seat zones">
-            <div className="space-y-2">{event.seatZones.map((zone) => <div key={zone.id} className="rounded-lg bg-white/[.04] p-3"><div className="flex justify-between"><span>{zone.name} · {zone.venueSection.name}</span><span>{formatNaira(zone.priceKobo)}</span></div><p className="mt-1 text-xs text-zinc-500">{zone.reservedQuantity}/{zone.capacity} reserved{zone.fanClub ? ` · ${zone.fanClub.club.name} priority` : ""}</p></div>)}</div>
+            <div className="space-y-2">{event.seatZones.map((zone) => <div key={zone.id} className="rounded-lg bg-white/[.04] p-3"><div className="flex justify-between"><span>{zone.name} · {zone.venueSection.name}{zone.passTier ? ` · ${zone.passTier === "DAY_PASS" ? "Day pass" : "Full-tournament pass"}` : ""}</span><span>{formatNaira(zone.priceKobo)}</span></div><p className="mt-1 text-xs text-zinc-500">{zone.reservedQuantity}/{zone.capacity} reserved{zone.fanClub ? ` · ${zone.fanClub.club.name} priority` : ""}</p></div>)}</div>
             <form action={createSeatZone.bind(null, id)} className="mt-4 grid gap-2 sm:grid-cols-2">
               <select name="venueSectionId" required className="rounded-lg bg-white/[.05] p-3"><option value="">Venue section</option>{event.venue.sections.map((section) => <option key={section.id} value={section.id}>{section.name}</option>)}</select>
               <input name="name" required placeholder="Zone name" className="rounded-lg bg-white/[.05] p-3" />
               <input name="capacity" type="number" min="1" required placeholder="Capacity" className="rounded-lg bg-white/[.05] p-3" />
               <input name="priceNaira" type="number" min="0" step="0.01" required placeholder="Price (NGN)" className="rounded-lg bg-white/[.05] p-3" />
+              <select name="passTier" className="rounded-lg bg-white/[.05] p-3" defaultValue=""><option value="">Regular zone (single event)</option><option value="DAY_PASS">Day pass</option><option value="TOURNAMENT_PASS">Full-tournament pass</option></select>
+              <input name="passValidFrom" type="datetime-local" title="Pass valid from" className="rounded-lg bg-white/[.05] p-3" />
+              <input name="passValidTo" type="datetime-local" title="Pass valid until" className="rounded-lg bg-white/[.05] p-3" />
               <input name="salesOpenAt" type="datetime-local" className="rounded-lg bg-white/[.05] p-3" />
               <input name="salesCloseAt" type="datetime-local" className="rounded-lg bg-white/[.05] p-3" />
               <select name="fanClubId" className="rounded-lg bg-white/[.05] p-3"><option value="">No fan-club allocation</option>{fanClubs.map((fanClub) => <option key={fanClub.id} value={fanClub.id}>{fanClub.club.name}</option>)}</select>

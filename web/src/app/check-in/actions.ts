@@ -6,6 +6,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePermission, requirePermissionWithOrganization } from "@/lib/authorization";
 import { withOrganizationContext } from "@/lib/tenant-context";
+import { checkPassWindow } from "@/lib/ticketing";
 
 export async function findCheckInCode(formData: FormData) {
   await requirePermission("check-in:operate");
@@ -18,7 +19,7 @@ export async function checkInTicket(ticketId: string, code: string) {
   await withOrganizationContext(organizationId, async (tx) => {
     const ticket = await tx.ticket.findUniqueOrThrow({
       where: { id: ticketId },
-      include: { reservation: true },
+      include: { reservation: { include: { seatZone: true } } },
     });
     if (ticket.status !== "ACTIVE") throw new Error("TICKET_NOT_ACTIVE");
     if (
@@ -27,6 +28,9 @@ export async function checkInTicket(ticketId: string, code: string) {
     ) {
       throw new Error("RESERVATION_NOT_PAID");
     }
+    // Pass zones admit only inside their validity window (regular zones always pass).
+    const passCheck = checkPassWindow(ticket.reservation.seatZone);
+    if (!passCheck.ok) throw new Error(passCheck.reason);
     const now = new Date();
     await tx.ticket.update({
       where: { id: ticketId },

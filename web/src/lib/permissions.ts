@@ -266,6 +266,9 @@ const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
     "mvp:vote",
     "public:view",
   ]),
+  // Gate staff (F4): validate tickets/QR codes at venue entry — nothing else. Narrower than
+  // VOLUNTEER on purpose (no fan-club/mvp fan surface), so a gate device account cannot vote.
+  GATE_MANAGER: new Set<Permission>(["check-in:operate", "public:view"]),
   FAN: new Set<Permission>(["fan-club:join", "mvp:vote", "public:view"]),
 };
 
@@ -294,6 +297,7 @@ export function primaryRole(roles: UserRole[] | undefined): UserRole {
     "VENDOR",
     "MEDIA",
     "VOLUNTEER",
+    "GATE_MANAGER",
     "FAN",
   ];
   const normalized = normalizeRoles(roles);

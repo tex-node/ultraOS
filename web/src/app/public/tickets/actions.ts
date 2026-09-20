@@ -9,12 +9,15 @@ import {
   calculateOrderPricing,
   remainingInventory,
 } from "@/lib/event-operations";
+import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { sendSmtpMail } from "@/lib/smtp";
 import {
   locatorMatchesResource,
   resolvePublicTokenLocator,
   upsertPublicTokenLocator,
 } from "@/lib/public-locators";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export async function createWalletOrder(
   ticketCode: string,
@@ -195,4 +198,75 @@ export async function createWalletOrder(
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
   redirect(`/public/orders/${order.collectionCode}`);
+}
+
+function escapeHtml(value: string) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+// QR email delivery (F4): sends the ticket QR details to the booking address only
+// (reservation user email, else guest email) — never an arbitrary address, so this
+// endpoint cannot be used as a spam relay. Returns a result instead of throwing so the
+// form can render success/failure inline.
+export async function emailTicketQr(ticketCode: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ticketLookup = await resolvePublicTokenLocator(prisma, PublicTokenLocatorType.TICKET, ticketCode);
+  if (!ticketLookup) return { ok: false, error: "Ticket not found." };
+
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = Number(process.env.SMTP_PORT ?? "587");
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPassword = process.env.SMTP_PASSWORD;
+  const emailFrom = process.env.EMAIL_FROM;
+  if (!smtpHost || !smtpUser || !smtpPassword || !emailFrom || !Number.isFinite(smtpPort)) {
+    return { ok: false, error: "Email delivery is not configured for this event yet — your QR code above scans at the gate." };
+  }
+
+  const ticket = await withOrganizationContext(ticketLookup.organizationId, (tx) =>
+    tx.ticket.findUnique({
+      where: { id: ticketLookup.resourceId },
+      include: { reservation: { include: { event: true, seatZone: true, user: { select: { email: true } } } } },
+    }),
+  );
+  if (!ticket || !locatorMatchesResource(ticketLookup, ticket) || ticket.code !== ticketCode) {
+    return { ok: false, error: "Ticket not found." };
+  }
+  const recipient = ticket.reservation.user?.email ?? ticket.reservation.guestEmail;
+  if (!recipient) return { ok: false, error: "No email address on this booking." };
+
+  const baseUrl = (process.env.AUTH_URL ?? "").replace(/\/$/, "");
+  const link = `${baseUrl}/public/tickets/${ticket.code}`;
+  const subject = `Your ${ticket.reservation.event.name} ticket`;
+  const text =
+    `Hi ${ticket.reservation.guestName ?? "fan"},\n\n` +
+    `Your ticket for ${ticket.reservation.event.name}:\n` +
+    `${ticket.reservation.seatZone.name} x ${ticket.reservation.quantity}\n` +
+    `Entry code: ${ticket.code}\n` +
+    `Open your ticket: ${link}\n\nShow this code at the gate to check in.`;
+  try {
+    await sendSmtpMail(
+      { from: emailFrom, host: smtpHost, password: smtpPassword, port: smtpPort, user: smtpUser },
+      {
+        to: recipient,
+        subject,
+        text,
+        html: `<p>Hi ${escapeHtml(ticket.reservation.guestName ?? "fan")},</p><p>Your ticket for <b>${escapeHtml(ticket.reservation.event.name)}</b>:</p><p>${escapeHtml(ticket.reservation.seatZone.name)} × ${ticket.reservation.quantity}<br/>Entry code: <code>${escapeHtml(ticket.code)}</code></p><p><a href="${escapeHtml(link)}">Open your ticket</a> — show this code at the gate to check in.</p>`,
+      },
+    );
+  } catch {
+    return { ok: false, error: "Email could not be sent — your QR code above still scans at the gate." };
+  }
+
+  if (ticket.reservation.userId) {
+    await withOrganizationContext(ticketLookup.organizationId, (tx) =>
+      writeAuditLog(tx, {
+        organizationId: ticketLookup.organizationId,
+        userId: ticket.reservation.userId as string,
+        action: "TICKET_QR_EMAILED",
+        entityType: "Ticket",
+        entityId: ticket.id,
+        details: { reservationId: ticket.reservationId },
+      }),
+    );
+  }
+  return { ok: true };
 }
