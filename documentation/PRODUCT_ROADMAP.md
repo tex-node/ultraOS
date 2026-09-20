@@ -688,11 +688,11 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | P11.3 | H2H and discipline/fair-play tiebreakers in standings | P11 | `Done` | P5 patterns |
 | P11.4 | Cross-sport leaders (scorers, assists, MVP, discipline) | P11 | `Done` | P5.3 |
 | P11.5 | POSTPONED match state with reason and history | P11 | `Done` | P3.4 |
-| F1.1 | Public portal shell (nav, sport switcher, search, city, cart, Live Center) | P12/F1 | `Not started` | P0.2 |
-| F1.2 | Organizer workspace shell (`/admin`) with redirects for moved routes | P12/F1 | `Not started` | P0.2 |
-| F1.3 | Strict guest/organizer context switching | P12/F1 | `Not started` | F1.1 |
-| F2.1 | Tournament sub-sites (`/t/:slug`) with Overview/Feed tab | P12/F2 | `Not started` | F1.1 |
-| F2.2 | Sub-site Fixtures & Stats tab (brackets, match detail) | P12/F2 | `Not started` | F2.1 |
+| F1.1 | Public portal shell (nav, sport switcher, search, city, cart, Live Center) | P12/F1 | `In progress` | P0.2 |
+| F1.2 | Organizer workspace shell (`/admin`) with redirects for moved routes | P12/F1 | `In progress` | P0.2 |
+| F1.3 | Strict guest/organizer context switching | P12/F1 | `Done` | F1.1 |
+| F2.1 | Tournament sub-sites (`/t/:slug`) with Overview/Feed tab | P12/F2 | `Done` | F1.1 |
+| F2.2 | Sub-site Fixtures & Stats tab (brackets, match detail) | P12/F2 | `Done` | F2.1 |
 | F3.1 | Fan discovery hub (`/`) with live hero + tournament grid | P12/F3 | `Not started` | F2.1 |
 | F3.2 | Sport hubs, search, city selector, quick actions | P12/F3 | `Not started` | F3.1 |
 | F4.1 | Tiered passes (day/full-tournament) + QR email/wallet delivery | P12/F4 | `Not started` | F2.1 |

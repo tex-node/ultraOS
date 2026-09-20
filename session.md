@@ -3939,3 +3939,57 @@ STAGE_5_5C: NOT_STARTED
 
 - Per-tournament leaders/MVP views, xG methodology, and later-round bracket UI - or
   whichever follow-up the operator prioritizes.
+
+### 2026-09-20 - F1 Dual-Shell IA + Fan/Organizer Programme Approval
+
+**Objective**
+
+- Approve the F1–F6 fan/marketplace programme and implement F1 (portal vs workspace split).
+
+**Completed**
+
+- Added product roadmap Section 6c (F1–F6, 15 tracker rows) and architecture Section 13
+  (proposed dual-experience reference; D1–D3 untouched); roadmap v0.4, arch v1.2.
+- F1 programme approved (all F1–F6) and F1 implemented: `PortalShell` on all `/public/*`
+  pages (with "Organize an Event" → `/admin`), `WorkspaceShell` sidebar adopted by every
+  ops page via the unchanged `OperationsShell` name, new role-gated `/admin` hub.
+- Fixed latent portal 500s on individual-sport fixtures (`/public`, `/public/fixtures`,
+  event pages, match pages now entrant-aware).
+
+**Decisions**
+
+- No URL moves in F1 (all links work; `/admin/*` re-homing with redirects is next).
+- Sport switcher/search/city selector ship in F3 — no dead UI in F1.
+- Non-staff users get a friendly panel on `/admin`, never an error.
+
+**Verification**
+
+- Typecheck, lint clean; 669/669 tests pass; staging release with smoke checks
+  (portal 200, admin/console auth redirects, scoreboard 200).
+
+**Next step**
+
+- F2 tournament sub-sites.
+
+### 2026-09-20 - F2 Tournament Sub-Sites
+
+**Objective**
+
+- Deliver tournament micro-sites (`/t/:slug`) with Overview and Fixtures & Stats tabs.
+
+**Completed**
+
+- New routes `/t/[slug]` (hero with LIVE/UPCOMING status + share, rules, venues,
+  teams/athletes) and `/t/[slug]/fixtures` (division-grouped fixtures with match links,
+  entrant-aware standings). Slug resolves competition directly — no migration.
+- Shared `tournamentStatusFromFixtureStatuses` helper + unit tests; Tickets/Food tabs
+  deferred to F4/F5 (no dead tabs shipped); roadmap F2.1/F2.2 marked Done.
+
+**Verification**
+
+- Typecheck, lint clean; 3 new tests pass; staging release verified: click-test,
+  ultra-basketball and tennis-pilot sub-sites 200, unknown slug 404.
+
+**Next step**
+
+- F3 fan discovery hub.
