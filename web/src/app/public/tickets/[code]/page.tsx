@@ -32,7 +32,7 @@ export default async function TicketPage({
             event: {
               include: {
                 inventories: {
-                  where: { product: { isActive: true } },
+                  where: { product: { isActive: true, approvalStatus: "APPROVED" } },
                   include: { product: { include: { vendor: true } } },
                   orderBy: { product: { name: "asc" } },
                 },

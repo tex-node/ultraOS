@@ -3,10 +3,12 @@ import test from "node:test";
 import {
   checkPassWindow,
   checkPromoForEvent,
+  orderTransitionError,
   passTierLabel,
   promoDiscountKobo,
   type PromoCandidate,
 } from "@/lib/ticketing";
+import { commissionSplitKobo } from "@/lib/money";
 
 const base: PromoCandidate = {
   id: "promo-1",
@@ -83,4 +85,26 @@ test("pass tier labels", () => {
   assert.equal(passTierLabel("DAY_PASS"), "Day pass");
   assert.equal(passTierLabel("TOURNAMENT_PASS"), "Full-tournament pass");
   assert.equal(passTierLabel(null), null);
+});
+
+test("order pipeline: paid orders move forward, unpaid cannot", () => {
+  const paid = { status: "PAID", paymentStatus: "PAID" };
+  assert.equal(orderTransitionError(paid, "PREPARING"), null);
+  assert.equal(orderTransitionError(paid, "READY"), null);
+  assert.equal(orderTransitionError({ status: "PENDING_PAYMENT", paymentStatus: "UNPAID" }, "PREPARING"), "ORDER_NOT_PAID");
+  assert.equal(orderTransitionError(paid, "SHIPPED"), "INVALID_ORDER_STATUS");
+});
+
+test("order pipeline: closed orders never move, cancellation stays open", () => {
+  assert.equal(orderTransitionError({ status: "COLLECTED", paymentStatus: "PAID" }, "READY"), "ORDER_CLOSED");
+  assert.equal(orderTransitionError({ status: "CANCELLED", paymentStatus: "PAID" }, "PREPARING"), "ORDER_CLOSED");
+  assert.equal(orderTransitionError({ status: "PAID", paymentStatus: "PAID" }, "CANCELLED"), null);
+  assert.equal(orderTransitionError({ status: "PENDING_PAYMENT", paymentStatus: "UNPAID" }, "CANCELLED"), null);
+});
+
+test("commission splits floor to the league and always sum to gross", () => {
+  assert.deepEqual(commissionSplitKobo(1000, 1000), { commissionKobo: 100, netKobo: 900 });
+  assert.deepEqual(commissionSplitKobo(999, 1000), { commissionKobo: 99, netKobo: 900 });
+  assert.deepEqual(commissionSplitKobo(1000, 0), { commissionKobo: 0, netKobo: 1000 });
+  assert.deepEqual(commissionSplitKobo(0, 1000), { commissionKobo: 0, netKobo: 0 });
 });

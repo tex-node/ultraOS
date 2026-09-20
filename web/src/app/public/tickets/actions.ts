@@ -64,11 +64,11 @@ export async function createWalletOrder(
 
       const inventories = requested.length
         ? await tx.vendorInventory.findMany({
-            where: {
-              id: { in: requested.map((item) => item.inventoryId) },
-              eventId: ticket.reservation.eventId,
-              product: { isActive: true },
-            },
+          where: {
+            id: { in: requested.map((item) => item.inventoryId) },
+            eventId: ticket.reservation.eventId,
+            product: { isActive: true, approvalStatus: "APPROVED" },
+          },
             include: { product: true },
           })
         : [];

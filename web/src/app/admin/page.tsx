@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { PortalShell } from "@/app/components/portal-shell";
 import { WorkspaceShell } from "@/app/components/workspace-shell";
 import { AuthenticationError } from "@/lib/authorization";
-import { formatNaira } from "@/lib/money";
+import { commissionSplitKobo, formatNaira } from "@/lib/money";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { auth } from "@/auth";
 
@@ -99,16 +99,20 @@ export default async function AdminHub() {
           }),
           tx.order.findMany({
             where: { paymentStatus: "PAID" },
-            select: { totalKobo: true, items: { select: { totalKobo: true, product: { select: { vendor: { select: { name: true } } } } } } },
+            select: { totalKobo: true, items: { select: { totalKobo: true, product: { select: { vendor: { select: { name: true, commissionBps: true } } } } } } },
             orderBy: { createdAt: "desc" },
             take: 200,
           }),
         ]);
-        const vendorGross = new Map<string, number>();
+        const vendorGross = new Map<string, { gross: number; commission: number }>();
         for (const order of paidOrders) {
           for (const item of order.items) {
             const vendor = item.product.vendor?.name ?? "Direct sales";
-            vendorGross.set(vendor, (vendorGross.get(vendor) ?? 0) + item.totalKobo);
+            const split = commissionSplitKobo(item.totalKobo, item.product.vendor?.commissionBps ?? 0);
+            const entry = vendorGross.get(vendor) ?? { gross: 0, commission: 0 };
+            entry.gross += item.totalKobo;
+            entry.commission += split.commissionKobo;
+            vendorGross.set(vendor, entry);
           }
         }
         return {
@@ -117,7 +121,10 @@ export default async function AdminHub() {
           reservations,
           tickets,
           liveFixtures,
-          vendorGross: [...vendorGross.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5),
+          vendorGross: [...vendorGross.entries()]
+            .map(([vendor, figures]) => ({ vendor, ...figures, net: figures.gross - figures.commission }))
+            .sort((a, b) => b.gross - a.gross)
+            .slice(0, 5),
         };
       })
     : null;
@@ -155,13 +162,14 @@ export default async function AdminHub() {
         ) : null}
         {stats && stats.vendorGross.length > 0 ? (
           <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
-            <h2 className="text-sm font-bold uppercase tracking-[.15em] text-zinc-400">Vendor gross (paid orders)</h2>
-            <p className="mt-1 text-xs text-zinc-500">Gross basis only — commission splits land with F5 vendor payouts.</p>
+            <h2 className="text-sm font-bold uppercase tracking-[.15em] text-zinc-400">Vendor payouts (paid orders)</h2>
             <div className="mt-3 space-y-1 text-sm">
-              {stats.vendorGross.map(([vendor, gross]) => (
-                <div key={vendor} className="flex justify-between">
-                  <span>{vendor}</span>
-                  <span className="text-emerald-300">{formatNaira(gross)}</span>
+              {stats.vendorGross.map((row) => (
+                <div key={row.vendor} className="flex justify-between gap-2">
+                  <span>{row.vendor}</span>
+                  <span className="text-zinc-400">
+                    {formatNaira(row.gross)} gross · <span className="text-emerald-300">{formatNaira(row.net)} net</span>
+                  </span>
                 </div>
               ))}
             </div>

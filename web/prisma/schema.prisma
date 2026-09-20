@@ -451,6 +451,13 @@ enum ProductCategory {
   OTHER
 }
 
+// F5 vendor marketplace: menu items sell only after approval.
+enum ProductApproval {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum OrderStatus {
   PENDING_PAYMENT
   PAID
@@ -2860,8 +2867,10 @@ model Vendor {
   email          String?
   phone          String?
   logoUrl        String?
-  isActive       Boolean             @default(true)
-  recordOrigin   RecordOrigin        @default(PRODUCTION)
+  isActive       Boolean           @default(true)
+  // F5 vendor marketplace: league commission on vendor gross, in basis points.
+  commissionBps  Int               @default(0)
+  recordOrigin   RecordOrigin      @default(PRODUCTION)
   products       VendorProduct[]
   eventReviews   EventVendorReview[]
   createdAt      DateTime            @default(now())
@@ -2922,6 +2931,9 @@ model VendorProduct {
   imageUrl           String?
   fanClubDiscountBps Int               @default(0)
   isActive           Boolean           @default(true)
+  // F5 vendor marketplace: menus sell only after approval. Existing products were
+  // backfilled to APPROVED; new products start PENDING until a vendor manager approves.
+  approvalStatus     ProductApproval   @default(PENDING)
   inventories        VendorInventory[]
   orderItems         OrderItem[]
   sponsorCampaigns   SponsorCampaign[]

@@ -65,3 +65,21 @@ export function passTierLabel(tier: PassWindow["passTier"]): string | null {
   if (tier === "TOURNAMENT_PASS") return "Full-tournament pass";
   return null;
 }
+
+export type OrderTransition = "PAID" | "PREPARING" | "READY" | "CANCELLED";
+
+export type OrderTransitionError = "ORDER_NOT_PAID" | "ORDER_CLOSED" | "INVALID_ORDER_STATUS";
+
+// F5 order pipeline rules: forward progress needs a paid order, closed orders (collected
+// or cancelled) never move, cancellation is allowed from any open state.
+export function orderTransitionError(
+  from: { status: string; paymentStatus: string },
+  to: string,
+): OrderTransitionError | null {
+  if (to !== "PAID" && to !== "PREPARING" && to !== "READY" && to !== "CANCELLED") {
+    return "INVALID_ORDER_STATUS";
+  }
+  if (from.status === "COLLECTED" || from.status === "CANCELLED") return "ORDER_CLOSED";
+  if (to !== "CANCELLED" && from.paymentStatus !== "PAID") return "ORDER_NOT_PAID";
+  return null;
+}

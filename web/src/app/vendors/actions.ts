@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { ProductCategory } from "@/generated/prisma/enums";
+import { ProductApproval, ProductCategory } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { formDataToRecord } from "@/lib/club-validation";
@@ -74,6 +74,7 @@ export async function createVendorProduct(
         priceKobo: nairaToKobo(input.priceNaira),
         imageUrl: input.imageUrl || null,
         fanClubDiscountBps: Math.round(input.fanClubDiscountPercent * 100),
+        approvalStatus: ProductApproval.PENDING,
       },
     });
     await writeAuditLog(tx, {
@@ -256,6 +257,72 @@ export async function createPromoCode(vendorId: string, formData: FormData) {
         sponsorCampaignId: promo.sponsorCampaignId,
         discountBps: promo.discountBps,
       },
+    });
+  });
+  revalidatePath(`/vendors/${vendorId}`);
+}
+
+// F5 menu approvals: new products start PENDING and sell only after approval. The wallet
+// and ticket surfaces filter to APPROVED products, so rejection immediately unsells.
+export async function setProductApproval(vendorId: string, productId: string, approval: ProductApproval) {
+  const { session, organizationId } = await requirePermissionWithOrganization("vendor:manage");
+  if (approval !== ProductApproval.APPROVED && approval !== ProductApproval.REJECTED) {
+    throw new Error("INVALID_APPROVAL");
+  }
+  await withOrganizationContext(organizationId, async (tx) => {
+    const product = await tx.vendorProduct.findFirstOrThrow({ where: { id: productId, vendorId } });
+    if (product.approvalStatus === approval) return;
+    await tx.vendorProduct.update({ where: { id: productId }, data: { approvalStatus: approval } });
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "VENDOR_PRODUCT_APPROVAL_CHANGED",
+      entityType: "VendorProduct",
+      entityId: productId,
+      details: { vendorId, from: product.approvalStatus, to: approval },
+    });
+  });
+  revalidatePath(`/vendors/${vendorId}`);
+}
+
+// F5 vendor onboarding state: suspending flips isActive (unsells the vendor everywhere
+// listings filter on it); reactivation restores. Audited both ways.
+export async function setVendorActive(vendorId: string, active: boolean) {
+  const { session, organizationId } = await requirePermissionWithOrganization("vendor:manage");
+  await withOrganizationContext(organizationId, async (tx) => {
+    const vendor = await tx.vendor.findUniqueOrThrow({ where: { id: vendorId } });
+    if (vendor.isActive === active) return;
+    await tx.vendor.update({ where: { id: vendorId }, data: { isActive: active } });
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: active ? "VENDOR_REACTIVATED" : "VENDOR_SUSPENDED",
+      entityType: "Vendor",
+      entityId: vendorId,
+      details: { name: vendor.name },
+    });
+  });
+  revalidatePath(`/vendors/${vendorId}`);
+  revalidatePath("/vendors");
+}
+
+// F5 commission configuration: league share on vendor gross, in basis points (0–100%).
+// Payout math reads this value; see commissionSplitKobo.
+export async function setVendorCommission(vendorId: string, formData: FormData) {
+  const { session, organizationId } = await requirePermissionWithOrganization("vendor:manage");
+  const percent = z.coerce.number().min(0).max(100).parse(formData.get("commissionPercent"));
+  await withOrganizationContext(organizationId, async (tx) => {
+    const vendor = await tx.vendor.findUniqueOrThrow({ where: { id: vendorId } });
+    const commissionBps = Math.round(percent * 100);
+    if (vendor.commissionBps === commissionBps) return;
+    await tx.vendor.update({ where: { id: vendorId }, data: { commissionBps } });
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "VENDOR_COMMISSION_CHANGED",
+      entityType: "Vendor",
+      entityId: vendorId,
+      details: { name: vendor.name, fromBps: vendor.commissionBps, toBps: commissionBps },
     });
   });
   revalidatePath(`/vendors/${vendorId}`);
