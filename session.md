@@ -4021,3 +4021,44 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - F4 ticketing depth + gate operations.
+
+### 2026-09-20 - F4 Ticketing Depth + Gate Operations
+
+**Objective**
+
+- Deliver tiered passes, reservation promo codes, QR email delivery, and the gate
+  scanner + Gate Manager role.
+
+**Completed**
+
+- Additive migration `20260920120000_f4_ticketing_passes_roles`: `PassTier` enum,
+  `SeatZone` pass columns, `SeatReservation.promoCodeId`, `GATE_MANAGER` role (rename
+  dance); applied to staging via deploy `--migrate`.
+- Pass zones manageable from the event admin page and shown on the public event page
+  with validity windows; gate enforces PASS_NOT_YET_VALID/PASS_EXPIRED.
+- Promo codes on reservations (same rules as wallet orders + explicit org check,
+  validated before the capacity claim, race-safe increment); promo input on the public
+  reservation form.
+- QR email action (booking address only, graceful when SMTP unconfigured) + inline form
+  on the ticket wallet page.
+- `GATE_MANAGER` in the permission matrix (check-in only), gate scanner connectivity
+  pill + device scan log, workspace Gate Scanner/QR Ops links, `/admin` gate card.
+- Staging E2E: paid zone + day-pass zone + CLICKTEST20 promo created; promo math
+  verified (2×NGN1000−20% = NGN1600 stored + linked + counted); email degrades
+  gracefully; authed gate verify page shows pass tier.
+
+**Decisions**
+
+- Passes ride on zone inventory (no parallel ticketing track); seat maps stay deferred.
+- Full offline store-and-forward admission is F7 work; F4 ships connectivity state +
+  device scan log with must-re-scan discipline.
+- SMTP is not configured on staging — email path verified only to graceful degradation.
+
+**Verification**
+
+- Typecheck, lint clean; 13 new tests pass (684/686 suite-wide, 1 pre-existing skip);
+  staging release with migration, route smokes, and content probes.
+
+**Next step**
+
+- F5 vendor marketplace + unified cart (needs the payment provider decision).
