@@ -1,8 +1,8 @@
 ---
 title: Multi-Sport Architecture
-status: Accepted — single agreed reference (2026-09-13)
-version: multi-sport-1.1
-last_updated: 2026-09-13
+status: Accepted — single agreed reference (2026-09-13); Section 13 proposed 2026-09-20, pending approval
+version: multi-sport-1.2
+last_updated: 2026-09-20
 ---
 
 # Multi-Sport Architecture
@@ -380,3 +380,77 @@ All criteria were met on 2026-09-13, granting Gate G0. This document is the **si
 | 5 | Open questions resolved with owners (Section 9) | Met — 2026-09-13 |
 
 Changes to D1–D3 require re-acceptance (a new Gate G0 review) before dependent phases continue. All other changes follow the change control in `documentation/MULTI_SPORT_ROADMAP.md`. Implementation proceeds only through the additive stages in Section 7.
+
+## 13. Fan & organizer dual experience (PROPOSED — pending approval, 2026-09-20)
+
+This section is **proposed, not accepted**. It adds no decision that alters D1–D3,
+Sections 5–7, or the accepted migration sequence; it describes how the accepted model
+serves two audiences — fans (marketplace) and organizers (workspace) — on one backend.
+Implementation proceeds only through product phases F1–F6
+(`documentation/PRODUCT_ROADMAP.md`, Section 6c), and only after this section is approved.
+
+### 13.1 Experience split
+
+One Next.js application, two shells, strict context switching:
+
+- **Public portal** (guests + fans): discovery hub (`/`), sport hubs, tournament
+  sub-sites (`/t/:slug`), tickets, vendors/food ordering, live center, sign-in/register.
+  Never renders admin controls or terminology.
+- **Organizer workspace** (`/admin`, authenticated): dashboard, tournament builder,
+  scheduler, sport scorepads, ticketing/access control, vendor management, staff tools.
+  Existing operations routes move under `/admin` with permanent redirects; server-side
+  permission guards stay exactly where they are.
+
+### 13.2 Tournament sub-site model
+
+- Path-based sub-sites: `/t/:slug` (slug unique per organization, resolving
+  organization + competition). Subdomain-per-tournament is explicitly deferred.
+- A sub-site is presentation over the accepted model (Competition/Season/Division,
+  Fixture/Game/GameEvent, Standing, reservations, orders). **No new tenant layer**; the
+  existing organization tenancy and RLS apply unchanged.
+- Tabs (Overview, Fixtures & Stats, Tickets, Food & Drinks) compose existing public APIs
+  and event-ops flows; the versioned `/api/v1` contract gains only additive fields.
+
+### 13.3 Commerce reuse
+
+- Tickets, QR delivery, gate check-in, vendors, products, orders, and promo codes extend
+  the existing event-ops models. Additive fields only: pass tiers (day/full-tournament),
+  order-status pipeline states (Received → Preparing → Ready/Out for delivery), cart
+  grouping across tickets/food/merchandise, vendor payout reporting.
+- Money rules are unchanged: integer kobo, provider-neutral confirmation until a payment
+  provider is selected (an F5 external dependency, not an architecture change).
+- Individual seat maps are out of scope; zone inventory remains the unit of sale.
+
+### 13.4 RBAC extension
+
+- New `UserRole` values are **additive**; existing roles and grants are untouched:
+  Tournament Director (brackets/schedules/standings), Scorekeeper/Referee (assigned live
+  pads only), Vendor Manager (stall orders + menu availability), Gate Manager (QR
+  validation only). `SUPER_ADMIN` keeps full access.
+- Scoping follows the established patterns: organization-scoped `UserRoleAssignment`
+  rows plus competition/event-scoped grants in the `GameControlGrant` style, so staff
+  access lapses with the tournament. Every grant is revokable in one action with an
+  audit record.
+- The scorer/statistician consoles themselves do not change engine behaviour; they are
+  mounted inside workspace chrome with the same `game:operate` / `game:record-stats`
+  gates as today.
+
+### 13.5 Guardrails
+
+- No parallel tables (no `matches`/`match_events` duplicates), no new cache or engine
+  layer, no new scoring or standings paths — the mapping table in product roadmap
+  Section 6c is binding.
+- Capability-gated single shell per experience (Section 3, principle 5 applies to both
+  shells); a new fan or organizer module must compose existing capabilities.
+- Season Zero, tenancy/RLS, frozen facts, and public-contract stability (Section 8)
+  apply to every F-phase without exception.
+
+### 13.6 Approval required
+
+| # | Item | Status | Owner |
+| --- | --- | --- | --- |
+| A1 | Section 13 accepted as the dual-experience reference | `Proposed` | Engineering Lead |
+| A2 | F1–F6 phase list approved for implementation | `Proposed` | Engineering Lead |
+| A3 | Payment provider selected (F5 external dependency, owner + date) | `Open` | TBD |
+
+Until A1/A2 are met, no F-phase work starts and no schema change for F-phases is authored.

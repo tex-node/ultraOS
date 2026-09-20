@@ -1,8 +1,8 @@
 ---
 title: Product Roadmap
 status: Active
-version: product-0.3
-last_updated: 2026-09-19
+version: product-0.4
+last_updated: 2026-09-20
 ---
 
 # Product Roadmap
@@ -72,6 +72,7 @@ These apply to every phase and every screen.
 | P9 | Table tennis end-to-end | A new individual sport runs the full journey on definitions alone | `Not started` |
 | P10 | Capture depth (soccer, tennis, volleyball) | Live depth stats per sport, all traceable to events | `Not started` |
 | P11 | Tournament engine extensions | Swiss/double-elim/ladder formats, H2H + discipline tiebreaks, cross-sport leaders | `Not started` |
+| P12 | Fan & organizer dual experience | Public portal + organizer workspace + tournament sub-sites (F1–F6 below) | `Not started` |
 
 P0-P5 are partly delivered for basketball Season Zero; the roadmap makes them complete and sport-agnostic.
 
@@ -430,6 +431,184 @@ What "Done" means for P8–P11 above, precisely:
 - **Leaders**: top scorers + discipline from the live ledger; per-tournament and MVP views
   remain follow-ups.
 
+## 6c. Fan & organizer dual experience (F1–F6) — PROPOSED, pending approval
+
+The programme below turns the operator-built platform into two clean experiences on one
+backend: a **fan-facing marketplace** (discover, tickets, food, live) and an **organizer
+workspace** (build, schedule, score, sell, pay out). Nothing here rebuilds the domain —
+every phase composes what already exists (event operations, public pages, registrations,
+tenancy, `GameControlGrant` scoping) under a strict portal/workspace split with
+tournament sub-sites. Status of every item is `Not started`; nothing starts until the
+phase list in this section is approved.
+
+**Already exists to build on:** zone-based ticketing with QR delivery and gate check-in
+(`/public/tickets`, `/gameday/checkin`), vendor/product/order pipelines with promo codes,
+public tournament/team/player/fixture/standing pages, live scoreboard and broadcast
+surfaces, shareable registration links (`/giesm`, `/register`), organization tenancy with
+RLS, the `UserRole` + `UserRoleAssignment` permission matrix, and event-scoped
+`GameControlGrant` controllers. The mapping table at the end shows where each proposed
+concept lives today, so nothing gets rebuilt under a new name.
+
+### F1 — Dual-shell IA: public portal vs organizer workspace
+
+**Goal:** a guest never sees admin clutter; an organizer never hunts through fan pages.
+One backend, two shells, explicit context switching.
+
+Deliverables:
+
+- Public portal shell: global nav (logo, sport switcher, search, city selector, cart,
+  Live Center, Sign In/Register, prominent "Organize an Event" entry).
+- Organizer workspace shell (`/admin`): left-sidebar nav (dashboard, builder, scheduler,
+  scorekeeping, ticketing, vendors, staff). Existing ops routes move under it without URL
+  breakage (redirects preserved).
+- Strict context switching: guest sessions never render admin controls; deep links across
+  shells re-auth the target context instead of leaking it.
+
+Usability acceptance:
+
+- A guest browsing a tournament sub-site encounters zero admin controls or terminology.
+- An organizer reaches any workspace area within two taps from the workspace dashboard.
+- Every moved route keeps its old URL working via redirect.
+
+Depends on: P0 shell patterns. Engine impact: none (route groups + components only).
+
+### F2 — Tournament sub-sites (`/t/:slug`)
+
+**Goal:** every tournament gets an immersive micro-site: hero banner with LIVE/UPCOMING
+status + share, and tabs for Overview, Fixtures & Stats, Tickets, Food & Drinks.
+
+Deliverables:
+
+- Path-based sub-sites (`/t/:slug`; organization- or competition-scoped slugs, unique per
+  organization). Subdomain-per-tournament (`slug.neonultra.ng`) is explicitly deferred.
+- Overview tab: rules, venue map, featured teams, media gallery, sponsor logos.
+- Fixtures tab: interactive brackets/group tables reusing the standings engine; match
+  detail view with player stats and point-by-point/event timeline.
+- Tickets and Vendors tabs mount the F4/F5 flows inside the sub-site chrome.
+
+Usability acceptance:
+
+- A fan shared one link sees the right tournament, its live state, and can buy a ticket
+  within three taps.
+- Sub-sites render fully on a phone; share previews (title/image) are correct.
+
+Depends on: F1. Engine impact: none (reads existing competition/season/division + public APIs).
+
+### F3 — Fan discovery hub (`/`)
+
+**Goal:** a global home that answers "what can I watch / attend near me" in seconds.
+
+Deliverables:
+
+- Live-now hero (marquee LIVE matches with real-time scores → scoreboard/stats).
+- Upcoming tournaments grid (venue, dates, sport tags, Get Tickets CTA).
+- Quick actions (games near me, order food at venue, live standings), featured sport hubs
+  (soccer, volleyball, tennis, table tennis, all-sports), team/tournament/venue search,
+  city selector.
+
+Usability acceptance:
+
+- A first-time visitor finds a nearby live or upcoming event without typing.
+- Search finds any team, tournament, venue, or match within three taps from the hub.
+
+Depends on: F1, F2. Engine impact: none (read-only composition; city/venue filter uses
+existing venue data).
+
+### F4 — Ticketing depth + gate operations
+
+**Goal:** sell the right ticket to the right fan, scan them in at the gate.
+
+Deliverables:
+
+- Tiered passes (day pass, full-tournament pass) on top of existing zone inventory;
+  individual seat maps stay deferred (zones only, per current event-ops scope).
+- Discount/invite codes (extends existing promo-code model), instant QR delivery to
+  email + in-app wallet.
+- Gate Scanner web app (staff-facing, `GATE_MANAGER` role): QR validation with
+  offline-tolerant queueing and visible sync state.
+
+Usability acceptance:
+
+- A fan buys a pass and receives a scannable QR without creating an account first
+  (account linking stays optional, as today).
+- A gate staffer validates entry in under 3 seconds per fan on a phone, offline-safe.
+
+Depends on: F2. Engine impact: additive — pass-tier fields on ticketing models, QR payload
+versioning; no change to the reservation/ledger semantics.
+
+### F5 — Vendor marketplace + unified cart
+
+**Goal:** fans order food/merch alongside tickets in one checkout; vendors run their stalls.
+
+Deliverables:
+
+- Vendor onboarding + menu approvals + commission/revenue-share configuration.
+- Live order tracking pipeline (Received → Preparing → Ready for pickup / Out for seat
+  delivery) with fan-facing status updates.
+- Unified cart: tickets + food + merchandise in a single checkout flow.
+- **External dependency:** a real payment provider decision + signed webhook
+  reconciliation. The platform is provider-neutral today (operators confirm references
+  manually); single-checkout cannot launch until this is resolved.
+
+Usability acceptance:
+
+- One checkout, one receipt, one QR wallet for tickets + pre-ordered food.
+- A vendor sees only their own orders, updates status in one tap, and payout figures
+  match the configured commission.
+
+Depends on: F2; payments decision (owner + date required). Engine impact: additive —
+order-status pipeline states, cart grouping, vendor payout reports; payment webhooks are
+new integration surface, not a new ledger (money stays integer kobo, as today).
+
+### F6 — Organizer RBAC + workspace dashboard
+
+**Goal:** least-privilege staff access and one dashboard that runs the event.
+
+Deliverables:
+
+- New roles (additive `UserRole` values, organization-scoped like today): Tournament
+  Director (brackets, schedules, standings), Scorekeeper/Referee (active match pads
+  only), Vendor Manager (stall orders + menu availability), Gate Manager (QR validation
+  only). `SUPER_ADMIN` keeps full access.
+- Competition-scoped grants following the existing `GameControlGrant` pattern, so a
+  scorekeeper's access dies with the tournament.
+- Workspace dashboard: revenue, ticket sales, live match status, vendor payouts.
+
+Usability acceptance:
+
+- A scorekeeper sees only their assigned live matches — no brackets, no payouts.
+- A tournament director runs scheduling → scoring → standings → publishing without
+  leaving the workspace.
+- Every grant is revokable in one action with an audit record.
+
+Depends on: F1; F4/F5 for the staff surfaces. Engine impact: additive — new enum values
++ permission namespaces + scoped-grant rows; existing roles and grants unchanged.
+
+### Mapping note: the proposed dual architecture already has a backend
+
+| Proposed concept | Existing equivalent | Notes |
+| --- | --- | --- |
+| Discovery hub / sport hubs | `/public/*` pages, `/live`, `/leaders` | Reassembled under one hub shell, not rebuilt |
+| Tournament sub-site | Competition + season + division + public APIs | New presentation route (`/t/:slug`); no new tenant layer |
+| Ticket inventory + QR | Zone reservations, QR tickets, `/gameday/checkin` | Add pass tiers + email/wallet delivery; seat maps deferred |
+| Food ordering + cart | Vendor/product/order models, promo codes | Add status pipeline + unified checkout + payment gateway |
+| Organizer workspace | Operations shell + role-gated routes | Re-homed under `/admin` with redirects; same guards |
+| Tournament Director / Scorekeeper / Vendor / Gate roles | `UserRole` + `UserRoleAssignment` + `GameControlGrant` | Additive roles + namespaces; same enforcement pattern |
+| Live scorepads | Scorer/statistician consoles per sport | Already tablet-ready; mounted in workspace chrome |
+
+### Scope notes (2026-09-20 proposal)
+
+What "Done" means for F1–F6, precisely:
+
+- **No new tenant layer.** Sub-sites resolve organization + competition from the slug
+  within the existing tenancy/RLS model.
+- **No parallel commerce tables.** Tickets, orders, and payouts extend the event-ops
+  models; the integer-kobo, provider-neutral money rules stand until the F5 payments
+  decision lands.
+- **No new scoring engine.** Scorepads are the existing consoles in workspace chrome.
+- **Not in scope:** subdomain-per-tournament hosting, individual seat maps, native
+  mobile apps, social publishing, dynamic ticket pricing.
+
 ## 7. Progress tracker
 
 Reality check (2026-09-15): the engine (Stages 1–9) is implemented and applied to **staging and
@@ -509,6 +688,20 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | P11.3 | H2H and discipline/fair-play tiebreakers in standings | P11 | `Done` | P5 patterns |
 | P11.4 | Cross-sport leaders (scorers, assists, MVP, discipline) | P11 | `Done` | P5.3 |
 | P11.5 | POSTPONED match state with reason and history | P11 | `Done` | P3.4 |
+| F1.1 | Public portal shell (nav, sport switcher, search, city, cart, Live Center) | P12/F1 | `Not started` | P0.2 |
+| F1.2 | Organizer workspace shell (`/admin`) with redirects for moved routes | P12/F1 | `Not started` | P0.2 |
+| F1.3 | Strict guest/organizer context switching | P12/F1 | `Not started` | F1.1 |
+| F2.1 | Tournament sub-sites (`/t/:slug`) with Overview/Feed tab | P12/F2 | `Not started` | F1.1 |
+| F2.2 | Sub-site Fixtures & Stats tab (brackets, match detail) | P12/F2 | `Not started` | F2.1 |
+| F3.1 | Fan discovery hub (`/`) with live hero + tournament grid | P12/F3 | `Not started` | F2.1 |
+| F3.2 | Sport hubs, search, city selector, quick actions | P12/F3 | `Not started` | F3.1 |
+| F4.1 | Tiered passes (day/full-tournament) + QR email/wallet delivery | P12/F4 | `Not started` | F2.1 |
+| F4.2 | Gate Scanner web app + Gate Manager role | P12/F4 | `Not started` | F4.1 |
+| F5.1 | Vendor onboarding, menu approvals, commission configuration | P12/F5 | `Not started` | F2.1 |
+| F5.2 | Order status pipeline + live tracking | P12/F5 | `Not started` | F5.1 |
+| F5.3 | Unified cart (tickets + food + merch) + payment provider decision | P12/F5 | `Not started` | F4.1 |
+| F6.1 | Tournament Director / Scorekeeper-Referee / Vendor Manager roles + scoped grants | P12/F6 | `Not started` | F1.2 |
+| F6.2 | Workspace dashboard (revenue, sales, live status, payouts) | P12/F6 | `Not started` | F6.1 |
 
 ## 8. Relationship to the engine roadmap
 
@@ -519,6 +712,8 @@ Product phases depend on engine stages but are not blocked by the full engine pr
 - P4 needs engine Stages 1, 2, and 6 (event catalog).
 - P5 needs engine Stages 3 and 5 (statistics, standings).
 - P6 needs engine Stages 1-9.
+- P12 needs only additive engine touchpoints (new `UserRole` values, pass-tier and
+  order-status fields); no new tenant layer, tables, or ledgers.
 
 The engine roadmap is in `documentation/MULTI_SPORT_ROADMAP.md`. When a product phase and an engine stage conflict on sequencing, the architecture document wins.
 
