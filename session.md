@@ -4062,3 +4062,63 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - F5 vendor marketplace + unified cart (needs the payment provider decision).
+
+### 2026-09-20 - F6 Organizer RBAC + Workspace Dashboard
+
+**Objective**
+
+- Deliver least-privilege organizer roles and a live workspace dashboard.
+
+**Completed**
+
+- Additive migration `20260920170000_f6_organizer_roles` (TOURNAMENT_DIRECTOR,
+  SCOREKEEPER, VENDOR_MANAGER via rename dance); applied to staging via deploy
+  `--migrate`. Per-tournament scoping reuses the existing GameControlGrant
+  SCOREKEEPER/STATISTICIAN grant roles — no parallel grant system.
+- Permission matrix + display rank for all three roles; sidebar opens Competitions,
+  Events, Content, Announcements to directors and Vendors/Orders to vendor managers;
+  everyone else keeps prior visibility exactly.
+- `/admin` hub now shows live numbers (paid ticket/food revenue, reservations, live
+  matches with console links, per-vendor gross basis) for any elevated role.
+- Staging E2E as a test tournament director: login, hub 200 with stats, competitions
+  200, sidebar correctly shows Tournaments/Gate Scanner and hides Access/QR Ops.
+
+**Verification**
+
+- Typecheck, lint clean; 8 new permission tests pass; staging release with migration
+  and authed HTTP checks.
+
+**Next step**
+
+- F5 vendor marketplace + unified cart (needs the payment provider decision).
+
+### 2026-09-20 - Production Outage: ZZTEST Entrant Fixtures
+
+**Objective**
+
+- Resolve `TypeError: Cannot read properties of null (reading 'club')` breaking
+  `app.neonultra.ng/dashboard` and other fixture-listing pages (digest 1383288326).
+
+**Completed**
+
+- Root cause: 2 LIVE entrant-sided test fixtures (`zztest-tt`, `zztest-ten` in ZZTEST
+  Tennis/Table Tennis Cups, created 2026-09-20T02:21Z on PRODUCTION) crashed every page
+  dereferencing `homeSeasonClub!.club`. Empty games, 0 events — pure scaffolding.
+- Backed both rows up to `/tmp/zztest-removal-backup.json` on the VPS, deleted the 2
+  games + 2 fixtures. Zero entrant-sided fixtures remain, eliminating the crash class.
+- Production untouched otherwise (still release-576f6b6; no code deployed).
+
+**Decisions**
+
+- Test data stays on staging. Nothing test-named is created on production again.
+- The 65-site `homeSeasonClub!` hardening (entrant-aware pages everywhere) is recorded
+  as follow-up work; the immediate outage is closed by data removal.
+
+**Verification**
+
+- No new `reading 'club'` errors in production logs post-removal; public pages 200.
+- Dashboard recovery needs an authenticated confirmation (login-gated).
+
+**Next step**
+
+- Operator confirms `/dashboard` loads, then F5/F6.

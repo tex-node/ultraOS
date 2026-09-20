@@ -700,8 +700,8 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | F5.1 | Vendor onboarding, menu approvals, commission configuration | P12/F5 | `Not started` | F2.1 |
 | F5.2 | Order status pipeline + live tracking | P12/F5 | `Not started` | F5.1 |
 | F5.3 | Unified cart (tickets + food + merch) + payment provider decision | P12/F5 | `Not started` | F4.1 |
-| F6.1 | Tournament Director / Scorekeeper-Referee / Vendor Manager roles + scoped grants | P12/F6 | `Not started` | F1.2 |
-| F6.2 | Workspace dashboard (revenue, sales, live status, payouts) | P12/F6 | `Not started` | F6.1 |
+| F6.1 | Tournament Director / Scorekeeper-Referee / Vendor Manager roles + scoped grants | P12/F6 | `Done` | F1.2 |
+| F6.2 | Workspace dashboard (revenue, sales, live status, payouts) | P12/F6 | `Done` | F6.1 |
 
 ## 8. Relationship to the engine roadmap
 
