@@ -1,6 +1,6 @@
 ---
 title: UI Overhaul Design Brief
-status: Proposed — pending approval
+status: Accepted (2026-09-20)
 version: design-brief-1.0
 last_updated: 2026-09-20
 ---
@@ -140,6 +140,6 @@ Out of scope for visual redesign (functional surfaces, not screens): `/api/*` en
 
 | # | Item | Status |
 | --- | --- | --- |
-| B1 | This brief accepted as the redesign reference | Proposed |
-| B2 | Screen inventory complete (no missing route) | Proposed |
-| B3 | D1–D6 stages approved for implementation | Proposed |
+| B1 | This brief accepted as the redesign reference | Accepted 2026-09-20 |
+| B2 | Screen inventory complete (no missing route) | Accepted 2026-09-20 |
+| B3 | D1–D6 stages approved for implementation | Accepted 2026-09-20 |
