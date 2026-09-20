@@ -38,6 +38,22 @@ const SPORTS: SportSetup[] = [
   { slug: "table-tennis", name: "Table Tennis", kind: "INDIVIDUAL", label: "Table Tennis (P9 SETS console)" },
 ];
 
+// [primary, secondary] scoreboard colors for the two individual entrants, per sport.
+const ENTRANT_COLORS: Record<string, [string, string][]> = {
+  tennis: [
+    ["#16F2B3", "#071713"],
+    ["#9B5CFF", "#160C24"],
+  ],
+  "table-tennis": [
+    ["#36A3FF", "#071524"],
+    ["#FF4D8D", "#240812"],
+  ],
+  default: [
+    ["#16F2B3", "#071713"],
+    ["#FFB84D", "#231506"],
+  ],
+};
+
 async function main() {
   const apply = flag("apply");
   const organization = await resolveActiveOrganizationBySlug(ORG_SLUG);
@@ -167,9 +183,12 @@ async function main() {
         homeSeasonClubId = ids[0];
         awaySeasonClubId = ids[1];
       } else {
+        // Distinct scoreboard colors per player (individual entrants have no club colors).
+        const pair = ENTRANT_COLORS[sport.slug] ?? ENTRANT_COLORS.default;
         const ids: string[] = [];
-        for (const tag of ["A", "B"] as const) {
+        for (const [index, tag] of (["A", "B"] as const).entries()) {
           const name = `CT ${sport.name} Player ${tag}`;
+          const colors = pair[index];
           let entrant = await tx.entrant.findFirst({ where: { seasonId: season.id, name }, select: { id: true } });
           if (!entrant) {
             entrant = await tx.entrant.create({
@@ -180,8 +199,16 @@ async function main() {
                 divisionId: division.id,
                 type: "INDIVIDUAL",
                 name,
+                primaryColor: colors[0],
+                secondaryColor: colors[1],
               },
               select: { id: true },
+            });
+          } else {
+            // Backfill colors on entrants created before colors were assigned.
+            await tx.entrant.update({
+              where: { id: entrant.id },
+              data: { primaryColor: colors[0], secondaryColor: colors[1] },
             });
           }
           ids.push(entrant.id);
