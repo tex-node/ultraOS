@@ -40,6 +40,8 @@ export default async function Match({ params }: { params: Promise<{ id: string }
       include: {
         homeSeasonClub: { include: { club: true } },
         awaySeasonClub: { include: { club: true } },
+        homeEntrant: true,
+        awayEntrant: true,
         venue: true,
         division: true,
       },
@@ -47,13 +49,18 @@ export default async function Match({ params }: { params: Promise<{ id: string }
   );
   if (!fixture || !locatorMatchesResource(locator, fixture)) notFound();
   const organizationId = locator.organizationId;
+  // A fixture side is a SeasonClub (team sports) or an Entrant (individual sports).
+  const sides = {
+    home: fixture.homeSeasonClub?.club.name ?? fixture.homeEntrant?.name ?? "TBD",
+    away: fixture.awaySeasonClub?.club.name ?? fixture.awayEntrant?.name ?? "TBD",
+  };
 
   if (fixture.status !== "FINAL") {
-    return <PreGameOrLive fixture={{ ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }} organizationId={organizationId} />;
+    return <PreGameOrLive fixture={{ id: fixture.id, status: fixture.status, homeScore: fixture.homeScore, awayScore: fixture.awayScore, scheduledAt: fixture.scheduledAt, venue: fixture.venue, homeName: sides.home, awayName: sides.away }} organizationId={organizationId} />;
   }
 
   const game = await withOrganizationContext(organizationId, (tx) => loadGameCoreByFixture(id, tx));
-  if (!game) return <PreGameOrLive fixture={{ ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }} organizationId={organizationId} />;
+  if (!game) return <PreGameOrLive fixture={{ id: fixture.id, status: fixture.status, homeScore: fixture.homeScore, awayScore: fixture.awayScore, scheduledAt: fixture.scheduledAt, venue: fixture.venue, homeName: sides.home, awayName: sides.away }} organizationId={organizationId} />;
 
   const storyTags = classifyGameStory(game);
   const headlineTag = GAME_STORY_PRIORITY.find((t) => storyTags.includes(t));
@@ -133,7 +140,7 @@ async function PreGameOrLive({
   organizationId,
 }: {
   organizationId: string;
-  fixture: { id: string; status: string; homeScore: number; awayScore: number; scheduledAt: Date; venue: { name: string }; homeSeasonClub: { club: { name: string } }; awaySeasonClub: { club: { name: string } } };
+  fixture: { id: string; status: string; homeScore: number; awayScore: number; scheduledAt: Date; venue: { name: string }; homeName: string; awayName: string };
 }) {
   const game = await withOrganizationContext(organizationId, (tx) => tx.game.findUnique({ where: { fixtureId: fixture.id }, select: { id: true } }));
   return (
@@ -141,9 +148,9 @@ async function PreGameOrLive({
       <section className="rounded-3xl border border-white/[.08] bg-[#0b100e] p-8 text-center">
         <p className="text-cyan-400">{fixture.status}</p>
         <div className="mt-8 grid grid-cols-[1fr_auto_1fr] items-center">
-          <MatchTeam name={fixture.homeSeasonClub!.club.name} score={fixture.homeScore} />
+          <MatchTeam name={fixture.homeName} score={fixture.homeScore} />
           <span className="text-zinc-500">VS</span>
-          <MatchTeam name={fixture.awaySeasonClub!.club.name} score={fixture.awayScore} />
+          <MatchTeam name={fixture.awayName} score={fixture.awayScore} />
         </div>
         <p className="mt-8 text-zinc-400">
           {formatLagosDateTime(fixture.scheduledAt)} · {fixture.venue.name}

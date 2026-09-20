@@ -35,6 +35,8 @@ export default async function PublicEventPage({
           include: {
             homeSeasonClub: { include: { club: true } },
             awaySeasonClub: { include: { club: true } },
+            homeEntrant: true,
+            awayEntrant: true,
           },
         },
         seatZones: {
@@ -55,7 +57,7 @@ export default async function PublicEventPage({
       <p className="text-xs uppercase tracking-[.24em] text-emerald-400">{event.status}</p>
       <h1 className="mt-2 text-4xl font-semibold">{event.name}</h1>
       <p className="mt-3 text-zinc-400">{formatLagosDateTime(event.startTime)} · {event.venue.name}, {event.venue.city}</p>
-      <div className="mt-6 flex flex-wrap gap-2">{event.fixtures.map((fixture) => <span key={fixture.id} className="rounded-full bg-white/[.05] px-3 py-2 text-sm">{fixture.homeSeasonClub!.club.name} vs {fixture.awaySeasonClub!.club.name}</span>)}</div>
+      <div className="mt-6 flex flex-wrap gap-2">{event.fixtures.map((fixture) => <span key={fixture.id} className="rounded-full bg-white/[.05] px-3 py-2 text-sm">{fixture.homeSeasonClub?.club.name ?? fixture.homeEntrant?.name ?? "TBD"} vs {fixture.awaySeasonClub?.club.name ?? fixture.awayEntrant?.name ?? "TBD"}</span>)}</div>
       {event.sponsorCampaigns.length ? <section className="mt-8 rounded-2xl border border-amber-400/20 bg-amber-400/[.05] p-5"><p className="text-xs uppercase tracking-[.2em] text-amber-300">Event partners</p><div className="mt-3 flex flex-wrap gap-3">{event.sponsorCampaigns.map((campaign)=><span key={campaign.id} className="rounded-full bg-white/[.06] px-3 py-2 text-sm">{campaign.sponsorName}<SponsorImpression campaignId={campaign.id} /></span>)}</div></section> : null}
       <section className="mt-10">
         <h2 className="text-2xl font-semibold">Choose your zone</h2>
