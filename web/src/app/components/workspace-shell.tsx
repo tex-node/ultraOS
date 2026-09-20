@@ -7,18 +7,20 @@ export type WorkspaceUser = {
   roles?: string[];
 };
 
-type NavLink = { href: string; label: string; adminOnly?: boolean };
+type NavLink = { href: string; label: string; adminOnly?: boolean; roles?: string[] };
 type NavSection = { label: string; links: NavLink[] };
 
 // Organizer workspace navigation (product roadmap F1/F6). Sections mirror the workspace
 // dashboard; every href is an existing route — this shell only reorganizes, never adds.
+// adminOnly links additionally open to the listed extra roles (least privilege per F6);
+// everyone else keeps exactly the visibility they had before.
 const sections: NavSection[] = [
   {
     label: "Manage",
     links: [
       { href: "/dashboard", label: "Dashboard" },
-      { href: "/competitions", label: "Tournaments", adminOnly: true },
-      { href: "/events", label: "Events", adminOnly: true },
+      { href: "/competitions", label: "Tournaments", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
+      { href: "/events", label: "Events", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
       { href: "/launch-readiness", label: "Launch", adminOnly: true },
     ],
   },
@@ -48,8 +50,8 @@ const sections: NavSection[] = [
   {
     label: "Commerce",
     links: [
-      { href: "/vendors", label: "Vendors", adminOnly: true },
-      { href: "/orders", label: "Orders", adminOnly: true },
+      { href: "/vendors", label: "Vendors", adminOnly: true, roles: ["VENDOR_MANAGER"] },
+      { href: "/orders", label: "Orders", adminOnly: true, roles: ["VENDOR_MANAGER"] },
       { href: "/check-in", label: "Gate Scanner" },
       { href: "/qr-operations", label: "QR Ops", adminOnly: true },
     ],
@@ -59,14 +61,14 @@ const sections: NavSection[] = [
     links: [
       { href: "/operations", label: "Operations", adminOnly: true },
       { href: "/access", label: "Access", adminOnly: true },
-      { href: "/content", label: "Content", adminOnly: true },
+      { href: "/content", label: "Content", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
       { href: "/media", label: "Media", adminOnly: true },
       { href: "/imports", label: "Imports", adminOnly: true },
       { href: "/audit", label: "Audit", adminOnly: true },
       { href: "/data-readiness", label: "Data", adminOnly: true },
       { href: "/participants/search", label: "Search", adminOnly: true },
       { href: "/training", label: "Training", adminOnly: true },
-      { href: "/announcements", label: "Announcements", adminOnly: true },
+      { href: "/announcements", label: "Announcements", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
     ],
   },
 ];
@@ -84,6 +86,8 @@ function isAdmin(user: WorkspaceUser) {
 // Same props contract as the legacy operations header so pages adopt it unchanged.
 export function WorkspaceShell({ children, user }: { children: React.ReactNode; user: WorkspaceUser }) {
   const admin = Boolean(isAdmin(user));
+  const roles = user.roles?.length ? user.roles : [user.role];
+  const visible = (link: NavLink) => !link.adminOnly || admin || (link.roles ?? []).some((role) => roles.includes(role));
 
   return (
     <div className="min-h-screen bg-[#050807] text-white lg:grid lg:grid-cols-[240px_1fr]">
@@ -111,7 +115,7 @@ export function WorkspaceShell({ children, user }: { children: React.ReactNode; 
         </div>
         <nav className="flex gap-5 overflow-x-auto px-5 pb-3 [scrollbar-width:thin] lg:flex-col lg:gap-1 lg:overflow-visible lg:pb-6">
           {sections.map((section) => {
-            const links = section.links.filter((link) => !link.adminOnly || admin);
+            const links = section.links.filter(visible);
             if (links.length === 0) return null;
             return (
               <div key={section.label} className="shrink-0 lg:shrink">

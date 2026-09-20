@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { PortalShell } from "@/app/components/portal-shell";
 import { WorkspaceShell } from "@/app/components/workspace-shell";
 import { AuthenticationError } from "@/lib/authorization";
+import { formatNaira } from "@/lib/money";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
@@ -13,17 +15,28 @@ const cards = [
   { href: "/fixtures", title: "Scheduler", body: "Generate and adjust fixtures across venues and timeslots." },
   { href: "/gameday", title: "Live scorekeeping", body: "Match-day command: open scorepads, track live games, finalize results." },
   { href: "/events", title: "Ticketing & access", body: "Inventory, pricing tiers, discount codes, gate check-in." },
-  { href: "/check-in", title: "Gate scanner", body: "Validate tickets and QR codes at venue entry." },
   { href: "/vendors", title: "Vendors & concessions", body: "Onboard vendors, approve menus, track orders and payouts." },
+  { href: "/check-in", title: "Gate scanner", body: "Validate tickets and QR codes at venue entry." },
   { href: "/access", title: "Staff access", body: "Grant tournament-scoped game control without league-wide roles." },
 ];
 
+const ELEVATED_ROLES = new Set([
+  "SUPER_ADMIN",
+  "LEAGUE_OPERATOR",
+  "TOURNAMENT_DIRECTOR",
+  "VENDOR_MANAGER",
+  "SCOREKEEPER",
+  "OFFICIAL",
+  "COACH",
+]);
+
 function isStaff(roles: string[] | undefined, role: string) {
-  return roles?.includes("SUPER_ADMIN") || roles?.includes("LEAGUE_OPERATOR") || role === "SUPER_ADMIN" || role === "LEAGUE_OPERATOR";
+  const all = roles?.length ? roles : [role];
+  return all.some((r) => ELEVATED_ROLES.has(r));
 }
 
-// Organizer workspace hub (product roadmap F1.2). Staff land on section cards; everyone
-// else gets a plain-language panel pointing back to the fan portal or applications.
+// Organizer workspace hub (product roadmap F1.2/F6.2): live numbers plus section cards.
+// Link visibility here is convenience only — every target page enforces its own gates.
 export default async function AdminHub() {
   let session = null;
   try {
@@ -62,11 +75,98 @@ export default async function AdminHub() {
     );
   }
 
+  const organizationId = session.user.organizationId;
+  const stats = organizationId
+    ? await withOrganizationContext(organizationId, async (tx) => {
+        const [ticketRevenue, orderRevenue, reservations, tickets, liveFixtures, paidOrders] = await Promise.all([
+          tx.seatReservation.aggregate({ where: { paymentStatus: "PAID" }, _sum: { totalKobo: true } }),
+          tx.order.aggregate({ where: { paymentStatus: "PAID" }, _sum: { totalKobo: true } }),
+          tx.seatReservation.count({ where: { status: "CONFIRMED" } }),
+          tx.ticket.count({ where: { status: { in: ["ACTIVE", "USED"] } } }),
+          tx.fixture.findMany({
+            where: { status: "LIVE" },
+            orderBy: { scheduledAt: "desc" },
+            take: 5,
+            select: {
+              id: true,
+              homeScore: true,
+              awayScore: true,
+              homeSeasonClub: { select: { club: { select: { name: true } } } },
+              awaySeasonClub: { select: { club: { select: { name: true } } } },
+              homeEntrant: { select: { name: true } },
+              awayEntrant: { select: { name: true } },
+            },
+          }),
+          tx.order.findMany({
+            where: { paymentStatus: "PAID" },
+            select: { totalKobo: true, items: { select: { totalKobo: true, product: { select: { vendor: { select: { name: true } } } } } } },
+            orderBy: { createdAt: "desc" },
+            take: 200,
+          }),
+        ]);
+        const vendorGross = new Map<string, number>();
+        for (const order of paidOrders) {
+          for (const item of order.items) {
+            const vendor = item.product.vendor?.name ?? "Direct sales";
+            vendorGross.set(vendor, (vendorGross.get(vendor) ?? 0) + item.totalKobo);
+          }
+        }
+        return {
+          ticketRevenueKobo: ticketRevenue._sum.totalKobo ?? 0,
+          orderRevenueKobo: orderRevenue._sum.totalKobo ?? 0,
+          reservations,
+          tickets,
+          liveFixtures,
+          vendorGross: [...vendorGross.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5),
+        };
+      })
+    : null;
+
   return (
     <WorkspaceShell user={session.user}>
       <main className="mx-auto max-w-6xl px-6 py-10">
         <h1 className="text-2xl font-semibold">Organizer workspace</h1>
         <p className="mt-1 text-sm text-zinc-400">Run your tournaments end to end — pick a section to begin.</p>
+        {stats ? (
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat label="Ticket revenue (paid)" value={formatNaira(stats.ticketRevenueKobo)} />
+            <Stat label="Food & merch revenue (paid)" value={formatNaira(stats.orderRevenueKobo)} />
+            <Stat label="Reservations / tickets" value={`${stats.reservations} / ${stats.tickets}`} />
+            <Stat label="Live now" value={String(stats.liveFixtures.length)} />
+          </div>
+        ) : null}
+        {stats && stats.liveFixtures.length > 0 ? (
+          <section className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/[.04] p-5">
+            <h2 className="text-sm font-bold uppercase tracking-[.15em] text-emerald-400">Live matches</h2>
+            <div className="mt-3 space-y-2">
+              {stats.liveFixtures.map((f) => (
+                <div key={f.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span>
+                    {f.homeSeasonClub?.club.name ?? f.homeEntrant?.name ?? "TBD"} {f.homeScore} – {f.awayScore}{" "}
+                    {f.awaySeasonClub?.club.name ?? f.awayEntrant?.name ?? "TBD"}
+                  </span>
+                  <Link href={`/games/${f.id}/live`} className="text-emerald-300">
+                    Open console →
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        {stats && stats.vendorGross.length > 0 ? (
+          <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+            <h2 className="text-sm font-bold uppercase tracking-[.15em] text-zinc-400">Vendor gross (paid orders)</h2>
+            <p className="mt-1 text-xs text-zinc-500">Gross basis only — commission splits land with F5 vendor payouts.</p>
+            <div className="mt-3 space-y-1 text-sm">
+              {stats.vendorGross.map(([vendor, gross]) => (
+                <div key={vendor} className="flex justify-between">
+                  <span>{vendor}</span>
+                  <span className="text-emerald-300">{formatNaira(gross)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((card) => (
             <Link
@@ -81,5 +181,14 @@ export default async function AdminHub() {
         </div>
       </main>
     </WorkspaceShell>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-4">
+      <p className="text-xs uppercase tracking-[.15em] text-zinc-500">{label}</p>
+      <p className="mt-1 text-xl font-bold text-emerald-300">{value}</p>
+    </div>
   );
 }

@@ -217,6 +217,23 @@ const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
     "training:record",
     "public:view",
   ]),
+  // Tournament director (F6): runs scheduling, scoring, standings, ticketing and publishing
+  // for their tournaments — everything operational except staff/admin/system management.
+  TOURNAMENT_DIRECTOR: new Set<Permission>([
+    "competition:manage",
+    "fixture:manage",
+    "game:operate",
+    "game:record-stats",
+    "result:confirm",
+    "event:manage",
+    "reservation:manage",
+    "draft-event:operate",
+    "draft-event:display",
+    "content:manage",
+    "announcement:manage",
+    "stats:view",
+    "public:view",
+  ]),
   PLAYER: new Set<Permission>([
     "roster:view",
     "availability:submit",
@@ -246,6 +263,10 @@ const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
     "stats:view",
     "public:view",
   ]),
+  // Scorekeeper (F6): active match pads only — no finalization, no management. Named
+  // distinctly from the GameControlGrant SCOREKEEPER grant role (competition-scoped game
+  // control); this is the organization-level role granting the same consoles league-wide.
+  SCOREKEEPER: new Set<Permission>(["game:operate", "game:record-stats", "stats:view", "public:view"]),
   VENDOR: new Set<Permission>([
     "vendor:manage",
     "order:manage",
@@ -253,6 +274,9 @@ const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
     "mvp:vote",
     "public:view",
   ]),
+  // Vendor manager (F6): runs stalls, orders and menu availability — staff-side, without
+  // the VENDOR account's fan-surface extras.
+  VENDOR_MANAGER: new Set<Permission>(["vendor:manage", "order:manage", "public:view"]),
   MEDIA: new Set<Permission>([
     "accreditation:manage",
     "stats:view",
@@ -289,12 +313,15 @@ export function primaryRole(roles: UserRole[] | undefined): UserRole {
   const rank: UserRole[] = [
     "SUPER_ADMIN",
     "LEAGUE_OPERATOR",
+    "TOURNAMENT_DIRECTOR",
     "TEAM_MANAGER",
     "COACH",
     "SCOUT",
     "OFFICIAL",
+    "SCOREKEEPER",
     "PLAYER",
     "VENDOR",
+    "VENDOR_MANAGER",
     "MEDIA",
     "VOLUNTEER",
     "GATE_MANAGER",
