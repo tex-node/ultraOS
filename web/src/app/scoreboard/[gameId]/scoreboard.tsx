@@ -15,6 +15,8 @@ type Data = {
   period: number;
   clockSeconds: number;
   updatedAt: string;
+  tournament: string;
+  sport: string;
   fixture: {
     status: string;
     homeScore: number;
@@ -54,8 +56,8 @@ export function Scoreboard({ gameId, initial }: { gameId: string; initial: Data 
     <main className="grid min-h-screen grid-rows-[auto_1fr_auto] bg-[#020403] p-8 text-white">
       <header className="flex justify-between">
         <div>
-          <p className="text-2xl font-black">ULTRA BASKETBALL</p>
-          <p className="text-xs tracking-[.3em] text-emerald-400">LIVE SCOREBOARD</p>
+          <p className="text-2xl font-black">{data.tournament.toUpperCase()}</p>
+          <p className="text-xs tracking-[.3em] text-emerald-400">{data.sport.toUpperCase()} · LIVE SCOREBOARD</p>
         </div>
         <div
           className={`rounded-full px-4 py-2 text-xs ${
@@ -77,7 +79,7 @@ export function Scoreboard({ gameId, initial }: { gameId: string; initial: Data 
       <footer className="flex justify-between border-t border-white/10 pt-5 text-sm text-zinc-400">
         <span>{data.fixture.venue}</span>
         <span>SPONSOR PLACEHOLDER</span>
-        <span>Updates every 2 seconds</span>
+        <span>Neon Ultra</span>
       </footer>
     </main>
   );
