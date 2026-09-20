@@ -18,6 +18,9 @@ Related references:
 
 - `documentation/PRODUCT_ROADMAP.md` — what users can do (unchanged by this brief).
 - `documentation/architecture/MULTI_SPORT_ARCHITECTURE.md` — domain model (unchanged).
+- `UI/NEON_ULTRA_CLAUDE_DESIGN_SYSTEM.md` — the visual authority: palette, type, spacing,
+  radii, glow, shells, components, motion, responsive rules, accessibility, and copy style.
+  Where this brief and that document disagree on a visual value, the system document wins.
 - `docs/product/ui-guidelines.md`, `docs/product/user-journeys.md` — prior product notes.
 - `documentation/standards/` — documentation and asset standards.
 
@@ -51,8 +54,9 @@ Related references:
 ## 4. Responsive specification
 
 All screens must be reviewed at all three breakpoints unless an exception is stated.
-Breakpoints: **mobile** ≤ 640px (single column, bottom-safe actions), **tablet**
-641–1023px (two-column, touch-first), **desktop** ≥ 1024px (full density, sidebar shell).
+Breakpoints (per the design system): **mobile** < 768px (single column, bottom-safe
+actions), **tablet** 768–1279px (two-column, touch-first), **desktop** ≥ 1280px (full
+density, sidebar shell).
 
 | # | Context | Primary device | Key requirements |
 | --- | --- | --- | --- |

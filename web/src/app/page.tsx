@@ -139,7 +139,7 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
             <div className="mt-6 grid gap-4 md:grid-cols-3">
               {liveAcross.map(({ tournament, fixture }) => (
                 <article key={fixture.id} className="rounded-2xl border border-emerald-400/25 bg-emerald-400/[.05] p-5">
-                  <p className="text-xs font-bold text-emerald-400">● LIVE · {tournament.name}</p>
+                  <p className="text-xs font-bold text-danger">● LIVE · {tournament.name}</p>
                   <p className="mt-2 text-lg font-bold">
                     {sideName(fixture.homeSeasonClub, fixture.homeEntrant)} {fixture.homeScore} – {fixture.awayScore}{" "}
                     {sideName(fixture.awaySeasonClub, fixture.awayEntrant)}

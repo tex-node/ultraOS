@@ -9,9 +9,11 @@ export function tournamentStatusFromFixtureStatuses(statuses: readonly string[])
   return "DRAFT";
 }
 
+// Status pill styles follow the design system (§13): Live is RED, Upcoming blue,
+// Completed slate, Draft purple. Status is always text as well as color.
 export const TOURNAMENT_STATUS_STYLE: Record<TournamentSubSiteStatus, string> = {
-  LIVE: "border-emerald-400/40 bg-emerald-400/10 text-emerald-300",
-  UPCOMING: "border-amber-400/40 bg-amber-400/10 text-amber-300",
-  COMPLETED: "border-white/10 bg-white/[.05] text-zinc-300",
-  DRAFT: "border-white/10 bg-white/[.05] text-zinc-500",
+  LIVE: "border-danger/40 bg-danger/10 text-danger",
+  UPCOMING: "border-info/40 bg-info/10 text-info",
+  COMPLETED: "border-line bg-white/[.04] text-text-2",
+  DRAFT: "border-accent-purple/30 bg-accent-purple/10 text-accent-purple",
 };

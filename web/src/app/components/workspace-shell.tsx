@@ -90,14 +90,14 @@ export function WorkspaceShell({ children, user }: { children: React.ReactNode; 
   const visible = (link: NavLink) => !link.adminOnly || admin || (link.roles ?? []).some((role) => roles.includes(role));
 
   return (
-    <div className="min-h-screen bg-[#050807] text-white lg:grid lg:grid-cols-[240px_1fr]">
-      <aside className="border-b border-white/[0.07] bg-[#080d0b]/95 lg:flex lg:min-h-screen lg:flex-col lg:border-b-0 lg:border-r">
+    <div className="min-h-screen bg-ink-900 text-text-1 lg:grid lg:grid-cols-[240px_1fr]">
+      <aside className="border-b border-line bg-ink-800/95 lg:flex lg:min-h-screen lg:flex-col lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between gap-4 px-5 py-4">
           <div>
             <Link className="font-semibold tracking-tight" href="/admin">
               Neon Ultra
             </Link>
-            <p className="text-[10px] uppercase tracking-[0.22em] text-emerald-400">Organizer workspace</p>
+            <p className="text-[10px] uppercase tracking-[0.22em] text-brand-400">Organizer workspace</p>
           </div>
           <form
             action={async () => {
@@ -106,7 +106,7 @@ export function WorkspaceShell({ children, user }: { children: React.ReactNode; 
             }}
           >
             <button
-              className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300 transition hover:border-white/20 hover:text-white"
+              className="rounded-lg border border-line-strong px-3 py-2 text-xs text-text-2 transition hover:border-brand-400/40 hover:text-white"
               type="submit"
             >
               Sign out
@@ -119,14 +119,14 @@ export function WorkspaceShell({ children, user }: { children: React.ReactNode; 
             if (links.length === 0) return null;
             return (
               <div key={section.label} className="shrink-0 lg:shrink">
-                <p className="hidden text-[10px] uppercase tracking-[0.2em] text-zinc-500 lg:mb-1 lg:block">
+                <p className="hidden text-[10px] uppercase tracking-[0.2em] text-text-3 lg:mb-1 lg:block">
                   {section.label}
                 </p>
                 <div className="flex gap-1 lg:flex-col">
                   {links.map((link) => (
                     <Link
                       key={link.href}
-                      className="whitespace-nowrap rounded-lg px-3 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
+                      className="whitespace-nowrap rounded-lg px-3 py-2 text-sm text-text-2 transition hover:bg-white/[0.06] hover:text-white"
                       href={link.href}
                     >
                       {link.label}
@@ -140,11 +140,11 @@ export function WorkspaceShell({ children, user }: { children: React.ReactNode; 
         <div className="mt-auto hidden px-5 py-4 lg:block">
           <Link href="/profile" className="block transition hover:opacity-80">
             <p className="text-sm font-medium">{user.name}</p>
-            <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+            <p className="text-[10px] uppercase tracking-wider text-text-3">
               {(user.roles?.length ? user.roles : [user.role]).join(" · ")}
             </p>
           </Link>
-          <Link href="/public" className="mt-2 block text-xs text-emerald-400">
+          <Link href="/public" className="mt-2 block text-xs text-brand-400">
             ← Back to fan portal
           </Link>
         </div>

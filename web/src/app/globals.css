@@ -1,19 +1,92 @@
 @import "tailwindcss";
 
-:root {
-  --background: #050807;
-  --foreground: #f4f4f5;
-}
+/* Neon Ultra design tokens (D1), aligned with UI/NEON_ULTRA_CLAUDE_DESIGN_SYSTEM.md.
+   Single source of truth for color, type, radii, glow, and motion. */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@theme {
+  /* Brand — neon green is the primary brand/action color */
+  --color-brand-200: #a9f5cd;
+  --color-brand-300: #5cf2a0;
+  --color-brand-400: #00f076;
+  --color-brand-500: #00d668;
+  --color-brand-600: #00a854;
+  --color-brand-700: #046c38;
+
+  /* Surfaces — depth from surface color + border, never heavy shadow */
+  --color-ink-950: #05070a;
+  --color-ink-900: #080a0d;
+  --color-ink-800: #111318;
+  --color-ink-700: #1a1f26;
+  --color-ink-600: #151a21;
+
+  /* Text */
+  --color-text-1: #f9fafb;
+  --color-text-2: #9ca3af;
+  --color-text-3: #6b7280;
+  --color-text-4: #4b5563;
+
+  /* Hairlines */
+  --color-line: #272d37;
+  --color-line-subtle: #1d232c;
+  --color-line-strong: #3a4350;
+
+  /* Semantic — red is live/danger, amber is warning */
+  --color-success: #22c55e;
+  --color-warn: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+
+  /* Controlled secondary accents */
+  --color-accent-blue: #3b82f6;
+  --color-accent-purple: #a855f7;
+  --color-accent-amber: #f59e0b;
+  --color-accent-rose: #ef4444;
+
+  /* Type */
+  --font-display: var(--font-display), "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-sans: var(--font-sans), "Inter", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Radius — cards 10–14px, buttons 8–10px, never everything pill-shaped */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+
+  /* Glow — signal only: active, focused, selected, live-important */
+  --shadow-glow-green: 0 0 0 1px rgb(0 240 118 / 0.25), 0 0 18px rgb(0 240 118 / 0.12);
+  --shadow-glow-blue: 0 0 0 1px rgb(59 130 246 / 0.2), 0 0 18px rgb(59 130 246 / 0.1);
+  --shadow-glow-purple: 0 0 0 1px rgb(168 85 247 / 0.2), 0 0 18px rgb(168 85 247 / 0.1);
+
+  /* Motion — fast and deliberate */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 280ms;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  background: var(--color-ink-900);
+  color: var(--color-text-1);
+  font-family: var(--font-sans);
+}
+
+/* Visible keyboard focus everywhere (brief + system accessibility rules). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-400);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: rgb(0 240 118 / 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
