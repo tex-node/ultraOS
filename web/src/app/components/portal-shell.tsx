@@ -28,7 +28,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       <header className="border-b border-white/[.08]">
         <div className="mx-auto max-w-7xl px-6 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <Link href="/public" className="font-bold">
+            <Link href="/" className="font-bold">
               NEON ULTRA
             </Link>
             <Link
