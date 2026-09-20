@@ -78,28 +78,10 @@ export async function reserveZone(eventId: string, formData: FormData) {
       if (zone.salesCloseAt && now > zone.salesCloseAt) {
         throw new Error("SALES_CLOSED");
       }
-      if (zone.reservedQuantity + input.quantity > zone.capacity) {
-        throw new Error("ZONE_SOLD_OUT");
-      }
-      const claimed = await tx.seatZone.updateMany({
-        where: {
-          id: zone.id,
-          reservedQuantity: zone.reservedQuantity,
-        },
-        data: { reservedQuantity: { increment: input.quantity } },
-      });
-      if (claimed.count !== 1) throw new Error("CAPACITY_CHANGED");
-
-      const discountBps = membership ? zone.fanClubDiscountBps : 0;
-      const unitPriceKobo = Math.max(
-        0,
-        zone.priceKobo - Math.floor((zone.priceKobo * discountBps) / 10000),
-      );
-      const grossKobo = unitPriceKobo * input.quantity;
-
-      // Optional promo code: same rules as wallet orders (active, this event or global,
-      // inside its window, redemptions remaining) plus an explicit same-organization check,
-      // since PromoCode.code is globally unique. Fan-club discount applies first, promo second.
+      // Optional promo code — validated BEFORE the capacity claim so a bad code never
+      // burns seats. Same rules as wallet orders (active, this event or global, inside its
+      // window, redemptions remaining) plus an explicit same-organization check, since
+      // PromoCode.code is globally unique. Fan-club discount applies first, promo second.
       const promoInput = input.promoCode?.trim().toUpperCase() || null;
       const promoRow = promoInput
         ? await tx.promoCode.findFirst({
@@ -120,12 +102,33 @@ export async function reserveZone(eventId: string, formData: FormData) {
       if (promoInput && (!promoCheck || !promoCheck.ok)) {
         throw new Error(promoCheck && !promoCheck.ok ? promoCheck.reason : "INVALID_PROMO");
       }
+      if (zone.reservedQuantity + input.quantity > zone.capacity) {
+        throw new Error("ZONE_SOLD_OUT");
+      }
+      const claimed = await tx.seatZone.updateMany({
+        where: {
+          id: zone.id,
+          reservedQuantity: zone.reservedQuantity,
+        },
+        data: { reservedQuantity: { increment: input.quantity } },
+      });
+      if (claimed.count !== 1) throw new Error("CAPACITY_CHANGED");
+
+      const discountBps = membership ? zone.fanClubDiscountBps : 0;
+      const unitPriceKobo = Math.max(
+        0,
+        zone.priceKobo - Math.floor((zone.priceKobo * discountBps) / 10000),
+      );
+      const grossKobo = unitPriceKobo * input.quantity;
+
+      // Increment before the reservation create: a failed create wastes a redemption slot
+      // (safe direction) and can never overspend the cap, even under concurrent checkouts.
       if (promoCheck?.ok) {
-        const claimed = await tx.promoCode.updateMany({
+        const claimedPromo = await tx.promoCode.updateMany({
           where: { id: promoCheck.promo.id, redemptionCount: promoCheck.promo.redemptionCount },
           data: { redemptionCount: { increment: 1 } },
         });
-        if (claimed.count !== 1) throw new Error("PROMO_CHANGED");
+        if (claimedPromo.count !== 1) throw new Error("PROMO_CHANGED");
       }
       const promoDiscount = promoCheck?.ok ? promoDiscountKobo(grossKobo, promoCheck.promo.discountBps) : 0;
       const totalKobo = grossKobo - promoDiscount;
