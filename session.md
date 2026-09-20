@@ -4122,3 +4122,38 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - Operator confirms `/dashboard` loads, then F5/F6.
+
+### 2026-09-20 - F5 Vendor Marketplace (No Gateway)
+
+**Objective**
+
+- Deliver F5.1 (onboarding, menu approvals, commissions) and F5.2 (order pipeline,
+  live tracking) without the payment provider decision; F5.3 stays blocked.
+
+**Completed**
+
+- Additive migration `20260920180000_f5_vendor_marketplace`: `ProductApproval` enum,
+  `VendorProduct.approvalStatus` (existing rows backfilled APPROVED), `Vendor.commissionBps`;
+  applied to staging via deploy `--migrate`.
+- Menu approvals (approve/reject + audit, unapproved products unsell everywhere),
+  vendor suspend/reactivate, commission config UI, payout nets on the workspace hub.
+- Vendor-scoped orders (own-items-only for vendor-linked accounts, enforced in page
+  and all three mutations), order cancellation with stock release + manual-refund note,
+  visual pipeline steps on the fan order page.
+- Staging verified: backfill intact, test vendor + PENDING product created, approval
+  UI renders authed, orders page 200.
+
+**Decisions**
+
+- Mixed-vendor orders stay with platform staff; vendors see/act only on pure own orders.
+- Paid cancellations keep sold stock and record manual-refund (no provider to refund
+  through yet).
+
+**Verification**
+
+- Typecheck, lint clean; 10 new tests pass (694 suite-wide); staging release with
+  migration, authed content probes, and data checks.
+
+**Next step**
+
+- F5.3 unified cart + payment provider decision (owner + date still open).

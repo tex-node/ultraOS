@@ -697,8 +697,8 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | F3.2 | Sport hubs, search, city selector, quick actions | P12/F3 | `Done` | F3.1 |
 | F4.1 | Tiered passes (day/full-tournament) + QR email/wallet delivery | P12/F4 | `Done` | F2.1 |
 | F4.2 | Gate Scanner web app + Gate Manager role | P12/F4 | `Done` | F4.1 |
-| F5.1 | Vendor onboarding, menu approvals, commission configuration | P12/F5 | `Not started` | F2.1 |
-| F5.2 | Order status pipeline + live tracking | P12/F5 | `Not started` | F5.1 |
+| F5.1 | Vendor onboarding, menu approvals, commission configuration | P12/F5 | `Done` | F2.1 |
+| F5.2 | Order status pipeline + live tracking | P12/F5 | `Done` | F5.1 |
 | F5.3 | Unified cart (tickets + food + merch) + payment provider decision | P12/F5 | `Not started` | F4.1 |
 | F6.1 | Tournament Director / Scorekeeper-Referee / Vendor Manager roles + scoped grants | P12/F6 | `Done` | F1.2 |
 | F6.2 | Workspace dashboard (revenue, sales, live status, payouts) | P12/F6 | `Done` | F6.1 |
