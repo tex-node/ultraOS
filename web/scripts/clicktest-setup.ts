@@ -16,6 +16,8 @@
 import { prisma } from "../src/lib/prisma";
 import { getSportDefinition } from "../src/lib/sports/registry";
 import { resolveActiveOrganizationBySlug, withOrganizationContext } from "../src/lib/tenant-context";
+import { upsertPublicResourceLocator } from "../src/lib/public-locators";
+import { PublicResourceLocatorType } from "../src/generated/prisma/enums";
 
 function flag(name: string): boolean {
   return process.argv.includes(`--${name}`);
@@ -262,6 +264,15 @@ async function main() {
       if (fixture.status !== "LIVE") {
         await tx.fixture.update({ where: { id: fixture.id }, data: { status: "LIVE" } });
       }
+
+      // Portal match pages resolve fixtures through public locators (publicKey = fixture id),
+      // so register one — otherwise /public/fixtures/<id> 404s for test fixtures.
+      await upsertPublicResourceLocator(tx, {
+        resourceType: PublicResourceLocatorType.FIXTURE,
+        publicKey: fixture.id,
+        organizationId: organization.id,
+        resourceId: fixture.id,
+      });
 
       out.push({
         sport: sport.slug,
