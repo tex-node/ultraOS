@@ -31,10 +31,13 @@ import {
   clockModeLabel,
   isFinalPeriod,
   periodLabelFor,
+  structureFromRules,
   type ClockModeValue,
 } from "@/lib/sports/game-structure";
 import { effectiveRuleSnapshot, isUltraTimeUnderRules } from "@/lib/ultra-scoring-engine";
 import { getSportDefinition } from "@/lib/sports/registry";
+import { resolveScoringModule } from "@/lib/sports/scoring-modules";
+import { replayTennisGamePoints } from "@/lib/sports/tennis-scoring";
 import { isKnockoutFormat, resolveFormat } from "@/lib/sports/format";
 import { chaseTarget, inningsConfig, isDelivery, isLegalDelivery, oversDisplay } from "@/lib/sports/innings-scoring";
 import { withOrganizationContext } from "@/lib/tenant-context";
@@ -76,8 +79,10 @@ export default async function Live({ params, searchParams }: { params: Promise<{
   if (!fixture) notFound();
   const game = fixture.game;
   // This game's frozen structure (periods, period length, shot clock, clock mode). Falls back to the
-  // legacy Ultra shape for games started before rule snapshots existed.
+  // sport definition when no snapshot was frozen yet (games started before snapshots existed, or
+  // script-seeded test games), and to the legacy Ultra shape only when no definition resolves.
   const snapshot = game?.ruleSnapshot ?? null;
+  const definition = getSportDefinition(fixture.division.competition.sport.slug);
   const structure = snapshot
     ? {
         periodCount: snapshot.periodCount,
@@ -86,7 +91,11 @@ export default async function Live({ params, searchParams }: { params: Promise<{
         shotClockSeconds: snapshot.shotClockSeconds,
         clockMode: snapshot.clockMode,
       }
-    : LEGACY_STRUCTURE;
+    : definition
+      ? structureFromRules({ structure: definition.structure })
+      : LEGACY_STRUCTURE;
+  // Sports with no clock (tennis, table tennis, volleyball) show the period and status only.
+  const hasClock = structure.periodSeconds > 0;
   const remainingSeconds = game ? remainingClockSeconds(game) : structure.periodSeconds;
   const ultraTime = game
     ? isUltraTimeUnderRules(effectiveRuleSnapshot(snapshot), game.status, game.currentPeriod, remainingSeconds)
@@ -94,7 +103,6 @@ export default async function Live({ params, searchParams }: { params: Promise<{
   const fourPointEnabled = snapshot ? snapshot.fourPointEnabled : true;
   const shotClockRunning = Boolean(game?.shotClockStartedAt);
   const shotClockRemaining = game ? remainingShotClockSeconds(game) : 20;
-  const definition = getSportDefinition(fixture.division.competition.sport.slug);
   const capabilities = new Set(definition?.capabilities ?? []);
   const hasShotClock = capabilities.has("SHOT_CLOCK");
   const isBasketball = definition?.key === "BASKETBALL";
@@ -130,7 +138,23 @@ export default async function Live({ params, searchParams }: { params: Promise<{
     };
   }
   const substitutionCheckDue = Boolean(game && isFinalPeriod(game.currentPeriod, structure) && game.status !== "FINAL");
-  const confirmations = substitutionCheckDue
+
+  // Tennis: replay this set's POINT events so the console shows live game points, not just sets won.
+  const scoringModuleKind = definition ? resolveScoringModule(definition)?.kind ?? null : null;
+  let tennisPoints: { home: number; away: number } | undefined;
+  if (scoringModuleKind === "TENNIS" && game) {
+    const pointEvents = await withOrganizationContext(session.user.organizationId, (tx) =>
+      tx.gameEvent.findMany({
+        where: { gameId: game.id, period: game.currentPeriod, typeKey: "POINT" },
+        orderBy: { sequenceNumber: "asc" },
+        select: { period: true, typeKey: true, entrantId: true, seasonClubId: true },
+      }),
+    );
+    tennisPoints = replayTennisGamePoints(pointEvents, game.currentPeriod, {
+      entrantId: fixture.homeEntrant?.id ?? null,
+      seasonClubId: fixture.homeSeasonClub?.id ?? null,
+    });
+  }  const confirmations = substitutionCheckDue
     ? await withOrganizationContext(session.user.organizationId, (tx) => tx.auditLog.findMany({
         where: { action: "MANDATORY_SUBSTITUTION_CONFIRMED", entityType: "Game", entityId: game!.id },
       }))
@@ -180,9 +204,17 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             <TeamScore name={homeSide.label} score={fixture.homeScore} />
             <div>
               <p className="text-xs text-zinc-500">{game ? periodLabelFor(game.currentPeriod, game.status, structure) : "Q1"}</p>
-              <p className="mt-1 font-mono text-3xl font-bold sm:text-4xl">
-                {game ? <GameClock seconds={remainingSeconds} status={game.status} startedAt={game.clockStartedAt?.toISOString() ?? null} /> : "10:00"}
-              </p>
+              {game ? (
+                hasClock ? (
+                  <p className="mt-1 font-mono text-3xl font-bold sm:text-4xl">
+                    <GameClock seconds={remainingSeconds} status={game.status} startedAt={game.clockStartedAt?.toISOString() ?? null} />
+                  </p>
+                ) : (
+                  <p className="mt-1 text-sm text-zinc-500">Not timed — score decides</p>
+                )
+              ) : (
+                <p className="mt-1 font-mono text-3xl font-bold sm:text-4xl">10:00</p>
+              )}
               <p className="mt-1 text-xs text-emerald-400">{game?.status ?? "NOT STARTED"}</p>
               {isBasketball ? (
                 <p className="mt-1 text-[10px] uppercase tracking-wider text-zinc-500" title={clockModeHint(structure.clockMode as ClockModeValue)}>
@@ -344,6 +376,9 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             definition={definition}
             battingTeamId={battingTeamId}
             innings={cricketInnings ?? undefined}
+            currentPeriod={game.currentPeriod}
+            periodScores={game.periodScores.map((score) => ({ period: score.period, home: score.homeScore, away: score.awayScore }))}
+            tennisPoints={tennisPoints}
             knockout={isKnockoutFormat(
               resolveFormat({
                 divisionFormat: fixture.division.format,

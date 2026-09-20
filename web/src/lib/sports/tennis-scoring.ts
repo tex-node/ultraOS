@@ -52,6 +52,33 @@ export function awardPoint(points: TennisPoints, side: "HOME" | "AWAY"): { point
   return { points: next, gameWon: leader >= 4 && lead >= 2 };
 }
 
+// Replays a set's POINT events to recover the current game's point counts (the ledger is the
+// source of truth; counts are never stored separately). Shared by the capture action and the
+// console display so both always agree.
+export type TennisReplayEvent = {
+  period: number | null;
+  typeKey: string | null;
+  entrantId: string | null;
+  seasonClubId: string | null;
+};
+
+export function replayTennisGamePoints(
+  events: TennisReplayEvent[],
+  currentPeriod: number,
+  home: { entrantId?: string | null; seasonClubId?: string | null },
+): TennisPoints {
+  let points: TennisPoints = { home: 0, away: 0 };
+  for (const event of events) {
+    if (event.period !== currentPeriod || event.typeKey !== "POINT") continue;
+    const isHome =
+      (event.entrantId != null && event.entrantId === home.entrantId) ||
+      (event.seasonClubId != null && event.seasonClubId === home.seasonClubId);
+    const awarded = awardPoint(points, isHome ? "HOME" : "AWAY");
+    points = awarded.gameWon ? { home: 0, away: 0 } : awarded.points;
+  }
+  return points;
+}
+
 // A set is won at gamesPerSet with a two-game lead (6-4, 7-5), or at gamesPerSet + 1 when the
 // tiebreak is enabled (7-6).
 export function isSetComplete(config: TennisConfig, games: { home: number; away: number }): boolean {

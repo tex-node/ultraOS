@@ -1,5 +1,6 @@
 import { SubmitButton } from "@/app/components/submit-button";
 import { resolveScoringModule } from "@/lib/sports/scoring-modules";
+import { pointLabel } from "@/lib/sports/tennis-scoring";
 import { type ShootoutKick, type ShootoutSide } from "@/lib/sports/shootout";
 import type { SportDefinition } from "@/lib/sports/types";
 import { recordScoringEvent, recordShootoutKick } from "../../actions";
@@ -19,6 +20,9 @@ export function ScoreCapturePanel({
   knockout = false,
   scoresLevel = false,
   shootoutKicks = [],
+  currentPeriod,
+  periodScores = [],
+  tennisPoints,
 }: {
   gameId: string;
   fixtureId: string;
@@ -29,6 +33,9 @@ export function ScoreCapturePanel({
   knockout?: boolean;
   scoresLevel?: boolean;
   shootoutKicks?: ShootoutKick[];
+  currentPeriod?: number;
+  periodScores?: { period: number; home: number; away: number }[];
+  tennisPoints?: { home: number; away: number };
 }) {
   const scoringModule = resolveScoringModule(definition);
   if (!scoringModule) return null;
@@ -44,8 +51,24 @@ export function ScoreCapturePanel({
             ? "Scoring"
             : "Run scoring";
 
-  const actionButtons = (teamId: string) => (
-    <div className="mt-3 flex flex-wrap gap-2">
+  // Live in-period progress: the header scoreboard only shows sets won, so surface the current
+  // set's rally score (SETS sports) or the current game's points (tennis) — otherwise every tap
+  // looks like it did nothing until a full set or game completes.
+  const currentRow = currentPeriod !== undefined ? periodScores.find((row) => row.period === currentPeriod) : undefined;
+  const progressSummary =
+    scoringModule.kind === "SETS" && currentPeriod !== undefined ? (
+      <p className="mt-1 text-sm font-semibold text-emerald-300">
+        Set {currentPeriod}: {currentRow?.home ?? 0}–{currentRow?.away ?? 0}
+      </p>
+    ) : scoringModule.kind === "TENNIS" && currentPeriod !== undefined ? (
+      <p className="mt-1 text-sm font-semibold text-emerald-300">
+        Set {currentPeriod}: games {currentRow?.home ?? 0}–{currentRow?.away ?? 0}
+        {" · "}points {pointLabel(tennisPoints ?? { home: 0, away: 0 }, "HOME")}–
+        {pointLabel(tennisPoints ?? { home: 0, away: 0 }, "AWAY")}
+      </p>
+    ) : null;
+
+  const actionButtons = (teamId: string) => (    <div className="mt-3 flex flex-wrap gap-2">
       {actions.map((action) => (
         <form key={action.label} action={recordScoringEvent.bind(null, gameId, fixtureId)}>
           <input type="hidden" name="seasonClubId" value={teamId} />
@@ -126,6 +149,7 @@ export function ScoreCapturePanel({
   return (
     <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
       <h3 className="font-semibold">{title}</h3>
+      {progressSummary}
       {scoringModule.kind === "GOALS" ? <p className="mt-0.5 text-xs text-zinc-500">An own goal credits the other team.</p> : null}
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {teams.map((team) => (

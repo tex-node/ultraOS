@@ -8,6 +8,7 @@ import {
   evaluateTennis,
   isSetComplete,
   pointLabel,
+  replayTennisGamePoints,
   tennisConfig,
 } from "@/lib/sports/tennis-scoring";
 
@@ -58,4 +59,37 @@ test("a best-of-five match ends at three sets", () => {
   assert.equal(summary.homeSetsWon, 3);
   assert.equal(summary.awaySetsWon, 1);
   assert.equal(summary.matchWinner, "HOME");
+});
+
+test("replay recovers live game points, resets after a won game, ignores other sets", () => {
+  const home = { entrantId: "home-entrant", seasonClubId: null };
+  const point = (side: "home" | "away", period = 1) => ({
+    period,
+    typeKey: "POINT",
+    entrantId: side === "home" ? "home-entrant" : "away-entrant",
+    seasonClubId: null,
+  });
+  // Four home points win the first game, so the replay resets to 0-0.
+  assert.deepEqual(
+    replayTennisGamePoints([point("home"), point("away"), point("home"), point("home"), point("home")], 1, home),
+    { home: 0, away: 0 },
+  );
+  // The next game's points then accumulate from zero.
+  assert.deepEqual(
+    replayTennisGamePoints(
+      [point("home"), point("away"), point("home"), point("home"), point("home"), point("away"), point("away")],
+      1,
+      home,
+    ),
+    { home: 0, away: 2 },
+  );
+  // Points from another set and non-point events are ignored.
+  assert.deepEqual(
+    replayTennisGamePoints(
+      [point("away", 2), { period: 1, typeKey: "ACE", entrantId: "away-entrant", seasonClubId: null }, point("home")],
+      1,
+      home,
+    ),
+    { home: 1, away: 0 },
+  );
 });

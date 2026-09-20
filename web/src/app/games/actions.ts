@@ -29,7 +29,7 @@ import { isKnockoutFormat, resolveFormat } from "@/lib/sports/format";
 import { requireSeasonClubId } from "@/lib/sports/fixture-sides";
 import { shootoutWinner, type ShootoutKick } from "@/lib/sports/shootout";
 import { resolveScoringModule } from "@/lib/sports/scoring-modules";
-import { awardPoint } from "@/lib/sports/tennis-scoring";
+import { replayTennisGamePoints } from "@/lib/sports/tennis-scoring";
 import { hasBlockingIssue, runConstraints } from "@/lib/sports/validators";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -1461,17 +1461,10 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
     // Tennis: replay this set's point events to recover the current game's point counts.
     let tennisPoints: { home: number; away: number } | undefined;
     if (scoringModule.kind === "TENNIS") {
-      tennisPoints = { home: 0, away: 0 };
-      for (const event of game.events) {
-        if (event.period !== game.currentPeriod || event.typeKey !== "POINT") continue;
-        const side =
-          (event.entrantId && event.entrantId === game.fixture.homeEntrantId) ||
-          (event.seasonClubId && event.seasonClubId === game.fixture.homeSeasonClubId)
-            ? "HOME"
-            : "AWAY";
-        const awarded = awardPoint(tennisPoints, side);
-        tennisPoints = awarded.gameWon ? { home: 0, away: 0 } : awarded.points;
-      }
+      tennisPoints = replayTennisGamePoints(game.events, game.currentPeriod, {
+        entrantId: game.fixture.homeEntrantId,
+        seasonClubId: game.fixture.homeSeasonClubId,
+      });
     }
 
     const result = scoringModule.apply(definition, {
