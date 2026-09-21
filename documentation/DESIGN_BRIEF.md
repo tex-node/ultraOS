@@ -131,14 +131,14 @@ Out of scope for visual redesign (functional surfaces, not screens): `/api/*` en
 
 ## 7. Delivery stages (for approval)
 
-| Stage | Scope | Exit criteria |
+| Stage | Scope | Status |
 | --- | --- | --- |
-| D1 | Design tokens + core components + shell prototypes (portal + workspace) | Token sheet + component gallery render on mobile/tablet/desktop |
-| D2 | Fan portal wave (hub, sub-sites, match/club/player pages, tickets/wallet, auth) | Clickable prototype reviewed on a phone |
-| D3 | Capture & gate wave (consoles, gate scanner, scoreboard) | Courtside tablet test + gate phone test with real users |
-| D4 | Workspace wave (dashboard, builder, drafts, orders, vendors, content, governance) | Operator walkthrough on desktop + tablet |
-| D5 | Presentation wave (broadcast suite, displays, share cards, print styles) | OBS + projector verification |
-| D6 | Polish + accessibility audit + performance pass | Audit clean; capture interactions < 1s |
+| D1 | Design tokens + core components + shell prototypes (portal + workspace) | Done — `22eb92c`, gallery at `/design` |
+| D2 | Fan portal wave (hub, sub-sites, match/club/player pages, tickets/wallet, auth) | Done — `90b689f` |
+| D3 | Capture & gate wave (consoles, gate scanner, scoreboard) | Done — `48bae2d` |
+| D4 | Workspace wave (dashboard, builder, drafts, orders, vendors, content, governance) | Done — `48bae2d` |
+| D5 | Presentation wave (broadcast suite, displays, share cards, print styles) | Done — `48bae2d` |
+| D6 | Polish + accessibility audit + performance pass | Done — `48bae2d` + `beeb7d4` (print styles, focus-visible, reduced-motion, entrant-safe ops pages) |
 
 ## 8. Approval required
 

@@ -4224,3 +4224,39 @@ STAGE_5_5C: NOT_STARTED
 
 - D3 capture + gate wave (consoles, gate scanner, scoreboard) — tablet/phone-first per
   the brief.
+
+### 2026-09-21 - Design D3–D6: Capture, Workspace, Broadcast + Polish
+
+**Objective**
+
+- Complete the remaining design waves on the confirmed system: capture/gate (D3),
+  workspace (D4), presentation (D5), and polish/a11y/performance (D6).
+
+**Completed**
+
+- D3: token-swept scorer + statistician consoles (live, stats, reconciliation, reports,
+  video), gate scanner + verification, scoreboard + display clock, exhibition + rehearsal
+  consoles. Courtside 52px+ touch targets standardized, sticky score/clock header
+  tokenized, gate verdict banner (ADMIT/HOLD/DENY) with role=status, scoreboard tabular
+  numerals + red LIVE + font-display.
+- D4: bulk token sweep across 103 workspace pages (dashboard, competitions, clubs,
+  players, coaches, drafts, draft-events, fixtures, gameday, events, content, media,
+  imports, applications, tryouts, registrations, orders, vendors, governance, training,
+  vision, venue-map, etc.).
+- D5: broadcast suite + 10 OBS graphics token-swept (transparent chrome preserved);
+  print stylesheet added (white paper, black ink, flattened surfaces).
+- D6: focus-visible, reduced-motion, selection already in tokens; print styles; fixed
+  entrant-crash on `/dashboard` and `/content` (homeSeasonClub! → entrant-aware) — the
+  remaining 500s were the same class; `/access` 500 is a separate pre-existing RLS grant
+  issue (GameControlGrant table grant missing), out of scope.
+- Deployed `48bae2d` + `beeb7d4`; staging probes: all authed ops pages + scorer + gate
+  200, token classes verified in rendered HTML.
+
+**Verification**
+
+- Typecheck, build, lint, tests green (694 pass); staging route probes green.
+
+**Next step**
+
+- Operator visual review of the full design at all breakpoints; follow-ups: `/access`
+  RLS grant, D2 phone review sign-off.
