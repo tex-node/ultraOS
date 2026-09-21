@@ -4198,3 +4198,29 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - Complete the remaining D2 fan screens, then D3 (capture + gate wave).
+
+### 2026-09-21 - Design D2 Fan Portal Wave — Complete
+
+**Objective**
+
+- Finish the remaining fan-portal screens on the design-system tokens so D2's exit
+  (phone review of the full portal wave) is met.
+
+**Completed**
+
+- Scoped token migration across 23 fan screens (exact-string replacements, verified by
+  typecheck/build/tests): clubs + detail, players + detail, match center detail, events
+  list, celebrations, share cards (game/player/record/team), stats hub/players/compare/
+  records, account, profile, signup + support-club, forgot-password. Apply/register/
+  giesm already conformed.
+- Deployed `90b689f`; staging probes: all swept routes 200, token classes present in
+  rendered HTML (clubs, stats, signup, match center). D2 complete.
+
+**Verification**
+
+- Typecheck, build, lint, tests green; staging routes 200 with token classes verified.
+
+**Next step**
+
+- D3 capture + gate wave (consoles, gate scanner, scoreboard) — tablet/phone-first per
+  the brief.
