@@ -4295,3 +4295,30 @@ STAGE_5_5C: NOT_STARTED
 - Continue handoff adoption: wire DataTable across workspace index pages, fan bottom nav
   on all portal routes, capture event-button grid (2/4) + offline amber pill with queued
   count, then real-device review.
+
+### 2026-09-21 - Handoff Adoption: Capture Surfaces + DataTable
+
+**Objective**
+
+- Continue the fresh-look implementation: capture event-button grid and states, offline
+  indicator, and DataTable adoption on the ops standings.
+
+**Completed**
+
+- Capture event buttons now render in a 2 (mobile) / 4 (tablet+) grid at 56px; scoring
+  actions solid brand, non-scoring catalog actions ink-700 neutral, basketball FOUL amber
+  tint. Verified in rendered HTML (`grid-cols-2`/`md:grid-cols-4`).
+- `CaptureConnectivity` offline amber pill added to the scorer console (honest state —
+  no queued-count until F7 queueing; renders only when actually offline).
+- Ops `/standings` rebuilt on the `DataTable` primitive (scroll min-width, header
+  `#0B0E12`, tabular numbers); fan standings already adopted it.
+- Deployed `375765e`; probes green.
+
+**Verification**
+
+- Typecheck, build, lint, tests green; staging route + content probes green.
+
+**Next step**
+
+- Fan bottom nav on all portal routes (it renders in the shell — confirm wrap/scroll on
+  very small screens), then real-device review (courtside tablet + gate phone).
