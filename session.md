@@ -4388,3 +4388,38 @@ STAGE_5_5C: NOT_STARTED
 
 - Operator visual sign-off on production; real-device review (courtside tablet + gate
   phone); remaining handoff adoption.
+
+### 2026-09-21 - Bachs Payments Live (F5.3) + /live Fix
+
+**Objective**
+
+- Fix the /live page (mobile-looking on desktop) and activate ticket sales + ecommerce
+  via the Bachs gateway, including per-vendor sub-account payouts.
+
+**Completed**
+
+- /live wrapped in the portal shell, widened for desktop, live cards 2-up, hero on tokens
+  (deployed with the payments release).
+- Bachs integration (live key + webhook secret wired into both servers' web.env, never
+  committed): `lib/bachs.ts` (checkout sessions, V1/V2 webhook HMAC verification, Connect
+  account creation + onboarding links, transfers), migration 20260921200000 (checkout refs
+  on reservations/orders, vendor bachsAccountId/onboardingUrl), checkout wiring in
+  reserveZone + createWalletOrder, signed webhook route (collection.succeeded / refund.paid,
+  idempotent), shared payment-fulfilment helper reused by operator + webhook paths.
+- Vendor sub-accounts: per-vendor "Connect payout account" panel; on paid orders the
+  webhook issues per-vendor transfers (net of commission, grouped by charge), best-effort.
+- Fixed webhook 500 for unknown entities (findUniqueOrThrow -> findUnique + acknowledge).
+- Verified: live checkout creation works after key scope update (CHECKOUT_OK), webhook
+  200/401/405, and an end-to-end flow proof: reservation 2xN1000-20%=N1600 -> real checkout
+  chk_tHLmo08VcDAPRUqW -> signed collection.succeeded -> reservation PAID (ref ch_flow_001),
+  ticket ACTIVE.
+
+**Verification**
+
+- typecheck/build/lint/tests green (4 new Bachs tests); deployed 665c109 + 0681015 to
+  staging and production; flow proof on staging.
+
+**Next step**
+
+- Operator connects a real vendor payout account + onboarding; funds settle -> automatic
+  transfers flow. Enable Payouts/Refunds scopes on the key as needed.
