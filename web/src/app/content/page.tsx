@@ -29,6 +29,8 @@ export default async function ContentStudioPage() {
       include: {
         homeSeasonClub: { include: { club: true } },
         awaySeasonClub: { include: { club: true } },
+        homeEntrant: true,
+        awayEntrant: true,
       },
       orderBy: { scheduledAt: "desc" },
       take: 100,
@@ -54,6 +56,9 @@ export default async function ContentStudioPage() {
     }),
   ]));
 
+  const sideName = (fixture: { homeSeasonClub?: { club: { name: string } } | null; awaySeasonClub?: { club: { name: string } } | null; homeEntrant?: { name: string } | null; awayEntrant?: { name: string } | null }) =>
+    `${fixture.homeSeasonClub?.club.name ?? fixture.homeEntrant?.name ?? "TBD"} vs ${fixture.awaySeasonClub?.club.name ?? fixture.awayEntrant?.name ?? "TBD"}`;
+
   const sourceGroups: Array<{
     type: ContentType;
     label: string;
@@ -72,7 +77,7 @@ export default async function ContentStudioPage() {
       label: "Fixture Release",
       options: fixtures.map((fixture) => ({
         id: fixture.id,
-        label: `${fixture.homeSeasonClub!.club.name} vs ${fixture.awaySeasonClub!.club.name} | ${fixture.scheduledAt.toLocaleDateString()}`,
+        label: `${sideName(fixture)} | ${fixture.scheduledAt.toLocaleDateString()}`,
       })),
     },
     {
@@ -80,7 +85,7 @@ export default async function ContentStudioPage() {
       label: "Match Result",
       options: fixtures.map((fixture) => ({
         id: fixture.id,
-        label: `${fixture.homeSeasonClub!.club.name} ${fixture.homeScore}-${fixture.awayScore} ${fixture.awaySeasonClub!.club.name}`,
+        label: `${fixture.homeSeasonClub?.club.name ?? fixture.homeEntrant?.name ?? "TBD"} ${fixture.homeScore}-${fixture.awayScore} ${fixture.awaySeasonClub?.club.name ?? fixture.awayEntrant?.name ?? "TBD"}`,
         disabled: fixture.status !== "FINAL",
       })),
     },
@@ -89,7 +94,7 @@ export default async function ContentStudioPage() {
       label: "MVP Announcement",
       options: fixtures.map((fixture) => ({
         id: fixture.id,
-        label: `${fixture.homeSeasonClub!.club.name} vs ${fixture.awaySeasonClub!.club.name}`,
+        label: sideName(fixture),
         disabled: fixture.status !== "FINAL",
       })),
     },

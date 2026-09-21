@@ -38,6 +38,8 @@ export default async function DashboardPage() {
             include: {
               homeSeasonClub: { include: { club: true } },
               awaySeasonClub: { include: { club: true } },
+              homeEntrant: true,
+              awayEntrant: true,
             },
           },
         },
@@ -50,6 +52,8 @@ export default async function DashboardPage() {
             include: {
               homeSeasonClub: { include: { club: true } },
               awaySeasonClub: { include: { club: true } },
+              homeEntrant: true,
+              awayEntrant: true,
             },
           },
         },
@@ -77,6 +81,8 @@ export default async function DashboardPage() {
           officials: true,
           homeSeasonClub: { include: { club: true } },
           awaySeasonClub: { include: { club: true } },
+          homeEntrant: true,
+          awayEntrant: true,
         },
         orderBy: { scheduledAt: "asc" },
         take: 100,
@@ -193,7 +199,7 @@ export default async function DashboardPage() {
           <AlertPanel title="Live and paused games">
             {[...liveGames, ...awaitingFinalization].map((game) => (
               <Link key={game.id} href={`/games/${game.fixtureId}/live`} className="block border-b border-line py-3 last:border-0">
-                {game.fixture.homeSeasonClub!.club.name} vs {game.fixture.awaySeasonClub!.club.name}
+                {game.fixture.homeSeasonClub?.club.name ?? game.fixture.homeEntrant?.name ?? "TBD"} vs {game.fixture.awaySeasonClub?.club.name ?? game.fixture.awayEntrant?.name ?? "TBD"}
                 <span className="ml-2 text-xs text-text-3">{game.status}</span>
               </Link>
             ))}
@@ -211,7 +217,7 @@ export default async function DashboardPage() {
           <AlertPanel title="Fixture readiness">
             {[...new Map([...missingOfficials, ...fixtureConflicts].map((fixture) => [fixture.id, fixture])).values()].map((fixture) => (
               <Link key={fixture.id} href={`/fixtures/${fixture.id}`} className="block border-b border-line py-3 last:border-0">
-                <p>{fixture.homeSeasonClub!.club.name} vs {fixture.awaySeasonClub!.club.name}</p>
+                <p>{fixture.homeSeasonClub?.club.name ?? fixture.homeEntrant?.name ?? "TBD"} vs {fixture.awaySeasonClub?.club.name ?? fixture.awayEntrant?.name ?? "TBD"}</p>
                 <p className="mt-1 text-xs text-text-3">
                   {fixture.scheduledAt.toLocaleString()} · {fixture.venue.name}
                   {fixture.officials.length === 0 ? " · No officials" : ""}
