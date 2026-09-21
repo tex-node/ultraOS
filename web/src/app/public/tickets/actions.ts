@@ -18,6 +18,7 @@ import {
   upsertPublicTokenLocator,
 } from "@/lib/public-locators";
 import { withOrganizationContext } from "@/lib/tenant-context";
+import { bachsConfig, createCheckoutSession } from "@/lib/bachs";
 
 export async function createWalletOrder(
   ticketCode: string,
@@ -197,6 +198,27 @@ export async function createWalletOrder(
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
+
+  // Paid orders go through the Bachs hosted checkout (F5.3); free orders go straight to the
+  // order page. The collection.succeeded webhook is the source of truth for marking paid.
+  if (order.totalKobo > 0 && bachsConfig()) {
+    const baseUrl = (process.env.AUTH_URL ?? "").replace(/\/$/, "");
+    const checkout = await createCheckoutSession({
+      amountKobo: order.totalKobo,
+      reference: `ord-${order.id}`,
+      metadata: { kind: "order", orderId: order.id, collectionCode: order.collectionCode },
+      customerEmail: order.guestEmail,
+      customerName: order.guestName,
+      phoneNumber: order.guestPhone,
+      successUrl: `${baseUrl}/public/orders/${order.collectionCode}`,
+      cancelUrl: `${baseUrl}/public/tickets/${ticketCode}`,
+    });
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { checkoutId: checkout.checkout_id, checkoutUrl: checkout.checkout_url },
+    });
+    redirect(checkout.checkout_url);
+  }
   redirect(`/public/orders/${order.collectionCode}`);
 }
 

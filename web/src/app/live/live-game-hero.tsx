@@ -23,86 +23,86 @@ export function LiveGameHero({
 }) {
   return (
     <Link href={href} className="block">
-      <section className={`rounded-2xl border p-6 ${rehearsal ? "border-fuchsia-400/40 bg-[#120a14]" : "border-emerald-400/30 bg-[#0b100e]"}`}>
+      <section className={`rounded-lg border p-6 ${rehearsal ? "border-accent-purple/40 bg-[#120a14]" : "border-brand-400/30 bg-ink-800"}`}>
         {rehearsal ? (
-          <p className="mb-3 text-center text-[10px] font-black uppercase tracking-[.3em] text-fuchsia-400">Rehearsal — not public</p>
+          <p className="mb-3 text-center text-[10px] font-black uppercase tracking-[.3em] text-accent-purple">Rehearsal — not public</p>
         ) : null}
         {staleness && (staleness.freshness === "DELAYED" || staleness.freshness === "STALE") ? (
-          <p className={`mb-3 text-center text-xs font-bold uppercase tracking-wide ${staleness.freshness === "STALE" ? "text-red-400" : "text-amber-400"}`}>
+          <p className={`mb-3 text-center text-xs font-bold uppercase tracking-wide ${staleness.freshness === "STALE" ? "text-danger" : "text-warn"}`}>
             LIVE DATA DELAYED · last updated {staleness.ageSeconds}s ago
           </p>
         ) : null}
         {model.ultraTime.phase === "ACTIVE" ? (
-          <p className="mb-3 text-center text-sm font-black tracking-wide text-amber-400">⚡ ULTRA TIME — ALL POINTS ×2</p>
+          <p className="mb-3 text-center text-sm font-black tracking-wide text-warn">⚡ ULTRA TIME — ALL POINTS ×2</p>
         ) : model.ultraTime.phase === "APPROACHING" ? (
-          <p className="mb-3 text-center text-xs font-bold text-amber-300">ULTRA TIME IN 00:{model.ultraTime.secondsUntilStart.toString().padStart(2, "0")}</p>
+          <p className="mb-3 text-center text-xs font-bold text-warn">ULTRA TIME IN 00:{model.ultraTime.secondsUntilStart.toString().padStart(2, "0")}</p>
         ) : null}
 
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
           <p className="text-lg font-semibold">{fixture.homeSeasonClub!.club.name}</p>
-          <p className="font-mono text-5xl font-black">{model.score.home} — {model.score.away}</p>
+          <p className="font-mono text-5xl font-black tabular-nums">{model.score.home} — {model.score.away}</p>
           <p className="text-lg font-semibold">{fixture.awaySeasonClub!.club.name}</p>
         </div>
-        <p className="mt-3 text-center text-sm text-zinc-500">
+        <p className="mt-3 text-center text-sm text-text-3">
           {model.periodLabel} · <GameClock seconds={model.clock.remainingSeconds} status={model.clock.running ? "LIVE" : "PAUSED"} startedAt={null} />
           {" · shot clock "}
           <GameClock seconds={model.shotClock.remainingSeconds} status={model.shotClock.running ? "LIVE" : "PAUSED"} startedAt={null} />
         </p>
 
         {model.leaders.length > 0 ? (
-          <div className="mt-5 border-t border-white/[.06] pt-4">
-            <p className="text-[10px] uppercase tracking-wider text-zinc-500">Game leaders</p>
+          <div className="mt-5 border-t border-line pt-4">
+            <p className="text-[10px] uppercase tracking-wider text-text-3">Game leaders</p>
             <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">
               {model.leaders.filter((l) => ["POINTS", "REBOUNDS", "ASSISTS"].includes(l.category)).map((l) => (
-                <span key={l.category} className="text-zinc-300">{l.category.slice(0, 3)} <span className="font-semibold text-white">{l.value}</span></span>
+                <span key={l.category} className="text-text-1">{l.category.slice(0, 3)} <span className="font-semibold text-white">{l.value}</span></span>
               ))}
             </div>
           </div>
         ) : null}
 
         {model.gameStory ? (
-          <div className="mt-4 border-t border-white/[.06] pt-4">
-            <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+          <div className="mt-4 border-t border-line pt-4">
+            <p className="text-[10px] uppercase tracking-wider text-text-3">
               {model.gameStory.provisional ? "Live Game Story · Provisional" : "Game Story"}
             </p>
-            <p className="mt-1 text-sm font-semibold text-zinc-200">{model.gameStory.tags[0]?.replaceAll("_", " ")}</p>
-            {model.gameStory.facts[0] ? <p className="mt-1 text-xs text-zinc-400">{model.gameStory.facts[0]}</p> : null}
+            <p className="mt-1 text-sm font-semibold text-text-1">{model.gameStory.tags[0]?.replaceAll("_", " ")}</p>
+            {model.gameStory.facts[0] ? <p className="mt-1 text-xs text-text-2">{model.gameStory.facts[0]}</p> : null}
           </div>
         ) : null}
 
         {model.gamePulse.leadChanges > 0 || model.gamePulse.largestLead ? (
-          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 border-t border-white/[.06] pt-3 text-xs text-zinc-500">
+          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 border-t border-line pt-3 text-xs text-text-3">
             <span>{model.gamePulse.leadChanges} lead changes</span>
             {model.gamePulse.largestLead ? (
               <span>Largest lead: {model.gamePulse.largestLead.team === "HOME" ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName} by {model.gamePulse.largestLead.margin}</span>
             ) : null}
             {model.gamePulse.currentRun && model.gamePulse.currentRun.points >= 4 ? (
-              <span className="text-amber-300">{model.gamePulse.currentRun.team === "HOME" ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName} on a {model.gamePulse.currentRun.points}–0 run</span>
+              <span className="text-warn">{model.gamePulse.currentRun.team === "HOME" ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName} on a {model.gamePulse.currentRun.points}–0 run</span>
             ) : null}
           </div>
         ) : null}
 
         {model.fourPoint.home || model.fourPoint.away ? (
-          <div className="mt-4 flex justify-center gap-6 text-xs text-violet-300">
+          <div className="mt-4 flex justify-center gap-6 text-xs text-accent-purple">
             <span>4PT {fixture.homeSeasonClub!.club.shortName} {model.fourPoint.home?.made ?? 0}</span>
             <span>4PT {fixture.awaySeasonClub!.club.shortName} {model.fourPoint.away?.made ?? 0}</span>
           </div>
         ) : null}
 
         {model.teamComparison.length > 0 ? (
-          <div className="mt-4 border-t border-white/[.06] pt-3">
-            <p className="text-[10px] uppercase tracking-wider text-zinc-500">Team comparison</p>
-            <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-zinc-400">
+          <div className="mt-4 border-t border-line pt-3">
+            <p className="text-[10px] uppercase tracking-wider text-text-3">Team comparison</p>
+            <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-text-2">
               {model.teamComparison.map((row) => (
-                <span key={row.label}>{row.home} <span className="text-zinc-600">{row.label}</span> {row.away}</span>
+                <span key={row.label}>{row.home} <span className="text-text-3">{row.label}</span> {row.away}</span>
               ))}
             </div>
           </div>
         ) : null}
 
         {model.momentFeed.length > 0 ? (
-          <div className="mt-4 border-t border-white/[.06] pt-3 text-xs text-zinc-500">
-            <p className="text-zinc-300">{model.momentFeed[0].clockLabel} — {model.momentFeed[0].text}</p>
+          <div className="mt-4 border-t border-line pt-3 text-xs text-text-3">
+            <p className="text-text-1">{model.momentFeed[0].clockLabel} — {model.momentFeed[0].text}</p>
           </div>
         ) : null}
       </section>

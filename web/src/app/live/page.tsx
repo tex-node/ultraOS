@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PortalShell } from "@/app/components/portal-shell";
 import { LiveRefresher } from "./live-refresher";
 import { LiveGameHero } from "./live-game-hero";
 import { buildLivePresentationModelForGame } from "@/lib/live-game-snapshot-v2";
@@ -52,10 +53,11 @@ export default async function PublicLive() {
       .slice(0, 6);
 
     return (
-      <main className="mx-auto max-w-4xl px-6 py-10">
-        <p className="text-xs uppercase tracking-[.2em] text-brand-400">Season Zero · Live</p>
-        <h1 className="mt-2 font-display text-3xl font-bold">Match centre</h1>
-        <p className="mt-3 text-text-2">No game is live right now.</p>
+      <PortalShell>
+        <main className="mx-auto max-w-6xl px-6 py-10">
+          <p className="text-xs uppercase tracking-[.2em] text-brand-400">Season Zero · Live</p>
+          <h1 className="mt-2 font-display text-3xl font-bold">Match centre</h1>
+          <p className="mt-3 text-text-2">No game is live right now.</p>
 
         {upcoming[0] ? (
           <section className="mt-8 rounded-lg border border-line bg-ink-800 p-6">
@@ -107,7 +109,8 @@ export default async function PublicLive() {
             <Link href="/public/stats/records" className="text-brand-400">Record book</Link>
           </div>
         </section>
-      </main>
+        </main>
+      </PortalShell>
     );
   }
 
@@ -129,15 +132,17 @@ export default async function PublicLive() {
     })));
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
-      <p className="text-xs uppercase tracking-[.2em] text-brand-400">Season Zero · Live</p>
-      <h1 className="mt-2 font-display text-3xl font-bold">Match centre</h1>
-      <LiveRefresher />
-      <div className="mt-8 space-y-8">
-        {live.map((fixture, i) => (
-          <LiveGameHero key={fixture.id} fixture={{ ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }} model={models[i]} href={`/public/fixtures/${fixture.id}`} staleness={freshness[i]} />
-        ))}
-      </div>
-    </main>
+    <PortalShell>
+      <main className="mx-auto max-w-6xl px-6 py-10">
+        <p className="text-xs uppercase tracking-[.2em] text-brand-400">Season Zero · Live</p>
+        <h1 className="mt-2 font-display text-3xl font-bold">Match centre</h1>
+        <LiveRefresher />
+        <div className="mt-8 grid gap-6 md:grid-cols-2">
+          {live.map((fixture, i) => (
+            <LiveGameHero key={fixture.id} fixture={{ ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }} model={models[i]} href={`/public/fixtures/${fixture.id}`} staleness={freshness[i]} />
+          ))}
+        </div>
+      </main>
+    </PortalShell>
   );
 }

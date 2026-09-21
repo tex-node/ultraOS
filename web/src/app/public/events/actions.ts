@@ -15,6 +15,7 @@ import {
   checkPromoForEvent,
   promoDiscountKobo,
 } from "@/lib/ticketing";
+import { bachsConfig, createCheckoutSession } from "@/lib/bachs";
 import {
   resolvePublicResourceLocator,
   upsertPublicTokenLocator,
@@ -173,5 +174,28 @@ export async function reserveZone(eventId: string, formData: FormData) {
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
-  redirect(`/public/tickets/${reservation.ticket?.code}`);
+
+  const ticketCode = reservation.ticket?.code;
+  // Paid reservations go through the Bachs hosted checkout (F5.3); free reservations go
+  // straight to the ticket. The webhook (collection.succeeded) is the source of truth for
+  // marking the reservation paid — never this redirect.
+  if (ticketCode && reservation.totalKobo > 0 && bachsConfig()) {
+    const baseUrl = (process.env.AUTH_URL ?? "").replace(/\/$/, "");
+    const checkout = await createCheckoutSession({
+      amountKobo: reservation.totalKobo,
+      reference: `res-${reservation.id}`,
+      metadata: { kind: "reservation", reservationId: reservation.id, ticketCode },
+      customerEmail: reservation.guestEmail,
+      customerName: reservation.guestName,
+      phoneNumber: reservation.guestPhone,
+      successUrl: `${baseUrl}/public/tickets/${ticketCode}`,
+      cancelUrl: `${baseUrl}/public/events/${eventId}`,
+    });
+    await prisma.seatReservation.update({
+      where: { id: reservation.id },
+      data: { checkoutId: checkout.checkout_id, checkoutUrl: checkout.checkout_url },
+    });
+    redirect(checkout.checkout_url);
+  }
+  redirect(`/public/tickets/${ticketCode}`);
 }

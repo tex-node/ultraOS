@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import {
+  connectBachsAccount,
   createSponsorCampaign,
   createPromoCode,
   createVendorProduct,
@@ -71,7 +72,20 @@ export default async function VendorDetailPage({
             <Panel title="Set event inventory"><form action={setVendorInventory.bind(null,id)} className="space-y-3"><select name="eventId" required className="w-full rounded-lg bg-white/[.05] p-3"><option value="">Event</option>{events.map((event)=><option key={event.id} value={event.id}>{event.name}</option>)}</select><select name="productId" required className="w-full rounded-lg bg-white/[.05] p-3"><option value="">Product</option>{vendor.products.map((product)=><option key={product.id} value={product.id}>{product.name}</option>)}</select><input name="stock" type="number" min="0" required placeholder="Stock" className="w-full rounded-lg bg-white/[.05] p-3" /><button className="w-full rounded-lg border border-brand-400/30 p-3 text-brand-300">Save inventory</button></form></Panel>
             <Panel title="Sponsor campaign"><form action={createSponsorCampaign.bind(null,id)} className="space-y-3"><input name="name" required placeholder="Campaign name" className="w-full rounded-lg bg-white/[.05] p-3" /><input name="sponsorName" required placeholder="Sponsor name" className="w-full rounded-lg bg-white/[.05] p-3" /><select name="eventId" className="w-full rounded-lg bg-white/[.05] p-3"><option value="">All events</option>{events.map((event)=><option key={event.id} value={event.id}>{event.name}</option>)}</select><select name="productId" className="w-full rounded-lg bg-white/[.05] p-3"><option value="">No product</option>{vendor.products.map((product)=><option key={product.id} value={product.id}>{product.name}</option>)}</select><button className="w-full rounded-lg border border-warn/30 p-3 text-warn">Create campaign</button></form></Panel>
             <Panel title="Promo code"><form action={createPromoCode.bind(null,id)} className="space-y-3"><input name="code" required placeholder="Code" className="w-full rounded-lg bg-white/[.05] p-3 uppercase" /><select name="campaignId" className="w-full rounded-lg bg-white/[.05] p-3"><option value="">No sponsor campaign</option>{campaigns.map((campaign)=><option key={campaign.id} value={campaign.id}>{campaign.sponsorName} · {campaign.name}</option>)}</select><select name="eventId" className="w-full rounded-lg bg-white/[.05] p-3"><option value="">All events</option>{events.map((event)=><option key={event.id} value={event.id}>{event.name}</option>)}</select><input name="discountPercent" type="number" min="0" max="100" required placeholder="Discount %" className="w-full rounded-lg bg-white/[.05] p-3" /><input name="maxRedemptions" type="number" min="0" defaultValue="0" placeholder="Max redemptions (0 unlimited)" className="w-full rounded-lg bg-white/[.05] p-3" /><button className="w-full rounded-lg border border-line p-3">Create promo</button></form></Panel>
-            <Panel title="League commission"><p className="text-xs text-text-3">League share of this vendor&apos;s gross, applied to payout figures.</p><form action={setVendorCommission.bind(null,id)} className="mt-3 flex gap-2"><input name="commissionPercent" type="number" min="0" max="100" step="0.01" required defaultValue={(vendor.commissionBps / 100).toString()} placeholder="Commission %" className="min-w-0 flex-1 rounded-lg bg-white/[.05] p-3" /><button className="rounded-lg border border-brand-400/30 px-4 text-brand-300">Save</button></form></Panel>
+            <Panel title="League commission"><p className="text-xs text-text-3">League share of this vendor&apos;s gross, applied to payout figures.</p><form action={setVendorCommission.bind(null,id)} className="mt-3 flex gap-2"><input name="commissionPercent" type="number" min="0" max="100" step="0.01" required defaultValue={(vendor.commissionBps / 100).toString()} placeholder="Commission %" className="min-w-0 flex-1 rounded-md border border-line bg-ink-700 p-3 text-sm text-text-1" /><button className="rounded-md border border-brand-400/30 px-4 text-brand-300">Save</button></form></Panel>
+            <Panel title="Payout account (Bachs Connect)">
+              {vendor.bachsAccountId ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-brand-300">Connected · <span className="font-mono text-xs text-text-2">{vendor.bachsAccountId}</span></p>
+                  {vendor.bachsOnboardingUrl ? <a href={vendor.bachsOnboardingUrl} className="block text-sm text-brand-400 underline">Reopen onboarding →</a> : null}
+                </div>
+              ) : (
+                <form action={connectBachsAccount.bind(null,id)}>
+                  <p className="text-xs text-text-3">Give this vendor its own gateway account so payouts reconcile cleanly.</p>
+                  <button className="mt-3 w-full rounded-md bg-brand-400 p-3 font-semibold text-ink-900 transition hover:bg-brand-300">Connect payout account</button>
+                </form>
+              )}
+            </Panel>
           </div>
         </div>
       </main>

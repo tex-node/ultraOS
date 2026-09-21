@@ -2581,6 +2581,10 @@ model SeatReservation {
   paymentStatus    PaymentStatus     @default(UNPAID)
   paymentReference String?
   paidAt           DateTime?
+  // Bachs hosted checkout (F5.3): set when a checkout session is created for this
+  // reservation; payment is confirmed by the collection.succeeded webhook.
+  checkoutId       String?
+  checkoutUrl      String?
   // F4 ticketing depth: optional promo code applied at reservation time.
   promoCodeId      String?
   promoCode        PromoCode?        @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
@@ -2870,6 +2874,10 @@ model Vendor {
   isActive       Boolean           @default(true)
   // F5 vendor marketplace: league commission on vendor gross, in basis points.
   commissionBps  Int               @default(0)
+  // Bachs Connect sub-account (F5.3): per-vendor financial identity so payouts reconcile
+  // cleanly. Null until an operator connects the vendor to the gateway.
+  bachsAccountId String?
+  bachsOnboardingUrl String?
   recordOrigin   RecordOrigin      @default(PRODUCTION)
   products       VendorProduct[]
   eventReviews   EventVendorReview[]
@@ -2994,6 +3002,9 @@ model Order {
   collectionCode   String           @unique
   paidAt           DateTime?
   collectedAt      DateTime?
+  // Bachs hosted checkout (F5.3): set when a checkout session is created for this order.
+  checkoutId       String?
+  checkoutUrl      String?
   items            OrderItem[]
   checkIns         CheckIn[]
   createdAt        DateTime         @default(now())

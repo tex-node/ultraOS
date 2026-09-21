@@ -6,6 +6,7 @@ import { z } from "zod";
 import { ProductApproval, ProductCategory } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { createAccountLink, createConnectedAccount } from "@/lib/bachs";
 import { formDataToRecord } from "@/lib/club-validation";
 import { nairaToKobo } from "@/lib/money";
 import { withOrganizationContext } from "@/lib/tenant-context";
@@ -326,4 +327,37 @@ export async function setVendorCommission(vendorId: string, formData: FormData) 
     });
   });
   revalidatePath(`/vendors/${vendorId}`);
+}
+
+// Bachs Connect sub-account (F5.3): gives the vendor its own financial identity so payout
+// reconciliation is clean. Creates the account and mints a hosted onboarding link, then
+// sends the operator straight there. Idempotent — reconnecting reopens onboarding.
+export async function connectBachsAccount(vendorId: string) {
+  const { session, organizationId } = await requirePermissionWithOrganization("vendor:manage");
+  const { redirect } = await import("next/navigation");
+  const vendor = await withOrganizationContext(organizationId, (tx) =>
+    tx.vendor.findUniqueOrThrow({ where: { id: vendorId } }),
+  );
+  const account = await createConnectedAccount({
+    name: vendor.name,
+    email: vendor.email ?? `vendor-${vendor.id}@neonultra.ng`,
+    metadata: { vendorId: vendor.id, organizationId },
+  });
+  const link = await createAccountLink(account.account_id);
+  await withOrganizationContext(organizationId, async (tx) => {
+    await tx.vendor.update({
+      where: { id: vendorId },
+      data: { bachsAccountId: account.account_id, bachsOnboardingUrl: link.url },
+    });
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "VENDOR_BACHS_ACCOUNT_CONNECTED",
+      entityType: "Vendor",
+      entityId: vendorId,
+      details: { accountId: account.account_id },
+    });
+  });
+  revalidatePath(`/vendors/${vendorId}`);
+  redirect(link.url);
 }
