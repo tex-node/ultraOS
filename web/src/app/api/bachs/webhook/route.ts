@@ -58,14 +58,16 @@ export async function POST(request: Request) {
       }
 
       if (orderId) {
-        const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, select: { organizationId: true } });
+        const order = await prisma.order.findUnique({ where: { id: orderId }, select: { organizationId: true } });
+        if (!order) return NextResponse.json({ received: true, skipped: "order not found" });
         await withOrganizationContext(order.organizationId, (tx) =>
           fulfilPaidOrder(tx, { organizationId: order.organizationId, orderId, reference, actorUserId: null }),
         );
         return NextResponse.json({ received: true });
       }
       if (reservationId) {
-        const reservation = await prisma.seatReservation.findUniqueOrThrow({ where: { id: reservationId }, select: { organizationId: true } });
+        const reservation = await prisma.seatReservation.findUnique({ where: { id: reservationId }, select: { organizationId: true } });
+        if (!reservation) return NextResponse.json({ received: true, skipped: "reservation not found" });
         await withOrganizationContext(reservation.organizationId, (tx) =>
           fulfilPaidReservation(tx, { organizationId: reservation.organizationId, reservationId, reference, actorUserId: null }),
         );
