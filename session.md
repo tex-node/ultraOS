@@ -4322,3 +4322,33 @@ STAGE_5_5C: NOT_STARTED
 
 - Fan bottom nav on all portal routes (it renders in the shell — confirm wrap/scroll on
   very small screens), then real-device review (courtside tablet + gate phone).
+
+### 2026-09-21 - Production Deployment of the New UI
+
+**Objective**
+
+- Ship the complete redesign (D1–D6 + handoff implementation) to production
+  `https://app.neonultra.ng` with all pending migrations.
+
+**Completed**
+
+- Pre-migration backup:
+  `/var/backups/ultraleagueos/pre_design_deploy_20260921T151346Z.dump`
+  (SHA-256 `c1cd507dd2a50c68bacfd9608b78d5637a6cedeb3f9a82fc61f91bcd586682b2`).
+- Deployed `cbfb05b` to `/opt/ultraleagueos` via `deploy.sh --migrate`; production was on
+  `576f6b6` and received the F4 passes/roles, F5 vendor approvals, F6 organizer roles, and
+  GameControlGrant access-fix migrations for the first time. All applied; service active.
+- Verified: public routes 200 on the live domain (`/login`, `/live`, `/`, `/public/standings`,
+  `/public/fixtures`); DB columns/enum/grants confirmed via the app role
+  (passTier/passValidFrom/passValidTo, approvalStatus, new UserRole values,
+  GameControlGrant readable); no new production log errors.
+
+**Verification**
+
+- Pre-deploy backup verified by size + SHA; migrations all "successfully applied";
+  live HTTP probes green; app-role DB checks green.
+
+**Next step**
+
+- Operator sign-in review on production; then real-device review (courtside tablet + gate
+  phone) and the remaining handoff adoption (DataTable across workspace index pages).
