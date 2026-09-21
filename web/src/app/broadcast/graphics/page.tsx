@@ -73,9 +73,9 @@ export default async function BroadcastGraphics({ searchParams }: { searchParams
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-6xl px-6 py-10">
-        <p className="text-xs uppercase tracking-[.2em] text-cyan-400">{season.name} · Media Production</p>
+        <p className="text-xs uppercase tracking-[.2em] text-info">{season.name} · Media Production</p>
         <h1 className="mt-2 text-3xl font-bold">Broadcast Graphics</h1>
-        <p className="mt-2 max-w-2xl text-sm text-zinc-400">
+        <p className="mt-2 max-w-2xl text-sm text-text-2">
           Every graphic here is generated from the same verified analytics engine as the public website — pick a subject, pick a card, pick a format.
         </p>
 
@@ -84,7 +84,7 @@ export default async function BroadcastGraphics({ searchParams }: { searchParams
             <Link
               key={t}
               href={`/broadcast/graphics?tab=${t}`}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${t === tab ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-300" : "border-white/[.12] text-zinc-400 hover:border-white/[.25]"}`}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${t === tab ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-300" : "border-line text-text-2 hover:border-white/[.25]"}`}
             >
               {t}
             </Link>
@@ -105,7 +105,7 @@ export default async function BroadcastGraphics({ searchParams }: { searchParams
 
 function CardButton({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className="rounded-md border border-white/[.12] bg-black/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-300 hover:border-cyan-400/40">
+    <Link href={href} className="rounded-md border border-line bg-black/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-300 hover:border-cyan-400/40">
       {label}
     </Link>
   );
@@ -113,9 +113,9 @@ function CardButton({ href, label }: { href: string; label: string }) {
 
 function SubjectRow({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-white/[.08] bg-[#0b100e] p-3">
-      <p className="text-sm font-bold text-zinc-200">{title}</p>
-      {subtitle ? <p className="text-xs text-zinc-500">{subtitle}</p> : null}
+    <div className="rounded-md border border-line bg-ink-800 p-3">
+      <p className="text-sm font-bold text-text-1">{title}</p>
+      {subtitle ? <p className="text-xs text-text-3">{subtitle}</p> : null}
       <div className="mt-2 flex flex-wrap gap-1.5">{children}</div>
     </div>
   );
@@ -181,7 +181,7 @@ function TeamsTab({
             {dna && dna.qualification === "QUALIFIED" ? <CardButton href={`/broadcast/graphics/preview?subject=team&id=${t.seasonClubId}&card=dna`} label="Team DNA" /> : null}
             <CardButton href={`/broadcast/graphics/preview?subject=team&id=${t.seasonClubId}&card=bestperf`} label="Best Performance" />
             {hasMilestone ? <CardButton href={`/broadcast/graphics/preview?subject=team&id=${t.seasonClubId}&card=milestone`} label="Milestone" /> : null}
-            {clubId ? <Link href={`/public/clubs/${clubId}`} className="rounded-md border border-white/[.08] px-2 py-1 text-[10px] uppercase tracking-wide text-zinc-500 hover:border-white/[.2]">View Page</Link> : null}
+            {clubId ? <Link href={`/public/clubs/${clubId}`} className="rounded-md border border-line px-2 py-1 text-[10px] uppercase tracking-wide text-text-3 hover:border-white/[.2]">View Page</Link> : null}
           </SubjectRow>
         );
       })}
@@ -201,7 +201,7 @@ function GamesTab({ games }: { games: GameCore[] }) {
             <CardButton href={`/broadcast/graphics/preview?subject=game&id=${g.fixtureId}&card=result`} label="Game Result" />
             {hasGameStar ? <CardButton href={`/broadcast/graphics/preview?subject=game&id=${g.fixtureId}&card=star`} label="Game Star" /> : null}
             {hasWhyTheyWon ? <CardButton href={`/broadcast/graphics/preview?subject=game&id=${g.fixtureId}&card=whytheywon`} label="Why They Won" /> : null}
-            <Link href={`/public/fixtures/${g.fixtureId}`} className="rounded-md border border-white/[.08] px-2 py-1 text-[10px] uppercase tracking-wide text-zinc-500 hover:border-white/[.2]">Full Story</Link>
+            <Link href={`/public/fixtures/${g.fixtureId}`} className="rounded-md border border-line px-2 py-1 text-[10px] uppercase tracking-wide text-text-3 hover:border-white/[.2]">Full Story</Link>
           </SubjectRow>
         );
       })}
@@ -228,7 +228,7 @@ function RecordsTab({ records }: { records: RecordEntry[] }) {
       {records.map((r) => (
         <SubjectRow key={r.key} title={r.title} subtitle={`${r.holderName} · ${r.value}`}>
           <CardButton href={`/broadcast/graphics/preview?subject=record&key=${encodeURIComponent(r.key)}&card=record`} label="View Card" />
-          <Link href={`/public/share/record/${encodeURIComponent(r.key)}`} className="rounded-md border border-white/[.08] px-2 py-1 text-[10px] uppercase tracking-wide text-zinc-500 hover:border-white/[.2]">Share View</Link>
+          <Link href={`/public/share/record/${encodeURIComponent(r.key)}`} className="rounded-md border border-line px-2 py-1 text-[10px] uppercase tracking-wide text-text-3 hover:border-white/[.2]">Share View</Link>
         </SubjectRow>
       ))}
     </section>
@@ -273,30 +273,30 @@ function MatchupsTab({
   const teams = [...teamTotals].sort((a, b) => a.name.localeCompare(b.name));
   return (
     <section className="mt-6 grid gap-6 sm:grid-cols-2">
-      <form action="/broadcast/graphics/preview" className="rounded-xl border border-white/[.08] bg-[#0b100e] p-4">
+      <form action="/broadcast/graphics/preview" className="rounded-md border border-line bg-ink-800 p-4">
         <input type="hidden" name="subject" value="matchup-player" />
         <input type="hidden" name="card" value="matchup" />
-        <p className="text-xs font-bold uppercase tracking-wide text-cyan-400">Player vs Player</p>
-        <select name="a" className="mt-2 w-full rounded-lg border border-white/[.12] bg-black/30 px-3 py-2 text-sm [color-scheme:dark]" required>
+        <p className="text-xs font-bold uppercase tracking-wide text-info">Player vs Player</p>
+        <select name="a" className="mt-2 w-full rounded-lg border border-line bg-black/30 px-3 py-2 text-sm [color-scheme:dark]" required>
           <option value="" disabled>Select Player A</option>
           {players.map((p) => <option key={p.playerId} value={p.playerId}>{p.name} · {p.seasonClubShortName}</option>)}
         </select>
-        <select name="b" className="mt-2 w-full rounded-lg border border-white/[.12] bg-black/30 px-3 py-2 text-sm [color-scheme:dark]" required>
+        <select name="b" className="mt-2 w-full rounded-lg border border-line bg-black/30 px-3 py-2 text-sm [color-scheme:dark]" required>
           <option value="" disabled>Select Player B</option>
           {players.map((p) => <option key={p.playerId} value={p.playerId}>{p.name} · {p.seasonClubShortName}</option>)}
         </select>
         <button type="submit" className="mt-3 w-full rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300">Generate Matchup Card</button>
       </form>
 
-      <form action="/broadcast/graphics/preview" className="rounded-xl border border-white/[.08] bg-[#0b100e] p-4">
+      <form action="/broadcast/graphics/preview" className="rounded-md border border-line bg-ink-800 p-4">
         <input type="hidden" name="subject" value="matchup-team" />
         <input type="hidden" name="card" value="matchup" />
-        <p className="text-xs font-bold uppercase tracking-wide text-cyan-400">Team vs Team</p>
-        <select name="a" className="mt-2 w-full rounded-lg border border-white/[.12] bg-black/30 px-3 py-2 text-sm [color-scheme:dark]" required>
+        <p className="text-xs font-bold uppercase tracking-wide text-info">Team vs Team</p>
+        <select name="a" className="mt-2 w-full rounded-lg border border-line bg-black/30 px-3 py-2 text-sm [color-scheme:dark]" required>
           <option value="" disabled>Select Team A</option>
           {teams.map((t) => <option key={t.seasonClubId} value={t.seasonClubId}>{t.name}</option>)}
         </select>
-        <select name="b" className="mt-2 w-full rounded-lg border border-white/[.12] bg-black/30 px-3 py-2 text-sm [color-scheme:dark]" required>
+        <select name="b" className="mt-2 w-full rounded-lg border border-line bg-black/30 px-3 py-2 text-sm [color-scheme:dark]" required>
           <option value="" disabled>Select Team B</option>
           {teams.map((t) => <option key={t.seasonClubId} value={t.seasonClubId}>{t.name}</option>)}
         </select>

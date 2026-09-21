@@ -91,8 +91,8 @@ export default async function BoxScoreReport({ params }: { params: Promise<{ fix
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-4 pb-8 sm:px-6">
         <div className="no-print flex flex-wrap items-center justify-between gap-2 py-3">
-          <Link href={`/games/${fixtureId}/stats/live`} className="text-sm text-zinc-400">Back to live console</Link>
-          <p className="text-sm text-zinc-500">
+          <Link href={`/games/${fixtureId}/stats/live`} className="text-sm text-text-2">Back to live console</Link>
+          <p className="text-sm text-text-3">
             {fixture.homeScore} - {fixture.awayScore}
             {game ? ` � ${game.status}` : ""}
           </p>
@@ -101,7 +101,7 @@ export default async function BoxScoreReport({ params }: { params: Promise<{ fix
           Box score � {fixture.homeSeasonClub.club.name} vs {fixture.awaySeasonClub.club.name}
         </h1>
         {!boxScore ? (
-          <p className="mt-4 text-sm text-zinc-400">No statistician events recorded yet.</p>
+          <p className="mt-4 text-sm text-text-2">No statistician events recorded yet.</p>
         ) : (
           teams.map((team) => {
             const totals =
@@ -116,10 +116,10 @@ export default async function BoxScoreReport({ params }: { params: Promise<{ fix
               }))
               .sort((a, b) => b.line.points - a.line.points);
             return (
-              <section key={team.id} className="mt-6 overflow-x-auto rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+              <section key={team.id} className="mt-6 overflow-x-auto rounded-lg border border-line bg-ink-800 p-5">
                 <h2 className="font-semibold">{team.club.name}</h2>
                 <table className="mt-3 w-full min-w-[720px] text-left text-sm">
-                  <thead className="text-xs uppercase tracking-wider text-zinc-500">
+                  <thead className="text-xs uppercase tracking-wider text-text-3">
                     <tr>
                       <th className="py-2 pr-3">Player</th>
                       <th className="py-2 pr-3">MIN</th>
@@ -156,7 +156,7 @@ export default async function BoxScoreReport({ params }: { params: Promise<{ fix
                         <td className="py-2 pr-3">{row.line.pf}</td>
                       </tr>
                     ))}
-                    <tr className="border-t border-white/10 font-semibold">
+                    <tr className="border-t border-line font-semibold">
                       <td className="py-2 pr-3">Team</td>
                       <td className="py-2 pr-3">-</td>
                       <td className="py-2 pr-3">{totals.points}</td>

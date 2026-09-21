@@ -22,15 +22,15 @@ export default async function IncidentsPage({ searchParams }: { searchParams: Pr
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">
         <h1 className="text-3xl font-semibold">Incident Management</h1>
-        <form action={createIncident} className="mt-6 grid gap-3 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5 md:grid-cols-[1fr_160px_160px_2fr_auto]">
-          <input className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" name="title" placeholder="Incident title" defaultValue={prefill.title ?? ""} required />
-          <select className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" name="type" defaultValue={prefillType}>{Object.values(IncidentType).map((x) => <option key={x} value={x}>{x}</option>)}</select>
-          <select className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" name="severity" defaultValue={prefillSeverity}>{Object.values(OpsSeverity).map((x) => <option key={x} value={x}>{x}</option>)}</select>
-          <input className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" name="description" placeholder="Description" defaultValue={prefill.description ?? ""} />
-          <button className="rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950">Log</button>
+        <form action={createIncident} className="mt-6 grid gap-3 rounded-lg border border-line bg-ink-800 p-5 md:grid-cols-[1fr_160px_160px_2fr_auto]">
+          <input className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm" name="title" placeholder="Incident title" defaultValue={prefill.title ?? ""} required />
+          <select className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm" name="type" defaultValue={prefillType}>{Object.values(IncidentType).map((x) => <option key={x} value={x}>{x}</option>)}</select>
+          <select className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm" name="severity" defaultValue={prefillSeverity}>{Object.values(OpsSeverity).map((x) => <option key={x} value={x}>{x}</option>)}</select>
+          <input className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm" name="description" placeholder="Description" defaultValue={prefill.description ?? ""} />
+          <button className="rounded-md bg-brand-400 px-4 py-3 text-sm font-semibold text-ink-900">Log</button>
         </form>
         <section className="mt-8 grid gap-4">
-          {incidents.map((incident) => <article className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5" key={incident.id}><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold">{incident.title}</p><p className="mt-1 text-sm text-zinc-400">{incident.type} - {incident.severity} - {incident.status}</p><p className="mt-2 text-sm text-zinc-500">{incident.description}</p></div><form action={updateIncidentStatus.bind(null, incident.id)} className="flex gap-2"><select className="rounded-xl border border-white/10 bg-[#050807] px-3 py-2 text-sm" name="status" defaultValue={incident.status}>{Object.values(OpsItemStatus).map((x) => <option key={x} value={x}>{x}</option>)}</select><button className="rounded-xl border border-white/10 px-3 py-2 text-sm">Update</button></form></div></article>)}
+          {incidents.map((incident) => <article className="rounded-lg border border-line bg-ink-800 p-5" key={incident.id}><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold">{incident.title}</p><p className="mt-1 text-sm text-text-2">{incident.type} - {incident.severity} - {incident.status}</p><p className="mt-2 text-sm text-text-3">{incident.description}</p></div><form action={updateIncidentStatus.bind(null, incident.id)} className="flex gap-2"><select className="rounded-md border border-line bg-ink-900 px-3 py-2 text-sm" name="status" defaultValue={incident.status}>{Object.values(OpsItemStatus).map((x) => <option key={x} value={x}>{x}</option>)}</select><button className="rounded-md border border-line px-3 py-2 text-sm">Update</button></form></div></article>)}
         </section>
       </main>
     </OperationsShell>

@@ -17,18 +17,18 @@ export default async function FinalScoreGraphic({ params }: { params: Promise<{ 
   const verified = model.isStatisticsVerified;
 
   return (
-    <div className="inline-flex flex-col items-center gap-2 rounded-2xl bg-black/90 px-8 py-6 font-sans text-white">
+    <div className="inline-flex flex-col items-center gap-2 rounded-lg bg-black/90 px-8 py-6 font-sans text-white">
       <GraphicRefresher />
       <TransparentBody />
-      <p className="text-[10px] font-bold uppercase tracking-[.3em] text-emerald-400">Final Score</p>
+      <p className="text-[10px] font-bold uppercase tracking-[.3em] text-brand-400">Final Score</p>
       <p className="font-mono text-4xl font-black">{fixture.homeSeasonClub!.club.shortName} {model.score.home} — {model.score.away} {fixture.awaySeasonClub!.club.shortName}</p>
       {!verified ? (
-        <p className="text-xs font-bold uppercase tracking-wide text-amber-300">Statistics pending verification</p>
+        <p className="text-xs font-bold uppercase tracking-wide text-warn">Statistics pending verification</p>
       ) : (
         <>
-          {model.gameStory ? <p className="text-sm text-zinc-300">{model.gameStory.tags[0].replaceAll("_", " ")}{model.gameStory.facts[0] ? ` — ${model.gameStory.facts[0]}` : ""}</p> : null}
+          {model.gameStory ? <p className="text-sm text-text-1">{model.gameStory.tags[0].replaceAll("_", " ")}{model.gameStory.facts[0] ? ` — ${model.gameStory.facts[0]}` : ""}</p> : null}
           {model.recordWatches.length > 0 ? (
-            <p className="text-xs text-violet-300">{model.recordWatches[0].recordTitle}: {model.recordWatches[0].liveValue} ({model.recordWatches[0].status.replace("_", " ")})</p>
+            <p className="text-xs text-accent-purple">{model.recordWatches[0].recordTitle}: {model.recordWatches[0].liveValue} ({model.recordWatches[0].status.replace("_", " ")})</p>
           ) : null}
         </>
       )}

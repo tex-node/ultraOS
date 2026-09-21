@@ -47,13 +47,13 @@ export default async function BroadcastControl({ searchParams }: { searchParams:
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-5xl px-6 py-10">
         {rehearsalMode ? (
-          <div className="mb-6 rounded-xl border-2 border-fuchsia-400 bg-fuchsia-400/10 px-4 py-3">
+          <div className="mb-6 rounded-md border-2 border-fuchsia-400 bg-fuchsia-400/10 px-4 py-3">
             <p className="text-sm font-black uppercase tracking-widest text-fuchsia-300">⚠ Rehearsal mode — not a real broadcast</p>
           </div>
         ) : null}
-        <p className="text-xs uppercase tracking-[.2em] text-cyan-400">Broadcast</p>
+        <p className="text-xs uppercase tracking-[.2em] text-info">Broadcast</p>
         <h1 className="mt-2 text-3xl font-bold">Broadcast Control</h1>
-        <p className="mt-2 max-w-2xl text-sm text-zinc-500">
+        <p className="mt-2 max-w-2xl text-sm text-text-3">
           Selects what browser-source graphics show. Score, clock, and stats are controlled elsewhere and cannot be changed here.
         </p>
 
@@ -63,23 +63,23 @@ export default async function BroadcastControl({ searchParams }: { searchParams:
         </div>
 
         <div className="mt-4 flex gap-3">
-          <form action={takeAction}><button className="rounded-lg bg-emerald-500 px-5 py-2 text-sm font-black text-black hover:bg-emerald-400">TAKE →</button></form>
+          <form action={takeAction}><button className="rounded-lg bg-emerald-500 px-5 py-2 text-sm font-black text-black hover:bg-brand-400">TAKE →</button></form>
           <form action={clearProgramAction}><button className="rounded-lg border border-red-400/40 px-5 py-2 text-sm font-bold text-red-300 hover:bg-red-400/10">CLEAR PROGRAM</button></form>
-          <form action={clearPreviewAction}><button className="rounded-lg border border-white/15 px-5 py-2 text-sm text-zinc-400 hover:bg-white/5">Clear preview</button></form>
+          <form action={clearPreviewAction}><button className="rounded-lg border border-white/15 px-5 py-2 text-sm text-text-2 hover:bg-white/5">Clear preview</button></form>
         </div>
 
         {games.length === 0 ? (
-          <p className="mt-8 text-sm text-zinc-500">
+          <p className="mt-8 text-sm text-text-3">
             {rehearsalMode ? "No LIVE/PAUSED rehearsal fixture with that id." : "No live production game right now."}
           </p>
         ) : (
           games.map(({ fixture, model }) => (
-            <section key={fixture.id} className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+            <section key={fixture.id} className="mt-8 rounded-lg border border-line bg-ink-800 p-5">
               <p className="text-sm font-bold">{fixture.homeSeasonClub!.club.shortName} {model.score.home} — {model.score.away} {fixture.awaySeasonClub!.club.shortName}</p>
 
               <Suggestions gameId={fixture.game!.id} model={model} />
 
-              <p className="mt-4 text-[10px] uppercase tracking-wide text-zinc-600">Select for preview</p>
+              <p className="mt-4 text-[10px] uppercase tracking-wide text-text-3">Select for preview</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {GRAPHIC_TYPES.filter((g) => !g.needsSubject).map((g) => (
                   <form key={g.type} action={setPreviewAction.bind(null, fixture.game!.id, g.type, null)}>
@@ -90,11 +90,11 @@ export default async function BroadcastControl({ searchParams }: { searchParams:
 
               {model.players.length > 0 ? (
                 <>
-                  <p className="mt-4 text-[10px] uppercase tracking-wide text-zinc-600">Player Spotlight</p>
+                  <p className="mt-4 text-[10px] uppercase tracking-wide text-text-3">Player Spotlight</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {model.players.slice(0, 10).map((p) => (
                       <form key={p.playerId} action={setPreviewAction.bind(null, fixture.game!.id, "PLAYER_SPOTLIGHT" as GraphicType, p.playerId)}>
-                        <button className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-zinc-300 hover:border-white/40">{p.points} PTS · {p.seasonClubId === model.teams.home.seasonClubId ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName}</button>
+                        <button className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-text-1 hover:border-white/40">{p.points} PTS · {p.seasonClubId === model.teams.home.seasonClubId ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName}</button>
                       </form>
                     ))}
                   </div>
@@ -111,15 +111,15 @@ export default async function BroadcastControl({ searchParams }: { searchParams:
 function StateCard({ title, slot, games, onAir = false }: { title: string; slot: { graphicType: GraphicType; gameId: string; subjectId: string | null } | null; games: { fixture: { id: string; game: { id: string } | null }; model: unknown }[]; onAir?: boolean }) {
   const gameFixtureId = slot ? games.find((g) => g.fixture.game?.id === slot.gameId)?.fixture.id : null;
   return (
-    <div className={`rounded-2xl border p-5 ${onAir ? "border-red-400/40 bg-red-400/[.04]" : "border-white/[.08] bg-[#0b100e]"}`}>
-      <p className={`text-[10px] font-bold uppercase tracking-wider ${onAir ? "text-red-400" : "text-zinc-500"}`}>{title}</p>
+    <div className={`rounded-lg border p-5 ${onAir ? "border-red-400/40 bg-red-400/[.04]" : "border-line bg-ink-800"}`}>
+      <p className={`text-[10px] font-bold uppercase tracking-wider ${onAir ? "text-red-400" : "text-text-3"}`}>{title}</p>
       {slot ? (
         <>
           <p className="mt-2 text-lg font-bold">{graphicLabel(slot.graphicType)}</p>
-          {gameFixtureId ? <a href={graphicRoute(slot.graphicType, slot.gameId) + (slot.subjectId ? `?playerId=${slot.subjectId}` : "")} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-cyan-400 hover:underline">Open browser source →</a> : null}
+          {gameFixtureId ? <a href={graphicRoute(slot.graphicType, slot.gameId) + (slot.subjectId ? `?playerId=${slot.subjectId}` : "")} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-info hover:underline">Open browser source →</a> : null}
         </>
       ) : (
-        <p className="mt-2 text-sm text-zinc-600">Empty</p>
+        <p className="mt-2 text-sm text-text-3">Empty</p>
       )}
     </div>
   );

@@ -40,24 +40,24 @@ export default async function StaffPlannerPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-3xl font-semibold">Game control</h1>
-            <p className="mt-2 text-sm text-zinc-400">
+            <p className="mt-2 text-sm text-text-2">
               Everyone who can operate games right now, and what they can reach.
             </p>
           </div>
-          <Link href="/access" className="rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950">
+          <Link href="/access" className="rounded-lg bg-brand-400 px-4 py-2 text-sm font-semibold text-ink-900">
             Grant access
           </Link>
         </div>
 
         {grants.length === 0 ? (
-          <p className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e] p-6 text-sm text-zinc-400">
+          <p className="mt-8 rounded-lg border border-line bg-ink-800 p-6 text-sm text-text-2">
             No game-control grants yet. Grant access from the Access page to let someone run a
             tournament, season or event without a league-wide role.
           </p>
         ) : (
-          <section className="mt-8 overflow-x-auto rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+          <section className="mt-8 overflow-x-auto rounded-lg border border-line bg-ink-800 p-5">
             <table className="w-full text-left text-sm">
-              <thead className="text-xs uppercase tracking-wider text-zinc-500">
+              <thead className="text-xs uppercase tracking-wider text-text-3">
                 <tr>
                   <th className="py-2 pr-4">Person</th>
                   <th className="py-2 pr-4">Role</th>
@@ -70,11 +70,11 @@ export default async function StaffPlannerPage() {
                   <tr key={grant.id} className="border-t border-white/5">
                     <td className="py-3 pr-4">
                       <span className="font-medium">{grant.user?.name ?? "—"}</span>
-                      <span className="ml-2 text-zinc-400">{grant.user?.email}</span>
+                      <span className="ml-2 text-text-2">{grant.user?.email}</span>
                     </td>
                     <td className="py-3 pr-4">{gameControlRoleLabel(grant.role) ?? grant.role}</td>
-                    <td className="py-3 pr-4 text-zinc-300">{scopeLabel(grant)}</td>
-                    <td className="py-3 pr-4 text-zinc-500">{grant.createdAt.toISOString().slice(0, 10)}</td>
+                    <td className="py-3 pr-4 text-text-1">{scopeLabel(grant)}</td>
+                    <td className="py-3 pr-4 text-text-3">{grant.createdAt.toISOString().slice(0, 10)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -82,7 +82,7 @@ export default async function StaffPlannerPage() {
           </section>
         )}
 
-        <p className="mt-6 text-xs text-zinc-500">
+        <p className="mt-6 text-xs text-text-3">
           Roles: Tournament admin (schedule + scoring + confirm) · Game controller (scoring + confirm) ·
           Scorekeeper (scoring only) · Statistician (player stats only).
         </p>

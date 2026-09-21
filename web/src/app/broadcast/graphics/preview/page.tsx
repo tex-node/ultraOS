@@ -67,7 +67,7 @@ export default async function GraphicsPreview({ searchParams }: { searchParams: 
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-4xl px-6 py-10">
-        <Link href="/broadcast/graphics" className="text-xs text-cyan-400 hover:underline">&larr; Back to Graphics Gallery</Link>
+        <Link href="/broadcast/graphics" className="text-xs text-info hover:underline">&larr; Back to Graphics Gallery</Link>
         <h1 className="mt-3 text-2xl font-bold">{built.card.title}</h1>
 
         <nav className="mt-4 flex flex-wrap gap-2">
@@ -75,7 +75,7 @@ export default async function GraphicsPreview({ searchParams }: { searchParams: 
             <Link
               key={f.key}
               href={`/broadcast/graphics/preview?${new URLSearchParams({ ...cleanQuery(q), format: f.key }).toString()}`}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${FORMAT_MAP[f.key] === format ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-300" : "border-white/[.12] text-zinc-400 hover:border-white/[.25]"}`}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${FORMAT_MAP[f.key] === format ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-300" : "border-line text-text-2 hover:border-white/[.25]"}`}
             >
               {f.label}
             </Link>

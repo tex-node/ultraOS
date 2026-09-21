@@ -20,15 +20,15 @@ export default async function DraftEventsPage() {
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="flex items-start justify-between gap-4">
-          <div><p className="text-xs uppercase tracking-[.2em] text-emerald-400">Server-authoritative squad allocation</p><h1 className="mt-2 text-3xl font-semibold">Draft Day events</h1></div>
-          {hasPermission(session.user.roles, "draft-event:configure") ? <Link className="rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950" href="/draft-events/new">Create DraftEvent</Link> : null}
+          <div><p className="text-xs uppercase tracking-[.2em] text-brand-400">Server-authoritative squad allocation</p><h1 className="mt-2 text-3xl font-semibold">Draft Day events</h1></div>
+          {hasPermission(session.user.roles, "draft-event:configure") ? <Link className="rounded-md bg-brand-400 px-4 py-3 text-sm font-semibold text-ink-900" href="/draft-events/new">Create DraftEvent</Link> : null}
         </div>
         <section className="mt-8 grid gap-4 md:grid-cols-2">
           {events.map((event) => (
-            <Link className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5" href={`/draft-events/${event.id}`} key={event.id}>
-              <div className="flex items-start justify-between gap-3"><h2 className="font-semibold">{event.publicTitle}</h2><span className="text-xs text-emerald-300">{event.status}</span></div>
-              <p className="mt-2 text-sm text-zinc-400">{event.season.name} - {event.currentStage.replaceAll("_", " ")}</p>
-              <p className="mt-4 text-xs text-zinc-500">{event._count.squads} squads - {event._count.allocations} allocations - display v{event.displaySequence}</p>
+            <Link className="rounded-lg border border-line bg-ink-800 p-5" href={`/draft-events/${event.id}`} key={event.id}>
+              <div className="flex items-start justify-between gap-3"><h2 className="font-semibold">{event.publicTitle}</h2><span className="text-xs text-brand-300">{event.status}</span></div>
+              <p className="mt-2 text-sm text-text-2">{event.season.name} - {event.currentStage.replaceAll("_", " ")}</p>
+              <p className="mt-4 text-xs text-text-3">{event._count.squads} squads - {event._count.allocations} allocations - display v{event.displaySequence}</p>
             </Link>
           ))}
         </section>

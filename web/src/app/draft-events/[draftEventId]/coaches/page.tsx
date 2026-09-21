@@ -25,19 +25,19 @@ export default async function DraftCoachPoolPage({ params }: { params: Promise<{
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">
-        <Link className="text-sm text-emerald-400" href={`/draft-events/${event.id}`}>Back to event</Link>
+        <Link className="text-sm text-brand-400" href={`/draft-events/${event.id}`}>Back to event</Link>
         <h1 className="mt-4 text-3xl font-semibold">Coach pool</h1>
-        <section className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e] p-6">
+        <section className="mt-8 rounded-lg border border-line bg-ink-800 p-6">
           <form action={addCoachPoolEntry.bind(null, event.id)} className="grid gap-3 md:grid-cols-[1fr_1fr_100px_1fr_auto]">
-            <select className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" name="staffId" required><option value="">Coach</option>{coaches.map((coach) => <option key={coach.id} value={coach.id}>{coach.name}</option>)}</select>
-            <select className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" name="divisionId" required><option value="">Division</option>{divisions.map((division) => <option key={division.id} value={division.id}>{division.name}</option>)}</select>
-            <input className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" name="sequence" placeholder="Seq" type="number" />
-            <input className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" name="publicBio" placeholder="Approved public bio" />
-            <button className="rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950">Add</button>
+            <select className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm" name="staffId" required><option value="">Coach</option>{coaches.map((coach) => <option key={coach.id} value={coach.id}>{coach.name}</option>)}</select>
+            <select className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm" name="divisionId" required><option value="">Division</option>{divisions.map((division) => <option key={division.id} value={division.id}>{division.name}</option>)}</select>
+            <input className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm" name="sequence" placeholder="Seq" type="number" />
+            <input className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm" name="publicBio" placeholder="Approved public bio" />
+            <button className="rounded-md bg-brand-400 px-4 py-3 text-sm font-semibold text-ink-900">Add</button>
           </form>
         </section>
         <section className="mt-6 grid gap-3">
-          {event.coachPoolEntries.map((entry) => <div className="rounded-xl border border-white/[.08] bg-[#0b100e] p-4" key={entry.id}><p className="font-semibold">{entry.staff.name}</p><p className="text-sm text-zinc-400">{entry.division.name} - sequence {entry.sequence ?? "not set"}</p><p className="text-xs text-zinc-500">{entry.publicBio ?? "No public bio"}</p></div>)}
+          {event.coachPoolEntries.map((entry) => <div className="rounded-md border border-line bg-ink-800 p-4" key={entry.id}><p className="font-semibold">{entry.staff.name}</p><p className="text-sm text-text-2">{entry.division.name} - sequence {entry.sequence ?? "not set"}</p><p className="text-xs text-text-3">{entry.publicBio ?? "No public bio"}</p></div>)}
         </section>
       </main>
     </OperationsShell>

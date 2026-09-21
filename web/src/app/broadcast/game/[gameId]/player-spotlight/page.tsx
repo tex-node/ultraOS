@@ -22,7 +22,7 @@ export default async function PlayerSpotlight({ params, searchParams }: { params
   const clubShort = model.teams.home.seasonClubId === stat.seasonClubId ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName;
 
   return (
-    <div className="inline-flex w-[420px] flex-col gap-2 rounded-2xl bg-black/85 p-5 font-sans text-white">
+    <div className="inline-flex w-[420px] flex-col gap-2 rounded-lg bg-black/85 p-5 font-sans text-white">
       <GraphicRefresher />
       <TransparentBody />
       <div className="flex items-center gap-3">
@@ -31,16 +31,16 @@ export default async function PlayerSpotlight({ params, searchParams }: { params
         </div>
         <div>
           <p className="text-lg font-black leading-tight">{display.name}</p>
-          <p className="text-xs uppercase tracking-widest text-zinc-400">{clubShort}</p>
+          <p className="text-xs uppercase tracking-widest text-text-2">{clubShort}</p>
         </div>
       </div>
       <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-lg bg-white/5 py-2"><p className="text-2xl font-black">{stat.points}</p><p className="text-[10px] uppercase tracking-wide text-zinc-500">PTS</p></div>
-        <div className="rounded-lg bg-white/5 py-2"><p className="text-2xl font-black">{stat.rebounds}</p><p className="text-[10px] uppercase tracking-wide text-zinc-500">REB</p></div>
-        <div className="rounded-lg bg-white/5 py-2"><p className="text-2xl font-black">{stat.assists}</p><p className="text-[10px] uppercase tracking-wide text-zinc-500">AST</p></div>
+        <div className="rounded-lg bg-white/5 py-2"><p className="text-2xl font-black">{stat.points}</p><p className="text-[10px] uppercase tracking-wide text-text-3">PTS</p></div>
+        <div className="rounded-lg bg-white/5 py-2"><p className="text-2xl font-black">{stat.rebounds}</p><p className="text-[10px] uppercase tracking-wide text-text-3">REB</p></div>
+        <div className="rounded-lg bg-white/5 py-2"><p className="text-2xl font-black">{stat.assists}</p><p className="text-[10px] uppercase tracking-wide text-text-3">AST</p></div>
       </div>
       {model.dataCapability === "FULL_ULTRA" ? (
-        <div className="mt-1 flex justify-center gap-4 text-xs text-violet-300">
+        <div className="mt-1 flex justify-center gap-4 text-xs text-accent-purple">
           <span>4PM {stat.fourPointsMade}</span>
           <span>Ultra Time PTS {stat.ultraTimePoints}</span>
         </div>

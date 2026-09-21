@@ -76,11 +76,11 @@ export default async function Match({ params }: { params: Promise<{ id: string }
       <Hero game={game} headlineTag={headlineTag} scheduledAt={fixture.scheduledAt} venueName={fixture.venue.name} />
 
       {insights.length > 0 ? (
-        <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0a0f14] p-5 sm:p-6">
-          <ul className="space-y-2 text-sm text-zinc-300 sm:text-base">
+        <section className="mt-6 rounded-lg border border-line bg-ink-800 p-5 sm:p-6">
+          <ul className="space-y-2 text-sm text-text-1 sm:text-base">
             {insights.map((insight, i) => (
               <li key={i} className="flex gap-2">
-                <span className="text-cyan-400">›</span>
+                <span className="text-info">›</span>
                 {insight.text}
               </li>
             ))}
@@ -93,10 +93,10 @@ export default async function Match({ params }: { params: Promise<{ id: string }
           <h2 className="text-lg font-bold tracking-tight sm:text-xl">Why They Won</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             {whyTheyWon.map((factor) => (
-              <div key={factor.key} className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[.04] p-4">
-                <p className="text-xs uppercase tracking-[.15em] text-cyan-400">{factor.label}</p>
+              <div key={factor.key} className="rounded-lg border border-info/20 bg-info/[.04] p-4">
+                <p className="text-xs uppercase tracking-[.15em] text-info">{factor.label}</p>
                 <p className="mt-2 text-lg font-black">
-                  {factor.winnerValue} <span className="text-sm font-normal text-zinc-500">vs {factor.loserValue}</span>
+                  {factor.winnerValue} <span className="text-sm font-normal text-text-3">vs {factor.loserValue}</span>
                 </p>
               </div>
             ))}
@@ -145,18 +145,18 @@ async function PreGameOrLive({
   const game = await withOrganizationContext(organizationId, (tx) => tx.game.findUnique({ where: { fixtureId: fixture.id }, select: { id: true } }));
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">
-      <section className="rounded-3xl border border-white/[.08] bg-[#0b100e] p-8 text-center">
-        <p className="text-cyan-400">{fixture.status}</p>
+      <section className="rounded-lg border border-line bg-ink-800 p-8 text-center">
+        <p className="text-info">{fixture.status}</p>
         <div className="mt-8 grid grid-cols-[1fr_auto_1fr] items-center">
           <MatchTeam name={fixture.homeName} score={fixture.homeScore} />
-          <span className="text-zinc-500">VS</span>
+          <span className="text-text-3">VS</span>
           <MatchTeam name={fixture.awayName} score={fixture.awayScore} />
         </div>
-        <p className="mt-8 text-zinc-400">
+        <p className="mt-8 text-text-2">
           {formatLagosDateTime(fixture.scheduledAt)} · {fixture.venue.name}
         </p>
         {game && fixture.status === "LIVE" ? (
-          <Link href={`/scoreboard/${game.id}`} className="mt-5 inline-block text-cyan-400">
+          <Link href={`/scoreboard/${game.id}`} className="mt-5 inline-block text-info">
             Full-screen scoreboard
           </Link>
         ) : null}
@@ -177,12 +177,12 @@ function MatchTeam({ name, score }: { name: string; score: number }) {
 function TeamBadge({ shortName, logoUrl, primaryColor }: { shortName: string; logoUrl: string | null; primaryColor: string | null }) {
   if (logoUrl) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img alt={shortName} src={logoUrl} className="h-14 w-14 rounded-xl object-cover sm:h-20 sm:w-20" />;
+    return <img alt={shortName} src={logoUrl} className="h-14 w-14 rounded-md object-cover sm:h-20 sm:w-20" />;
   }
   const color = primaryColor ?? "#22d3ee";
   return (
     <div
-      className="grid h-14 w-14 place-items-center rounded-xl border text-lg font-black sm:h-20 sm:w-20 sm:text-2xl"
+      className="grid h-14 w-14 place-items-center rounded-md border text-lg font-black sm:h-20 sm:w-20 sm:text-2xl"
       style={{ borderColor: `${color}55`, background: `${color}15`, color }}
     >
       {shortName.slice(0, 3).toUpperCase()}
@@ -193,13 +193,13 @@ function TeamBadge({ shortName, logoUrl, primaryColor }: { shortName: string; lo
 function Hero({ game, headlineTag, scheduledAt, venueName }: { game: GameCore; headlineTag: string | undefined; scheduledAt: Date; venueName: string }) {
   const isOvertime = game.periods.some((p) => /^OT/i.test(p.label));
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-cyan-400/20 bg-gradient-to-b from-[#0a1418] to-[#050708] p-6 text-center sm:p-10">
+    <section className="relative overflow-hidden rounded-lg border border-info/20 bg-gradient-to-b from-[#0a1418] to-[#050708] p-6 text-center sm:p-10">
       <div className="pointer-events-none absolute -top-24 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-cyan-400/10 blur-3xl" />
-      <p className="relative text-xs font-bold uppercase tracking-[.3em] text-cyan-400">
+      <p className="relative text-xs font-bold uppercase tracking-[.3em] text-info">
         {isOvertime ? "Overtime" : "Final"} · {game.divisionName}
       </p>
       {headlineTag ? (
-        <p className="relative mt-2 text-sm font-semibold uppercase tracking-[.2em] text-zinc-400">{GAME_STORY_LABEL[headlineTag as keyof typeof GAME_STORY_LABEL]}</p>
+        <p className="relative mt-2 text-sm font-semibold uppercase tracking-[.2em] text-text-2">{GAME_STORY_LABEL[headlineTag as keyof typeof GAME_STORY_LABEL]}</p>
       ) : null}
       <div className="relative mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-6">
         <div className="flex flex-col items-center gap-3">
@@ -207,9 +207,9 @@ function Hero({ game, headlineTag, scheduledAt, venueName }: { game: GameCore; h
           <p className="text-sm font-bold sm:text-base">{game.home.shortName}</p>
         </div>
         <div className="flex items-baseline gap-2 text-4xl font-black sm:text-6xl">
-          <span className={game.home.score >= game.away.score ? "text-white" : "text-zinc-600"}>{game.home.score}</span>
-          <span className="text-lg text-zinc-700 sm:text-2xl">–</span>
-          <span className={game.away.score >= game.home.score ? "text-white" : "text-zinc-600"}>{game.away.score}</span>
+          <span className={game.home.score >= game.away.score ? "text-white" : "text-text-3"}>{game.home.score}</span>
+          <span className="text-lg text-text-3 sm:text-2xl">–</span>
+          <span className={game.away.score >= game.home.score ? "text-white" : "text-text-3"}>{game.away.score}</span>
         </div>
         <div className="flex flex-col items-center gap-3">
           <TeamBadge shortName={game.away.shortName} logoUrl={game.away.logoUrl} primaryColor={game.away.primaryColor} />
@@ -217,22 +217,22 @@ function Hero({ game, headlineTag, scheduledAt, venueName }: { game: GameCore; h
         </div>
       </div>
       {game.periods.length > 0 ? (
-        <div className="relative mt-6 flex justify-center gap-4 text-xs text-zinc-500 sm:text-sm">
+        <div className="relative mt-6 flex justify-center gap-4 text-xs text-text-3 sm:text-sm">
           {game.periods.map((p) => (
             <span key={p.period}>
-              {p.label} <b className="text-zinc-300">{p.homeScore}-{p.awayScore}</b>
+              {p.label} <b className="text-text-1">{p.homeScore}-{p.awayScore}</b>
             </span>
           ))}
         </div>
       ) : null}
-      <p className="relative mt-4 text-xs text-zinc-600">
+      <p className="relative mt-4 text-xs text-text-3">
         {formatLagosDateTime(scheduledAt)} · {venueName}
       </p>
       <div className="relative mt-3 flex flex-wrap items-center justify-center gap-2">
-        <span className="inline-block rounded-full border border-white/[.12] px-2.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
+        <span className="inline-block rounded-full border border-line px-2.5 py-0.5 text-[10px] uppercase tracking-wide text-text-3">
           {GAME_ANALYTICS_CAPABILITY_PROVENANCE_LABEL[getGameAnalyticsCapability(game.dataCapability)]}
         </span>
-        <Link href={`/public/share/game/${game.fixtureId}`} className="inline-block rounded-full border border-cyan-400/30 bg-cyan-400/[.06] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-300">
+        <Link href={`/public/share/game/${game.fixtureId}`} className="inline-block rounded-full border border-info/30 bg-info/[.06] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-info">
           Shareable Card
         </Link>
       </div>
@@ -258,7 +258,7 @@ function BroadcastCardsSection({
   return (
     <section className="mt-8">
       <h2 className="text-lg font-bold tracking-tight sm:text-xl">Broadcast Cards</h2>
-      <p className="mt-1 text-xs text-zinc-600">Ready-to-share graphics generated from this game&apos;s data — same numbers as above.</p>
+      <p className="mt-1 text-xs text-text-3">Ready-to-share graphics generated from this game&apos;s data — same numbers as above.</p>
       <div className="mt-3 grid gap-4 sm:grid-cols-2">
         {gameStar ? (
           <AnalyticsCard
@@ -269,7 +269,7 @@ function BroadcastCardsSection({
           <AnalyticsCard card={buildWhyTheyWonCard(winnerShortName, whyTheyWon, capability)} />
         ) : null}
       </div>
-      <Link href={`/public/share/game/${game.fixtureId}`} className="mt-3 inline-block text-xs font-bold uppercase tracking-wide text-cyan-400 hover:underline">
+      <Link href={`/public/share/game/${game.fixtureId}`} className="mt-3 inline-block text-xs font-bold uppercase tracking-wide text-info hover:underline">
         Open Full Share View
       </Link>
     </section>
@@ -291,21 +291,21 @@ function PerformerCard({
 }) {
   const share = playerScoringShare(player, game);
   return (
-    <article className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-4">
-      <p className="text-xs font-bold uppercase tracking-[.15em] text-cyan-400">{PERFORMER_LABEL[category as keyof typeof PERFORMER_LABEL]}</p>
+    <article className="rounded-lg border border-line bg-ink-800 p-4">
+      <p className="text-xs font-bold uppercase tracking-[.15em] text-info">{PERFORMER_LABEL[category as keyof typeof PERFORMER_LABEL]}</p>
       <div className="mt-3 flex items-center gap-3">
         <PersonAvatar className="h-12 w-12" name={player.name} photoUrl={player.photoUrl} />
         <div>
           <p className="font-bold leading-tight">{player.name}</p>
-          <p className="text-xs text-zinc-500">{player.seasonClubShortName}{player.jerseyNumber != null ? ` · #${player.jerseyNumber}` : ""}</p>
+          <p className="text-xs text-text-3">{player.seasonClubShortName}{player.jerseyNumber != null ? ` · #${player.jerseyNumber}` : ""}</p>
         </div>
       </div>
-      <p className="mt-3 text-sm text-zinc-300">{headline}</p>
-      {share != null && share >= 30 ? <p className="mt-1 text-xs text-zinc-500">{formatPercent(share, 1)} of team scoring</p> : null}
+      <p className="mt-3 text-sm text-text-1">{headline}</p>
+      {share != null && share >= 30 ? <p className="mt-1 text-xs text-text-3">{formatPercent(share, 1)} of team scoring</p> : null}
       {badges.length > 0 ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {badges.map((b) => (
-            <span key={b} className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300">
+            <span key={b} className="rounded-full border border-info/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-info">
               {b.replace(/_/g, " ")}
             </span>
           ))}
@@ -317,10 +317,10 @@ function PerformerCard({
 
 function ComparisonBar({ label, home, away, homeIsBetter }: { label: string; home: string; away: string; homeIsBetter: boolean | null }) {
   return (
-    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-white/[.06] py-2.5 text-sm">
-      <span className={`text-right font-semibold ${homeIsBetter === true ? "text-cyan-400" : "text-zinc-300"}`}>{home}</span>
-      <span className="text-center text-[10px] uppercase tracking-wide text-zinc-600">{label}</span>
-      <span className={`font-semibold ${homeIsBetter === false ? "text-cyan-400" : "text-zinc-300"}`}>{away}</span>
+    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-line py-2.5 text-sm">
+      <span className={`text-right font-semibold ${homeIsBetter === true ? "text-info" : "text-text-1"}`}>{home}</span>
+      <span className="text-center text-[10px] uppercase tracking-wide text-text-3">{label}</span>
+      <span className={`font-semibold ${homeIsBetter === false ? "text-info" : "text-text-1"}`}>{away}</span>
     </div>
   );
 }
@@ -331,8 +331,8 @@ function MatchupIntelligenceSection({ game }: { game: GameCore }) {
   return (
     <section className="mt-8">
       <h2 className="text-lg font-bold tracking-tight sm:text-xl">Matchup Intelligence</h2>
-      <p className="mt-1 text-xs text-zinc-600">Game profile — what happened in this box score, not a prediction.</p>
-      <div className="mt-3 space-y-3 rounded-2xl border border-white/[.08] bg-[#0b100e] p-4 sm:p-5">
+      <p className="mt-1 text-xs text-text-3">Game profile — what happened in this box score, not a prediction.</p>
+      <div className="mt-3 space-y-3 rounded-lg border border-line bg-ink-800 p-4 sm:p-5">
         {factors.slice(0, 6).map((f) => (
           <MatchupBar key={f.key} factor={f} game={game} />
         ))}
@@ -346,10 +346,10 @@ function MatchupBar({ factor, game }: { factor: MatchupFactor; game: GameCore })
   return (
     <div>
       <div className="flex items-baseline justify-between text-xs">
-        <span className="font-semibold text-zinc-300">{factor.label}</span>
-        <span className="text-cyan-400">{edgeLabel}</span>
+        <span className="font-semibold text-text-1">{factor.label}</span>
+        <span className="text-info">{edgeLabel}</span>
       </div>
-      <div className="mt-1 flex items-center gap-2 text-[11px] text-zinc-500">
+      <div className="mt-1 flex items-center gap-2 text-[11px] text-text-3">
         <span className="w-10 text-right">{factor.homeValue}</span>
         <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[.06]">
           <div className="h-full bg-cyan-400" style={{ width: `${Math.round(factor.homeShare * 100)}%` }} />
@@ -362,8 +362,8 @@ function MatchupBar({ factor, game }: { factor: MatchupFactor; game: GameCore })
 
 function ComparisonTable({ game, rows }: { game: GameCore; rows: ReturnType<typeof buildTeamComparison> }) {
   return (
-    <div className="mt-3 rounded-2xl border border-white/[.08] bg-[#0b100e] p-4 sm:p-5">
-      <div className="mb-2 grid grid-cols-[1fr_auto_1fr] text-xs font-bold text-zinc-500">
+    <div className="mt-3 rounded-lg border border-line bg-ink-800 p-4 sm:p-5">
+      <div className="mb-2 grid grid-cols-[1fr_auto_1fr] text-xs font-bold text-text-3">
         <span className="text-right">{game.home.shortName}</span>
         <span />
         <span>{game.away.shortName}</span>
@@ -391,9 +391,9 @@ function GamePulse({ game }: { game: GameCore }) {
       <h2 className="text-lg font-bold tracking-tight sm:text-xl">Game Pulse</h2>
       <div className="mt-3 grid grid-cols-3 gap-3">
         {cards.map((c) => (
-          <div key={c.label} className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-4 text-center">
-            <p className="text-2xl font-black text-cyan-400 sm:text-3xl">{c.value}</p>
-            <p className="mt-1 text-[10px] uppercase tracking-[.15em] text-zinc-500">{c.label}</p>
+          <div key={c.label} className="rounded-lg border border-line bg-ink-800 p-4 text-center">
+            <p className="text-2xl font-black text-info sm:text-3xl">{c.value}</p>
+            <p className="mt-1 text-[10px] uppercase tracking-[.15em] text-text-3">{c.label}</p>
           </div>
         ))}
       </div>
@@ -406,7 +406,7 @@ function UltraImpact({ game }: { game: GameCore }) {
     return (
       <section className="mt-8">
         <h2 className="text-lg font-bold tracking-tight sm:text-xl">Ultra Impact</h2>
-        <div className="mt-3 rounded-2xl border border-dashed border-white/[.12] bg-transparent p-5 text-center text-sm text-zinc-500">
+        <div className="mt-3 rounded-lg border border-dashed border-line bg-transparent p-5 text-center text-sm text-text-3">
           Ultra event data not captured for this game — 4PT and Ultra Time breakdowns require this app&apos;s live scorer, not a box-score import.
         </div>
       </section>
@@ -426,9 +426,9 @@ function UltraImpact({ game }: { game: GameCore }) {
 
 function UltraStat({ label, value }: { label: string; value: number | null }) {
   return (
-    <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[.04] p-4 text-center">
-      <p className="text-2xl font-black text-cyan-300">{value ?? "—"}</p>
-      <p className="mt-1 text-[10px] uppercase tracking-[.15em] text-zinc-500">{label}</p>
+    <div className="rounded-lg border border-info/20 bg-info/[.04] p-4 text-center">
+      <p className="text-2xl font-black text-info">{value ?? "—"}</p>
+      <p className="mt-1 text-[10px] uppercase tracking-[.15em] text-text-3">{label}</p>
     </div>
   );
 }
@@ -447,8 +447,8 @@ function GameFlow({ game }: { game: GameCore }) {
   return (
     <section className="mt-8">
       <h2 className="text-lg font-bold tracking-tight sm:text-xl">Game Flow</h2>
-      <p className="mt-1 text-xs text-zinc-600">Period score progression — resolution limited to half/OT checkpoints for this game.</p>
-      <div className="mt-3 overflow-x-auto rounded-2xl border border-white/[.08] bg-[#0b100e] p-4">
+      <p className="mt-1 text-xs text-text-3">Period score progression — resolution limited to half/OT checkpoints for this game.</p>
+      <div className="mt-3 overflow-x-auto rounded-lg border border-line bg-ink-800 p-4">
         <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[500px]" role="img" aria-label="Score progression by period">
           <polyline points={points("homeScore")} fill="none" stroke={game.home.primaryColor ?? "#22d3ee"} strokeWidth="2.5" />
           <polyline points={points("awayScore")} fill="none" stroke={game.away.primaryColor ?? "#f472b6"} strokeWidth="2.5" strokeDasharray="4 3" />
@@ -474,17 +474,17 @@ function BoxScore({ game, winnerSeasonClubId }: { game: GameCore; winnerSeasonCl
           <p className="text-sm font-bold" style={side.seasonClubId === winnerSeasonClubId ? { color: "#22d3ee" } : undefined}>
             {side.name}
           </p>
-          <div className="mt-2 overflow-x-auto rounded-xl border border-white/[.08]">
+          <div className="mt-2 overflow-x-auto rounded-md border border-line">
             <table className="w-full min-w-[720px] text-left text-xs sm:text-sm">
               <thead>
-                <tr className="border-b border-white/[.08] text-zinc-500">
+                <tr className="border-b border-line text-text-3">
                   <Th>Player</Th><Th>MIN</Th><Th>PTS</Th><Th>FG</Th><Th>FG%</Th><Th>3PT</Th>{showFourPt ? <Th>4PT</Th> : null}
                   <Th>FT</Th><Th>REB</Th><Th>AST</Th><Th>STL</Th><Th>BLK</Th><Th>TO</Th><Th>PF</Th><Th>EFF</Th>
                 </tr>
               </thead>
               <tbody>
                 {players.map((p) => (
-                  <tr key={p.playerId} className={`border-b border-white/[.04] ${p.didNotPlay ? "text-zinc-600" : ""}`}>
+                  <tr key={p.playerId} className={`border-b border-white/[.04] ${p.didNotPlay ? "text-text-3" : ""}`}>
                     <td className="px-3 py-2 font-medium">{p.name}{p.jerseyNumber != null ? ` #${p.jerseyNumber}` : ""}</td>
                     <td className="px-3 py-2">{p.didNotPlay ? "DNP" : p.minutesPlayed}</td>
                     <td className="px-3 py-2 font-bold">{p.points}</td>
@@ -508,7 +508,7 @@ function BoxScore({ game, winnerSeasonClubId }: { game: GameCore; winnerSeasonCl
         </div>
       ))}
       {!hasEventLedger(game.dataCapability) ? (
-        <p className="mt-3 text-xs text-zinc-600">Play-by-play data not captured for this game — box score sourced from the official match report.</p>
+        <p className="mt-3 text-xs text-text-3">Play-by-play data not captured for this game — box score sourced from the official match report.</p>
       ) : null}
     </section>
   );

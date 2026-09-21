@@ -22,7 +22,7 @@ export function ReportsNav({ fixtureId }: { fixtureId: string }) {
           <Link
             key={slug}
             href={href}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold ${active ? "bg-emerald-400 text-zinc-950" : "border border-white/10 text-zinc-300 hover:border-white/25"}`}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold ${active ? "bg-brand-400 text-ink-900" : "border border-line text-text-1 hover:border-white/25"}`}
           >
             {label}
           </Link>
@@ -31,7 +31,7 @@ export function ReportsNav({ fixtureId }: { fixtureId: string }) {
       <button
         type="button"
         onClick={() => window.print()}
-        className="rounded-lg border border-amber-400/40 px-4 py-2 text-sm font-semibold text-amber-300 hover:border-amber-400"
+        className="rounded-lg border border-amber-400/40 px-4 py-2 text-sm font-semibold text-warn hover:border-amber-400"
       >
         Quick Print
       </button>

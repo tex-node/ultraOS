@@ -30,14 +30,14 @@ export default async function VenueClockDisplay({ params }: { params: Promise<{ 
     <main className="flex min-h-screen flex-col items-center justify-center bg-black text-white">
       <GraphicRefresher intervalSeconds={3} />
       {model.ultraTime.phase === "ACTIVE" ? (
-        <p className="mb-6 animate-pulse text-4xl font-black tracking-widest text-amber-400 md:text-6xl">⚡ ULTRA TIME</p>
+        <p className="mb-6 animate-pulse text-4xl font-black tracking-widest text-warn md:text-6xl">⚡ ULTRA TIME</p>
       ) : null}
-      <p className="text-2xl uppercase tracking-[.3em] text-zinc-500 md:text-3xl">{model.periodLabel}</p>
+      <p className="text-2xl uppercase tracking-[.3em] text-text-3 md:text-3xl">{model.periodLabel}</p>
       <p className="mt-4 font-mono text-[18vw] font-black leading-none md:text-[14rem]">
         <GameClock seconds={model.clock.remainingSeconds} status={model.clock.running ? "LIVE" : "PAUSED"} startedAt={null} />
       </p>
-      <div className="mt-10 flex items-center gap-3 rounded-2xl border border-white/10 px-8 py-4">
-        <span className="text-lg uppercase tracking-widest text-zinc-500">Shot clock</span>
+      <div className="mt-10 flex items-center gap-3 rounded-lg border border-line px-8 py-4">
+        <span className="text-lg uppercase tracking-widest text-text-3">Shot clock</span>
         <span className="font-mono text-5xl font-bold">
           <GameClock seconds={model.shotClock.remainingSeconds} status={model.shotClock.running ? "LIVE" : "PAUSED"} startedAt={null} />
         </span>

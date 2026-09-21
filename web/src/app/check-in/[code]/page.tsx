@@ -52,44 +52,57 @@ export default async function CheckInRecordPage({
   ]));
   if (!ticket && !accreditation && !order) notFound();
 
+  // Gate verdict (brief §4.3, sub-3s flow): unmistakable admit/deny before any detail.
+  const ticketReady = ticket && ticket.status === "ACTIVE" && (ticket.reservation.totalKobo === 0 || ticket.reservation.paymentStatus === "PAID");
+  const ticketBlocked = ticket && !ticketReady && ticket.status === "ACTIVE";
+  const verdict = ticketReady ? { tone: "bg-success/15 text-success border-success/40", label: "ADMIT — VALID TICKET" }
+    : ticketBlocked ? { tone: "bg-warn/15 text-warn border-warn/40", label: "HOLD — CHECK PAYMENT / STATUS" }
+    : ticket && ticket.status === "USED" ? { tone: "bg-danger/15 text-danger border-danger/40", label: "DENY — ALREADY USED" }
+    : null;
+
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-2xl px-6 py-12">
+        {verdict ? (
+          <p role="status" className={`mb-4 rounded-md border px-4 py-3 text-center font-display text-lg font-bold uppercase tracking-wider ${verdict.tone}`}>
+            {verdict.label}
+          </p>
+        ) : null}
         {ticket ? (
           <Record title="Fan ticket" status={ticket.status}>
             <p>{ticket.reservation.user?.name ?? ticket.reservation.guestName ?? "Guest fan"}</p>
-            <p className="text-zinc-400">{ticket.reservation.event.name} · {ticket.reservation.seatZone.name} · {ticket.reservation.quantity} admission</p>
+            <p className="text-text-2">{ticket.reservation.event.name} · {ticket.reservation.seatZone.name} · {ticket.reservation.quantity} admission</p>
             {ticket.reservation.seatZone.passTier ? (
-              <p className="font-semibold text-cyan-300">
+              <p className="font-semibold text-info">
                 {ticket.reservation.seatZone.passTier === "DAY_PASS" ? "Day pass" : "Full-tournament pass"}
                 {ticket.reservation.seatZone.passValidFrom || ticket.reservation.seatZone.passValidTo ? (
-                  <span className="font-normal text-zinc-400">
+                  <span className="font-normal text-text-2">
                     {" "}· valid{ticket.reservation.seatZone.passValidFrom ? ` from ${ticket.reservation.seatZone.passValidFrom.toLocaleString()}` : ""}{ticket.reservation.seatZone.passValidTo ? ` to ${ticket.reservation.seatZone.passValidTo.toLocaleString()}` : ""}
                   </span>
                 ) : null}
               </p>
             ) : null}
-            <p className="text-zinc-400">{formatNaira(ticket.reservation.totalKobo)} · {ticket.reservation.paymentStatus}</p>
-            {ticket.status === "ACTIVE" && (ticket.reservation.totalKobo === 0 || ticket.reservation.paymentStatus === "PAID") ? <form action={checkInTicket.bind(null,ticket.id,code)}><button className="mt-6 w-full rounded-xl bg-emerald-400 p-4 font-semibold text-zinc-950">Confirm venue entry</button></form> : null}
-            {ticket.checkIns[0] ? <p className="mt-4 text-sm text-emerald-300">Checked in {ticket.checkIns[0].checkedInAt.toLocaleString()}</p> : null}
+            <p className="text-text-2">{formatNaira(ticket.reservation.totalKobo)} · {ticket.reservation.paymentStatus}</p>
+            {ticket.status === "ACTIVE" && (ticket.reservation.totalKobo === 0 || ticket.reservation.paymentStatus === "PAID") ? <form action={checkInTicket.bind(null,ticket.id,code)}><button className="mt-6 w-full rounded-md bg-brand-400 p-4 font-semibold text-ink-900">Confirm venue entry</button></form> : null}
+            {ticket.checkIns[0] ? <p className="mt-4 text-sm text-brand-300">Checked in {ticket.checkIns[0].checkedInAt.toLocaleString()}</p> : null}
           </Record>
         ) : null}
         {accreditation ? (
           <Record title="Accreditation" status={accreditation.status}>
             <p>{accreditation.personName}</p>
-            <p className="text-zinc-400">{accreditation.category} · {accreditation.organization ?? accreditation.roleTitle ?? "Event guest"}</p>
-            <p className="text-zinc-400">{accreditation.event.name}</p>
-            {accreditation.status === "APPROVED" && accreditation.checkIns.length === 0 ? <form action={checkInAccreditation.bind(null,accreditation.id,code)}><button className="mt-6 w-full rounded-xl bg-emerald-400 p-4 font-semibold text-zinc-950">Confirm accreditation entry</button></form> : null}
-            {accreditation.checkIns[0] ? <p className="mt-4 text-sm text-emerald-300">Checked in {accreditation.checkIns[0].checkedInAt.toLocaleString()}</p> : null}
+            <p className="text-text-2">{accreditation.category} · {accreditation.organization ?? accreditation.roleTitle ?? "Event guest"}</p>
+            <p className="text-text-2">{accreditation.event.name}</p>
+            {accreditation.status === "APPROVED" && accreditation.checkIns.length === 0 ? <form action={checkInAccreditation.bind(null,accreditation.id,code)}><button className="mt-6 w-full rounded-md bg-brand-400 p-4 font-semibold text-ink-900">Confirm accreditation entry</button></form> : null}
+            {accreditation.checkIns[0] ? <p className="mt-4 text-sm text-brand-300">Checked in {accreditation.checkIns[0].checkedInAt.toLocaleString()}</p> : null}
           </Record>
         ) : null}
         {order ? (
           <Record title="Food and merchandise collection" status={order.status}>
             <p>{order.guestName ?? "Fan order"}</p>
-            <p className="text-zinc-400">{order.event.name} · {formatNaira(order.totalKobo)} · {order.paymentStatus}</p>
-            <ul className="mt-4 space-y-1 text-sm text-zinc-300">{order.items.map((item) => <li key={item.id}>{item.quantity} × {item.product.name}</li>)}</ul>
-            {order.status === "READY" && order.paymentStatus === "PAID" ? <form action={collectOrder.bind(null,order.id,code)}><button className="mt-6 w-full rounded-xl bg-emerald-400 p-4 font-semibold text-zinc-950">Confirm collection</button></form> : null}
-            {order.checkIns[0] ? <p className="mt-4 text-sm text-emerald-300">Collected {order.checkIns[0].checkedInAt.toLocaleString()}</p> : null}
+            <p className="text-text-2">{order.event.name} · {formatNaira(order.totalKobo)} · {order.paymentStatus}</p>
+            <ul className="mt-4 space-y-1 text-sm text-text-1">{order.items.map((item) => <li key={item.id}>{item.quantity} × {item.product.name}</li>)}</ul>
+            {order.status === "READY" && order.paymentStatus === "PAID" ? <form action={collectOrder.bind(null,order.id,code)}><button className="mt-6 w-full rounded-md bg-brand-400 p-4 font-semibold text-ink-900">Confirm collection</button></form> : null}
+            {order.checkIns[0] ? <p className="mt-4 text-sm text-brand-300">Collected {order.checkIns[0].checkedInAt.toLocaleString()}</p> : null}
           </Record>
         ) : null}
       </main>
@@ -98,5 +111,5 @@ export default async function CheckInRecordPage({
 }
 
 function Record({ title, status, children }: { title: string; status: string; children: React.ReactNode }) {
-  return <section className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-8"><div className="flex justify-between"><h1 className="text-2xl font-semibold">{title}</h1><span className="text-sm text-emerald-300">{status}</span></div><div className="mt-6 space-y-2">{children}</div></section>;
+  return <section className="rounded-lg border border-line bg-ink-800 p-8"><div className="flex justify-between"><h1 className="text-2xl font-semibold">{title}</h1><span className="text-sm text-brand-300">{status}</span></div><div className="mt-6 space-y-2">{children}</div></section>;
 }

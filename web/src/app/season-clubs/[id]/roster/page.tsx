@@ -54,33 +54,33 @@ export default async function SeasonClubRosterPage({
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-4xl px-6 py-10">
-        <Link className="text-sm text-zinc-400 hover:text-white" href={`/clubs/${registration.club.id}`}>
+        <Link className="text-sm text-text-2 hover:text-white" href={`/clubs/${registration.club.id}`}>
           ← Back to club
         </Link>
         <div className="mt-6">
-          <p className="text-xs uppercase tracking-[0.2em] text-emerald-400">
+          <p className="text-xs uppercase tracking-[0.2em] text-brand-400">
             {registration.division.name} roster
           </p>
           <h1 className="mt-2 text-2xl font-semibold">{registration.club.name}</h1>
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="mt-1 text-sm text-text-2">
             Head coach: {registration.headCoach?.name ?? "Unassigned"} · {registration.players.length} players
           </p>
         </div>
 
         {errorMessage ? (
-          <p className="mt-5 rounded-xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-300">
+          <p className="mt-5 rounded-md border border-rose-400/20 bg-danger/10 p-4 text-sm text-danger">
             {errorMessage}
           </p>
         ) : null}
 
         {!canEdit ? (
-          <p className="mt-5 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-zinc-400">
+          <p className="mt-5 rounded-md border border-line bg-white/[0.03] p-4 text-sm text-text-2">
             You have read-only access to this roster. Jersey numbers can only be edited by an operator with player management access.
           </p>
         ) : null}
 
-        <div className="mt-6 overflow-hidden rounded-2xl border border-white/[0.08]">
-          <div className="grid grid-cols-[1fr_140px_140px] gap-4 border-b border-white/[0.06] bg-white/[0.02] px-5 py-3 text-xs uppercase tracking-wide text-zinc-500">
+        <div className="mt-6 overflow-hidden rounded-lg border border-white/[0.08]">
+          <div className="grid grid-cols-[1fr_140px_140px] gap-4 border-b border-white/[0.06] bg-white/[0.02] px-5 py-3 text-xs uppercase tracking-wide text-text-3">
             <span>Player</span>
             <span>Position</span>
             <span>Jersey No.</span>
@@ -88,19 +88,19 @@ export default async function SeasonClubRosterPage({
           {registration.players.map((player) => (
             <div
               key={player.id}
-              className="grid grid-cols-[1fr_140px_140px] items-center gap-4 border-b border-white/[0.06] bg-[#0b100e] px-5 py-4 last:border-0"
+              className="grid grid-cols-[1fr_140px_140px] items-center gap-4 border-b border-white/[0.06] bg-ink-800 px-5 py-4 last:border-0"
             >
               <div>
                 <p className="font-medium">
                   {player.athlete.firstName} {player.athlete.lastName}
                 </p>
-                <p className="text-xs text-zinc-500">{player.athlete.ultraAthleteId ?? "No Ultra Athlete ID"}</p>
+                <p className="text-xs text-text-3">{player.athlete.ultraAthleteId ?? "No Ultra Athlete ID"}</p>
               </div>
-              <p className="text-sm text-zinc-400">{player.position || "—"}</p>
+              <p className="text-sm text-text-2">{player.position || "—"}</p>
               {canEdit ? (
                 <form action={setPlayerJerseyNumber.bind(null, player.id, registration.id)} className="flex gap-2">
                   <input
-                    className="w-16 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-2 text-center text-sm text-white outline-none focus:border-emerald-400"
+                    className="w-16 rounded-lg border border-line bg-white/[0.04] px-2 py-2 text-center text-sm text-white outline-none focus:border-emerald-400"
                     defaultValue={player.jerseyNumber ?? ""}
                     max={999}
                     min={0}
@@ -108,7 +108,7 @@ export default async function SeasonClubRosterPage({
                     placeholder="—"
                     type="number"
                   />
-                  <button className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-zinc-950 hover:bg-emerald-300" type="submit">
+                  <button className="rounded-lg bg-brand-400 px-3 py-2 text-xs font-semibold text-ink-900 hover:bg-brand-300" type="submit">
                     Save
                   </button>
                 </form>
@@ -118,7 +118,7 @@ export default async function SeasonClubRosterPage({
             </div>
           ))}
           {registration.players.length === 0 ? (
-            <p className="bg-[#0b100e] p-8 text-center text-sm text-zinc-400">No players on this roster yet.</p>
+            <p className="bg-ink-800 p-8 text-center text-sm text-text-2">No players on this roster yet.</p>
           ) : null}
         </div>
       </main>

@@ -54,14 +54,14 @@ export function GateScanTools() {
       <div className="flex items-center justify-center gap-2">
         <span
           className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wider ${
-            online ? "bg-emerald-400/10 text-emerald-400" : "bg-rose-400/10 text-rose-400"
+            online ? "bg-brand-400/10 text-brand-400" : "bg-danger/10 text-danger"
           }`}
         >
           {online ? "Online" : "Offline — verify before admitting"}
         </span>
       </div>
       {!online ? (
-        <p className="mt-3 text-center text-xs text-amber-300">
+        <p className="mt-3 text-center text-xs text-warn">
           No connection: codes cannot be verified right now. Re-scan anything admitted from
           memory once back online.
         </p>
@@ -74,13 +74,13 @@ export function GateScanTools() {
           record(String(data.get("code") ?? ""));
         }}
       >
-        <input name="code" required autoFocus placeholder="Ticket, accreditation, or collection code" className="min-w-0 flex-1 rounded-xl bg-white/[.05] p-4" />
-        <button className="rounded-xl bg-emerald-400 px-5 font-semibold text-zinc-950">Find</button>
+        <input name="code" required autoFocus placeholder="Ticket, accreditation, or collection code" className="min-w-0 flex-1 rounded-md bg-white/[.05] p-4" />
+        <button className="rounded-md bg-brand-400 px-5 font-semibold text-ink-900">Find</button>
       </form>
       {log.length > 0 ? (
         <div className="mt-6 text-left">
           <div className="flex items-center justify-between">
-            <p className="text-xs uppercase tracking-wider text-zinc-500">Recent scans on this device</p>
+            <p className="text-xs uppercase tracking-wider text-text-3">Recent scans on this device</p>
             <button
               type="button"
               onClick={() => {
@@ -91,12 +91,12 @@ export function GateScanTools() {
                   // Ignore — see above.
                 }
               }}
-              className="text-xs text-zinc-500 underline"
+              className="text-xs text-text-3 underline"
             >
               Clear
             </button>
           </div>
-          <ul className="mt-2 space-y-1 text-sm text-zinc-400">
+          <ul className="mt-2 space-y-1 text-sm text-text-2">
             {log.slice(0, 8).map((entry, index) => (
               <li key={`${entry.at}-${index}`}>
                 …{entry.codeSuffix} · {new Date(entry.at).toLocaleString()}

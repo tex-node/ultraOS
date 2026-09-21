@@ -7,19 +7,19 @@ import { draftPersonnelReadinessReport } from "@/lib/draft-personnel-readiness";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
 function badgeClass(status: string) {
-  if (["READY", "PASS", "CONFIGURED"].includes(status)) return "text-emerald-300";
-  if (["BLOCKED", "FAIL"].includes(status)) return "text-rose-300";
-  if (status.includes("WAITING") || status.includes("PENDING") || status.includes("NO_DRAFT_EVENT")) return "text-amber-300";
-  return "text-zinc-300";
+  if (["READY", "PASS", "CONFIGURED"].includes(status)) return "text-brand-300";
+  if (["BLOCKED", "FAIL"].includes(status)) return "text-danger";
+  if (status.includes("WAITING") || status.includes("PENDING") || status.includes("NO_DRAFT_EVENT")) return "text-warn";
+  return "text-text-1";
 }
 
 function Stat({ label, value, target }: { label: string; value: number | string; target?: number | string }) {
   return (
-    <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-4">
-      <p className="text-xs uppercase tracking-[.18em] text-zinc-500">{label}</p>
+    <div className="rounded-lg border border-line bg-ink-800 p-4">
+      <p className="text-xs uppercase tracking-[.18em] text-text-3">{label}</p>
       <p className="mt-2 text-2xl font-semibold text-white">
         {value}
-        {target !== undefined ? <span className="text-zinc-500">/{target}</span> : null}
+        {target !== undefined ? <span className="text-text-3">/{target}</span> : null}
       </p>
     </div>
   );
@@ -36,14 +36,14 @@ export default async function DraftReadinessPage() {
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[.2em] text-emerald-400">Phase 9 Track D</p>
+            <p className="text-xs uppercase tracking-[.2em] text-brand-400">Phase 9 Track D</p>
             <h1 className="mt-2 text-3xl font-semibold">Draft Personnel & Media Readiness</h1>
-            <p className="mt-2 max-w-3xl text-sm text-zinc-400">
+            <p className="mt-2 max-w-3xl text-sm text-text-2">
               Read-only gate for the Season Zero rehearsal layer. This page does not assign coaches, players, or clubs.
             </p>
           </div>
-          <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-4 text-right">
-            <p className="text-xs uppercase tracking-[.18em] text-zinc-500">Full rehearsal gate</p>
+          <div className="rounded-lg border border-line bg-ink-800 p-4 text-right">
+            <p className="text-xs uppercase tracking-[.18em] text-text-3">Full rehearsal gate</p>
             <p className={`mt-2 text-xl font-semibold ${badgeClass(report.gate.fullDraftRehearsal)}`}>
               {report.gate.fullDraftRehearsal.replaceAll("_", " ")}
             </p>
@@ -51,8 +51,8 @@ export default async function DraftReadinessPage() {
         </div>
 
         {report.gate.blockers.length ? (
-          <section className="mt-8 rounded-2xl border border-rose-400/20 bg-rose-400/10 p-5">
-            <h2 className="text-lg font-semibold text-rose-200">Human action or blocker required</h2>
+          <section className="mt-8 rounded-lg border border-rose-400/20 bg-danger/10 p-5">
+            <h2 className="text-lg font-semibold text-danger">Human action or blocker required</h2>
             <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-rose-100">
               {report.gate.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
             </ul>
@@ -60,8 +60,8 @@ export default async function DraftReadinessPage() {
         ) : null}
 
         {report.gate.warnings.length ? (
-          <section className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-5">
-            <h2 className="text-lg font-semibold text-amber-200">Warnings</h2>
+          <section className="mt-5 rounded-lg border border-warn/20 bg-warn/10 p-5">
+            <h2 className="text-lg font-semibold text-warn">Warnings</h2>
             <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-amber-100">
               {report.gate.warnings.map((warning) => <li key={warning}>{warning}</li>)}
             </ul>
@@ -78,7 +78,7 @@ export default async function DraftReadinessPage() {
         </section>
 
         <section className="mt-8 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+          <div className="rounded-lg border border-line bg-ink-800 p-5">
             <h2 className="text-lg font-semibold">Player Groups</h2>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <Stat label="Men group 1" value={report.groups.men1} target={7} />
@@ -92,7 +92,7 @@ export default async function DraftReadinessPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+          <div className="rounded-lg border border-line bg-ink-800 p-5">
             <h2 className="text-lg font-semibold">Clubs & Media</h2>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <Stat label="Permanent clubs" value={report.clubs.permanent} target={8} />
@@ -105,13 +105,13 @@ export default async function DraftReadinessPage() {
           </div>
         </section>
 
-        <section className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+        <section className="mt-8 rounded-lg border border-line bg-ink-800 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold">Coach Selection</h2>
-              <p className="mt-1 text-sm text-zinc-400">Approved coach applications require explicit Season Zero selection before Staff provisioning.</p>
+              <p className="mt-1 text-sm text-text-2">Approved coach applications require explicit Season Zero selection before Staff provisioning.</p>
             </div>
-            <Link className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950" href="/coaches/season-zero-selection">
+            <Link className="rounded-md bg-brand-400 px-4 py-2 text-sm font-semibold text-ink-900" href="/coaches/season-zero-selection">
               Open selection review
             </Link>
           </div>
@@ -125,19 +125,19 @@ export default async function DraftReadinessPage() {
             <Stat label="Coach photos" value={report.coaches.photosReady} target={report.coaches.selected} />
             <Stat label="Division unresolved" value={report.coaches.divisionUnresolved} />
           </div>
-          <div className="mt-5 overflow-hidden rounded-xl border border-white/[.08]">
+          <div className="mt-5 overflow-hidden rounded-md border border-line">
             <table className="w-full text-left text-sm">
-              <thead className="bg-white/[.04] text-xs uppercase tracking-wider text-zinc-500">
+              <thead className="bg-white/[.04] text-xs uppercase tracking-wider text-text-3">
                 <tr><th className="p-3">Application</th><th className="p-3">Name</th><th className="p-3">Selection</th><th className="p-3">Staff</th><th className="p-3">Division preference</th></tr>
               </thead>
               <tbody>
                 {report.coachApplications.map((coach) => (
-                  <tr className="border-t border-white/[.06]" key={coach.applicationId}>
-                    <td className="p-3 text-xs text-zinc-500">{coach.applicationId}</td>
+                  <tr className="border-t border-line" key={coach.applicationId}>
+                    <td className="p-3 text-xs text-text-3">{coach.applicationId}</td>
                     <td className="p-3 font-medium">{coach.name}</td>
                     <td className="p-3">{coach.selectionStatus.replaceAll("_", " ")}</td>
                     <td className="p-3">{coach.currentStaffLinkage}</td>
-                    <td className="p-3 text-zinc-300">{coach.divisionPreference || "-"}</td>
+                    <td className="p-3 text-text-1">{coach.divisionPreference || "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -146,7 +146,7 @@ export default async function DraftReadinessPage() {
         </section>
 
         <section className="mt-8 grid gap-4 lg:grid-cols-3">
-          <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+          <div className="rounded-lg border border-line bg-ink-800 p-5">
             <h2 className="text-lg font-semibold">Presentation Payloads</h2>
             <div className="mt-4 space-y-2 text-sm">
               <p>Club payload: <span className={badgeClass(report.presentation.clubPayload)}>{report.presentation.clubPayload}</span></p>
@@ -156,7 +156,7 @@ export default async function DraftReadinessPage() {
               <p>Public-safety review: <span className={badgeClass(report.presentation.publicSafety)}>{report.presentation.publicSafety}</span></p>
             </div>
           </div>
-          <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+          <div className="rounded-lg border border-line bg-ink-800 p-5">
             <h2 className="text-lg font-semibold">Draft System</h2>
             <div className="mt-4 space-y-2 text-sm">
               <p>Operating modes: {report.draftSystem.operatingModes}</p>
@@ -166,7 +166,7 @@ export default async function DraftReadinessPage() {
               <p>Reset: {report.draftSystem.reset.replaceAll("_", " ")}</p>
             </div>
           </div>
-          <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+          <div className="rounded-lg border border-line bg-ink-800 p-5">
             <h2 className="text-lg font-semibold">Isolation</h2>
             <div className="mt-4 space-y-2 text-sm">
               <p>Rehearsal isolation: <span className={badgeClass(report.draftSystem.rehearsalIsolation)}>{report.draftSystem.rehearsalIsolation}</span></p>

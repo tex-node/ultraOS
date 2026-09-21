@@ -16,15 +16,15 @@ export default async function UltraTimeGraphic({ params }: { params: Promise<{ g
   if (model.ultraTime.phase === "INACTIVE") notFound();
 
   return (
-    <div className="inline-flex flex-col items-center gap-2 rounded-2xl border border-amber-400/50 bg-black/90 px-8 py-5 font-sans text-white">
+    <div className="inline-flex flex-col items-center gap-2 rounded-lg border border-warn/50 bg-black/90 px-8 py-5 font-sans text-white">
       <GraphicRefresher intervalSeconds={3} />
       <TransparentBody />
       {model.ultraTime.phase === "ACTIVE" ? (
-        <p className="animate-pulse text-3xl font-black tracking-widest text-amber-400">⚡ ULTRA TIME</p>
+        <p className="animate-pulse text-3xl font-black tracking-widest text-warn">⚡ ULTRA TIME</p>
       ) : (
-        <p className="text-xl font-bold text-amber-300">ULTRA TIME IN {model.ultraTime.secondsUntilStart}s</p>
+        <p className="text-xl font-bold text-warn">ULTRA TIME IN {model.ultraTime.secondsUntilStart}s</p>
       )}
-      <p className="text-sm text-zinc-400">ALL POINTS ×2</p>
+      <p className="text-sm text-text-2">ALL POINTS ×2</p>
       <p className="font-mono text-2xl font-black">{fixture.homeSeasonClub!.club.shortName} {model.score.home} — {model.score.away} {fixture.awaySeasonClub!.club.shortName}</p>
       {model.dataCapability === "FULL_ULTRA" ? (
         <p className="text-xs text-amber-200">

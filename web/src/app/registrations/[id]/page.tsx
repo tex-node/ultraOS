@@ -20,17 +20,17 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-5xl px-6 py-10">
-        <Link className="text-sm text-zinc-400" href="/registrations">Back to registrations</Link>
-        <p className="mt-6 font-mono text-xs text-emerald-400">{registration.referenceNumber}</p>
+        <Link className="text-sm text-text-2" href="/registrations">Back to registrations</Link>
+        <p className="mt-6 font-mono text-xs text-brand-400">{registration.referenceNumber}</p>
         <h1 className="mt-1 text-3xl font-semibold">{registration.teamName ?? "Team registration"}</h1>
-        <p className="mt-2 text-sm text-zinc-400">{registration.teamClubOrSchool ?? "—"} · {registration.teamCategory ?? "No category"} · {registration.status}</p>
+        <p className="mt-2 text-sm text-text-2">{registration.teamClubOrSchool ?? "—"} · {registration.teamCategory ?? "No category"} · {registration.status}</p>
 
-        <form action={updateRegistrationStatusAction.bind(null, registration.id)} className="mt-6 grid gap-3 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5 md:grid-cols-[200px_1fr_auto]">
-          <select name="status" defaultValue={registration.status} className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm">
+        <form action={updateRegistrationStatusAction.bind(null, registration.id)} className="mt-6 grid gap-3 rounded-lg border border-line bg-ink-800 p-5 md:grid-cols-[200px_1fr_auto]">
+          <select name="status" defaultValue={registration.status} className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm">
             {Object.values(RegistrationSubmissionStatus).map((status) => <option key={status} value={status}>{status}</option>)}
           </select>
-          <input name="reviewNotes" defaultValue={registration.reviewNotes ?? ""} placeholder="Review notes" className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" />
-          <button className="rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950">Update status</button>
+          <input name="reviewNotes" defaultValue={registration.reviewNotes ?? ""} placeholder="Review notes" className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm" />
+          <button className="rounded-md bg-brand-400 px-4 py-3 text-sm font-semibold text-ink-900">Update status</button>
         </form>
 
         <section className="mt-8 grid gap-5 md:grid-cols-2">
@@ -38,7 +38,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
           <Roster title="Flag Race roster" count={flagRace.length} participants={flagRace} ordered />
         </section>
 
-        <p className="mt-6 text-xs text-zinc-500">Dual-sport children appear on both rosters; they are one participant record with two sport memberships.</p>
+        <p className="mt-6 text-xs text-text-3">Dual-sport children appear on both rosters; they are one participant record with two sport memberships.</p>
       </main>
     </OperationsShell>
   );
@@ -52,15 +52,15 @@ function Roster({ title, count, participants, showActive = false, ordered = fals
   ordered?: boolean;
 }) {
   return (
-    <section className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
-      <h2 className="text-lg font-semibold">{title} <span className="text-sm text-zinc-500">({count})</span></h2>
+    <section className="rounded-lg border border-line bg-ink-800 p-5">
+      <h2 className="text-lg font-semibold">{title} <span className="text-sm text-text-3">({count})</span></h2>
       <div className="mt-4 space-y-2">
-        {participants.length === 0 ? <p className="text-sm text-zinc-500">Empty.</p> : participants.map((participant) => {
+        {participants.length === 0 ? <p className="text-sm text-text-3">Empty.</p> : participants.map((participant) => {
           const membership = participant.sportMemberships.find((item) => (showActive ? item.sport === "VOLLEYBALL" : item.sport === "FLAG_RACE"));
           return (
-            <div key={participant.id} className="rounded-xl border border-white/[.06] bg-black/20 p-3 text-sm">
+            <div key={participant.id} className="rounded-md border border-line bg-black/20 p-3 text-sm">
               <b>{participant.fullName}</b>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-text-3">
                 {participant.dateOfBirth ? participant.dateOfBirth.toISOString().slice(0, 10) : "No DOB"} · {participant.gender ?? "—"}
                 {ordered && membership ? ` · order ${membership.rosterOrder}` : ""}
                 {showActive && membership ? membership.isActive ? " · active" : " · substitute" : ""}

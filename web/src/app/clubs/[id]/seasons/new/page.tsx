@@ -56,11 +56,11 @@ export default async function NewSeasonClubPage({
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-4xl px-6 py-10">
-        <Link className="text-sm text-zinc-400 hover:text-white" href={`/clubs/${club.id}`}>
+        <Link className="text-sm text-text-2 hover:text-white" href={`/clubs/${club.id}`}>
           ← Back to club
         </Link>
-        <div className="mt-6 rounded-2xl border border-white/[0.08] bg-[#0b100e] p-6">
-          <p className="text-xs uppercase tracking-[0.2em] text-emerald-400">
+        <div className="mt-6 rounded-lg border border-white/[0.08] bg-ink-800 p-6">
+          <p className="text-xs uppercase tracking-[0.2em] text-brand-400">
             Competitive registration
           </p>
           <h1 className="mt-2 text-2xl font-semibold">Register {club.name} in a season</h1>

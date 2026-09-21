@@ -43,7 +43,7 @@ export function CourtSvg({
     <svg
       viewBox={"0 0 " + VIEW_W + " " + VIEW_H}
       onClick={interactive ? handleClick : undefined}
-      className={"h-auto w-full rounded-xl " + (interactive ? "cursor-crosshair touch-manipulation" : "")}
+      className={"h-auto w-full rounded-md " + (interactive ? "cursor-crosshair touch-manipulation" : "")}
       role="application"
       aria-label="Basketball court. Activate to log a shot location."
     >

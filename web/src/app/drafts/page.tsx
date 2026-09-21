@@ -28,14 +28,14 @@ export default async function Drafts() {
       <main className="mx-auto max-w-6xl px-6 py-10">
         <div className="flex justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[.2em] text-emerald-400">
+            <p className="text-xs uppercase tracking-[.2em] text-brand-400">
               SeasonClub selections
             </p>
             <h1 className="mt-2 text-3xl font-semibold">Drafts</h1>
           </div>
           {canManageDraft ? (
             <Link
-              className="rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950"
+              className="rounded-md bg-brand-400 px-4 py-3 text-sm font-semibold text-ink-900"
               href="/drafts/new"
             >
               Create draft
@@ -45,18 +45,18 @@ export default async function Drafts() {
         <div className="mt-8 grid gap-4 md:grid-cols-2">
           {drafts.map((draft) => (
             <Link
-              className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5"
+              className="rounded-lg border border-line bg-ink-800 p-5"
               href={`/drafts/${draft.id}`}
               key={draft.id}
             >
               <div className="flex justify-between">
                 <h2 className="font-semibold">{draft.name}</h2>
-                <span className="text-xs text-emerald-400">{draft.status}</span>
+                <span className="text-xs text-brand-400">{draft.status}</span>
               </div>
-              <p className="mt-2 text-sm text-zinc-400">
+              <p className="mt-2 text-sm text-text-2">
                 {draft.season.name} - {draft.division.name} - {draft.tier.replace("_", " ")}
               </p>
-              <p className="mt-4 text-xs text-zinc-500">
+              <p className="mt-4 text-xs text-text-3">
                 {draft._count.picks} picks - next #{draft.nextPickNumber}
               </p>
             </Link>

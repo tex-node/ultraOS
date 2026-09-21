@@ -7,8 +7,8 @@ import { grantGameControl, revokeGameControl } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-const inputClass = "mt-1 w-full rounded-lg border border-white/10 bg-[#050807] px-3 py-2 text-sm text-white";
-const labelClass = "block text-sm text-zinc-300";
+const inputClass = "mt-1 w-full rounded-lg border border-line bg-ink-900 px-3 py-2 text-sm text-white";
+const labelClass = "block text-sm text-text-1";
 
 // Admin console for game-control access. Grants are scoped to a tournament (competition), season,
 // event, or the whole organization, so an admin can hand someone control of one tournament without
@@ -53,12 +53,12 @@ export default async function AccessPage() {
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-5xl px-6 py-10">
         <h1 className="text-2xl font-semibold">Game-control access</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <p className="mt-1 text-sm text-text-2">
           Give a user control of games for one tournament, season or event — without a league-wide role.
           Organization-wide grants apply everywhere in this organization.
         </p>
 
-        <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+        <section className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
           <h2 className="text-lg font-semibold">Grant access</h2>
           <form action={grantGameControl} className="mt-4 grid gap-4 sm:grid-cols-3">
             <label className={labelClass}>
@@ -97,23 +97,23 @@ export default async function AccessPage() {
               </select>
             </label>
             <div className="sm:col-span-3">
-              <button className="rounded-lg bg-emerald-400 px-5 py-3 font-semibold text-zinc-950">Grant access</button>
+              <button className="rounded-lg bg-brand-400 px-5 py-3 font-semibold text-ink-900">Grant access</button>
             </div>
           </form>
-          <p className="mt-3 text-xs text-zinc-500">
+          <p className="mt-3 text-xs text-text-3">
             {GAME_CONTROL_ROLE_LIST.map((role) => `${GAME_CONTROL_ROLE_LABELS[role]}`).join(" · ")} — a
             scorekeeper scores but cannot confirm a result; a statistician records player stats only.
           </p>
         </section>
 
-        <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+        <section className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
           <h2 className="text-lg font-semibold">Active grants</h2>
           {grants.length === 0 ? (
-            <p className="mt-3 text-sm text-zinc-500">No game-control grants yet.</p>
+            <p className="mt-3 text-sm text-text-3">No game-control grants yet.</p>
           ) : (
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="text-xs uppercase tracking-wider text-zinc-500">
+                <thead className="text-xs uppercase tracking-wider text-text-3">
                   <tr>
                     <th className="py-2 pr-4">User</th>
                     <th className="py-2 pr-4">Role</th>
@@ -126,14 +126,14 @@ export default async function AccessPage() {
                     <tr key={grant.id} className="border-t border-white/5">
                       <td className="py-2 pr-4">
                         <span className="font-medium">{grant.user?.name ?? "—"}</span>
-                        <span className="ml-2 text-zinc-400">{grant.user?.email}</span>
+                        <span className="ml-2 text-text-2">{grant.user?.email}</span>
                       </td>
                       <td className="py-2 pr-4">{gameControlRoleLabel(grant.role) ?? grant.role}</td>
-                      <td className="py-2 pr-4 text-zinc-300">{scopeLabel(grant)}</td>
+                      <td className="py-2 pr-4 text-text-1">{scopeLabel(grant)}</td>
                       <td className="py-2 pr-4 text-right">
                         <form action={revokeGameControl}>
                           <input type="hidden" name="grantId" value={grant.id} />
-                          <button className="rounded-lg border border-rose-400/30 px-3 py-1.5 text-xs text-rose-300 hover:border-rose-400/60">
+                          <button className="rounded-lg border border-danger/30 px-3 py-1.5 text-xs text-danger hover:border-rose-400/60">
                             Revoke
                           </button>
                         </form>
@@ -146,10 +146,10 @@ export default async function AccessPage() {
           )}
         </section>
 
-        <p className="mt-6 text-xs text-zinc-500">
+        <p className="mt-6 text-xs text-text-3">
           Fixtures must be attached to an event for event-scoped grants to apply; tournament and season
           grants cover fixtures by their schedule, with no attachment needed. See{" "}
-          <Link href="/gameday" className="text-emerald-300 underline">
+          <Link href="/gameday" className="text-brand-300 underline">
             Game Day
           </Link>{" "}
           to open a console.

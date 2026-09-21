@@ -18,26 +18,26 @@ export default async function VisionFailures() {
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-5xl px-6 py-10">
-        <p className="text-xs uppercase tracking-[.2em] text-violet-400">AI Vision</p>
+        <p className="text-xs uppercase tracking-[.2em] text-accent-purple">AI Vision</p>
         <h1 className="mt-2 text-3xl font-bold">Failure Case Gallery</h1>
-        <p className="mt-2 max-w-2xl text-sm text-zinc-400">
+        <p className="mt-2 max-w-2xl text-sm text-text-2">
           Every tagged false positive, false negative, ID switch, calibration issue, jersey
           error, timeline error, occlusion, or ambiguous case - the real backlog for improving
           detection/tracking quality, not just a success-rate number.
         </p>
 
         {observations.length === 0 && matches.length === 0 ? (
-          <p className="mt-8 text-sm text-zinc-500">No failure cases tagged yet.</p>
+          <p className="mt-8 text-sm text-text-3">No failure cases tagged yet.</p>
         ) : null}
 
         {observations.length > 0 ? (
           <section className="mt-8">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-violet-400">Observations</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-accent-purple">Observations</h2>
             <div className="mt-3 space-y-2">
               {observations.map((o) => (
-                <div key={o.id} className="rounded-xl border border-red-400/30 bg-red-400/[.04] p-3 text-xs">
+                <div key={o.id} className="rounded-md border border-red-400/30 bg-red-400/[.04] p-3 text-xs">
                   <p className="font-bold text-red-300">{o.failureCategory}</p>
-                  <p className="mt-1 text-zinc-400">{o.gameVideo.fixture.homeSeasonClub!.club.shortName} vs {o.gameVideo.fixture.awaySeasonClub!.club.shortName} · {o.observationType} @ {o.videoTimeMs}ms</p>
+                  <p className="mt-1 text-text-2">{o.gameVideo.fixture.homeSeasonClub!.club.shortName} vs {o.gameVideo.fixture.awaySeasonClub!.club.shortName} · {o.observationType} @ {o.videoTimeMs}ms</p>
                 </div>
               ))}
             </div>
@@ -46,12 +46,12 @@ export default async function VisionFailures() {
 
         {matches.length > 0 ? (
           <section className="mt-8">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-violet-400">Event matches</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-accent-purple">Event matches</h2>
             <div className="mt-3 space-y-2">
               {matches.map((m) => (
-                <div key={m.id} className="rounded-xl border border-red-400/30 bg-red-400/[.04] p-3 text-xs">
+                <div key={m.id} className="rounded-md border border-red-400/30 bg-red-400/[.04] p-3 text-xs">
                   <p className="font-bold text-red-300">{m.failureCategory}</p>
-                  <p className="mt-1 text-zinc-400">{m.observation.gameVideo.fixture.homeSeasonClub!.club.shortName} vs {m.observation.gameVideo.fixture.awaySeasonClub!.club.shortName} — {m.gameEvent.description}</p>
+                  <p className="mt-1 text-text-2">{m.observation.gameVideo.fixture.homeSeasonClub!.club.shortName} vs {m.observation.gameVideo.fixture.awaySeasonClub!.club.shortName} — {m.gameEvent.description}</p>
                 </div>
               ))}
             </div>

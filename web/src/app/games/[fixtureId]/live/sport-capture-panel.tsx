@@ -10,7 +10,7 @@ type TeamOption = {
   players: { id: string; name: string }[];
 };
 
-const BIG_BTN = "min-h-[52px] min-w-[52px] rounded-xl text-sm font-semibold active:scale-95 transition";
+const BIG_BTN = "min-h-[52px] min-w-[52px] rounded-md px-4 text-base font-bold active:scale-95 transition";
 
 // Catalog-driven capture for the sport's NON-scoring events (cards, fouls, substitutions, serves...)
 // grouped by category. Scoring is deliberately excluded: it is recorded through the panel that
@@ -36,20 +36,20 @@ export function SportCapturePanel({
   });
 
   return (
-    <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+    <section className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="font-semibold">Sport capture · {definition.name}</h3>
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-text-3">
           Non-scoring events from the {definition.name} catalog. Points are recorded in the scoring panel above.
         </p>
       </div>
 
       {plan.length === 0 ? (
-        <p className="mt-4 text-sm text-zinc-500">No non-scoring events for this sport.</p>
+        <p className="mt-4 text-sm text-text-3">No non-scoring events for this sport.</p>
       ) : (
         <div className="mt-4 grid gap-6 lg:grid-cols-2">
           {teams.map((team) => (
-            <form key={team.id} action={recordSportEvent.bind(null, gameId, fixtureId)} className="rounded-xl border border-white/[.06] p-4">
+            <form key={team.id} action={recordSportEvent.bind(null, gameId, fixtureId)} className="rounded-md border border-line p-4">
               <input type="hidden" name="seasonClubId" value={team.id} />
               <h4 className="text-sm font-semibold">{team.name}</h4>
 
@@ -62,7 +62,7 @@ export function SportCapturePanel({
 
               {plan.map((group) => (
                 <div key={group.category} className="mt-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">{group.category.replace(/_/g, " ")}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-text-3">{group.category.replace(/_/g, " ")}</p>
                   <div className="mt-1 grid grid-cols-3 gap-2">
                     {group.actions.map((action) => (
                       <SubmitButton
@@ -70,7 +70,7 @@ export function SportCapturePanel({
                         name="typeKey"
                         value={action.key}
                         pendingLabel="…"
-                        className={`${BIG_BTN} border border-emerald-400/30 text-xs text-emerald-300`}
+                        className={`${BIG_BTN} border border-brand-400/30 text-xs text-brand-300`}
                       >
                         {action.label}
                       </SubmitButton>

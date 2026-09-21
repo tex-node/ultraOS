@@ -40,18 +40,18 @@ export default async function ClubsPage() {
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-brand-400">
               Permanent identities and season teams
             </p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">Clubs</h1>
-            <p className="mt-2 max-w-2xl text-sm text-zinc-400">
+            <p className="mt-2 max-w-2xl text-sm text-text-2">
               Club holds brand identity. SeasonClub represents a team competing in a
               specific season and division.
             </p>
           </div>
           {canManage ? (
             <Link
-              className="rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-300"
+              className="rounded-md bg-brand-400 px-4 py-3 text-sm font-semibold text-ink-900 transition hover:bg-brand-300"
               href="/clubs/new"
             >
               Create permanent club
@@ -71,7 +71,7 @@ export default async function ClubsPage() {
             return (
               <article
                 key={club.id}
-                className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b100e]"
+                className="overflow-hidden rounded-lg border border-white/[0.08] bg-ink-800"
               >
                 <div
                   className="h-1"
@@ -83,7 +83,7 @@ export default async function ClubsPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-center gap-3">
                       <div
-                        className="grid h-12 w-12 place-items-center rounded-xl border text-xs font-black"
+                        className="grid h-12 w-12 place-items-center rounded-md border text-xs font-black"
                         style={{
                           color: displayPrimaryColor,
                           borderColor: `${displayPrimaryColor}55`,
@@ -94,18 +94,18 @@ export default async function ClubsPage() {
                       </div>
                       <div>
                         <h2 className="text-lg font-semibold">{club.name}</h2>
-                        <p className="text-xs text-zinc-500">
+                        <p className="text-xs text-text-3">
                           {club.sport.name} · permanent club
                         </p>
                       </div>
                     </div>
-                    <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-wider text-zinc-400">
+                    <span className="rounded-full border border-line px-2 py-1 text-[10px] uppercase tracking-wider text-text-2">
                       {club.status}
                     </span>
                   </div>
 
-                  <div className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.025] p-4">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                  <div className="mt-5 rounded-md border border-white/[0.06] bg-white/[0.025] p-4">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-text-3">
                       Competitive registration
                     </p>
                     {activeRegistration ? (
@@ -115,19 +115,19 @@ export default async function ClubsPage() {
                         </p>
                         <div className="mt-3 grid grid-cols-3 gap-3 text-xs">
                           <div>
-                            <p className="text-zinc-500">Roster</p>
+                            <p className="text-text-3">Roster</p>
                             <p className="mt-1 font-semibold">
                               {activeRegistration._count.players}
                             </p>
                           </div>
                           <div>
-                            <p className="text-zinc-500">Coach</p>
+                            <p className="text-text-3">Coach</p>
                             <p className="mt-1 truncate font-semibold">
                               {activeRegistration.headCoach?.name ?? "Unassigned"}
                             </p>
                           </div>
                           <div>
-                            <p className="text-zinc-500">Record</p>
+                            <p className="text-text-3">Record</p>
                             <p className="mt-1 font-semibold">
                               {activeRegistration.standing?.won ?? 0}-
                               {activeRegistration.standing?.lost ?? 0}
@@ -136,20 +136,20 @@ export default async function ClubsPage() {
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-2 text-sm text-zinc-400">
+                      <p className="mt-2 text-sm text-text-2">
                         Not registered in an active season.
                       </p>
                     )}
                   </div>
 
                   <div className="mt-5 flex items-center justify-between">
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-text-3">
                       {club.seasonClubs.length} season registration
                       {club.seasonClubs.length === 1 ? "" : "s"} ·{" "}
                       {club.fanClub?._count.memberships ?? 0} fans
                     </p>
                     <Link
-                      className="text-sm font-semibold text-emerald-400 hover:text-emerald-300"
+                      className="text-sm font-semibold text-brand-400 hover:text-brand-300"
                       href={`/clubs/${club.id}`}
                     >
                       View club
@@ -162,7 +162,7 @@ export default async function ClubsPage() {
         </section>
 
         {clubs.length === 0 ? (
-          <div className="mt-8 rounded-2xl border border-dashed border-white/10 p-10 text-center text-zinc-400">
+          <div className="mt-8 rounded-lg border border-dashed border-line p-10 text-center text-text-2">
             No permanent clubs have been created.
           </div>
         ) : null}

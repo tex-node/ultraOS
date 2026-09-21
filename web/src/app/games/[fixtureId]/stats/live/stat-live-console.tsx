@@ -19,8 +19,8 @@ import { pauseGame, resumeGame } from "../../../actions";
 import { shotZone } from "@/lib/sports/shot-zones";
 import { CourtSvg, type CourtPoint } from "./court-svg";
 
-const BIG_BTN = "min-h-[52px] min-w-[52px] rounded-xl text-sm font-semibold active:scale-95 transition";
-const CARD = "rounded-2xl border border-white/[.08] bg-[#0b100e] p-5";
+const BIG_BTN = "min-h-[52px] min-w-[52px] rounded-md text-sm font-semibold active:scale-95 transition";
+const CARD = "rounded-lg border border-line bg-ink-800 p-5";
 
 export type LiveTeam = {
   id: string;
@@ -167,12 +167,12 @@ export function StatLiveConsole({
             <p className="font-mono text-4xl font-bold">{homeScore}</p>
           </div>
           <div>
-            <p className="text-xs text-zinc-500">{periodLabel}</p>
+            <p className="text-xs text-text-3">{periodLabel}</p>
             <p className="font-mono text-3xl font-bold">
               <GameClock seconds={clockSeconds} status={status} startedAt={clockStartedAt} />
             </p>
-            <p className="mt-1 text-xs text-emerald-400">{status}</p>
-            <p className="mt-1 text-[10px] uppercase tracking-wider text-zinc-500">Possession {possessionSide}</p>
+            <p className="mt-1 text-xs text-brand-400">{status}</p>
+            <p className="mt-1 text-[10px] uppercase tracking-wider text-text-3">Possession {possessionSide}</p>
           </div>
           <div>
             <p className="font-semibold">{teams[1].name}</p>
@@ -184,10 +184,10 @@ export function StatLiveConsole({
           {canOperate ? (
             <>
               <form ref={pauseFormRef} action={pauseGame.bind(null, gameId, fixtureId)}>
-                <SubmitButton pendingLabel="�" disabled={status !== "LIVE"} className={`${BIG_BTN} border border-white/10 px-4 text-xs`}>Pause (space)</SubmitButton>
+                <SubmitButton pendingLabel="�" disabled={status !== "LIVE"} className={`${BIG_BTN} border border-line px-4 text-xs`}>Pause (space)</SubmitButton>
               </form>
               <form ref={resumeFormRef} action={resumeGame.bind(null, gameId, fixtureId)}>
-                <SubmitButton pendingLabel="�" disabled={status !== "PAUSED"} className={`${BIG_BTN} border border-white/10 px-4 text-xs`}>Resume (space)</SubmitButton>
+                <SubmitButton pendingLabel="�" disabled={status !== "PAUSED"} className={`${BIG_BTN} border border-line px-4 text-xs`}>Resume (space)</SubmitButton>
               </form>
             </>
           ) : null}
@@ -195,26 +195,26 @@ export function StatLiveConsole({
             <>
               <form action={flipPossession.bind(null, gameId, fixtureId)}>
                 <input type="hidden" name="seasonClubId" value={possessionTeamId === teams[0].id ? teams[1].id : teams[0].id} />
-                <SubmitButton pendingLabel="�" className={`${BIG_BTN} border border-white/10 px-4 text-xs`}>Flip arrow</SubmitButton>
+                <SubmitButton pendingLabel="�" className={`${BIG_BTN} border border-line px-4 text-xs`}>Flip arrow</SubmitButton>
               </form>
               <form action={recordJumpBall.bind(null, gameId, fixtureId)}>
                 <input type="hidden" name="seasonClubId" value={teams[0].id} />
-                <SubmitButton pendingLabel="�" className={`${BIG_BTN} border border-white/10 px-4 text-xs`}>Jump: {teams[0].shortName}</SubmitButton>
+                <SubmitButton pendingLabel="�" className={`${BIG_BTN} border border-line px-4 text-xs`}>Jump: {teams[0].shortName}</SubmitButton>
               </form>
               <form action={recordJumpBall.bind(null, gameId, fixtureId)}>
                 <input type="hidden" name="seasonClubId" value={teams[1].id} />
-                <SubmitButton pendingLabel="�" className={`${BIG_BTN} border border-white/10 px-4 text-xs`}>Jump: {teams[1].shortName}</SubmitButton>
+                <SubmitButton pendingLabel="�" className={`${BIG_BTN} border border-line px-4 text-xs`}>Jump: {teams[1].shortName}</SubmitButton>
               </form>
               <form action={recordGameTimeout.bind(null, gameId, fixtureId)}>
                 <input type="hidden" name="seasonClubId" value={selectedTeamId} />
-                <SubmitButton pendingLabel="�" className={`${BIG_BTN} border border-amber-400/30 px-4 text-xs text-amber-300`}>Timeout</SubmitButton>
+                <SubmitButton pendingLabel="�" className={`${BIG_BTN} border border-warn/30 px-4 text-xs text-warn`}>Timeout</SubmitButton>
               </form>
             </>
           ) : null}
-          <p className="mt-3 w-full text-center text-xs text-zinc-500">
+          <p className="mt-3 w-full text-center text-xs text-text-3">
             Timeouts {teams[0].shortName} {timeouts.home} · {teams[1].shortName} {timeouts.away}
             {lastVerification ? (
-              <span className={lastVerification.allMatch ? "text-emerald-300" : "text-rose-300"}>
+              <span className={lastVerification.allMatch ? "text-brand-300" : "text-danger"}>
                 {" "}· Score {lastVerification.allMatch ? "verified" : "MISMATCH"} (P{lastVerification.period} {mmss(lastVerification.clockSeconds)})
               </span>
             ) : null}
@@ -226,24 +226,24 @@ export function StatLiveConsole({
       {isMutable ? (
         <section className={`${CARD} mt-6`}>
           <h3 className="font-semibold">Verify against the venue scoreboard</h3>
-          <p className="mt-0.5 text-xs text-zinc-500">
+          <p className="mt-0.5 text-xs text-text-3">
             During a timeout or stoppage, read the building&apos;s board and confirm the app matches it. Official{" "}
             {official.home}–{official.away} · Statistician {statScore.home}–{statScore.away}.
           </p>
           <form action={verifyScoreboard.bind(null, gameId, fixtureId)} className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_2fr_auto] sm:items-end">
-            <label className="text-xs text-zinc-400">
+            <label className="text-xs text-text-2">
               Venue home
               <input name="venueHomeScore" type="number" min={0} max={300} required defaultValue={official.home} className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white" />
             </label>
-            <label className="text-xs text-zinc-400">
+            <label className="text-xs text-text-2">
               Venue away
               <input name="venueAwayScore" type="number" min={0} max={300} required defaultValue={official.away} className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white" />
             </label>
-            <label className="text-xs text-zinc-400">
+            <label className="text-xs text-text-2">
               Note (optional)
               <input name="note" placeholder="e.g. checked at the media timeout" className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white" />
             </label>
-            <SubmitButton pendingLabel="…" className={`${BIG_BTN} border border-emerald-400/30 px-5 text-sm text-emerald-300`}>Verify</SubmitButton>
+            <SubmitButton pendingLabel="…" className={`${BIG_BTN} border border-brand-400/30 px-5 text-sm text-brand-300`}>Verify</SubmitButton>
           </form>
         </section>
       ) : null}
@@ -252,23 +252,23 @@ export function StatLiveConsole({
       {!startersConfirmed.home || !startersConfirmed.away ? (
         <section className={`${CARD} mt-6`}>
           <h3 className="font-semibold">Confirm starting fives</h3>
-          <p className="mt-0.5 text-xs text-zinc-500">Pick exactly five per team before the tip. Shots and subs need confirmed starters.</p>
+          <p className="mt-0.5 text-xs text-text-3">Pick exactly five per team before the tip. Shots and subs need confirmed starters.</p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {teams.map((t, index) => {
               const confirmed = index === 0 ? startersConfirmed.home : startersConfirmed.away;
-              if (confirmed) return <p key={t.id} className="text-sm text-emerald-300">{t.name} starters confirmed.</p>;
+              if (confirmed) return <p key={t.id} className="text-sm text-brand-300">{t.name} starters confirmed.</p>;
               return (
-                <form key={t.id} action={confirmStartingFive.bind(null, gameId, fixtureId)} className="rounded-xl border border-white/[.06] p-4">
+                <form key={t.id} action={confirmStartingFive.bind(null, gameId, fixtureId)} className="rounded-md border border-line p-4">
                   <input type="hidden" name="seasonClubId" value={t.id} />
                   <h4 className="text-sm font-semibold">{t.name}</h4>
                   <div className="mt-2 grid gap-1">
                     {t.players.map((p) => (
-                      <label key={p.id} className="flex items-center gap-2 text-sm text-zinc-300">
+                      <label key={p.id} className="flex items-center gap-2 text-sm text-text-1">
                         <input type="checkbox" name="playerIds" value={p.id} /> {p.name}
                       </label>
                     ))}
                   </div>
-                  <SubmitButton pendingLabel="�" className={`${BIG_BTN} mt-3 border border-emerald-400/30 px-4 text-xs text-emerald-300`}>Confirm five</SubmitButton>
+                  <SubmitButton pendingLabel="�" className={`${BIG_BTN} mt-3 border border-brand-400/30 px-4 text-xs text-brand-300`}>Confirm five</SubmitButton>
                 </form>
               );
             })}
@@ -282,11 +282,11 @@ export function StatLiveConsole({
           <h3 className="font-semibold">Roster</h3>
           <div className="flex gap-2">
             {teams.map((t) => (
-              <button key={t.id} type="button" onClick={() => selectTeam(t.id)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${t.id === selectedTeamId ? "bg-emerald-400 text-zinc-950" : "border border-white/10 text-zinc-300"}`}>
+              <button key={t.id} type="button" onClick={() => selectTeam(t.id)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${t.id === selectedTeamId ? "bg-brand-400 text-ink-900" : "border border-line text-text-1"}`}>
                 {t.shortName}
               </button>
             ))}
-            <button type="button" onClick={() => { setWaveMode((v) => !v); setWaveOuts([]); setWaveIns([]); }} className={`rounded-lg px-3 py-2 text-xs font-semibold ${waveMode ? "bg-amber-400 text-zinc-950" : "border border-amber-400/30 text-amber-300"}`}>
+            <button type="button" onClick={() => { setWaveMode((v) => !v); setWaveOuts([]); setWaveIns([]); }} className={`rounded-lg px-3 py-2 text-xs font-semibold ${waveMode ? "bg-amber-400 text-ink-900" : "border border-warn/30 text-warn"}`}>
               {waveMode ? "Wave: ON" : "Wave sub"}
             </button>
           </div>
@@ -294,7 +294,7 @@ export function StatLiveConsole({
 
         {teams.map((t) => (
           <div key={t.id} className="mt-4">
-            <p className="text-xs uppercase tracking-wider text-zinc-500">{t.name} � on court</p>
+            <p className="text-xs uppercase tracking-wider text-text-3">{t.name} � on court</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {t.players.filter((p) => t.onCourt.includes(p.id)).map((p) => {
                 const isOut = waveOuts.includes(p.id);
@@ -306,7 +306,7 @@ export function StatLiveConsole({
                       if (waveMode && t.id === selectedTeamId) toggleWaveOut(p.id);
                       else if (!waveMode) { selectTeam(t.id); setSelectedPlayerId(p.id); }
                     }}
-                    className={`min-h-[48px] rounded-xl border px-3 text-xs font-semibold ${waveMode && t.id === selectedTeamId && isOut ? "border-rose-400 bg-rose-500/20 text-rose-200" : p.id === effectivePlayerId && t.id === selectedTeamId ? "border-emerald-400 bg-emerald-400/15 text-emerald-200" : "border-white/10 text-zinc-200"}`}
+                    className={`min-h-[48px] rounded-md border px-3 text-xs font-semibold ${waveMode && t.id === selectedTeamId && isOut ? "border-rose-400 bg-rose-500/20 text-danger" : p.id === effectivePlayerId && t.id === selectedTeamId ? "border-emerald-400 bg-brand-400/15 text-emerald-200" : "border-line text-text-1"}`}
                     style={t.color ? { borderLeftColor: t.color, borderLeftWidth: 4 } : undefined}
                   >
                     {p.name}
@@ -314,7 +314,7 @@ export function StatLiveConsole({
                 );
               })}
             </div>
-            <p className="mt-3 text-xs uppercase tracking-wider text-zinc-500">{t.name} � bench</p>
+            <p className="mt-3 text-xs uppercase tracking-wider text-text-3">{t.name} � bench</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {t.players.filter((p) => !t.onCourt.includes(p.id)).map((p) => {
                 const isIn = waveIns.includes(p.id);
@@ -326,7 +326,7 @@ export function StatLiveConsole({
                       if (waveMode && t.id === selectedTeamId) toggleWaveIn(p.id);
                       else if (!waveMode) { selectTeam(t.id); setSelectedPlayerId(p.id); }
                     }}
-                    className={`min-h-[48px] rounded-xl border px-3 text-xs ${waveMode && t.id === selectedTeamId && isIn ? "border-emerald-400 bg-emerald-400/15 text-emerald-200" : "border-white/10 text-zinc-400"}`}
+                    className={`min-h-[48px] rounded-md border px-3 text-xs ${waveMode && t.id === selectedTeamId && isIn ? "border-emerald-400 bg-brand-400/15 text-emerald-200" : "border-line text-text-2"}`}
                     style={t.color ? { borderLeftColor: t.color, borderLeftWidth: 4 } : undefined}
                   >
                     {p.name}
@@ -338,12 +338,12 @@ export function StatLiveConsole({
         ))}
 
         {waveMode ? (
-          <form action={recordWaveSubstitution.bind(null, gameId, fixtureId)} className="mt-4 rounded-xl border border-amber-400/20 p-4">
+          <form action={recordWaveSubstitution.bind(null, gameId, fixtureId)} className="mt-4 rounded-md border border-warn/20 p-4">
             <input type="hidden" name="seasonClubId" value={selectedTeamId} />
             {waveOuts.map((id) => <input key={"o" + id} type="hidden" name="playerOutIds" value={id} />)}
             {waveIns.map((id) => <input key={"i" + id} type="hidden" name="playerInIds" value={id} />)}
-            <p className="text-sm text-zinc-300">Wave for {team.shortName}: {waveOuts.length} out, {waveIns.length} in.</p>
-            <SubmitButton pendingLabel="�" disabled={waveOuts.length === 0 || waveOuts.length !== waveIns.length} className={`${BIG_BTN} mt-3 bg-amber-400 px-5 text-sm text-zinc-950 disabled:opacity-40`}>Apply wave</SubmitButton>
+            <p className="text-sm text-text-1">Wave for {team.shortName}: {waveOuts.length} out, {waveIns.length} in.</p>
+            <SubmitButton pendingLabel="�" disabled={waveOuts.length === 0 || waveOuts.length !== waveIns.length} className={`${BIG_BTN} mt-3 bg-amber-400 px-5 text-sm text-ink-900 disabled:opacity-40`}>Apply wave</SubmitButton>
           </form>
         ) : null}
       </section>
@@ -351,17 +351,17 @@ export function StatLiveConsole({
       {/* shot panel + court */}
       <section className={`${CARD} mt-6`}>
         <h3 className="font-semibold">Log a shot � {team.name}</h3>
-        <p className="mt-0.5 text-xs text-zinc-500">
+        <p className="mt-0.5 text-xs text-text-3">
           {effectivePlayerId ? team.players.find((p) => p.id === effectivePlayerId)?.name : "Pick a player above"} � click the court, then Made or Missed.
           {pending && pendingZone ? ` Marked ${pending.x}, ${pending.y} ft (${pendingZone.replace(/_/g, " ")}).` : ""}
         </p>
         <div className="mt-3 flex gap-2">
           {(fourPointEnabled ? [2, 3, 4, 1] : [2, 3, 1]).map((value) => (
-            <button key={value} type="button" onClick={() => setShotValue(value as 2 | 3 | 1 | 4)} className={`rounded-lg px-4 py-2 text-sm font-semibold ${shotValue === value ? "bg-emerald-400 text-zinc-950" : "border border-white/10 text-zinc-300"}`}>
+            <button key={value} type="button" onClick={() => setShotValue(value as 2 | 3 | 1 | 4)} className={`rounded-lg px-4 py-2 text-sm font-semibold ${shotValue === value ? "bg-brand-400 text-ink-900" : "border border-line text-text-1"}`}>
               {value === 1 ? "FT" : value + "PT"}
             </button>
           ))}
-          <button type="button" onClick={() => setPending(null)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-400">Clear mark</button>
+          <button type="button" onClick={() => setPending(null)} className="rounded-lg border border-line px-4 py-2 text-sm text-text-2">Clear mark</button>
         </div>
         <div className="mx-auto mt-4 max-w-md">
           <CourtSvg onSelect={setPending} pending={pending} dots={shotDots} />
@@ -372,8 +372,8 @@ export function StatLiveConsole({
           <input type="hidden" name="shotValue" value={shotValue} />
           {pending ? <input type="hidden" name="x" value={pending.x} /> : null}
           {pending ? <input type="hidden" name="y" value={pending.y} /> : null}
-          <SubmitButton pendingLabel="�" disabled={!effectivePlayerId || (shotValue !== 1 && !pending)} className={`${BIG_BTN} flex-1 border border-emerald-400/40 px-5 text-emerald-300 disabled:opacity-40`} name="made" value="true">Made</SubmitButton>
-          <SubmitButton pendingLabel="�" disabled={!effectivePlayerId || (shotValue !== 1 && !pending)} className={`${BIG_BTN} flex-1 border border-rose-400/40 px-5 text-rose-300 disabled:opacity-40`} name="made" value="false">Missed</SubmitButton>
+          <SubmitButton pendingLabel="�" disabled={!effectivePlayerId || (shotValue !== 1 && !pending)} className={`${BIG_BTN} flex-1 border border-brand-400/40 px-5 text-brand-300 disabled:opacity-40`} name="made" value="true">Made</SubmitButton>
+          <SubmitButton pendingLabel="�" disabled={!effectivePlayerId || (shotValue !== 1 && !pending)} className={`${BIG_BTN} flex-1 border border-danger/40 px-5 text-danger disabled:opacity-40`} name="made" value="false">Missed</SubmitButton>
         </form>
         <OtherStats gameId={gameId} fixtureId={fixtureId} teamId={team.id} playerId={effectivePlayerId} />
         <FoulPanel
@@ -390,23 +390,23 @@ export function StatLiveConsole({
         <div className="flex items-center justify-between gap-2">
           <h3 className="font-semibold">Action log</h3>
           <form action={undoLastStatisticianEvent.bind(null, gameId, fixtureId)}>
-            <SubmitButton pendingLabel="�" className="rounded-lg border border-amber-400/30 px-3 py-2 text-xs text-amber-300">Undo last</SubmitButton>
+            <SubmitButton pendingLabel="�" className="rounded-lg border border-warn/30 px-3 py-2 text-xs text-warn">Undo last</SubmitButton>
           </form>
         </div>
         {events.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">Nothing logged yet.</p>
+          <p className="mt-3 text-sm text-text-3">Nothing logged yet.</p>
         ) : (
           <ul className="mt-3 divide-y divide-white/5">
             {events.map((event) => (
               <li key={event.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                 <div className="min-w-0">
-                  <p className="truncate text-zinc-200">{event.description}</p>
-                  <p className="text-xs text-zinc-500">P{event.period} � {mmss(event.clockSeconds)}{event.courtZone ? ` � ${event.courtZone.replace(/_/g, " ")}` : ""} � {event.status}</p>
+                  <p className="truncate text-text-1">{event.description}</p>
+                  <p className="text-xs text-text-3">P{event.period} � {mmss(event.clockSeconds)}{event.courtZone ? ` � ${event.courtZone.replace(/_/g, " ")}` : ""} � {event.status}</p>
                 </div>
                 {event.status === "ACTIVE" ? (
                   <form action={voidStatisticianEvent.bind(null, gameId, fixtureId)} className="shrink-0">
                     <input type="hidden" name="eventId" value={event.id} />
-                    <SubmitButton pendingLabel="�" className="rounded-lg border border-white/10 px-2 py-1.5 text-xs text-zinc-400" title="Void this entry">Void</SubmitButton>
+                    <SubmitButton pendingLabel="�" className="rounded-lg border border-line px-2 py-1.5 text-xs text-text-2" title="Void this entry">Void</SubmitButton>
                   </form>
                 ) : null}
               </li>
@@ -434,13 +434,13 @@ function FoulPanel({
   return (
     <form
       action={recordStatisticianStat.bind(null, gameId, fixtureId)}
-      className="mt-4 rounded-xl border border-white/[.06] p-4"
+      className="mt-4 rounded-md border border-line p-4"
     >
       <input type="hidden" name="seasonClubId" value={team.id} />
       <input type="hidden" name="eventType" value="FOUL" />
       <h4 className="text-sm font-semibold">Foul — {team.name}</h4>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <label className="text-xs text-zinc-400">
+        <label className="text-xs text-text-2">
           Assessed to
           <select name="foulTarget" value={target} onChange={(e) => setTarget(e.target.value)} className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white">
             <option value="PLAYER">Player</option>
@@ -449,7 +449,7 @@ function FoulPanel({
           </select>
         </label>
         {target === "PLAYER" ? (
-          <label className="text-xs text-zinc-400">
+          <label className="text-xs text-text-2">
             Player
             <select name="playerId" className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white">
               {team.players.map((p) => (
@@ -458,7 +458,7 @@ function FoulPanel({
             </select>
           </label>
         ) : null}
-        <label className="text-xs text-zinc-400">
+        <label className="text-xs text-text-2">
           Type
           <select name="foulType" value={foulType} onChange={(e) => setFoulType(e.target.value)} className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white">
             <option value="PERSONAL">Personal</option>
@@ -468,7 +468,7 @@ function FoulPanel({
           </select>
         </label>
         {foulType === "TECHNICAL" ? (
-          <label className="text-xs text-zinc-400">
+          <label className="text-xs text-text-2">
             Class
             <select name="technicalClass" defaultValue="CLASS_A" className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white">
               <option value="CLASS_A">Class A (unsportsmanlike)</option>
@@ -476,7 +476,7 @@ function FoulPanel({
             </select>
           </label>
         ) : null}
-        <label className="text-xs text-zinc-400">
+        <label className="text-xs text-text-2">
           Fouled player (optional)
           <select name="fouledPlayerId" defaultValue="" className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white">
             <option value="">None / unknown</option>
@@ -485,12 +485,12 @@ function FoulPanel({
             ))}
           </select>
         </label>
-        <label className="text-xs text-zinc-400">
+        <label className="text-xs text-text-2">
           FTs awarded
           <input name="freeThrowsAwarded" type="number" min={0} max={3} defaultValue={0} className="mt-1 min-h-[48px] w-full rounded-lg bg-white/[.05] p-3 text-sm text-white" />
         </label>
       </div>
-      <SubmitButton pendingLabel="…" className={`${BIG_BTN} mt-3 border border-rose-400/30 px-5 text-sm text-rose-300`}>
+      <SubmitButton pendingLabel="…" className={`${BIG_BTN} mt-3 border border-danger/30 px-5 text-sm text-danger`}>
         Record foul
       </SubmitButton>
     </form>
@@ -516,8 +516,8 @@ function PendingFreeThrows({
 }) {
   if (rows.length === 0) return null;
   return (
-    <div className="mt-4 rounded-xl border border-amber-400/20 p-4">
-      <h4 className="text-sm font-semibold text-amber-200">Pending free throws</h4>
+    <div className="mt-4 rounded-md border border-warn/20 p-4">
+      <h4 className="text-sm font-semibold text-warn">Pending free throws</h4>
       <div className="mt-3 grid gap-3">
         {rows.map((row) => {
           const team = teams.find((t) => t.id === row.teamId);
@@ -526,14 +526,14 @@ function PendingFreeThrows({
             <form
               key={row.foulId}
               action={recordStatisticianShot.bind(null, gameId, fixtureId)}
-              className="grid gap-2 rounded-lg border border-white/[.06] p-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end"
+              className="grid gap-2 rounded-lg border border-line p-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end"
             >
               <input type="hidden" name="seasonClubId" value={team.id} />
               <input type="hidden" name="shotValue" value={1} />
               <input type="hidden" name="causedByEventId" value={row.foulId} />
               <div className="sm:col-span-2">
-                <p className="text-xs text-zinc-400">{row.description}</p>
-                <p className="text-sm font-semibold text-zinc-200">
+                <p className="text-xs text-text-2">{row.description}</p>
+                <p className="text-sm font-semibold text-text-1">
                   FT {row.recorded + 1} of {row.awarded}
                 </p>
               </div>
@@ -544,8 +544,8 @@ function PendingFreeThrows({
                 ))}
               </select>
               <div className="flex gap-2">
-                <SubmitButton pendingLabel="…" name="made" value="true" className={`${BIG_BTN} border border-emerald-400/40 px-4 text-xs text-emerald-300`}>Made</SubmitButton>
-                <SubmitButton pendingLabel="…" name="made" value="false" className={`${BIG_BTN} border border-rose-400/40 px-4 text-xs text-rose-300`}>Missed</SubmitButton>
+                <SubmitButton pendingLabel="…" name="made" value="true" className={`${BIG_BTN} border border-brand-400/40 px-4 text-xs text-brand-300`}>Made</SubmitButton>
+                <SubmitButton pendingLabel="…" name="made" value="false" className={`${BIG_BTN} border border-danger/40 px-4 text-xs text-danger`}>Missed</SubmitButton>
               </div>
             </form>
           );
@@ -572,7 +572,7 @@ function OtherStats({ gameId, fixtureId, teamId, playerId }: { gameId: string; f
           <input type="hidden" name="seasonClubId" value={teamId} />
           <input type="hidden" name="playerId" value={playerId} />
           <input type="hidden" name="eventType" value={typeKey} />
-          <SubmitButton pendingLabel="�" disabled={!playerId} className={`${BIG_BTN} w-full border border-white/10 px-2 text-xs text-zinc-300 disabled:opacity-40`}>{label}</SubmitButton>
+          <SubmitButton pendingLabel="�" disabled={!playerId} className={`${BIG_BTN} w-full border border-line px-2 text-xs text-text-1 disabled:opacity-40`}>{label}</SubmitButton>
         </form>
       ))}
     </div>

@@ -57,11 +57,11 @@ export default async function DraftCohortPage({ searchParams }: { searchParams: 
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">Season Zero</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-brand-400">Season Zero</p>
             <h1 className="mt-2 text-3xl font-semibold">Draft Cohort Resolution</h1>
-            <p className="mt-2 max-w-3xl text-sm text-zinc-400">The workbook-selected cohort is reviewed separately from the permanent application registry. All applications remain preserved.</p>
+            <p className="mt-2 max-w-3xl text-sm text-text-2">The workbook-selected cohort is reviewed separately from the permanent application registry. All applications remain preserved.</p>
           </div>
-          <Link className="rounded-xl border border-white/10 px-4 py-3 text-sm" href="/data-quality/duplicates?filter=draft-cohort">Review cohort duplicates</Link>
+          <Link className="rounded-md border border-line px-4 py-3 text-sm" href="/data-quality/duplicates?filter=draft-cohort">Review cohort duplicates</Link>
         </div>
 
         <section className="mt-8 grid gap-4 md:grid-cols-4">
@@ -78,31 +78,31 @@ export default async function DraftCohortPage({ searchParams }: { searchParams: 
           <Metric label="Female Group 4 capacity" value={groupRows.find((row) => row.gender === "Female" && row.sequence === 4)?.remaining ?? womenTarget} />
         </section>
 
-        <section className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+        <section className="mt-8 rounded-lg border border-line bg-ink-800 p-5">
           <h2 className="text-lg font-semibold">Application pool</h2>
           <div className="mt-5 grid gap-3 sm:grid-cols-5">
             {applicationStatusCounts.map((item) => <Metric key={item.status} label={item.status.replaceAll("_", " ")} value={item.count} />)}
           </div>
-          <p className="mt-4 text-xs text-zinc-500">Unrelated duplicate groups: {analysis.unrelatedDuplicateGroups}. These remain tracked but do not block this cohort.</p>
+          <p className="mt-4 text-xs text-text-3">Unrelated duplicate groups: {analysis.unrelatedDuplicateGroups}. These remain tracked but do not block this cohort.</p>
         </section>
 
         {rejectedRows.length ? (
-          <section className="mt-8 rounded-2xl border border-amber-300/20 bg-[#120f08] p-5">
+          <section className="mt-8 rounded-lg border border-amber-300/20 bg-[#120f08] p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-amber-100">Rejected Selected Applications</h2>
                 <p className="mt-1 text-sm text-amber-100/70">These players were selected in the workbook but remain behind a separate administrator decision gate.</p>
               </div>
-              <Link className="rounded-xl border border-amber-300/30 px-4 py-2 text-sm text-amber-100" href="/draft-cohort?filter=Pending%20Approval">Open review queue</Link>
+              <Link className="rounded-md border border-amber-300/30 px-4 py-2 text-sm text-amber-100" href="/draft-cohort?filter=Pending%20Approval">Open review queue</Link>
             </div>
             <div className="mt-5 grid gap-4 lg:grid-cols-3">
               {rejectedRows.map((row) => {
                 const application = rejectedApplicationById.get(row.matchedApplicationId ?? row.applicationId);
                 return (
-                  <article className="rounded-2xl border border-amber-300/20 bg-black/25 p-4" key={`${row.worksheet}-${row.rowNumber}-rejected`}>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-300">{row.worksheet} row {row.rowNumber}</p>
+                  <article className="rounded-lg border border-amber-300/20 bg-black/25 p-4" key={`${row.worksheet}-${row.rowNumber}-rejected`}>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-warn">{row.worksheet} row {row.rowNumber}</p>
                     <h3 className="mt-2 text-lg font-semibold">{row.fullName}</h3>
-                    <dl className="mt-3 grid gap-2 text-xs text-zinc-300">
+                    <dl className="mt-3 grid gap-2 text-xs text-text-1">
                       <Info label="Application" value={row.matchedApplicationId ?? row.applicationId} />
                       <Info label="Status" value="REJECTED" />
                       <Info label="Draft selection" value={row.proposedSquadCode ?? row.draftSelectionGroup.replaceAll("_", " ")} />
@@ -111,16 +111,16 @@ export default async function DraftCohortPage({ searchParams }: { searchParams: 
                       <Info label="Submitted" value={application?.createdAt.toISOString() ?? "-"} />
                       <Info label="Current duplicate state" value={row.matchType.replaceAll("_", " ")} />
                     </dl>
-                    {application?.notes ? <p className="mt-3 rounded-xl border border-white/[.06] bg-black/30 p-3 text-xs text-zinc-400">Review notes: {application.notes}</p> : null}
-                    <form action={reviewDraftCohortApplication} className="mt-4 grid gap-2 border-t border-white/[.06] pt-4">
+                    {application?.notes ? <p className="mt-3 rounded-md border border-line bg-black/30 p-3 text-xs text-text-2">Review notes: {application.notes}</p> : null}
+                    <form action={reviewDraftCohortApplication} className="mt-4 grid gap-2 border-t border-line pt-4">
                       <input name="worksheet" type="hidden" value={row.worksheet} />
                       <input name="rowNumber" type="hidden" value={row.rowNumber} />
                       <input name="applicationId" type="hidden" value={row.matchedApplicationId ?? row.applicationId} />
-                      <select className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs" name="applicationReviewAction" defaultValue="">
+                      <select className="rounded-lg border border-line bg-black/30 px-3 py-2 text-xs" name="applicationReviewAction" defaultValue="">
                         <option value="" disabled>Select review action</option>
                         {applicationReviewActionsFor(ApplicationStatus.REJECTED).map((action) => <option key={action} value={action}>{action.replaceAll("_", " ")}</option>)}
                       </select>
-                      <textarea className="min-h-20 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs" name="reason" placeholder="Required written reason. Use approval override only after administrator review." />
+                      <textarea className="min-h-20 rounded-lg border border-line bg-black/30 px-3 py-2 text-xs" name="reason" placeholder="Required written reason. Use approval override only after administrator review." />
                       <button className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs font-semibold text-amber-100" type="submit">Record rejected-player decision</button>
                     </form>
                   </article>
@@ -130,63 +130,63 @@ export default async function DraftCohortPage({ searchParams }: { searchParams: 
           </section>
         ) : null}
 
-        <section className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e]">
-          <div className="border-b border-white/[.06] p-5">
+        <section className="mt-8 rounded-lg border border-line bg-ink-800">
+          <div className="border-b border-line p-5">
             <h2 className="text-lg font-semibold">Main Draft squad planning</h2>
-            <p className="mt-1 text-sm text-zinc-500">Incomplete groups are valid planning warnings. Over-capacity groups require review.</p>
+            <p className="mt-1 text-sm text-text-3">Incomplete groups are valid planning warnings. Over-capacity groups require review.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-sm">
-              <thead className="bg-white/[.04] text-zinc-400"><tr><th className="p-4">Division</th><th className="p-4">Group</th><th className="p-4">Current</th><th className="p-4">Target</th><th className="p-4">Status</th><th className="p-4">Remaining</th></tr></thead>
-              <tbody>{groupRows.map((row) => <tr className="border-t border-white/[.06]" key={`${row.gender}-${row.sequence}`}><td className="p-4">{row.gender}</td><td className="p-4">Group {row.sequence}</td><td className="p-4">{row.current}</td><td className="p-4">{row.target}</td><td className={statusClass(row.status)}>{row.status}</td><td className="p-4">{row.remaining}</td></tr>)}</tbody>
+              <thead className="bg-white/[.04] text-text-2"><tr><th className="p-4">Division</th><th className="p-4">Group</th><th className="p-4">Current</th><th className="p-4">Target</th><th className="p-4">Status</th><th className="p-4">Remaining</th></tr></thead>
+              <tbody>{groupRows.map((row) => <tr className="border-t border-line" key={`${row.gender}-${row.sequence}`}><td className="p-4">{row.gender}</td><td className="p-4">Group {row.sequence}</td><td className="p-4">{row.current}</td><td className="p-4">{row.target}</td><td className={statusClass(row.status)}>{row.status}</td><td className="p-4">{row.remaining}</td></tr>)}</tbody>
             </table>
           </div>
         </section>
 
-        <section className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e]">
-          <div className="border-b border-white/[.06] p-5">
+        <section className="mt-8 rounded-lg border border-line bg-ink-800">
+          <div className="border-b border-line p-5">
             <h2 className="text-lg font-semibold">Resolution queue</h2>
             <div className="mt-4 flex flex-wrap gap-2">
-              {filters.map((item) => <Link className={item === filter ? "rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-zinc-950" : "rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300"} href={`/draft-cohort?filter=${encodeURIComponent(item)}`} key={item}>{item}</Link>)}
+              {filters.map((item) => <Link className={item === filter ? "rounded-lg bg-brand-400 px-3 py-2 text-xs font-semibold text-ink-900" : "rounded-lg border border-line px-3 py-2 text-xs text-text-1"} href={`/draft-cohort?filter=${encodeURIComponent(item)}`} key={item}>{item}</Link>)}
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1200px] text-left text-xs">
-              <thead className="bg-white/[.04] text-zinc-400"><tr><th className="p-3">Source</th><th className="p-3">Player</th><th className="p-3">Contact</th><th className="p-3">Application</th><th className="p-3">Draft</th><th className="p-3">Identity</th><th className="p-3">Next action</th><th className="p-3">Resolve</th></tr></thead>
+              <thead className="bg-white/[.04] text-text-2"><tr><th className="p-3">Source</th><th className="p-3">Player</th><th className="p-3">Contact</th><th className="p-3">Application</th><th className="p-3">Draft</th><th className="p-3">Identity</th><th className="p-3">Next action</th><th className="p-3">Resolve</th></tr></thead>
               <tbody>
                 {visibleRows.map((row) => (
-                  <tr className="border-t border-white/[.06] align-top" key={`${row.worksheet}-${row.rowNumber}`}>
+                  <tr className="border-t border-line align-top" key={`${row.worksheet}-${row.rowNumber}`}>
                     <td className="p-3">{row.worksheet} #{row.rowNumber}</td>
-                    <td className="p-3"><p className="font-medium text-white">{row.fullName}</p><p className="text-zinc-500">{row.gender} | {row.position || "Missing position"}</p></td>
-                    <td className="p-3"><p>{row.email || "-"}</p><p className="text-zinc-500">{row.phone || "-"}</p></td>
-                    <td className="p-3"><p>{row.matchedApplicationId ?? row.applicationId ?? "-"}</p><p className="text-zinc-500">{row.applicationStatus?.replaceAll("_", " ") ?? "No match"}</p></td>
-                    <td className="p-3"><p>{row.draftSelectionGroup.replaceAll("_", " ")}</p><p className="text-zinc-500">{row.proposedSquadCode ?? "Secondary pool"}</p></td>
+                    <td className="p-3"><p className="font-medium text-white">{row.fullName}</p><p className="text-text-3">{row.gender} | {row.position || "Missing position"}</p></td>
+                    <td className="p-3"><p>{row.email || "-"}</p><p className="text-text-3">{row.phone || "-"}</p></td>
+                    <td className="p-3"><p>{row.matchedApplicationId ?? row.applicationId ?? "-"}</p><p className="text-text-3">{row.applicationStatus?.replaceAll("_", " ") ?? "No match"}</p></td>
+                    <td className="p-3"><p>{row.draftSelectionGroup.replaceAll("_", " ")}</p><p className="text-text-3">{row.proposedSquadCode ?? "Secondary pool"}</p></td>
                     <td className={identityClass(row.matchType)}>{row.matchType.replaceAll("_", " ")}</td>
-                    <td className="p-3 max-w-[220px] text-zinc-400">{row.nextAction}</td>
+                    <td className="p-3 max-w-[220px] text-text-2">{row.nextAction}</td>
                     <td className="p-3 min-w-[360px]">
                       <form action={resolveDraftCohortRow} className="grid gap-2">
                         <input name="worksheet" type="hidden" value={row.worksheet} />
                         <input name="rowNumber" type="hidden" value={row.rowNumber} />
-                        <input className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs" name="applicationId" placeholder="Application ID" defaultValue={row.matchedApplicationId ?? ""} />
-                        <select className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs" name="action" defaultValue={row.resolutionAction ?? ""}>
+                        <input className="rounded-lg border border-line bg-black/30 px-3 py-2 text-xs" name="applicationId" placeholder="Application ID" defaultValue={row.matchedApplicationId ?? ""} />
+                        <select className="rounded-lg border border-line bg-black/30 px-3 py-2 text-xs" name="action" defaultValue={row.resolutionAction ?? ""}>
                           <option value="" disabled>Select resolution</option>
                           {cohortRowResolutionActions.map((action) => <option key={action} value={action}>{action.replaceAll("_", " ")}</option>)}
                         </select>
-                        <textarea className="min-h-16 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs" name="reason" placeholder="Written resolution reason" defaultValue={row.resolutionReason ?? ""} />
-                        <button className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-zinc-950" type="submit">Save resolution</button>
+                        <textarea className="min-h-16 rounded-lg border border-line bg-black/30 px-3 py-2 text-xs" name="reason" placeholder="Written resolution reason" defaultValue={row.resolutionReason ?? ""} />
+                        <button className="rounded-lg bg-brand-400 px-3 py-2 text-xs font-semibold text-ink-900" type="submit">Save resolution</button>
                       </form>
                       {row.matchedApplicationId && row.applicationStatus && row.applicationStatus !== ApplicationStatus.APPROVED ? (
-                        <form action={reviewDraftCohortApplication} className="mt-4 grid gap-2 border-t border-white/[.06] pt-4">
+                        <form action={reviewDraftCohortApplication} className="mt-4 grid gap-2 border-t border-line pt-4">
                           <input name="worksheet" type="hidden" value={row.worksheet} />
                           <input name="rowNumber" type="hidden" value={row.rowNumber} />
                           <input name="applicationId" type="hidden" value={row.matchedApplicationId} />
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-300">Application review</p>
-                          <select className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs" name="applicationReviewAction" defaultValue="">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-warn">Application review</p>
+                          <select className="rounded-lg border border-line bg-black/30 px-3 py-2 text-xs" name="applicationReviewAction" defaultValue="">
                             <option value="" disabled>Select review action</option>
                             {applicationReviewActionsFor(row.applicationStatus).map((action) => <option key={action} value={action}>{action.replaceAll("_", " ")}</option>)}
                           </select>
-                          <textarea className="min-h-16 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs" name="reason" placeholder="Required written reason" />
-                          <button className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs font-semibold text-amber-200" type="submit">Save application review</button>
+                          <textarea className="min-h-16 rounded-lg border border-line bg-black/30 px-3 py-2 text-xs" name="reason" placeholder="Required written reason" />
+                          <button className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs font-semibold text-warn" type="submit">Save application review</button>
                         </form>
                       ) : null}
                     </td>
@@ -194,7 +194,7 @@ export default async function DraftCohortPage({ searchParams }: { searchParams: 
                 ))}
               </tbody>
             </table>
-            {visibleRows.length === 0 ? <p className="p-8 text-center text-zinc-500">No rows for this filter.</p> : null}
+            {visibleRows.length === 0 ? <p className="p-8 text-center text-text-3">No rows for this filter.</p> : null}
           </div>
         </section>
       </main>
@@ -216,15 +216,15 @@ function groupSummary(rows: Awaited<ReturnType<typeof draftCohortAnalysis>>["row
 }
 
 function statusClass(status: string) {
-  if (status === "READY") return "p-4 text-emerald-300";
-  if (status === "OVER_CAPACITY") return "p-4 text-rose-300";
-  return "p-4 text-amber-300";
+  if (status === "READY") return "p-4 text-brand-300";
+  if (status === "OVER_CAPACITY") return "p-4 text-danger";
+  return "p-4 text-warn";
 }
 
 function identityClass(status: string) {
-  if (status === "READY" || status === "SAFE" || status === "PROVISIONED") return "p-3 text-emerald-300";
-  if (status === "DUPLICATE_BLOCKED" || status === "AMBIGUOUS" || status === "UNMATCHED") return "p-3 text-rose-300";
-  return "p-3 text-amber-300";
+  if (status === "READY" || status === "SAFE" || status === "PROVISIONED") return "p-3 text-brand-300";
+  if (status === "DUPLICATE_BLOCKED" || status === "AMBIGUOUS" || status === "UNMATCHED") return "p-3 text-danger";
+  return "p-3 text-warn";
 }
 
 function applicationReviewActionsFor(status: ApplicationStatus) {
@@ -235,9 +235,9 @@ function applicationReviewActionsFor(status: ApplicationStatus) {
 }
 
 function Metric({ label, value }: { label: string; value: number | string }) {
-  return <div className="rounded-xl border border-white/[.06] bg-black/20 p-4"><p className="text-xs text-zinc-500">{label}</p><p className="mt-2 text-2xl font-semibold">{value}</p></div>;
+  return <div className="rounded-md border border-line bg-black/20 p-4"><p className="text-xs text-text-3">{label}</p><p className="mt-2 text-2xl font-semibold">{value}</p></div>;
 }
 
 function Info({ label, value }: { label: string; value: string }) {
-  return <div><dt className="text-zinc-500">{label}</dt><dd className="mt-0.5 break-words font-medium text-zinc-100">{value}</dd></div>;
+  return <div><dt className="text-text-3">{label}</dt><dd className="mt-0.5 break-words font-medium text-text-1">{value}</dd></div>;
 }

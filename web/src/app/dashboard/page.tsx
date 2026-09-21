@@ -161,29 +161,29 @@ export default async function DashboardPage() {
   );
 
   const cards = [
-    ["Live games", liveGames.length, "text-emerald-300"],
-    ["Awaiting finalization", awaitingFinalization.length, "text-amber-300"],
-    ["Missing rosters", missingRosters.length, "text-rose-300"],
-    ["Missing officials", missingOfficials.length, "text-rose-300"],
-    ["Fixture conflicts", fixtureConflicts.length, "text-amber-300"],
-    ["Standing failures", standingFailures, "text-rose-300"],
+    ["Live games", liveGames.length, "text-brand-300"],
+    ["Awaiting finalization", awaitingFinalization.length, "text-warn"],
+    ["Missing rosters", missingRosters.length, "text-danger"],
+    ["Missing officials", missingOfficials.length, "text-danger"],
+    ["Fixture conflicts", fixtureConflicts.length, "text-warn"],
+    ["Standing failures", standingFailures, "text-danger"],
   ] as const;
 
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-400">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-brand-400">
           {activeSeason?.name ?? "No active season"}
         </p>
         <h1 className="mt-2 text-4xl font-semibold">Operations mission control</h1>
-        <p className="mt-2 text-zinc-400">
+        <p className="mt-2 text-text-2">
           Live activity, readiness gaps, scheduling risks, and data integrity.
         </p>
 
         <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
           {cards.map(([label, value, color]) => (
-            <article key={label} className="rounded-2xl border border-white/10 bg-[#0b100e] p-5">
-              <p className="text-sm text-zinc-400">{label}</p>
+            <article key={label} className="rounded-lg border border-line bg-ink-800 p-5">
+              <p className="text-sm text-text-2">{label}</p>
               <p className={`mt-3 text-3xl font-semibold ${color}`}>{value}</p>
             </article>
           ))}
@@ -192,27 +192,27 @@ export default async function DashboardPage() {
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           <AlertPanel title="Live and paused games">
             {[...liveGames, ...awaitingFinalization].map((game) => (
-              <Link key={game.id} href={`/games/${game.fixtureId}/live`} className="block border-b border-white/[.06] py-3 last:border-0">
+              <Link key={game.id} href={`/games/${game.fixtureId}/live`} className="block border-b border-line py-3 last:border-0">
                 {game.fixture.homeSeasonClub!.club.name} vs {game.fixture.awaySeasonClub!.club.name}
-                <span className="ml-2 text-xs text-zinc-500">{game.status}</span>
+                <span className="ml-2 text-xs text-text-3">{game.status}</span>
               </Link>
             ))}
             {liveGames.length + awaitingFinalization.length === 0 ? <Empty /> : null}
           </AlertPanel>
           <AlertPanel title="Roster readiness">
             {missingRosters.map((team) => (
-              <Link key={team.id} href={`/clubs/${team.clubId}`} className="flex justify-between border-b border-white/[.06] py-3 last:border-0">
+              <Link key={team.id} href={`/clubs/${team.clubId}`} className="flex justify-between border-b border-line py-3 last:border-0">
                 <span>{team.club.name} · {team.division.name}</span>
-                <span className="text-rose-300">{team._count.players}/{MINIMUM_ROSTER_SIZE}</span>
+                <span className="text-danger">{team._count.players}/{MINIMUM_ROSTER_SIZE}</span>
               </Link>
             ))}
             {missingRosters.length === 0 ? <Empty /> : null}
           </AlertPanel>
           <AlertPanel title="Fixture readiness">
             {[...new Map([...missingOfficials, ...fixtureConflicts].map((fixture) => [fixture.id, fixture])).values()].map((fixture) => (
-              <Link key={fixture.id} href={`/fixtures/${fixture.id}`} className="block border-b border-white/[.06] py-3 last:border-0">
+              <Link key={fixture.id} href={`/fixtures/${fixture.id}`} className="block border-b border-line py-3 last:border-0">
                 <p>{fixture.homeSeasonClub!.club.name} vs {fixture.awaySeasonClub!.club.name}</p>
-                <p className="mt-1 text-xs text-zinc-500">
+                <p className="mt-1 text-xs text-text-3">
                   {fixture.scheduledAt.toLocaleString()} · {fixture.venue.name}
                   {fixture.officials.length === 0 ? " · No officials" : ""}
                   {conflictIds.has(fixture.id) ? " · Venue conflict" : ""}
@@ -223,13 +223,13 @@ export default async function DashboardPage() {
           </AlertPanel>
           <AlertPanel title="Recent critical actions">
             {recentAudits.map((audit) => (
-              <div key={audit.id} className="border-b border-white/[.06] py-3 text-sm last:border-0">
+              <div key={audit.id} className="border-b border-line py-3 text-sm last:border-0">
                 <p>{audit.action.replaceAll("_", " ")}</p>
-                <p className="mt-1 text-xs text-zinc-500">{audit.user.name} · {audit.createdAt.toLocaleString()}</p>
+                <p className="mt-1 text-xs text-text-3">{audit.user.name} · {audit.createdAt.toLocaleString()}</p>
               </div>
             ))}
             {recentAudits.length === 0 ? <Empty /> : null}
-            <Link href="/audit" className="mt-4 inline-block text-sm text-emerald-400">Open audit ledger</Link>
+            <Link href="/audit" className="mt-4 inline-block text-sm text-brand-400">Open audit ledger</Link>
           </AlertPanel>
         </div>
       </main>
@@ -238,9 +238,9 @@ export default async function DashboardPage() {
 }
 
 function AlertPanel({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5"><h2 className="font-semibold">{title}</h2><div className="mt-3">{children}</div></section>;
+  return <section className="rounded-lg border border-line bg-ink-800 p-5"><h2 className="font-semibold">{title}</h2><div className="mt-3">{children}</div></section>;
 }
 
 function Empty() {
-  return <p className="py-4 text-sm text-zinc-500">No issues detected.</p>;
+  return <p className="py-4 text-sm text-text-3">No issues detected.</p>;
 }

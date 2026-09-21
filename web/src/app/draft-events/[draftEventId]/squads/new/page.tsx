@@ -5,7 +5,7 @@ import { createDraftSquad } from "@/app/draft-events/actions";
 import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
-const input = "mt-2 w-full rounded-xl border border-white/10 bg-white/[.04] px-4 py-3 text-sm text-white";
+const input = "mt-2 w-full rounded-md border border-line bg-white/[.04] px-4 py-3 text-sm text-white";
 
 export default async function NewDraftSquadPage({ params }: { params: Promise<{ draftEventId: string }> }) {
   const { draftEventId } = await params;
@@ -22,16 +22,16 @@ export default async function NewDraftSquadPage({ params }: { params: Promise<{ 
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <section className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-6">
+        <section className="rounded-lg border border-line bg-ink-800 p-6">
           <h1 className="text-2xl font-semibold">Create squad</h1>
           <form action={createDraftSquad.bind(null, event.id)} className="mt-8 space-y-5">
-            <label className="block text-sm text-zinc-300">Name<input className={input} name="name" required /></label>
-            <label className="block text-sm text-zinc-300">Public label<input className={input} name="publicLabel" /></label>
-            <label className="block text-sm text-zinc-300">Division<select className={input} name="divisionId" required><option value="">Select</option>{divisions.map((division) => <option key={division.id} value={division.id}>{division.name}</option>)}</select></label>
-            <label className="block text-sm text-zinc-300">Sequence<input className={input} name="sequence" type="number" min="1" required /></label>
-            <label className="block text-sm text-zinc-300">Color<input className={input} name="color" placeholder="#16F2B3" /></label>
-            <label className="block text-sm text-zinc-300">Icon URL<input className={input} name="iconUrl" /></label>
-            <button className="rounded-xl bg-emerald-400 px-5 py-3 text-sm font-semibold text-zinc-950">Create squad</button>
+            <label className="block text-sm text-text-1">Name<input className={input} name="name" required /></label>
+            <label className="block text-sm text-text-1">Public label<input className={input} name="publicLabel" /></label>
+            <label className="block text-sm text-text-1">Division<select className={input} name="divisionId" required><option value="">Select</option>{divisions.map((division) => <option key={division.id} value={division.id}>{division.name}</option>)}</select></label>
+            <label className="block text-sm text-text-1">Sequence<input className={input} name="sequence" type="number" min="1" required /></label>
+            <label className="block text-sm text-text-1">Color<input className={input} name="color" placeholder="#16F2B3" /></label>
+            <label className="block text-sm text-text-1">Icon URL<input className={input} name="iconUrl" /></label>
+            <button className="rounded-md bg-brand-400 px-5 py-3 text-sm font-semibold text-ink-900">Create squad</button>
           </form>
         </section>
       </main>

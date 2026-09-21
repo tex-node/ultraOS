@@ -19,18 +19,18 @@ export default async function LeaderGraphic({ params }: { params: Promise<{ game
   if (categories.length === 0) notFound();
 
   return (
-    <div className="inline-flex flex-col gap-2 rounded-2xl bg-black/85 p-5 font-sans text-white">
+    <div className="inline-flex flex-col gap-2 rounded-lg bg-black/85 p-5 font-sans text-white">
       <GraphicRefresher />
       <TransparentBody />
-      <p className="text-[10px] font-bold uppercase tracking-[.25em] text-cyan-400">{model.isFinal ? "Game Leader" : "Live Leader"}</p>
+      <p className="text-[10px] font-bold uppercase tracking-[.25em] text-info">{model.isFinal ? "Game Leader" : "Live Leader"}</p>
       {categories.map((l) => {
         const player = model.players.find((p) => p.playerId === l.playerId);
         const clubShort = l.seasonClubId === model.teams.home.seasonClubId ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName;
         return (
           <div key={l.category} className="flex items-baseline gap-3">
-            <span className="w-20 text-[10px] uppercase tracking-wide text-zinc-500">{l.category}</span>
+            <span className="w-20 text-[10px] uppercase tracking-wide text-text-3">{l.category}</span>
             <span className="text-xl font-black">{l.value}</span>
-            <span className="text-xs text-zinc-400">{clubShort}{player ? ` · ${player.rebounds} REB / ${player.assists} AST / ${player.points} PTS` : ""}</span>
+            <span className="text-xs text-text-2">{clubShort}{player ? ` · ${player.rebounds} REB / ${player.assists} AST / ${player.points} PTS` : ""}</span>
           </div>
         );
       })}

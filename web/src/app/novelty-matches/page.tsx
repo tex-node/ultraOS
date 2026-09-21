@@ -24,9 +24,9 @@ export default async function NoveltyMatchesPage() {
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-6xl px-6 py-10">
-        <p className="text-xs uppercase tracking-[.2em] text-emerald-400">Exhibition / novelty</p>
+        <p className="text-xs uppercase tracking-[.2em] text-brand-400">Exhibition / novelty</p>
         <h1 className="mt-2 text-3xl font-semibold">Exhibition matches</h1>
-        <p className="mt-2 max-w-3xl text-sm text-zinc-400">
+        <p className="mt-2 max-w-3xl text-sm text-text-2">
           Matches between novelty teams (like the All-Star exhibition) - separate from the real league&apos;s
           fixtures, so they never touch Club standings, but scored through the same live dashboard.
         </p>
@@ -35,9 +35,9 @@ export default async function NoveltyMatchesPage() {
           <CreateNoveltyMatchForm events={events} teams={teams} venues={venues} />
         </div>
 
-        <section className="mt-10 overflow-hidden rounded-2xl border border-white/[.08]">
+        <section className="mt-10 overflow-hidden rounded-lg border border-line">
           <table className="w-full text-left text-sm">
-            <thead className="bg-white/[.04] text-xs uppercase tracking-wider text-zinc-500">
+            <thead className="bg-white/[.04] text-xs uppercase tracking-wider text-text-3">
               <tr>
                 <th className="p-4">Match</th>
                 <th className="p-4">Scheduled</th>
@@ -48,16 +48,16 @@ export default async function NoveltyMatchesPage() {
             </thead>
             <tbody>
               {matches.map((m) => (
-                <tr className="border-t border-white/[.06]" key={m.id}>
+                <tr className="border-t border-line" key={m.id}>
                   <td className="p-4">
                     <p className="font-semibold">{m.name}</p>
-                    <p className="text-xs text-zinc-500">{m.homeTeam.name} vs {m.awayTeam.name}</p>
+                    <p className="text-xs text-text-3">{m.homeTeam.name} vs {m.awayTeam.name}</p>
                   </td>
-                  <td className="p-4 text-zinc-300">{m.scheduledAt.toLocaleString()}</td>
+                  <td className="p-4 text-text-1">{m.scheduledAt.toLocaleString()}</td>
                   <td className="p-4">{m.status}</td>
-                  <td className="p-4 text-zinc-300">{m.homeScore} - {m.awayScore}</td>
+                  <td className="p-4 text-text-1">{m.homeScore} - {m.awayScore}</td>
                   <td className="p-4">
-                    <Link className="rounded-lg border border-emerald-400/40 px-3 py-1.5 text-xs text-emerald-300" href={`/novelty-matches/${m.id}/live`}>
+                    <Link className="rounded-lg border border-brand-400/40 px-3 py-1.5 text-xs text-brand-300" href={`/novelty-matches/${m.id}/live`}>
                       {m.game ? "Open live" : "Start"}
                     </Link>
                   </td>
@@ -65,7 +65,7 @@ export default async function NoveltyMatchesPage() {
               ))}
             </tbody>
           </table>
-          {matches.length === 0 ? <p className="p-6 text-center text-sm text-zinc-400">No exhibition matches yet.</p> : null}
+          {matches.length === 0 ? <p className="p-6 text-center text-sm text-text-2">No exhibition matches yet.</p> : null}
         </section>
       </main>
     </OperationsShell>

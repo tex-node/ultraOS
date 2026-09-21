@@ -30,11 +30,11 @@ export default async function SportRulesPage({ params }: { params: Promise<{ id:
     return (
       <OperationsShell user={session.user}>
         <main className="mx-auto max-w-3xl px-6 py-10">
-          <Link href={`/competitions/${id}`} className="text-sm text-emerald-400">
+          <Link href={`/competitions/${id}`} className="text-sm text-brand-400">
             ← {competition.name}
           </Link>
           <h1 className="mt-4 text-2xl font-semibold">Sport rules</h1>
-          <p className="mt-2 text-sm text-amber-300">
+          <p className="mt-2 text-sm text-warn">
             No registered definition exists for sport “{competition.sport.name}”, so rules cannot be customized yet.
           </p>
         </main>
@@ -55,15 +55,15 @@ export default async function SportRulesPage({ params }: { params: Promise<{ id:
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <Link href={`/competitions/${id}`} className="text-sm text-emerald-400">
+        <Link href={`/competitions/${id}`} className="text-sm text-brand-400">
           ← {competition.name}
         </Link>
         <h1 className="mt-4 text-2xl font-semibold">Sport rules · {definition.name}</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <p className="mt-1 text-sm text-text-2">
           Customize rule values for every {definition.name} competition in your organization. Defaults come from the built-in{" "}
           {definition.name} definition.
         </p>
-        <p className="mt-2 text-sm text-zinc-300">{describeSport(definition).formatSummary}</p>
+        <p className="mt-2 text-sm text-text-1">{describeSport(definition).formatSummary}</p>
         <SportRulesForm
           competitionId={id}
           sportId={competition.sportId}

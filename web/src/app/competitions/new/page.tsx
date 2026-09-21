@@ -11,11 +11,11 @@ export default async function NewTournamentPage() {
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-4xl px-6 py-10">
-        <Link href="/competitions" className="text-sm text-emerald-400">
+        <Link href="/competitions" className="text-sm text-brand-400">
           ← Competitions
         </Link>
         <h1 className="mt-4 text-2xl font-semibold">Create a tournament</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <p className="mt-1 text-sm text-text-2">
           A guided setup: pick the sport, name the tournament and its first season, and add divisions.
         </p>
         <TournamentWizard summaries={summaries} />

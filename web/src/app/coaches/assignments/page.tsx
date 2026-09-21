@@ -21,7 +21,7 @@ export default async function CoachAssignmentsPage() {
       <OperationsShell user={session.user}>
         <main className="mx-auto max-w-3xl px-6 py-16">
           <h1 className="text-3xl font-semibold">Access required</h1>
-          <p className="mt-3 text-sm text-zinc-400">
+          <p className="mt-3 text-sm text-text-2">
             Your account does not have staff management permission.
           </p>
         </main>
@@ -58,24 +58,24 @@ export default async function CoachAssignmentsPage() {
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div>
-          <p className="text-xs uppercase tracking-[.2em] text-emerald-400">SeasonClub staff</p>
+          <p className="text-xs uppercase tracking-[.2em] text-brand-400">SeasonClub staff</p>
           <h1 className="mt-2 text-3xl font-semibold">Coach assignments</h1>
-          <p className="mt-2 max-w-3xl text-sm text-zinc-400">
+          <p className="mt-2 max-w-3xl text-sm text-text-2">
             Assign coaches to a club&apos;s participation in a season. This intentionally writes to
             SeasonClub, not permanent Club identity.
           </p>
         </div>
         <section className="mt-8 grid gap-4">
           {seasonClubs.map((seasonClub) => (
-            <article className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5" key={seasonClub.id}>
+            <article className="rounded-lg border border-line bg-ink-800 p-5" key={seasonClub.id}>
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <h2 className="font-semibold">{seasonClub.club.name}</h2>
-                  <p className="mt-1 text-sm text-zinc-400">
+                  <p className="mt-1 text-sm text-text-2">
                     {seasonClub.season.name} - {seasonClub.division.name}
                   </p>
                 </div>
-                <div className="text-sm text-zinc-400">
+                <div className="text-sm text-text-2">
                   <p>Head: {seasonClub.headCoach?.name ?? "Unassigned"}</p>
                   <p>Assistant: {seasonClub.assistantCoach?.name ?? "Unassigned"}</p>
                 </div>
@@ -110,13 +110,13 @@ function CoachAssignmentForm({
   seasonClubId: string;
 }) {
   return (
-    <div className="rounded-xl border border-white/[.06] bg-black/20 p-4">
+    <div className="rounded-md border border-line bg-black/20 p-4">
       <p className="text-sm font-semibold capitalize">{assignmentType} coach</p>
       <form action={assignSeasonClubCoach} className="mt-3 grid gap-3 md:grid-cols-[1fr_auto]">
         <input name="seasonClubId" type="hidden" value={seasonClubId} />
         <input name="assignmentType" type="hidden" value={assignmentType} />
         <select
-          className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm"
+          className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm"
           name="staffId"
           required
         >
@@ -127,14 +127,14 @@ function CoachAssignmentForm({
             </option>
           ))}
         </select>
-        <button className="rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950">
+        <button className="rounded-md bg-brand-400 px-4 py-3 text-sm font-semibold text-ink-900">
           Assign
         </button>
       </form>
       <form action={clearSeasonClubCoach} className="mt-2">
         <input name="seasonClubId" type="hidden" value={seasonClubId} />
         <input name="assignmentType" type="hidden" value={assignmentType} />
-        <button className="text-xs text-zinc-500 hover:text-rose-300">Clear assignment</button>
+        <button className="text-xs text-text-3 hover:text-danger">Clear assignment</button>
       </form>
     </div>
   );

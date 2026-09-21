@@ -49,9 +49,9 @@ export default async function DataReadinessPage() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold">Real Data Readiness</h1>
-            <p className="mt-2 text-sm text-zinc-400">Participant reconciliation and cleanup signals for production data transition.</p>
+            <p className="mt-2 text-sm text-text-2">Participant reconciliation and cleanup signals for production data transition.</p>
           </div>
-          <Link className="rounded-xl border border-white/10 px-4 py-3 text-sm" href="/data-readiness/export">Export CSV</Link>
+          <Link className="rounded-md border border-line px-4 py-3 text-sm" href="/data-readiness/export">Export CSV</Link>
         </div>
         <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           <Panel title="Applications" rows={[["Total", totalApplications], ["Approved", approvedApplications], ["Internalized", internalizedApplications], ["Missing profiles", approvedApplications - internalizedApplications]]} />
@@ -67,5 +67,5 @@ export default async function DataReadinessPage() {
 }
 
 function Panel({ title, rows }: { title: string; rows: [string, string | number][] }) {
-  return <section className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5"><h2 className="text-lg font-semibold">{title}</h2><div className="mt-4 grid gap-2">{rows.map(([label, value]) => <div className="flex justify-between rounded-xl border border-white/[.06] bg-black/20 px-4 py-3 text-sm" key={label}><span className="text-zinc-400">{label}</span><b>{value}</b></div>)}</div></section>;
+  return <section className="rounded-lg border border-line bg-ink-800 p-5"><h2 className="text-lg font-semibold">{title}</h2><div className="mt-4 grid gap-2">{rows.map(([label, value]) => <div className="flex justify-between rounded-md border border-line bg-black/20 px-4 py-3 text-sm" key={label}><span className="text-text-2">{label}</span><b>{value}</b></div>)}</div></section>;
 }

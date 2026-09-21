@@ -53,15 +53,15 @@ export function Scoreboard({ gameId, initial }: { gameId: string; initial: Data 
   }, [gameId]);
 
   return (
-    <main className="grid min-h-screen grid-rows-[auto_1fr_auto] bg-[#020403] p-8 text-white">
+    <main className="grid min-h-screen grid-rows-[auto_1fr_auto] bg-ink-950 p-8 text-white">
       <header className="flex justify-between">
         <div>
-          <p className="text-2xl font-black">{data.tournament.toUpperCase()}</p>
-          <p className="text-xs tracking-[.3em] text-emerald-400">{data.sport.toUpperCase()} · LIVE SCOREBOARD</p>
+          <p className="font-display text-2xl font-bold">{data.tournament.toUpperCase()}</p>
+          <p className="mt-1 text-xs tracking-[.3em] text-brand-400">{data.sport.toUpperCase()} · {data.status === "FINAL" ? "FINAL SCOREBOARD" : "LIVE SCOREBOARD"}</p>
         </div>
         <div
-          className={`rounded-full px-4 py-2 text-xs ${
-            connected ? "bg-emerald-400/10 text-emerald-400" : "bg-rose-400/10 text-rose-400"
+          className={`rounded-full px-4 py-2 text-xs font-semibold ${
+            connected ? "bg-brand-400/10 text-brand-400" : "bg-danger/10 text-danger"
           }`}
         >
           {connected ? "CONNECTED" : "STALE DATA"}
@@ -70,13 +70,13 @@ export function Scoreboard({ gameId, initial }: { gameId: string; initial: Data 
       <section className="grid grid-cols-[1fr_auto_1fr] items-center gap-10 text-center">
         <Team t={data.fixture.home} score={data.fixture.homeScore} />
         <div>
-          <p className="text-sm tracking-[.3em] text-zinc-500">PERIOD {data.period}</p>
-          <p className="mt-4 font-mono text-8xl font-black">{clock(data.clockSeconds)}</p>
-          <p className="mt-5 text-xl text-emerald-400">{data.status}</p>
+          <p className="text-sm tracking-[.3em] text-text-3">PERIOD {data.period}</p>
+          <p className="mt-4 font-mono text-8xl font-black tabular-nums">{clock(data.clockSeconds)}</p>
+          <p className={`mt-5 text-xl ${data.status === "LIVE" ? "text-danger" : "text-brand-400"}`}>{data.status}</p>
         </div>
         <Team t={data.fixture.away} score={data.fixture.awayScore} />
       </section>
-      <footer className="flex justify-between border-t border-white/10 pt-5 text-sm text-zinc-400">
+      <footer className="flex justify-between border-t border-line pt-5 text-sm text-text-2">
         <span>{data.fixture.venue}</span>
         <span>SPONSOR PLACEHOLDER</span>
         <span>Neon Ultra</span>
@@ -91,7 +91,7 @@ function Team({ t, score }: { t: TeamData; score: number }) {
   return (
     <div>
       <div
-        className="mx-auto grid h-32 w-32 place-items-center rounded-3xl border text-3xl font-black"
+        className="mx-auto grid h-32 w-32 place-items-center rounded-lg border text-3xl font-bold"
         style={{
           color: displayColor,
           borderColor: `${displayColor}55`,
@@ -100,8 +100,8 @@ function Team({ t, score }: { t: TeamData; score: number }) {
       >
         {t.shortName}
       </div>
-      <h1 className="mt-6 text-4xl font-black">{t.name}</h1>
-      <p className="mt-6 text-9xl font-black" style={{ color: displayColor }}>
+      <h1 className="mt-6 font-display text-4xl font-bold">{t.name}</h1>
+      <p className="mt-6 font-mono text-9xl font-black tabular-nums" style={{ color: displayColor }}>
         {score}
       </p>
     </div>

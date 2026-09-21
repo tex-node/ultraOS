@@ -121,40 +121,40 @@ export default async function ContentStudioPage() {
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[.24em] text-emerald-400">Database -&gt; Template -&gt; Content</p>
+            <p className="text-xs uppercase tracking-[.24em] text-brand-400">Database -&gt; Template -&gt; Content</p>
             <h1 className="mt-2 text-3xl font-semibold">Content studio</h1>
           </div>
-          <Link href="/content/templates" className="rounded-xl border border-white/10 px-4 py-3">Manage templates</Link>
+          <Link href="/content/templates" className="rounded-md border border-line px-4 py-3">Manage templates</Link>
         </div>
 
         <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {sourceGroups.map((group) => (
-            <form key={group.type} action={generateContentAsset} className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+            <form key={group.type} action={generateContentAsset} className="rounded-lg border border-line bg-ink-800 p-5">
               <h2 className="font-semibold">{group.label}</h2>
               <input type="hidden" name="type" value={group.type} />
               <select name="sourceId" required className="mt-4 w-full rounded-lg bg-white/[.05] p-3">
                 <option value="">Select source record</option>
                 {group.options.map((option) => <option key={option.id} value={option.id} disabled={option.disabled}>{option.label}</option>)}
               </select>
-              <button disabled={group.options.every((option) => option.disabled)} className="mt-3 w-full rounded-lg bg-emerald-400 p-3 font-semibold text-zinc-950 disabled:opacity-40">Generate asset</button>
+              <button disabled={group.options.every((option) => option.disabled)} className="mt-3 w-full rounded-lg bg-brand-400 p-3 font-semibold text-ink-900 disabled:opacity-40">Generate asset</button>
             </form>
           ))}
         </section>
 
         <section className="mt-10">
           <h2 className="text-xl font-semibold">Generated assets</h2>
-          <div className="mt-4 overflow-hidden rounded-2xl border border-white/[.08]">
+          <div className="mt-4 overflow-hidden rounded-lg border border-line">
             {assets.map((asset) => (
-              <Link key={asset.id} href={`/content/assets/${asset.slug}`} className="grid gap-2 border-b border-white/[.06] bg-[#0b100e] p-4 last:border-0 md:grid-cols-[1fr_220px_180px]">
+              <Link key={asset.id} href={`/content/assets/${asset.slug}`} className="grid gap-2 border-b border-line bg-ink-800 p-4 last:border-0 md:grid-cols-[1fr_220px_180px]">
                 <span>{asset.title}</span>
-                <span className="text-zinc-400">{asset.job.type.replaceAll("_", " ")}</span>
-                <span className="text-zinc-500">{asset.createdAt.toLocaleString()}</span>
+                <span className="text-text-2">{asset.job.type.replaceAll("_", " ")}</span>
+                <span className="text-text-3">{asset.createdAt.toLocaleString()}</span>
               </Link>
             ))}
-            {assets.length === 0 ? <p className="bg-[#0b100e] p-8 text-center text-zinc-500">No generated assets yet.</p> : null}
+            {assets.length === 0 ? <p className="bg-ink-800 p-8 text-center text-text-3">No generated assets yet.</p> : null}
           </div>
         </section>
-        {jobs.length ? <section className="mt-8 rounded-2xl border border-rose-400/20 bg-rose-400/[.04] p-5"><h2 className="font-semibold text-rose-300">Failed jobs</h2>{jobs.map((job)=><p key={job.id} className="mt-2 text-sm">{job.type}: {job.errorMessage}</p>)}</section> : null}
+        {jobs.length ? <section className="mt-8 rounded-lg border border-rose-400/20 bg-rose-400/[.04] p-5"><h2 className="font-semibold text-danger">Failed jobs</h2>{jobs.map((job)=><p key={job.id} className="mt-2 text-sm">{job.type}: {job.errorMessage}</p>)}</section> : null}
       </main>
     </OperationsShell>
   );

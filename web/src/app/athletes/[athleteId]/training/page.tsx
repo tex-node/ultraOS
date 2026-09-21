@@ -26,10 +26,10 @@ export default async function AthleteTrainingPage({ params }: { params: Promise<
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-5xl px-6 py-10">
-        <Link className="text-sm text-emerald-400" href={`/players/${athlete.ultraAthleteId ?? athlete.id}`}>Back to athlete</Link>
+        <Link className="text-sm text-brand-400" href={`/players/${athlete.ultraAthleteId ?? athlete.id}`}>Back to athlete</Link>
         <h1 className="mt-4 text-3xl font-semibold">Training History</h1>
-        <p className="mt-2 text-sm text-zinc-400">{athlete.firstName} {athlete.lastName} | {athlete.ultraAthleteId ?? "Ultra ID pending"}</p>
-        <section className="mt-8 grid gap-3">{athlete.trainingRecords.map((record) => <article className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5" key={record.id}><p className="font-semibold">{record.trainingSession.title}</p><p className="text-sm text-zinc-400">{record.attendanceStatus} | {record.trainingSession.sessionType}</p><p className="mt-2 text-sm">{record.publicSummary ?? (canViewPrivate ? record.performanceNotes ?? record.developmentFocus : "Private notes hidden")}</p><div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-400">{record.metrics.map((metric) => <span className="rounded-lg border border-white/10 px-2 py-1" key={metric.id}>{metric.metricDefinition.name}: {metric.numericValue?.toString() ?? metric.textValue ?? String(metric.booleanValue ?? "")}</span>)}</div></article>)}</section>
+        <p className="mt-2 text-sm text-text-2">{athlete.firstName} {athlete.lastName} | {athlete.ultraAthleteId ?? "Ultra ID pending"}</p>
+        <section className="mt-8 grid gap-3">{athlete.trainingRecords.map((record) => <article className="rounded-lg border border-line bg-ink-800 p-5" key={record.id}><p className="font-semibold">{record.trainingSession.title}</p><p className="text-sm text-text-2">{record.attendanceStatus} | {record.trainingSession.sessionType}</p><p className="mt-2 text-sm">{record.publicSummary ?? (canViewPrivate ? record.performanceNotes ?? record.developmentFocus : "Private notes hidden")}</p><div className="mt-3 flex flex-wrap gap-2 text-xs text-text-2">{record.metrics.map((metric) => <span className="rounded-lg border border-line px-2 py-1" key={metric.id}>{metric.metricDefinition.name}: {metric.numericValue?.toString() ?? metric.textValue ?? String(metric.booleanValue ?? "")}</span>)}</div></article>)}</section>
       </main>
     </OperationsShell>
   );

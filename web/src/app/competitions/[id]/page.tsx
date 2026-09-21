@@ -50,15 +50,15 @@ export default async function CompetitionDetailPage({ params }: { params: Promis
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-5xl px-6 py-10">
-        <Link href="/competitions" className="text-sm text-emerald-400">
+        <Link href="/competitions" className="text-sm text-brand-400">
           ← Competitions
         </Link>
         <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[.24em] text-emerald-400">{competition.sport.name}</p>
+            <p className="text-xs uppercase tracking-[.24em] text-brand-400">{competition.sport.name}</p>
             <h1 className="mt-2 text-3xl font-semibold">{competition.name}</h1>
-            <p className="mt-1 text-sm text-zinc-400">{summary?.formatSummary ?? "Sport format not configured."}</p>
-            <p className="mt-1 text-sm text-zinc-400">
+            <p className="mt-1 text-sm text-text-2">{summary?.formatSummary ?? "Sport format not configured."}</p>
+            <p className="mt-1 text-sm text-text-2">
               Format: {formatLabel(competition.format)}
               {competition.format === "GROUP_STAGE" ? ` · ${competition.groupCount} groups` : ""}
               {competition.divisions.some((division) => division.format || division.groupCount)
@@ -68,33 +68,33 @@ export default async function CompetitionDetailPage({ params }: { params: Promis
           </div>
           <span
             className={`rounded-full px-3 py-1 text-xs font-medium ${
-              ready ? "bg-emerald-400/15 text-emerald-300" : "bg-amber-400/15 text-amber-300"
+              ready ? "bg-brand-400/15 text-brand-300" : "bg-amber-400/15 text-warn"
             }`}
           >
             {ready ? "Ready" : "Setup in progress"}
           </span>
         </div>
 
-        <section className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+        <section className="mt-8 rounded-lg border border-line bg-ink-800 p-5">
           <h2 className="text-lg font-semibold">Readiness</h2>
           <ul className="mt-4 grid gap-2 sm:grid-cols-2">
             {readiness.map((step) => (
               <li key={step.label} className="flex items-center gap-3 text-sm">
-                <span className={step.ok ? "text-emerald-400" : "text-zinc-600"}>{step.ok ? "✓" : "○"}</span>
-                <span className={step.ok ? "text-zinc-200" : "text-zinc-400"}>{step.label}</span>
+                <span className={step.ok ? "text-brand-400" : "text-text-3"}>{step.ok ? "✓" : "○"}</span>
+                <span className={step.ok ? "text-text-1" : "text-text-2"}>{step.label}</span>
               </li>
             ))}
           </ul>
         </section>
 
-        <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+        <section className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
           <h2 className="text-lg font-semibold">Seasons</h2>
           {competition.seasons.length === 0 ? (
-            <p className="mt-2 text-sm text-zinc-400">No seasons yet.</p>
+            <p className="mt-2 text-sm text-text-2">No seasons yet.</p>
           ) : (
-            <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
+            <div className="mt-4 overflow-hidden rounded-md border border-line">
               <table className="w-full text-left text-sm">
-                <thead className="bg-white/[.03] text-xs uppercase tracking-wider text-zinc-500">
+                <thead className="bg-white/[.03] text-xs uppercase tracking-wider text-text-3">
                   <tr>
                     <th className="px-4 py-3">Season</th>
                     <th className="px-4 py-3">Status</th>
@@ -107,7 +107,7 @@ export default async function CompetitionDetailPage({ params }: { params: Promis
                   {competition.seasons.map((season) => (
                     <tr key={season.id} className="border-t border-white/5">
                       <td className="px-4 py-3">{season.name}</td>
-                      <td className="px-4 py-3 text-zinc-400">{season.status}</td>
+                      <td className="px-4 py-3 text-text-2">{season.status}</td>
                       <td className="px-4 py-3">{season._count.seasonClubs}</td>
                       <td className="px-4 py-3">{season._count.fixtures}</td>
                       <td className="px-4 py-3">{season._count.standings}</td>
@@ -119,14 +119,14 @@ export default async function CompetitionDetailPage({ params }: { params: Promis
           )}
         </section>
 
-        <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+        <section className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
           <h2 className="text-lg font-semibold">Divisions</h2>
           {competition.divisions.length === 0 ? (
-            <p className="mt-2 text-sm text-zinc-400">No divisions yet.</p>
+            <p className="mt-2 text-sm text-text-2">No divisions yet.</p>
           ) : (
             <div className="mt-4 flex flex-wrap gap-2">
               {competition.divisions.map((division) => (
-                <span key={division.id} className="rounded-full border border-white/10 px-3 py-1 text-sm text-zinc-200">
+                <span key={division.id} className="rounded-full border border-line px-3 py-1 text-sm text-text-1">
                   {division.name}
                 </span>
               ))}
@@ -134,37 +134,37 @@ export default async function CompetitionDetailPage({ params }: { params: Promis
           )}
         </section>
 
-        <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+        <section className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
           <h2 className="text-lg font-semibold">Next steps</h2>
           <div className="mt-4 flex flex-wrap gap-3">
-            <Link href={`/competitions/${competition.id}/settings`} className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:border-white/25">
+            <Link href={`/competitions/${competition.id}/settings`} className="rounded-lg border border-line px-4 py-2 text-sm hover:border-white/25">
               Format
             </Link>
-            <Link href={`/competitions/${competition.id}/sport-rules`} className="rounded-lg border border-emerald-400/40 px-4 py-2 text-sm text-emerald-200 hover:border-emerald-400">
+            <Link href={`/competitions/${competition.id}/sport-rules`} className="rounded-lg border border-brand-400/40 px-4 py-2 text-sm text-emerald-200 hover:border-emerald-400">
               Sport rules
             </Link>
-            <Link href={`/competitions/${competition.id}/teams`} className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:border-white/25">
+            <Link href={`/competitions/${competition.id}/teams`} className="rounded-lg border border-line px-4 py-2 text-sm hover:border-white/25">
               Teams
             </Link>
-            <Link href={`/competitions/${competition.id}/teams/new`} className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:border-white/25">
+            <Link href={`/competitions/${competition.id}/teams/new`} className="rounded-lg border border-line px-4 py-2 text-sm hover:border-white/25">
               Add team
             </Link>
-            <Link href={`/competitions/${competition.id}/schedule`} className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:border-white/25">
+            <Link href={`/competitions/${competition.id}/schedule`} className="rounded-lg border border-line px-4 py-2 text-sm hover:border-white/25">
               Generate schedule
             </Link>
-            <Link href="/clubs" className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:border-white/25">
+            <Link href="/clubs" className="rounded-lg border border-line px-4 py-2 text-sm hover:border-white/25">
               Manage teams
             </Link>
-            <Link href="/players" className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:border-white/25">
+            <Link href="/players" className="rounded-lg border border-line px-4 py-2 text-sm hover:border-white/25">
               Manage athletes
             </Link>
-            <Link href="/fixtures" className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:border-white/25">
+            <Link href="/fixtures" className="rounded-lg border border-line px-4 py-2 text-sm hover:border-white/25">
               Schedule fixtures
             </Link>
-            <Link href="/standings" className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:border-white/25">
+            <Link href="/standings" className="rounded-lg border border-line px-4 py-2 text-sm hover:border-white/25">
               View standings
             </Link>
-            <Link href="/gameday" className="rounded-lg border border-emerald-400/40 px-4 py-2 text-sm text-emerald-300 hover:border-emerald-400">
+            <Link href="/gameday" className="rounded-lg border border-brand-400/40 px-4 py-2 text-sm text-brand-300 hover:border-emerald-400">
               Game Day
             </Link>
           </div>

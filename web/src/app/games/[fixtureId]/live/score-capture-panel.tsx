@@ -5,7 +5,7 @@ import { type ShootoutKick, type ShootoutSide } from "@/lib/sports/shootout";
 import type { SportDefinition } from "@/lib/sports/types";
 import { recordScoringEvent, recordShootoutKick } from "../../actions";
 
-const BIG_BTN = "min-h-[52px] min-w-[52px] rounded-xl text-sm font-semibold active:scale-95 transition";
+const BIG_BTN = "min-h-[52px] min-w-[52px] rounded-md px-4 text-base font-bold active:scale-95 transition";
 
 // One console panel for every scoring module (sets / goals / runs). Buttons come from the resolved
 // module, so the console has no sport-specific branching. Each action is its own form with hidden
@@ -57,11 +57,11 @@ export function ScoreCapturePanel({
   const currentRow = currentPeriod !== undefined ? periodScores.find((row) => row.period === currentPeriod) : undefined;
   const progressSummary =
     scoringModule.kind === "SETS" && currentPeriod !== undefined ? (
-      <p className="mt-1 text-sm font-semibold text-emerald-300">
+      <p className="mt-1 text-sm font-semibold text-brand-300">
         Set {currentPeriod}: {currentRow?.home ?? 0}–{currentRow?.away ?? 0}
       </p>
     ) : scoringModule.kind === "TENNIS" && currentPeriod !== undefined ? (
-      <p className="mt-1 text-sm font-semibold text-emerald-300">
+      <p className="mt-1 text-sm font-semibold text-brand-300">
         Set {currentPeriod}: games {currentRow?.home ?? 0}–{currentRow?.away ?? 0}
         {" · "}points {pointLabel(tennisPoints ?? { home: 0, away: 0 }, "HOME")}–
         {pointLabel(tennisPoints ?? { home: 0, away: 0 }, "AWAY")}
@@ -75,7 +75,7 @@ export function ScoreCapturePanel({
           <input type="hidden" name="typeKey" value={action.typeKey} />
           {action.runs !== undefined ? <input type="hidden" name="runs" value={action.runs} /> : null}
           {action.points !== undefined ? <input type="hidden" name="points" value={action.points} /> : null}
-          <SubmitButton pendingLabel="…" className={`${BIG_BTN} border border-emerald-400/30 px-4 text-xs text-emerald-300`}>
+          <SubmitButton pendingLabel="…" className={`${BIG_BTN} border border-brand-400/30 px-4 text-xs text-brand-300`}>
             {action.label}
           </SubmitButton>
         </form>
@@ -86,9 +86,9 @@ export function ScoreCapturePanel({
   const supportsShootout = definition.capabilities.includes("PENALTIES");
   const shootoutSection =
     knockout && supportsShootout && teams.length === 2 ? (
-      <section className="mt-6 rounded-2xl border border-amber-400/20 bg-[#0b100e] p-5">
+      <section className="mt-6 rounded-lg border border-warn/20 bg-ink-800 p-5">
         <h3 className="font-semibold">Penalty shootout</h3>
-        <p className="mt-0.5 text-xs text-zinc-500">
+        <p className="mt-0.5 text-xs text-text-3">
           {scoresLevel
             ? "Level after normal time — record each kick. Best-of-five, then sudden death; the winner is decided automatically."
             : "Available once the match is level after normal time and extra time."}
@@ -99,9 +99,9 @@ export function ScoreCapturePanel({
             const taken = shootoutKicks.filter((kick) => kick.side === side);
             const scored = taken.filter((kick) => kick.scored).length;
             return (
-              <div key={team.id} className="rounded-xl border border-white/[.06] p-4">
+              <div key={team.id} className="rounded-md border border-line p-4">
                 <h4 className="text-sm font-semibold">{team.name}</h4>
-                <p className="mt-1 text-xs text-zinc-500">
+                <p className="mt-1 text-xs text-text-3">
                   {scored}/{taken.length} in the shootout
                 </p>
                 {scoresLevel ? (
@@ -112,7 +112,7 @@ export function ScoreCapturePanel({
                         <input type="hidden" name="scored" value={scoredKick ? "true" : "false"} />
                         <SubmitButton
                           pendingLabel="…"
-                          className={`${BIG_BTN} border px-4 text-xs ${scoredKick ? "border-emerald-400/30 text-emerald-300" : "border-rose-400/30 text-rose-300"}`}
+                          className={`${BIG_BTN} border px-4 text-xs ${scoredKick ? "border-brand-400/30 text-brand-300" : "border-danger/30 text-danger"}`}
                         >
                           {scoredKick ? "Scored" : "Missed"}
                         </SubmitButton>
@@ -130,30 +130,30 @@ export function ScoreCapturePanel({
   if (scoringModule.kind === "RUNS") {
     const batting = teams.find((team) => team.id === battingTeamId);
     return (
-      <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+      <section className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
         <h3 className="font-semibold">{title}</h3>
-        <p className="mt-0.5 text-xs text-zinc-500">
+        <p className="mt-0.5 text-xs text-text-3">
           {batting ? `${batting.name} batting.` : "Batting side unknown."} Runs are credited to the batting team for the current innings.
         </p>
         {innings ? (
-          <p className="mt-2 text-sm text-zinc-300">
+          <p className="mt-2 text-sm text-text-1">
             Innings {innings.period} · {innings.overs} overs · {innings.wickets} wicket{innings.wickets === 1 ? "" : "s"}
-            {innings.target !== null ? <span className="ml-2 text-amber-300">Target {innings.target}</span> : null}
+            {innings.target !== null ? <span className="ml-2 text-warn">Target {innings.target}</span> : null}
           </p>
         ) : null}
-        {batting ? <div className="rounded-xl border border-white/[.06] p-4">{actionButtons(batting.id)}</div> : null}
+        {batting ? <div className="rounded-md border border-line p-4">{actionButtons(batting.id)}</div> : null}
       </section>
     );
   }
 
   return (
-    <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+    <section className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
       <h3 className="font-semibold">{title}</h3>
       {progressSummary}
-      {scoringModule.kind === "GOALS" ? <p className="mt-0.5 text-xs text-zinc-500">An own goal credits the other team.</p> : null}
+      {scoringModule.kind === "GOALS" ? <p className="mt-0.5 text-xs text-text-3">An own goal credits the other team.</p> : null}
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {teams.map((team) => (
-          <div key={team.id} className="rounded-xl border border-white/[.06] p-4">
+          <div key={team.id} className="rounded-md border border-line p-4">
             <h4 className="text-sm font-semibold">{team.name}</h4>
             {actionButtons(team.id)}
           </div>

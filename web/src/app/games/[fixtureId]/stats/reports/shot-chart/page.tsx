@@ -51,14 +51,14 @@ export default async function ShotChartReport({ params }: { params: Promise<{ fi
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-4xl px-4 pb-8 sm:px-6">
         <div className="no-print flex flex-wrap items-center justify-between gap-2 py-3">
-          <Link href={`/games/${fixtureId}/stats/live`} className="text-sm text-zinc-400">Back to live console</Link>
-          <p className="text-sm text-zinc-500">
+          <Link href={`/games/${fixtureId}/stats/live`} className="text-sm text-text-2">Back to live console</Link>
+          <p className="text-sm text-text-3">
             {fixture.homeSeasonClub?.club.shortName} {fixture.homeScore} - {fixture.awayScore} {fixture.awaySeasonClub?.club.shortName}
           </p>
         </div>
         <h1 className="text-2xl font-semibold">Shot chart</h1>
         {fixture.game.events.length === 0 ? (
-          <p className="mt-4 text-sm text-zinc-400">No located shots yet. Click the court on the live console to log one.</p>
+          <p className="mt-4 text-sm text-text-2">No located shots yet. Click the court on the live console to log one.</p>
         ) : (
           <ShotChartClient
             homeId={fixture.homeSeasonClubId ?? ""}

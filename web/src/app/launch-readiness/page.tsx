@@ -29,13 +29,13 @@ export default async function LaunchReadinessPage() {
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[.22em] text-emerald-400">Season Zero Launch</p>
+            <p className="text-xs uppercase tracking-[.22em] text-brand-400">Season Zero Launch</p>
             <h1 className="mt-2 text-3xl font-semibold">Launch Readiness</h1>
-            <p className="mt-2 text-sm text-zinc-400">Generated {new Date(report.generatedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}. Sensitive applicant details are excluded.</p>
+            <p className="mt-2 text-sm text-text-2">Generated {new Date(report.generatedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}. Sensitive applicant details are excluded.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link className="rounded-xl border border-white/10 px-4 py-3 text-sm" href="/operations">Command Center</Link>
-            <Link className="rounded-xl border border-white/10 px-4 py-3 text-sm" href="/launch-readiness/report">JSON report</Link>
+            <Link className="rounded-md border border-line px-4 py-3 text-sm" href="/operations">Command Center</Link>
+            <Link className="rounded-md border border-line px-4 py-3 text-sm" href="/launch-readiness/report">JSON report</Link>
           </div>
         </div>
 
@@ -50,7 +50,7 @@ export default async function LaunchReadinessPage() {
           <Panel title="Configuration">
             <ReadinessLine label="Missing production configuration" value={report.configuration.missing.length} bad={report.configuration.missing.length > 0} />
             <ReadinessLine label="Content templates" value={report.configuration.contentTemplateCount} />
-            <p className="mt-3 text-xs text-zinc-500">{report.configuration.missing.length ? report.configuration.missing.join(", ") : "Competition, Season Zero, divisions, settings, and content templates are present."}</p>
+            <p className="mt-3 text-xs text-text-3">{report.configuration.missing.length ? report.configuration.missing.join(", ") : "Competition, Season Zero, divisions, settings, and content templates are present."}</p>
           </Panel>
           <Panel title="Real Data Baseline">
             <ReadinessLine label="Clubs" value={report.realData.clubs} />
@@ -85,40 +85,40 @@ export default async function LaunchReadinessPage() {
         </section>
 
         {hasPermission(session.user.roles, "operations:manage") ? (
-          <section className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e] p-6">
+          <section className="mt-8 rounded-lg border border-line bg-ink-800 p-6">
             <h2 className="text-xl font-semibold">Add Launch Blocker</h2>
             <form action={createLaunchReadinessCheck} className="mt-4 grid gap-3 md:grid-cols-[150px_140px_1fr_auto]">
               <input type="hidden" name="seasonId" value={seasonId} />
-              <select className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" name="priority" defaultValue={LaunchBlockerPriority.P2}>{Object.values(LaunchBlockerPriority).map((priority) => <option key={priority} value={priority}>{priority}</option>)}</select>
-              <input className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" name="category" placeholder="Category" required />
-              <input className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm" name="title" placeholder="Blocker title" required />
-              <button className="rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950">Add</button>
-              <textarea className="rounded-xl border border-white/10 bg-[#050807] px-3 py-3 text-sm md:col-span-4" name="details" placeholder="Decision notes, workaround, owner, evidence required" />
+              <select className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm" name="priority" defaultValue={LaunchBlockerPriority.P2}>{Object.values(LaunchBlockerPriority).map((priority) => <option key={priority} value={priority}>{priority}</option>)}</select>
+              <input className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm" name="category" placeholder="Category" required />
+              <input className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm" name="title" placeholder="Blocker title" required />
+              <button className="rounded-md bg-brand-400 px-4 py-3 text-sm font-semibold text-ink-900">Add</button>
+              <textarea className="rounded-md border border-line bg-ink-900 px-3 py-3 text-sm md:col-span-4" name="details" placeholder="Decision notes, workaround, owner, evidence required" />
             </form>
           </section>
         ) : null}
 
-        <section className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e] p-6">
+        <section className="mt-8 rounded-lg border border-line bg-ink-800 p-6">
           <h2 className="text-xl font-semibold">Open and Recent Readiness Checks</h2>
           <div className="mt-4 grid gap-3">
             {checks.map((check) => (
-              <article className="rounded-xl border border-white/[.06] bg-black/20 p-4" key={check.id}>
+              <article className="rounded-md border border-line bg-black/20 p-4" key={check.id}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs uppercase tracking-[.18em] text-zinc-500">{check.priority} | {check.category} | {check.status}</p>
+                    <p className="text-xs uppercase tracking-[.18em] text-text-3">{check.priority} | {check.category} | {check.status}</p>
                     <h3 className="mt-1 font-semibold">{check.title}</h3>
-                    {check.details ? <p className="mt-2 text-sm text-zinc-400">{check.details}</p> : null}
+                    {check.details ? <p className="mt-2 text-sm text-text-2">{check.details}</p> : null}
                   </div>
                   {hasPermission(session.user.roles, "operations:manage") ? (
                     <form action={updateLaunchReadinessCheckStatus.bind(null, check.id)} className="flex flex-wrap gap-2">
-                      <select className="rounded-xl border border-white/10 bg-[#050807] px-3 py-2 text-sm" name="status" defaultValue={check.status}>{Object.values(OpsItemStatus).map((status) => <option key={status} value={status}>{status}</option>)}</select>
-                      <button className="rounded-xl border border-white/10 px-3 py-2 text-sm">Update</button>
+                      <select className="rounded-md border border-line bg-ink-900 px-3 py-2 text-sm" name="status" defaultValue={check.status}>{Object.values(OpsItemStatus).map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                      <button className="rounded-md border border-line px-3 py-2 text-sm">Update</button>
                     </form>
                   ) : null}
                 </div>
               </article>
             ))}
-            {checks.length === 0 ? <p className="text-sm text-zinc-500">No readiness checks recorded yet.</p> : null}
+            {checks.length === 0 ? <p className="text-sm text-text-3">No readiness checks recorded yet.</p> : null}
           </div>
         </section>
       </main>
@@ -127,13 +127,13 @@ export default async function LaunchReadinessPage() {
 }
 
 function Metric({ label, value, status }: { label: string; value: string | number; status: OpsHealthStatus }) {
-  return <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5"><p className="text-sm text-zinc-400">{label}</p><p className={`mt-2 text-2xl font-semibold ${status === OpsHealthStatus.RED ? "text-rose-300" : status === OpsHealthStatus.AMBER ? "text-amber-300" : "text-emerald-300"}`}>{value}</p></div>;
+  return <div className="rounded-lg border border-line bg-ink-800 p-5"><p className="text-sm text-text-2">{label}</p><p className={`mt-2 text-2xl font-semibold ${status === OpsHealthStatus.RED ? "text-danger" : status === OpsHealthStatus.AMBER ? "text-warn" : "text-brand-300"}`}>{value}</p></div>;
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5"><h2 className="text-lg font-semibold">{title}</h2><div className="mt-4 grid gap-2">{children}</div></section>;
+  return <section className="rounded-lg border border-line bg-ink-800 p-5"><h2 className="text-lg font-semibold">{title}</h2><div className="mt-4 grid gap-2">{children}</div></section>;
 }
 
 function ReadinessLine({ label, value, bad = false }: { label: string; value: string | number; bad?: boolean }) {
-  return <div className="flex justify-between gap-4 rounded-xl border border-white/[.06] bg-black/20 px-4 py-3 text-sm"><span className="text-zinc-400">{label}</span><span className={bad ? "font-semibold text-rose-300" : "font-semibold text-emerald-300"}>{value}</span></div>;
+  return <div className="flex justify-between gap-4 rounded-md border border-line bg-black/20 px-4 py-3 text-sm"><span className="text-text-2">{label}</span><span className={bad ? "font-semibold text-danger" : "font-semibold text-brand-300"}>{value}</span></div>;
 }

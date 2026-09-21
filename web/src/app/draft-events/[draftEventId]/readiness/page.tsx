@@ -15,23 +15,23 @@ export default async function DraftReadinessPage({ params }: { params: Promise<{
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-5xl px-6 py-10">
-        <Link className="text-sm text-emerald-400" href={`/draft-events/${draftEventId}`}>Back to event</Link>
+        <Link className="text-sm text-brand-400" href={`/draft-events/${draftEventId}`}>Back to event</Link>
         <h1 className="mt-4 text-3xl font-semibold">Readiness checks</h1>
         <section className="mt-8 grid gap-3">
           {items.map((item) => (
-            <div className="grid gap-3 rounded-xl border border-white/[.08] bg-[#0b100e] p-4 md:grid-cols-[140px_1fr_2fr]" key={item.key}>
+            <div className="grid gap-3 rounded-md border border-line bg-ink-800 p-4 md:grid-cols-[140px_1fr_2fr]" key={item.key}>
               <span className={badgeClass(item.status)}>{item.squadStatus ?? item.status}</span>
               <div>
                 <b>{item.label}</b>
                 {item.current !== undefined && item.target !== undefined ? (
-                  <p className="mt-1 text-xs text-zinc-500">
+                  <p className="mt-1 text-xs text-text-3">
                     Current: {item.current} / Target: {item.target}
                     {item.shortfall ? ` | Shortfall: ${item.shortfall}` : ""}
                     {item.completion !== undefined ? ` | Completion: ${item.completion}%` : ""}
                   </p>
                 ) : null}
               </div>
-              <span className="text-sm text-zinc-400">{item.message}</span>
+              <span className="text-sm text-text-2">{item.message}</span>
             </div>
           ))}
         </section>
@@ -41,9 +41,9 @@ export default async function DraftReadinessPage({ params }: { params: Promise<{
 }
 
 function badgeClass(status: string) {
-  if (status === "GREEN") return "text-emerald-300";
-  if (status === "RED") return "text-rose-300";
-  if (status === "GREY") return "text-zinc-400";
+  if (status === "GREEN") return "text-brand-300";
+  if (status === "RED") return "text-danger";
+  if (status === "GREY") return "text-text-2";
   if (status === "BLUE") return "text-sky-300";
-  return "text-amber-300";
+  return "text-warn";
 }

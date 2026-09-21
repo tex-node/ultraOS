@@ -49,30 +49,30 @@ export default async function NoveltyLive({ params, searchParams }: { params: Pr
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-8">
         <div className="flex justify-between">
-          <Link href="/novelty-matches" className="text-zinc-400">Back to exhibition matches</Link>
+          <Link href="/novelty-matches" className="text-text-2">Back to exhibition matches</Link>
         </div>
-        <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-6">
-          {query.error === "tied" ? <p className="mb-5 rounded-lg bg-rose-400/10 p-3 text-rose-300">A tied game cannot be finalized. Complete overtime or correct the score.</p> : null}
-          <p className="text-center text-xs uppercase tracking-[.2em] text-emerald-400">{match.name}</p>
+        <section className="mt-6 rounded-lg border border-line bg-ink-800 p-6">
+          {query.error === "tied" ? <p className="mb-5 rounded-lg bg-danger/10 p-3 text-danger">A tied game cannot be finalized. Complete overtime or correct the score.</p> : null}
+          <p className="text-center text-xs uppercase tracking-[.2em] text-brand-400">{match.name}</p>
           <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center text-center">
             <TeamScore name={match.homeTeam.name} score={match.homeScore} />
             <div>
-              <p className="text-xs text-zinc-500">PERIOD {game?.currentPeriod ?? 1}</p>
+              <p className="text-xs text-text-3">PERIOD {game?.currentPeriod ?? 1}</p>
               <p className="mt-2 font-mono text-4xl font-bold">
                 {game ? <GameClock seconds={remainingClockSeconds(game)} status={game.status} startedAt={game.clockStartedAt?.toISOString() ?? null} /> : "10:00"}
               </p>
-              <p className="mt-2 text-xs text-emerald-400">{game?.status ?? "NOT STARTED"}</p>
+              <p className="mt-2 text-xs text-brand-400">{game?.status ?? "NOT STARTED"}</p>
             </div>
             <TeamScore name={match.awayTeam.name} score={match.awayScore} />
           </div>
           <div className="mt-8 flex justify-center gap-2">
             {!game ? (
-              <form action={startNoveltyGame.bind(null, matchId)}><button className="rounded-xl bg-emerald-400 px-5 py-3 font-semibold text-zinc-950">Start match</button></form>
+              <form action={startNoveltyGame.bind(null, matchId)}><button className="rounded-md bg-brand-400 px-5 py-3 font-semibold text-ink-900">Start match</button></form>
             ) : (
               <>
-                {game.status === "LIVE" ? <form action={pauseNoveltyGame.bind(null, game.id, matchId)}><button className="rounded-xl border border-white/10 px-4 py-2">Pause</button></form> : game.status !== "FINAL" ? <form action={resumeNoveltyGame.bind(null, game.id, matchId)}><button className="rounded-xl bg-emerald-400 px-4 py-2 text-zinc-950">Resume</button></form> : null}
-                {game.status !== "FINAL" ? <div className="flex flex-col items-center gap-1"><form action={advanceNoveltyPeriod.bind(null, game.id, matchId)}><button className="rounded-xl border border-white/10 px-4 py-2">Next period</button></form>{game.currentPeriod === 1 ? <p className="text-[10px] uppercase tracking-wider text-zinc-500">Halftime break: 2 min</p> : null}</div> : null}
-                {game.status !== "FINAL" ? <form action={finalizeNoveltyGame.bind(null, game.id, matchId)}><button className="rounded-xl border border-rose-400/20 px-4 py-2 text-rose-300">Confirm final</button></form> : null}
+                {game.status === "LIVE" ? <form action={pauseNoveltyGame.bind(null, game.id, matchId)}><button className="rounded-md border border-line px-4 py-2">Pause</button></form> : game.status !== "FINAL" ? <form action={resumeNoveltyGame.bind(null, game.id, matchId)}><button className="rounded-md bg-brand-400 px-4 py-2 text-ink-900">Resume</button></form> : null}
+                {game.status !== "FINAL" ? <div className="flex flex-col items-center gap-1"><form action={advanceNoveltyPeriod.bind(null, game.id, matchId)}><button className="rounded-md border border-line px-4 py-2">Next period</button></form>{game.currentPeriod === 1 ? <p className="text-[10px] uppercase tracking-wider text-text-3">Halftime break: 2 min</p> : null}</div> : null}
+                {game.status !== "FINAL" ? <form action={finalizeNoveltyGame.bind(null, game.id, matchId)}><button className="rounded-md border border-rose-400/20 px-4 py-2 text-danger">Confirm final</button></form> : null}
               </>
             )}
           </div>
@@ -80,7 +80,7 @@ export default async function NoveltyLive({ params, searchParams }: { params: Pr
         {game && game.status !== "FINAL" ? (
           <div className="mt-6 grid gap-6 lg:grid-cols-2">
             {[match.homeTeam, match.awayTeam].map((team) => (
-              <section key={team.id} className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+              <section key={team.id} className="rounded-lg border border-line bg-ink-800 p-5">
                 <h3 className="font-semibold">{team.name} scoring</h3>
                 <form action={recordNoveltyScore.bind(null, game.id, matchId)} className="mt-4 grid grid-cols-2 gap-3">
                   <input type="hidden" name="teamId" value={team.id} />
@@ -92,9 +92,9 @@ export default async function NoveltyLive({ params, searchParams }: { params: Pr
                     {[1, 2, 3, -1, -2, -3].map((value) => <option key={value} value={value}>{value > 0 ? "+" : ""}{value}</option>)}
                   </select>
                   <input name="description" placeholder="Description" className="rounded-lg bg-white/[.05] p-3" />
-                  <button className="col-span-2 rounded-lg bg-emerald-400 p-3 font-semibold text-zinc-950">Record score</button>
+                  <button className="col-span-2 rounded-lg bg-brand-400 p-3 font-semibold text-ink-900">Record score</button>
                 </form>
-                <form action={recordNoveltyStatEvent.bind(null, game.id, matchId)} className="mt-5 grid grid-cols-2 gap-3 border-t border-white/[.06] pt-5">
+                <form action={recordNoveltyStatEvent.bind(null, game.id, matchId)} className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-5">
                   <input type="hidden" name="teamId" value={team.id} />
                   <select name="playerId" className="col-span-2 rounded-lg bg-white/[.05] p-3" required>
                     <option value="">Select player</option>
@@ -104,7 +104,7 @@ export default async function NoveltyLive({ params, searchParams }: { params: Pr
                     {["REBOUND", "ASSIST", "STEAL", "BLOCK", "TURNOVER", "FOUL"].map((event) => <option key={event}>{event}</option>)}
                   </select>
                   <input name="description" placeholder="Description" className="rounded-lg bg-white/[.05] p-3" />
-                  <p className="col-span-2 -mb-1 text-xs text-zinc-500">If recording a foul (optional - leave blank when it isn&apos;t clearly one-sided):</p>
+                  <p className="col-span-2 -mb-1 text-xs text-text-3">If recording a foul (optional - leave blank when it isn&apos;t clearly one-sided):</p>
                   <select name="fouledPlayerId" className="rounded-lg bg-white/[.05] p-3">
                     <option value="">Fouled player (unknown/none)</option>
                     {players.map((player) => <option key={player.id} value={player.id}>{player.athlete.firstName} {player.athlete.lastName} ({player.seasonClub?.club.shortName})</option>)}
@@ -113,20 +113,20 @@ export default async function NoveltyLive({ params, searchParams }: { params: Pr
                     <option value="">Foul type (unspecified)</option>
                     {["PERSONAL", "TECHNICAL", "FLAGRANT", "OFFENSIVE"].map((type) => <option key={type} value={type}>{type}</option>)}
                   </select>
-                  <button className="col-span-2 rounded-lg border border-emerald-400/30 p-3 text-emerald-400">Record player event</button>
+                  <button className="col-span-2 rounded-lg border border-brand-400/30 p-3 text-brand-400">Record player event</button>
                 </form>
               </section>
             ))}
           </div>
         ) : null}
         {game ? (
-          <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+          <section className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
             <h3 className="font-semibold">Event feed</h3>
             <div className="mt-4 space-y-2">
               {game.events.map((event) => (
-                <div key={event.id} className="flex justify-between border-b border-white/[.06] py-2 text-sm">
+                <div key={event.id} className="flex justify-between border-b border-line py-2 text-sm">
                   <span>{event.team.shortName ?? event.team.name} · {event.player ? `${event.player.athlete.firstName} ${event.player.athlete.lastName}` : "Team"} · {event.description}{event.eventType === "FOUL" && (event.fouledPlayer || event.foulType) ? ` (${[event.foulType, event.fouledPlayer ? `on ${event.fouledPlayer.athlete.firstName} ${event.fouledPlayer.athlete.lastName}` : null].filter(Boolean).join(" · ")})` : ""}</span>
-                  <span className="text-zinc-500">P{event.period} {Math.floor(event.clockSeconds / 60)}:{(event.clockSeconds % 60).toString().padStart(2, "0")}</span>
+                  <span className="text-text-3">P{event.period} {Math.floor(event.clockSeconds / 60)}:{(event.clockSeconds % 60).toString().padStart(2, "0")}</span>
                 </div>
               ))}
             </div>

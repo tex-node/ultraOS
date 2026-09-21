@@ -40,14 +40,14 @@ export function ShotChartClient({
             key={option}
             type="button"
             onClick={() => setFilter(option)}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold ${filter === option ? "bg-emerald-400 text-zinc-950" : "border border-white/10 text-zinc-300"}`}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold ${filter === option ? "bg-brand-400 text-ink-900" : "border border-line text-text-1"}`}
           >
             {option === "ALL" ? "Both teams" : option === "HOME" ? homeName : awayName}
           </button>
         ))}
-        <span className="ml-2 text-sm text-zinc-400">
-          {visible.length} shots · <span className="text-emerald-300">{makes} made</span> ·{" "}
-          <span className="text-rose-300">{misses} missed</span>
+        <span className="ml-2 text-sm text-text-2">
+          {visible.length} shots · <span className="text-brand-300">{makes} made</span> ·{" "}
+          <span className="text-danger">{misses} missed</span>
         </span>
       </div>
       <div className="mx-auto mt-4 max-w-xl">
@@ -58,7 +58,7 @@ export function ShotChartClient({
           interactive={false}
         />
       </div>
-      <p className="mt-2 text-center text-xs text-zinc-500 no-print">Green = made, red = missed.</p>
+      <p className="mt-2 text-center text-xs text-text-3 no-print">Green = made, red = missed.</p>
     </div>
   );
 }

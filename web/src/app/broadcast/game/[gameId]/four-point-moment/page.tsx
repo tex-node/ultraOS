@@ -21,13 +21,13 @@ export default async function FourPointMomentGraphic({ params, searchParams }: {
   if (!moment) notFound();
 
   return (
-    <div className="inline-flex flex-col items-center gap-1 rounded-2xl border border-violet-400/50 bg-black/90 px-8 py-5 font-sans text-white">
+    <div className="inline-flex flex-col items-center gap-1 rounded-lg border border-accent-purple/50 bg-black/90 px-8 py-5 font-sans text-white">
       <GraphicRefresher />
       <TransparentBody />
-      <p className="text-[10px] font-bold uppercase tracking-[.3em] text-violet-300">4PT MADE</p>
+      <p className="text-[10px] font-bold uppercase tracking-[.3em] text-accent-purple">4PT MADE</p>
       <p className="text-xl font-black">{moment.playerName}</p>
       {moment.multiplier > 1 ? (
-        <p className="text-lg font-bold text-amber-300">4PT ×{moment.multiplier} — {moment.points} POINTS</p>
+        <p className="text-lg font-bold text-warn">4PT ×{moment.multiplier} — {moment.points} POINTS</p>
       ) : (
         <p className="text-lg font-bold text-violet-200">{moment.points} POINTS</p>
       )}

@@ -55,9 +55,9 @@ export default async function StatLivePage({ params }: { params: Promise<{ fixtu
     return (
       <OperationsShell user={session.user}>
         <main className="mx-auto max-w-3xl px-6 py-10">
-          <p className="text-zinc-400">
+          <p className="text-text-2">
             The live statistician console is for team fixtures. Individual matches are scored on the{" "}
-            <Link href={`/games/${fixtureId}/live`} className="text-emerald-400">scorer console</Link>.
+            <Link href={`/games/${fixtureId}/live`} className="text-brand-400">scorer console</Link>.
           </p>
         </main>
       </OperationsShell>
@@ -69,10 +69,10 @@ export default async function StatLivePage({ params }: { params: Promise<{ fixtu
     return (
       <OperationsShell user={session.user}>
         <main className="mx-auto max-w-3xl px-6 py-10">
-          <p className="text-zinc-400">
+          <p className="text-text-2">
             This game has not started yet on the scorer console. Statistics capture opens once the scorer starts the game.
           </p>
-          <Link href={`/games/${fixtureId}/live`} className="mt-3 inline-block text-sm text-emerald-400">Open scorer console</Link>
+          <Link href={`/games/${fixtureId}/live`} className="mt-3 inline-block text-sm text-brand-400">Open scorer console</Link>
         </main>
       </OperationsShell>
     );
@@ -196,12 +196,12 @@ export default async function StatLivePage({ params }: { params: Promise<{ fixtu
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-4 pb-8 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-2 py-3">
-          <Link href={`/fixtures/${fixtureId}`} className="text-sm text-zinc-400">Back to fixture</Link>
+          <Link href={`/fixtures/${fixtureId}`} className="text-sm text-text-2">Back to fixture</Link>
           <div className="flex gap-4">
-            <Link href={`/games/${fixtureId}/stats`} className="text-sm text-zinc-400">Statistician console</Link>
-            <Link href={`/games/${fixtureId}/stats/reports`} className="text-sm text-amber-300">Reports</Link>
-            <Link href={`/games/${fixtureId}/stats/reconciliation`} className="text-sm text-violet-400">Reconciliation</Link>
-            <Link href={`/games/${fixtureId}/live`} className="text-sm text-emerald-400">Open scorer console</Link>
+            <Link href={`/games/${fixtureId}/stats`} className="text-sm text-text-2">Statistician console</Link>
+            <Link href={`/games/${fixtureId}/stats/reports`} className="text-sm text-warn">Reports</Link>
+            <Link href={`/games/${fixtureId}/stats/reconciliation`} className="text-sm text-accent-purple">Reconciliation</Link>
+            <Link href={`/games/${fixtureId}/live`} className="text-sm text-brand-400">Open scorer console</Link>
           </div>
         </div>
         <StatLiveConsole

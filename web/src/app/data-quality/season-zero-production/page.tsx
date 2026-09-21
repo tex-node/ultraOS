@@ -35,10 +35,10 @@ export default async function SeasonZeroProductionReviewPage({ searchParams }: {
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-7xl px-6 py-10">
-        <Link className="text-sm text-zinc-400" href="/data-quality/duplicates">Back to data quality</Link>
-        <p className="mt-6 text-xs uppercase tracking-[.2em] text-emerald-400">Production reconciliation</p>
+        <Link className="text-sm text-text-2" href="/data-quality/duplicates">Back to data quality</Link>
+        <p className="mt-6 text-xs uppercase tracking-[.2em] text-brand-400">Production reconciliation</p>
         <h1 className="mt-2 text-3xl font-semibold">Season Zero production player review</h1>
-        <p className="mt-2 max-w-3xl text-sm text-zinc-400">
+        <p className="mt-2 max-w-3xl text-sm text-text-2">
           The 58 selected Season Zero players, matched by the authoritative <code>Application ID</code> from{" "}
           TryOutsPlayers.xlsx directly against the live Application table — never inferred from email or phone.
           This page only records a decision (SystemSetting + AuditLog); it never writes Application.status by
@@ -48,7 +48,7 @@ export default async function SeasonZeroProductionReviewPage({ searchParams }: {
         <div className="mt-6 grid grid-cols-2 gap-2 text-sm md:grid-cols-5">
           {["READY", "SUBMITTED_REQUIRES_APPROVAL", "REJECTED_REQUIRES_OVERRIDE", "MISSING", "RESOLVED"].map((s) => (
             <Link
-              className={status === s ? "rounded-xl bg-emerald-400 px-3 py-3 text-center font-semibold text-zinc-950" : "rounded-xl border border-white/10 px-3 py-3 text-center text-zinc-300"}
+              className={status === s ? "rounded-md bg-brand-400 px-3 py-3 text-center font-semibold text-ink-900" : "rounded-md border border-line px-3 py-3 text-center text-text-1"}
               href={`/data-quality/season-zero-production?status=${s}`}
               key={s}
             >
@@ -57,11 +57,11 @@ export default async function SeasonZeroProductionReviewPage({ searchParams }: {
             </Link>
           ))}
         </div>
-        <Link className="mt-3 inline-block text-sm text-emerald-400" href="/data-quality/season-zero-production">Clear filter (show all 58)</Link>
+        <Link className="mt-3 inline-block text-sm text-brand-400" href="/data-quality/season-zero-production">Clear filter (show all 58)</Link>
 
-        <section className="mt-8 overflow-hidden rounded-2xl border border-white/[.08]">
+        <section className="mt-8 overflow-hidden rounded-lg border border-line">
           <table className="w-full text-left text-sm">
-            <thead className="bg-white/[.04] text-xs uppercase tracking-wider text-zinc-500">
+            <thead className="bg-white/[.04] text-xs uppercase tracking-wider text-text-3">
               <tr>
                 <th className="p-4">Player</th>
                 <th className="p-4">Division / Group</th>
@@ -72,36 +72,36 @@ export default async function SeasonZeroProductionReviewPage({ searchParams }: {
             </thead>
             <tbody>
               {visible.map((row) => (
-                <tr className="border-t border-white/[.06]" key={row.applicationId}>
+                <tr className="border-t border-line" key={row.applicationId}>
                   <td className="p-4">
                     <p className="font-semibold">{row.name}</p>
-                    <p className="text-xs text-zinc-500">{row.applicationId}</p>
+                    <p className="text-xs text-text-3">{row.applicationId}</p>
                   </td>
-                  <td className="p-4 text-zinc-300">
+                  <td className="p-4 text-text-1">
                     {row.division} · {row.draftSelectionGroup.replaceAll("_", " ")}{row.mainDraftGroupNumber ? ` (Group ${row.mainDraftGroupNumber})` : ""}
                   </td>
                   <td className="p-4">{row.productionApplicationStatus}</td>
                   <td className="p-4">
                     {DUPLICATE_APPLICATION_IDS.has(row.applicationId) ? (
-                      <Link className="text-amber-300 underline" href={`/data-quality/season-zero-production/${row.applicationId}/duplicates`}>Yes — review candidates</Link>
+                      <Link className="text-warn underline" href={`/data-quality/season-zero-production/${row.applicationId}/duplicates`}>Yes — review candidates</Link>
                     ) : "No"}
                   </td>
                   <td className="p-4">
                     {row.resolution ? (
-                      <div className="text-xs text-emerald-300">
+                      <div className="text-xs text-brand-300">
                         <p className="font-semibold">{row.resolution.action.replaceAll("_", " ")}</p>
-                        <p className="text-zinc-500">{row.resolution.reason}</p>
+                        <p className="text-text-3">{row.resolution.reason}</p>
                       </div>
                     ) : row.resolutionStatus === "READY" ? (
-                      <span className="text-xs text-zinc-500">No decision needed</span>
+                      <span className="text-xs text-text-3">No decision needed</span>
                     ) : (
                       <form action={recordSeasonZeroPlayerResolutionAction.bind(null, row.applicationId)} className="grid gap-2">
-                        <select className="rounded-lg border border-white/10 bg-[#050807] px-2 py-1 text-xs" name="action" required>
+                        <select className="rounded-lg border border-line bg-ink-900 px-2 py-1 text-xs" name="action" required>
                           <option value="">Select action</option>
                           {seasonZeroPlayerResolutionActions.map((a) => <option key={a} value={a}>{a.replaceAll("_", " ")}</option>)}
                         </select>
-                        <input className="rounded-lg border border-white/10 bg-[#050807] px-2 py-1 text-xs" name="reason" placeholder="Required reason" required />
-                        <button className="rounded-lg border border-emerald-400/40 px-2 py-1 text-xs text-emerald-100">Record decision</button>
+                        <input className="rounded-lg border border-line bg-ink-900 px-2 py-1 text-xs" name="reason" placeholder="Required reason" required />
+                        <button className="rounded-lg border border-brand-400/40 px-2 py-1 text-xs text-emerald-100">Record decision</button>
                       </form>
                     )}
                   </td>

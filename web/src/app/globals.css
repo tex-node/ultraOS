@@ -90,3 +90,25 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Print (D5): scoresheets, reports and export pages print clean — white paper, black
+   ink, surfaces flattened so dark UI never wastes toner or hides content. */
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  :where(.bg-ink-800, .bg-ink-900, .bg-ink-950, .bg-ink-700, .bg-white\/\[\.04\], .bg-white\/\[\.05\], .bg-white\/\[\.06\]) {
+    background: #fff !important;
+  }
+  :where(.text-text-1, .text-text-2, .text-text-3, .text-white) {
+    color: #000 !important;
+  }
+  :where(.border-line, .border-line-strong, .border-white\/\[\.08\]) {
+    border-color: #d4d4d8 !important;
+  }
+  :where(a) {
+    color: #000 !important;
+    text-decoration: underline;
+  }
+}

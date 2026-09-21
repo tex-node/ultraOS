@@ -12,10 +12,10 @@ export default async function CoachPhotoImportPage() {
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-5xl px-6 py-10">
-        <Link className="text-sm text-zinc-400" href="/coaches">Back to coaches</Link>
-        <p className="mt-6 text-xs uppercase tracking-[.2em] text-emerald-400">Coach media</p>
+        <Link className="text-sm text-text-2" href="/coaches">Back to coaches</Link>
+        <p className="mt-6 text-xs uppercase tracking-[.2em] text-brand-400">Coach media</p>
         <h1 className="mt-2 text-3xl font-semibold">Bulk coach photo import</h1>
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="mt-2 text-sm text-text-2">
           Preview matches before applying. Existing coach photos are only replaced if you explicitly allow it.
         </p>
         <div className="mt-8">

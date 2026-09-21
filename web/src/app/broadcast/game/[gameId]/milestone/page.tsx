@@ -20,12 +20,12 @@ export default async function MilestoneGraphic({ params, searchParams }: { param
   const display = await resolvePlayerDisplay(milestone.playerId);
 
   return (
-    <div className="inline-flex flex-col items-center gap-1 rounded-2xl border border-amber-400/40 bg-black/85 px-6 py-4 font-sans text-white">
+    <div className="inline-flex flex-col items-center gap-1 rounded-lg border border-amber-400/40 bg-black/85 px-6 py-4 font-sans text-white">
       <GraphicRefresher />
       <TransparentBody />
-      <p className="text-[10px] font-bold uppercase tracking-[.3em] text-amber-400">Milestone</p>
+      <p className="text-[10px] font-bold uppercase tracking-[.3em] text-warn">Milestone</p>
       <p className="text-lg font-black">{display?.name ?? "Player"}</p>
-      <p className="text-2xl font-black text-amber-300">{milestone.label}</p>
+      <p className="text-2xl font-black text-warn">{milestone.label}</p>
     </div>
   );
 }

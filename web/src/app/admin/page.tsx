@@ -52,20 +52,20 @@ export default async function AdminHub() {
       <PortalShell>
         <main className="mx-auto max-w-2xl px-6 py-16 text-center">
           <h1 className="text-2xl font-semibold">The organizer workspace is for event staff</h1>
-          <p className="mt-3 text-sm text-zinc-400">
+          <p className="mt-3 text-sm text-text-2">
             Your account has fan access. To run tournaments, apply as an organizer or ask your
             league administrator for staff access — nothing here affects your fan experience.
           </p>
           <div className="mt-6 flex justify-center gap-3">
             <Link
               href="/public"
-              className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:border-white/20 hover:text-white"
+              className="rounded-lg border border-line px-4 py-2 text-sm text-text-1 transition hover:border-white/20 hover:text-white"
             >
               Back to fan portal
             </Link>
             <Link
               href="/apply"
-              className="rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-300"
+              className="rounded-lg bg-brand-400 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-300"
             >
               Apply as organizer
             </Link>
@@ -133,7 +133,7 @@ export default async function AdminHub() {
     <WorkspaceShell user={session.user}>
       <main className="mx-auto max-w-6xl px-6 py-10">
         <h1 className="text-2xl font-semibold">Organizer workspace</h1>
-        <p className="mt-1 text-sm text-zinc-400">Run your tournaments end to end — pick a section to begin.</p>
+        <p className="mt-1 text-sm text-text-2">Run your tournaments end to end — pick a section to begin.</p>
         {stats ? (
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Stat label="Ticket revenue (paid)" value={formatNaira(stats.ticketRevenueKobo)} />
@@ -143,8 +143,8 @@ export default async function AdminHub() {
           </div>
         ) : null}
         {stats && stats.liveFixtures.length > 0 ? (
-          <section className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/[.04] p-5">
-            <h2 className="text-sm font-bold uppercase tracking-[.15em] text-emerald-400">Live matches</h2>
+          <section className="mt-6 rounded-lg border border-emerald-400/20 bg-brand-400/[.04] p-5">
+            <h2 className="text-sm font-bold uppercase tracking-[.15em] text-brand-400">Live matches</h2>
             <div className="mt-3 space-y-2">
               {stats.liveFixtures.map((f) => (
                 <div key={f.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -152,7 +152,7 @@ export default async function AdminHub() {
                     {f.homeSeasonClub?.club.name ?? f.homeEntrant?.name ?? "TBD"} {f.homeScore} – {f.awayScore}{" "}
                     {f.awaySeasonClub?.club.name ?? f.awayEntrant?.name ?? "TBD"}
                   </span>
-                  <Link href={`/games/${f.id}/live`} className="text-emerald-300">
+                  <Link href={`/games/${f.id}/live`} className="text-brand-300">
                     Open console →
                   </Link>
                 </div>
@@ -161,14 +161,14 @@ export default async function AdminHub() {
           </section>
         ) : null}
         {stats && stats.vendorGross.length > 0 ? (
-          <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
-            <h2 className="text-sm font-bold uppercase tracking-[.15em] text-zinc-400">Vendor payouts (paid orders)</h2>
+          <section className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
+            <h2 className="text-sm font-bold uppercase tracking-[.15em] text-text-2">Vendor payouts (paid orders)</h2>
             <div className="mt-3 space-y-1 text-sm">
               {stats.vendorGross.map((row) => (
                 <div key={row.vendor} className="flex justify-between gap-2">
                   <span>{row.vendor}</span>
-                  <span className="text-zinc-400">
-                    {formatNaira(row.gross)} gross · <span className="text-emerald-300">{formatNaira(row.net)} net</span>
+                  <span className="text-text-2">
+                    {formatNaira(row.gross)} gross · <span className="text-brand-300">{formatNaira(row.net)} net</span>
                   </span>
                 </div>
               ))}
@@ -180,10 +180,10 @@ export default async function AdminHub() {
             <Link
               key={card.href}
               href={card.href}
-              className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5 transition hover:border-emerald-400/30"
+              className="rounded-lg border border-line bg-ink-800 p-5 transition hover:border-brand-400/30"
             >
-              <h2 className="font-semibold text-emerald-300">{card.title}</h2>
-              <p className="mt-1 text-sm text-zinc-400">{card.body}</p>
+              <h2 className="font-semibold text-brand-300">{card.title}</h2>
+              <p className="mt-1 text-sm text-text-2">{card.body}</p>
             </Link>
           ))}
         </div>
@@ -194,9 +194,9 @@ export default async function AdminHub() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-4">
-      <p className="text-xs uppercase tracking-[.15em] text-zinc-500">{label}</p>
-      <p className="mt-1 text-xl font-bold text-emerald-300">{value}</p>
+    <div className="rounded-lg border border-line bg-ink-800 p-4">
+      <p className="text-xs uppercase tracking-[.15em] text-text-3">{label}</p>
+      <p className="mt-1 text-xl font-bold text-brand-300">{value}</p>
     </div>
   );
 }

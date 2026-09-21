@@ -46,14 +46,14 @@ export default async function Scorebug({ params }: { params: Promise<{ gameId: s
         <span className="font-mono text-xl font-black">{model.score.home}</span>
       </div>
       <div className="flex flex-col items-center rounded-lg bg-black/80 px-3 py-2">
-        <span className="text-[10px] uppercase tracking-widest text-zinc-400">{model.periodLabel}</span>
+        <span className="text-[10px] uppercase tracking-widest text-text-2">{model.periodLabel}</span>
         <span className="font-mono text-lg font-bold">
           <GameClock seconds={model.clock.remainingSeconds} status={model.clock.running ? "LIVE" : "PAUSED"} startedAt={null} />
         </span>
-        <span className="mt-0.5 font-mono text-[10px] text-amber-300">
+        <span className="mt-0.5 font-mono text-[10px] text-warn">
           SHOT <GameClock seconds={model.shotClock.remainingSeconds} status={shotClockRunning ? "LIVE" : "PAUSED"} startedAt={null} />
         </span>
-        {model.ultraTime.phase === "ACTIVE" ? <span className="mt-0.5 text-[10px] font-bold text-amber-400">⚡ ULTRA TIME</span> : null}
+        {model.ultraTime.phase === "ACTIVE" ? <span className="mt-0.5 text-[10px] font-bold text-warn">⚡ ULTRA TIME</span> : null}
       </div>
       <div className="flex items-center gap-2 rounded-lg bg-black/80 px-3 py-2">
         <span className="font-mono text-xl font-black">{model.score.away}</span>

@@ -33,7 +33,7 @@ export default async function ApplicationInternalizationPage() {
     <OperationsShell user={authorizedSession.user}>
       <main className="mx-auto max-w-6xl px-6 py-10">
         <h1 className="text-3xl font-semibold">Application Internalization</h1>
-        <p className="mt-2 text-sm text-zinc-400">Dry-run planning for converting approved applications into permanent participant profiles.</p>
+        <p className="mt-2 text-sm text-text-2">Dry-run planning for converting approved applications into permanent participant profiles.</p>
         <section className="mt-8 grid gap-4 md:grid-cols-4">
           <Metric label="Total applications" value={total} />
           <Metric label="Approved" value={approved} />
@@ -44,14 +44,14 @@ export default async function ApplicationInternalizationPage() {
           <Metric label="Players missing Player" value={playerMissingPlayer} />
           <Metric label="Coaches missing Staff" value={coachMissingStaff} />
         </section>
-        <section className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+        <section className="mt-8 rounded-lg border border-line bg-ink-800 p-5">
           <h2 className="text-xl font-semibold">Dry-run sample</h2>
           <div className="mt-4 grid gap-3">
             {dryRun.items.slice(0, 30).map((item) => (
-              <article className="rounded-xl border border-white/[.06] bg-black/20 p-4" key={item.applicationId}>
-                <p className="text-xs uppercase tracking-[.18em] text-zinc-500">{item.type} | {item.status}</p>
-                <p className="mt-1 font-mono text-xs text-zinc-400">{item.applicationId}</p>
-                <p className="mt-2 text-sm text-zinc-300">{item.actions.join(" ") || item.warnings.join(" ")}</p>
+              <article className="rounded-md border border-line bg-black/20 p-4" key={item.applicationId}>
+                <p className="text-xs uppercase tracking-[.18em] text-text-3">{item.type} | {item.status}</p>
+                <p className="mt-1 font-mono text-xs text-text-2">{item.applicationId}</p>
+                <p className="mt-2 text-sm text-text-1">{item.actions.join(" ") || item.warnings.join(" ")}</p>
               </article>
             ))}
           </div>
@@ -62,5 +62,5 @@ export default async function ApplicationInternalizationPage() {
 }
 
 function Metric({ label, value }: { label: string; value: string | number }) {
-  return <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5"><p className="text-sm text-zinc-400">{label}</p><p className="mt-2 text-2xl font-semibold text-emerald-300">{value}</p></div>;
+  return <div className="rounded-lg border border-line bg-ink-800 p-5"><p className="text-sm text-text-2">{label}</p><p className="mt-2 text-2xl font-semibold text-brand-300">{value}</p></div>;
 }

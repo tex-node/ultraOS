@@ -47,17 +47,17 @@ export default async function CompetitionSchedulePage({ params }: { params: Prom
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-6xl px-6 py-10">
-        <Link href={`/competitions/${id}`} className="text-sm text-emerald-400">← {competition.name}</Link>
+        <Link href={`/competitions/${id}`} className="text-sm text-brand-400">← {competition.name}</Link>
         <h1 className="mt-4 text-2xl font-semibold">Schedule · {competition.name}</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <p className="mt-1 text-sm text-text-2">
           Generate a round-robin schedule from the active teams in a division. Slots that clash with an
           existing venue booking or a team already playing are skipped, never overwritten.
         </p>
 
-        <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+        <section className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
           <h2 className="text-lg font-semibold">Generate schedule</h2>
           {competition.seasons.length === 0 || competition.divisions.length === 0 ? (
-            <p className="mt-2 text-sm text-amber-300">Add at least one season and division to this competition first.</p>
+            <p className="mt-2 text-sm text-warn">Add at least one season and division to this competition first.</p>
           ) : (
             <GenerateScheduleForm
               competitionId={id}
@@ -69,14 +69,14 @@ export default async function CompetitionSchedulePage({ params }: { params: Prom
           )}
         </section>
 
-        <section className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+        <section className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
           <h2 className="text-lg font-semibold">Scheduled fixtures</h2>
           {fixtures.length === 0 ? (
-            <p className="mt-2 text-sm text-zinc-400">No fixtures scheduled for this competition yet.</p>
+            <p className="mt-2 text-sm text-text-2">No fixtures scheduled for this competition yet.</p>
           ) : (
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="text-xs uppercase tracking-wider text-zinc-500">
+                <thead className="text-xs uppercase tracking-wider text-text-3">
                   <tr>
                     <th className="py-2 pr-4">When</th>
                     <th className="py-2 pr-4">Home</th>
@@ -89,13 +89,13 @@ export default async function CompetitionSchedulePage({ params }: { params: Prom
                 <tbody>
                   {fixtures.map((fixture) => (
                     <tr key={fixture.id} className="border-t border-white/5">
-                      <td className="py-2 pr-4 text-zinc-400">{formatLagosDateTime(fixture.scheduledAt)}</td>
+                      <td className="py-2 pr-4 text-text-2">{formatLagosDateTime(fixture.scheduledAt)}</td>
                       <td className="py-2 pr-4">
-                        <Link href={`/fixtures/${fixture.id}`} className="text-emerald-300">{fixture.homeSeasonClub!.club.shortName}</Link>
+                        <Link href={`/fixtures/${fixture.id}`} className="text-brand-300">{fixture.homeSeasonClub!.club.shortName}</Link>
                       </td>
                       <td className="py-2 pr-4">{fixture.awaySeasonClub!.club.shortName}</td>
-                      <td className="py-2 pr-4 text-zinc-400">{fixture.venue.name}</td>
-                      <td className="py-2 pr-4 text-zinc-400">{fixture.status}</td>
+                      <td className="py-2 pr-4 text-text-2">{fixture.venue.name}</td>
+                      <td className="py-2 pr-4 text-text-2">{fixture.status}</td>
                       <td className="py-2 pr-4">{fixture.homeScore}–{fixture.awayScore}</td>
                     </tr>
                   ))}

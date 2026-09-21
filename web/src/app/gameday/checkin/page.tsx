@@ -10,10 +10,10 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const STATUS_STYLE: Record<CheckInStatus, string> = {
-  PRESENT: "bg-emerald-400 text-zinc-950",
-  LATE: "bg-amber-400 text-zinc-950",
-  ABSENT: "border border-rose-400/40 text-rose-300",
-  UNAVAILABLE: "border border-rose-400/40 text-rose-300",
+  PRESENT: "bg-brand-400 text-ink-900",
+  LATE: "bg-amber-400 text-ink-900",
+  ABSENT: "border border-danger/40 text-danger",
+  UNAVAILABLE: "border border-danger/40 text-danger",
 };
 
 export default async function GameDayCheckIn() {
@@ -50,19 +50,19 @@ export default async function GameDayCheckIn() {
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-6xl px-6 py-8">
-        <Link href="/gameday" className="text-sm text-zinc-400">Back to control center</Link>
+        <Link href="/gameday" className="text-sm text-text-2">Back to control center</Link>
         <h1 className="mt-2 text-3xl font-bold">Player check-in</h1>
-        <p className="mt-1 max-w-2xl text-sm text-zinc-500">
+        <p className="mt-1 max-w-2xl text-sm text-text-3">
           Game Day attendance only — marking a player Absent or Unavailable here does not change their permanent club roster.
         </p>
-        {!event ? <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-amber-300">No published event found for Season Zero.</p> : null}
+        {!event ? <p className="mt-4 rounded-md border border-warn/30 bg-warn/10 p-3 text-warn">No published event found for Season Zero.</p> : null}
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
           <Stat label="Rostered" value={totals.rostered} />
-          <Stat label="Present" value={totals.present} tone="text-emerald-400" />
-          <Stat label="Late" value={totals.late} tone="text-amber-400" />
-          <Stat label="Absent" value={totals.absent} tone="text-rose-400" />
-          <Stat label="Not checked in" value={totals.notCheckedIn} tone="text-zinc-500" />
+          <Stat label="Present" value={totals.present} tone="text-brand-400" />
+          <Stat label="Late" value={totals.late} tone="text-warn" />
+          <Stat label="Absent" value={totals.absent} tone="text-danger" />
+          <Stat label="Not checked in" value={totals.notCheckedIn} tone="text-text-3" />
         </div>
 
         <div className="mt-8 space-y-8">
@@ -72,13 +72,13 @@ export default async function GameDayCheckIn() {
               <section key={seasonClub.id}>
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold">{seasonClub.club.name}</h2>
-                  <span className="text-xs text-zinc-500">{present} / {seasonClub.players.length} present</span>
+                  <span className="text-xs text-text-3">{present} / {seasonClub.players.length} present</span>
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   {seasonClub.players.map((player) => {
                     const current = statuses[player.id]?.status;
                     return (
-                      <div key={player.id} className="flex items-center justify-between rounded-xl border border-white/[.08] bg-[#0b100e] p-3">
+                      <div key={player.id} className="flex items-center justify-between rounded-md border border-line bg-ink-800 p-3">
                         <span className="text-sm">{player.athlete.firstName} {player.athlete.lastName}</span>
                         <div className="flex gap-1">
                           {(["PRESENT", "LATE", "ABSENT", "UNAVAILABLE"] as const).map((status) => (
@@ -88,7 +88,7 @@ export default async function GameDayCheckIn() {
                               <input type="hidden" name="status" value={status} />
                               <SubmitButton
                                 disabled={!event}
-                                className={`min-h-[36px] rounded-lg px-2 text-[10px] font-semibold uppercase tracking-wider transition ${current === status ? STATUS_STYLE[status] : "border border-white/10 text-zinc-500"}`}
+                                className={`min-h-[36px] rounded-lg px-2 text-[10px] font-semibold uppercase tracking-wider transition ${current === status ? STATUS_STYLE[status] : "border border-line text-text-3"}`}
                               >
                                 {status === "UNAVAILABLE" ? "N/A" : status.slice(0, 4)}
                               </SubmitButton>
@@ -110,9 +110,9 @@ export default async function GameDayCheckIn() {
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: string }) {
   return (
-    <div className="rounded-xl border border-white/[.08] bg-[#0b100e] p-3 text-center">
+    <div className="rounded-md border border-line bg-ink-800 p-3 text-center">
       <p className={`font-mono text-2xl font-bold ${tone ?? ""}`}>{value}</p>
-      <p className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</p>
+      <p className="text-[10px] uppercase tracking-wider text-text-3">{label}</p>
     </div>
   );
 }

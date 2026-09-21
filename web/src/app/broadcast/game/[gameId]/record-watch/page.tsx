@@ -19,10 +19,10 @@ export default async function RecordWatchGraphic({ params }: { params: Promise<{
   const official = model.isFinal && model.isStatisticsVerified;
 
   return (
-    <div className="inline-flex flex-col gap-2 rounded-2xl border border-violet-400/40 bg-black/85 p-5 font-sans text-white">
+    <div className="inline-flex flex-col gap-2 rounded-lg border border-accent-purple/40 bg-black/85 p-5 font-sans text-white">
       <GraphicRefresher />
       <TransparentBody />
-      <p className="text-[10px] font-bold uppercase tracking-[.25em] text-violet-300">Record Watch</p>
+      <p className="text-[10px] font-bold uppercase tracking-[.25em] text-accent-purple">Record Watch</p>
       {model.recordWatches.map((w) => (
         <div key={w.recordKey}>
           <p className="text-sm font-bold text-white">
