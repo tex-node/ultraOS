@@ -1,5 +1,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/lib/audit";
+import { bachsConfig, createTransfer, koboToAmountString } from "@/lib/bachs";
+import { commissionSplitKobo } from "@/lib/money";
 
 // Shared payment fulfilment (Bachs F5.3). The exact same state transitions run whether the
 // payment was confirmed by an operator typing a reference or by the gateway's
@@ -84,4 +86,49 @@ export async function fulfilPaidReservation(
     });
   }
   return reservation;
+}
+
+// After an order is paid, move each vendor's net share (gross minus league commission) to
+// its Bachs Connect sub-account. Best-effort and never fatal: a vendor without a connected
+// account (or an un-settled balance, or a missing capability) is skipped and its share
+// reconciles in the dashboard instead. Grouped by the charge so the order's transfers are
+// traceable. Call after the payment is confirmed, outside any DB transaction.
+export async function issueVendorTransfers(orderId: string, transferGroup: string) {
+  const config = bachsConfig();
+  if (!config) return;
+
+  const { prisma } = await import("@/lib/prisma");
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: { include: { product: { include: { vendor: true } } } } },
+  });
+  if (!order) return;
+
+  const byVendor = new Map<string, { vendorId: string; name: string; accountId: string | null; netKobo: number }>();
+  for (const item of order.items) {
+    const vendor = item.product.vendor;
+    if (!vendor) continue;
+    const split = commissionSplitKobo(item.totalKobo, vendor.commissionBps);
+    const key = vendor.id;
+    const entry = byVendor.get(key) ?? { vendorId: vendor.id, name: vendor.name, accountId: vendor.bachsAccountId, netKobo: 0 };
+    entry.netKobo += split.netKobo;
+    byVendor.set(key, entry);
+  }
+
+  for (const entry of byVendor.values()) {
+    if (!entry.accountId || entry.netKobo <= 0) continue;
+    try {
+      await createTransfer({
+        amountKobo: entry.netKobo,
+        destinationAccountId: entry.accountId,
+        reference: `ord-${orderId}`,
+        transferGroup,
+      });
+      console.log(`VENDOR_TRANSFER_OK order=${orderId} vendor=${entry.vendorId} net=${koboToAmountString(entry.netKobo)}`);
+    } catch (error) {
+      // Balance/capability issues (e.g. funds not settled, account not onboarded) are
+      // expected early on; they must never fail the payment acknowledgment.
+      console.warn(`VENDOR_TRANSFER_SKIPPED order=${orderId} vendor=${entry.vendorId}: ${error instanceof Error ? error.message : error}`);
+    }
+  }
 }

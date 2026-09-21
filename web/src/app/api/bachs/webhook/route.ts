@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { bachsConfig, verifyBachsSignature } from "@/lib/bachs";
-import { fulfilPaidOrder, fulfilPaidReservation } from "@/lib/payment-fulfilment";
+import { fulfilPaidOrder, fulfilPaidReservation, issueVendorTransfers } from "@/lib/payment-fulfilment";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { prisma } from "@/lib/prisma";
 
@@ -63,6 +63,8 @@ export async function POST(request: Request) {
         await withOrganizationContext(order.organizationId, (tx) =>
           fulfilPaidOrder(tx, { organizationId: order.organizationId, orderId, reference, actorUserId: null }),
         );
+        // Vendor sub-account payouts (net of commission), grouped by the charge. Best-effort.
+        await issueVendorTransfers(orderId, reference);
         return NextResponse.json({ received: true });
       }
       if (reservationId) {

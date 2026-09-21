@@ -176,3 +176,35 @@ export async function createAccountLink(accountId: string): Promise<{ url: strin
   }
   return (await response.json()) as { url: string };
 }
+
+// Connect transfer (docs: "Transfers"): moves a vendor's net share from the platform balance
+// to its own connected account. `transfer_group` tags the whole order's shares so they can be
+// traced from the order back to its transfers.
+export type TransferResult = { transfer_id: string; status: string };
+
+export async function createTransfer(input: {
+  amountKobo: number;
+  currency?: string;
+  destinationAccountId: string;
+  reference: string;
+  transferGroup: string;
+}): Promise<TransferResult> {
+  const config = bachsConfig();
+  if (!config) throw new Error("BACHS_NOT_CONFIGURED");
+  const response = await fetch(`${config.apiBase}/v1/transfers`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      amount: koboToAmountString(input.amountKobo),
+      currency: input.currency ?? "NGN",
+      destination: input.destinationAccountId,
+      reference: input.reference.slice(0, 128),
+      transfer_group: input.transferGroup.slice(0, 128),
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`BACHS_TRANSFER_FAILED:${response.status}:${body.slice(0, 300)}`);
+  }
+  return (await response.json()) as TransferResult;
+}
