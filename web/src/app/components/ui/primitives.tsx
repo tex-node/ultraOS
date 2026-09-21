@@ -29,19 +29,48 @@ export function Badge({ tone = "neutral", children }: { tone?: BadgeTone; childr
   );
 }
 
-// Pipeline stepper (order tracking, onboarding progress). `current` is the active index;
-// `failed` renders the trail in the danger tone (e.g. cancelled orders).
+// Circular-node stepper (handoff components.md §Stepper): 28px nodes, done/current/next
+// states, 2px connectors. `current` is the active index; `failed` tints the whole trail.
 export function Steps({ steps, current, failed = false }: { steps: string[]; current: number; failed?: boolean }) {
   return (
-    <ol className="flex gap-1" aria-label="Progress">
-      {steps.map((step, index) => (
-        <li key={step} className="flex-1">
-          <div className={`h-1.5 rounded-full ${failed ? "bg-danger/60" : index <= current ? "bg-brand-400" : "bg-white/10"}`} />
-          <p className={`mt-1 text-[10px] uppercase tracking-wide ${failed ? "text-danger" : index <= current ? "text-brand-300" : "text-text-3"}`}>
-            {step}
-          </p>
-        </li>
-      ))}
+    <ol className="flex items-start gap-2" aria-label="Progress">
+      {steps.map((step, index) => {
+        const done = index < current;
+        const active = index === current;
+        return (
+          <li key={step} className="flex flex-1 flex-col items-start">
+            <div className="flex w-full items-center">
+              <span
+                className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold transition ${
+                  failed
+                    ? "bg-danger/15 text-danger"
+                    : done
+                      ? "bg-brand-400/15 text-brand-400 shadow-glow-green"
+                      : active
+                        ? "bg-brand-400 text-ink-900 shadow-glow-green"
+                        : "border border-line bg-ink-700 text-text-3"
+                }`}
+                aria-current={active ? "step" : undefined}
+              >
+                {failed ? "✕" : done ? "✓" : index + 1}
+              </span>
+              {index < steps.length - 1 ? (
+                <span
+                  aria-hidden
+                  className={`mx-1 h-0.5 flex-1 rounded-full ${failed ? "bg-danger/60" : done ? "bg-brand-400/50" : "bg-line"}`}
+                />
+              ) : null}
+            </div>
+            <p
+              className={`mt-1.5 text-[10px] font-medium uppercase tracking-wide ${
+                failed ? "text-danger" : done || active ? "text-brand-300" : "text-text-3"
+              }`}
+            >
+              {step}
+            </p>
+          </li>
+        );
+      })}
     </ol>
   );
 }

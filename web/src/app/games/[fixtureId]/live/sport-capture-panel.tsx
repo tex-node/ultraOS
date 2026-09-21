@@ -10,7 +10,7 @@ type TeamOption = {
   players: { id: string; name: string }[];
 };
 
-const BIG_BTN = "min-h-[52px] min-w-[52px] rounded-md px-4 text-base font-bold active:scale-95 transition";
+const BIG_BTN = "min-h-[56px] min-w-[56px] rounded-md px-4 font-display text-base font-bold active:scale-95 transition";
 
 // Catalog-driven capture for the sport's NON-scoring events (cards, fouls, substitutions, serves...)
 // grouped by category. Scoring is deliberately excluded: it is recorded through the panel that

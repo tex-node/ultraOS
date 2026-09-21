@@ -1,6 +1,7 @@
 import Image from "next/image";
 
-// D1 QR ticket card: scannable QR, code, and status on a light card for contrast.
+// D1 QR ticket card (handoff components.md §QR card): elevated card with green glow, QR on
+// light at >= 132px, mono code spaced, status pill under the code, dashed divider.
 export function QrCard({
   code,
   title,
@@ -13,12 +14,19 @@ export function QrCard({
   status: string;
 }) {
   return (
-    <section className="rounded-lg bg-white p-6 text-center text-zinc-950">
-      <p className="text-xs uppercase tracking-[0.2em] text-brand-700">{title}</p>
-      <p className="mt-2 text-sm">{subtitle}</p>
-      <Image src={`/api/qr/${code}`} alt="QR code" width={260} height={260} className="mx-auto mt-4" unoptimized />
-      <p className="mt-2 break-all font-mono text-xs text-zinc-500">{code}</p>
-      <p className="mt-2 text-sm font-semibold">{status}</p>
+    <section className="rounded-lg border border-line bg-ink-600 p-6 shadow-glow-green">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-400">{title}</p>
+      <p className="mt-1 text-sm text-text-2">{subtitle}</p>
+      <div className="my-4 border-t border-dashed border-line-strong" />
+      <div className="rounded-md bg-[#f9fafb] p-4 text-center">
+        <Image src={`/api/qr/${code}`} alt="QR code" width={220} height={220} className="mx-auto" unoptimized />
+      </div>
+      <p className="mt-3 break-all text-center font-mono text-base tracking-[0.14em] text-text-1">{code}</p>
+      <div className="mt-3 text-center">
+        <span className="inline-block rounded-full border border-brand-400/40 bg-brand-400/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-brand-300">
+          {status}
+        </span>
+      </div>
     </section>
   );
 }

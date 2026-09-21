@@ -173,7 +173,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
       .filter((id): id is string => Boolean(id)),
   );
 
-  const BIG_BTN = "min-h-[52px] min-w-[52px] rounded-md px-4 text-base font-bold active:scale-95 transition";
+  const BIG_BTN = "min-h-[56px] min-w-[56px] rounded-md px-4 font-display text-base font-bold active:scale-95 transition";
 
   return (
     <OperationsShell user={session.user}>

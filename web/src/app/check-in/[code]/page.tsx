@@ -52,21 +52,24 @@ export default async function CheckInRecordPage({
   ]));
   if (!ticket && !accreditation && !order) notFound();
 
-  // Gate verdict (brief §4.3, sub-3s flow): unmistakable admit/deny before any detail.
+  // Gate verdict (handoff capture surfaces): unmistakable at arm's length — full-width
+// colour field, one word, and the code in mono underneath.
   const ticketReady = ticket && ticket.status === "ACTIVE" && (ticket.reservation.totalKobo === 0 || ticket.reservation.paymentStatus === "PAID");
   const ticketBlocked = ticket && !ticketReady && ticket.status === "ACTIVE";
-  const verdict = ticketReady ? { tone: "bg-success/15 text-success border-success/40", label: "ADMIT — VALID TICKET" }
-    : ticketBlocked ? { tone: "bg-warn/15 text-warn border-warn/40", label: "HOLD — CHECK PAYMENT / STATUS" }
-    : ticket && ticket.status === "USED" ? { tone: "bg-danger/15 text-danger border-danger/40", label: "DENY — ALREADY USED" }
+  const verdict = ticketReady ? { tone: "bg-success/15 text-success border-success/40", word: "ADMIT", note: "Valid ticket" }
+    : ticketBlocked ? { tone: "bg-warn/15 text-warn border-warn/40", word: "HOLD", note: "Check payment / status" }
+    : ticket && ticket.status === "USED" ? { tone: "bg-danger/15 text-danger border-danger/40", word: "DENY", note: "Already used" }
     : null;
 
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-2xl px-6 py-12">
         {verdict ? (
-          <p role="status" className={`mb-4 rounded-md border px-4 py-3 text-center font-display text-lg font-bold uppercase tracking-wider ${verdict.tone}`}>
-            {verdict.label}
-          </p>
+          <section role="status" className={`mb-4 rounded-lg border px-4 py-5 text-center ${verdict.tone}`}>
+            <p className="font-display text-4xl font-bold uppercase tracking-wider">{verdict.word}</p>
+            <p className="mt-1 text-sm font-semibold">{verdict.note}</p>
+            {ticket ? <p className="mt-2 font-mono text-xs tracking-[0.14em] text-text-2">{ticket.code}</p> : null}
+          </section>
         ) : null}
         {ticket ? (
           <Record title="Fan ticket" status={ticket.status}>

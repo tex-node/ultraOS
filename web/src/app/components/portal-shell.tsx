@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PortalBottomNav } from "@/app/components/ui/portal-bottom-nav";
 
 // Fan portal shell (product roadmap F1, restyled D1). Guest-safe by construction: every
 // link here is a public route, and this shell never imports anything from the organizer
@@ -29,12 +30,12 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       <header className="border-b border-line">
         <div className="mx-auto max-w-7xl px-6 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <Link href="/" className="font-black tracking-tight">
+            <Link href="/" className="font-display font-bold tracking-tight">
               NEON ULTRA
             </Link>
             <Link
               href="/admin"
-              className="rounded-xl border border-brand-400/40 px-3 py-2 text-xs font-semibold text-brand-300 transition hover:bg-brand-400/10"
+              className="rounded-md border border-brand-400/40 px-3 py-2 text-xs font-semibold text-brand-300 transition hover:bg-brand-400/10"
             >
               Organize an Event
             </Link>
@@ -53,7 +54,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
       </header>
-      {children}
+      <div className="pb-16 md:pb-0">{children}</div>
+      <PortalBottomNav />
     </div>
   );
 }

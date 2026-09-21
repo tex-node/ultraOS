@@ -1,4 +1,5 @@
 import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
+import { DataTable } from "@/app/components/ui/table";
 
 type Row = {
   id: string;
@@ -70,24 +71,22 @@ export default async function Standings() {
         return (
           <section className="mt-8" key={division}>
             <h2 className="mb-4 text-2xl font-semibold">{division}</h2>
-            <div className="overflow-x-auto rounded-lg border border-line">
-              <div className="min-w-[800px]">
-                {rows.map((row, index) => (
-                  <div
-                    className="grid grid-cols-[50px_1fr_repeat(5,70px)] border-b border-line bg-ink-800 p-4"
-                    key={row.id}
-                  >
-                    <b>{index + 1}</b>
-                    <span>{row.seasonClub!.club.name}</span>
-                    <span>{row.played} P</span>
-                    <span>{row.won} W</span>
-                    <span>{row.lost} L</span>
-                    <span>{row.pointDifference} PD</span>
-                    <b className="text-brand-400">{row.leaguePoints}</b>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <DataTable<Row>
+              rows={rows}
+              rowKey={(row) => row.id}
+              minWidth="640px"
+              stackOnMobile
+              empty="No entries yet."
+              columns={[
+                { key: "pos", label: "#", render: (_row, i) => i + 1 },
+                { key: "team", label: "Team", render: (row) => row.seasonClub!.club.name },
+                { key: "played", label: "P", align: "right", render: (row) => row.played },
+                { key: "won", label: "W", align: "right", render: (row) => row.won },
+                { key: "lost", label: "L", align: "right", render: (row) => row.lost },
+                { key: "pd", label: "PD", align: "right", render: (row) => row.pointDifference },
+                { key: "pts", label: "PTS", align: "right", render: (row) => <b className="text-brand-400">{row.leaguePoints}</b> },
+              ]}
+            />
           </section>
         );
       })}

@@ -3,6 +3,100 @@
 /* Neon Ultra design tokens (D1), aligned with UI/NEON_ULTRA_CLAUDE_DESIGN_SYSTEM.md.
    Single source of truth for color, type, radii, glow, and motion. */
 
+/* Handoff tokens ported verbatim (UI/design_handoff_neon_ultra/tokens.css) so the exact
+   `--ul-*` names exist for any consumer; the Tailwind @theme below maps onto these. */
+:root {
+  --ul-primary: #00f076;
+  --ul-blue: #3b82f6;
+  --ul-purple: #a855f7;
+
+  --ul-bg: #080a0d;
+  --ul-surface: #111318;
+  --ul-surface-alt: #1a1f26;
+  --ul-surface-elevated: #151a21;
+
+  --ul-border: #272d37;
+  --ul-border-subtle: #1d232c;
+  --ul-border-strong: #3a4350;
+
+  --ul-text: #f9fafb;
+  --ul-text-secondary: #9ca3af;
+  --ul-text-muted: #6b7280;
+  --ul-text-disabled: #4b5563;
+
+  --ul-success: #22c55e;
+  --ul-warning: #f59e0b;
+  --ul-danger: #ef4444;
+  --ul-info: #3b82f6;
+
+  --ul-tint-primary: rgba(0, 240, 118, 0.1);
+  --ul-tint-danger: rgba(239, 68, 68, 0.1);
+  --ul-tint-info: rgba(59, 130, 246, 0.1);
+  --ul-tint-purple: rgba(168, 85, 247, 0.1);
+  --ul-tint-warning: rgba(245, 158, 11, 0.1);
+
+  --ul-p0: #ef4444;
+  --ul-p1: #f59e0b;
+  --ul-p2: #3b82f6;
+  --ul-p3: #64748b;
+
+  --ul-display-xl: 56px;
+  --ul-display-lg: 48px;
+  --ul-display-md: 36px;
+  --ul-heading-lg: 28px;
+  --ul-heading-md: 22px;
+  --ul-heading-sm: 18px;
+  --ul-body-lg: 18px;
+  --ul-body-md: 16px;
+  --ul-body-sm: 14px;
+  --ul-caption: 12px;
+  --ul-metric-xl: 42px;
+  --ul-metric-lg: 32px;
+  --ul-metric-md: 24px;
+
+  --ul-space-1: 4px;
+  --ul-space-2: 8px;
+  --ul-space-3: 12px;
+  --ul-space-4: 16px;
+  --ul-space-5: 20px;
+  --ul-space-6: 24px;
+  --ul-space-8: 32px;
+  --ul-space-10: 40px;
+  --ul-space-12: 48px;
+  --ul-space-16: 64px;
+  --ul-space-20: 80px;
+
+  --ul-radius-sm: 6px;
+  --ul-radius-md: 10px;
+  --ul-radius-lg: 14px;
+  --ul-radius-xl: 18px;
+  --ul-radius-full: 9999px;
+
+  --ul-glow-green: 0 0 0 1px rgba(0, 240, 118, 0.25), 0 0 18px rgba(0, 240, 118, 0.12);
+  --ul-glow-blue: 0 0 0 1px rgba(59, 130, 246, 0.2), 0 0 18px rgba(59, 130, 246, 0.1);
+  --ul-glow-purple: 0 0 0 1px rgba(168, 85, 247, 0.2), 0 0 18px rgba(168, 85, 247, 0.1);
+
+  --ul-motion-micro: 150ms;
+  --ul-motion-panel: 210ms;
+  --ul-motion-transition: 280ms;
+  --ul-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --ul-topbar-h: 68px;
+  --ul-sidebar-w: 236px;
+  --ul-sidebar-w-collapsed: 68px;
+  --ul-bottomnav-h: 64px;
+  --ul-touch-min: 44px;
+  --ul-touch-capture: 52px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ul-motion-micro: 0ms;
+    --ul-motion-panel: 0ms;
+    --ul-motion-transition: 0ms;
+  }
+}
+
 @theme {
   /* Brand — neon green is the primary brand/action color */
   --color-brand-200: #a9f5cd;

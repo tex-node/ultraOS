@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { signOut } from "@/auth";
+import { WorkspaceNav } from "@/app/components/ui/workspace-nav";
+import { WorkspaceBottomNav } from "@/app/components/ui/workspace-bottom-nav";
 
 export type WorkspaceUser = {
   name?: string | null;
@@ -88,16 +90,23 @@ export function WorkspaceShell({ children, user }: { children: React.ReactNode; 
   const admin = Boolean(isAdmin(user));
   const roles = user.roles?.length ? user.roles : [user.role];
   const visible = (link: NavLink) => !link.adminOnly || admin || (link.roles ?? []).some((role) => roles.includes(role));
+  const visibleSections = sections
+    .map((section) => ({ label: section.label, links: section.links.filter(visible) }))
+    .filter((section) => section.links.length > 0);
 
   return (
-    <div className="min-h-screen bg-ink-900 text-text-1 lg:grid lg:grid-cols-[240px_1fr]">
+    <div className="min-h-screen bg-ink-900 text-text-1 lg:grid lg:grid-cols-[224px_1fr]">
       <aside className="border-b border-line bg-ink-800/95 lg:flex lg:min-h-screen lg:flex-col lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between gap-4 px-5 py-4">
           <div>
-            <Link className="font-semibold tracking-tight" href="/admin">
+            <Link className="font-display font-semibold tracking-tight" href="/admin">
               Neon Ultra
             </Link>
             <p className="text-[10px] uppercase tracking-[0.22em] text-brand-400">Organizer workspace</p>
+            {/* Season/competition context chip (handoff shells §Workspace). */}
+            <p className="mt-1 inline-block rounded-full border border-line px-2 py-0.5 text-[10px] uppercase tracking-wider text-text-2">
+              Season Zero · 2026
+            </p>
           </div>
           <form
             action={async () => {
@@ -106,37 +115,16 @@ export function WorkspaceShell({ children, user }: { children: React.ReactNode; 
             }}
           >
             <button
-              className="rounded-lg border border-line-strong px-3 py-2 text-xs text-text-2 transition hover:border-brand-400/40 hover:text-white"
+              className="rounded-md border border-line-strong px-3 py-2 text-xs text-text-2 transition hover:border-brand-400/40 hover:text-white"
               type="submit"
             >
               Sign out
             </button>
           </form>
         </div>
-        <nav className="flex gap-5 overflow-x-auto px-5 pb-3 [scrollbar-width:thin] lg:flex-col lg:gap-1 lg:overflow-visible lg:pb-6">
-          {sections.map((section) => {
-            const links = section.links.filter(visible);
-            if (links.length === 0) return null;
-            return (
-              <div key={section.label} className="shrink-0 lg:shrink">
-                <p className="hidden text-[10px] uppercase tracking-[0.2em] text-text-3 lg:mb-1 lg:block">
-                  {section.label}
-                </p>
-                <div className="flex gap-1 lg:flex-col">
-                  {links.map((link) => (
-                    <Link
-                      key={link.href}
-                      className="whitespace-nowrap rounded-lg px-3 py-2 text-sm text-text-2 transition hover:bg-white/[0.06] hover:text-white"
-                      href={link.href}
-                    >
-                      {link.label}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </nav>
+        <div className="min-w-0 flex-1">
+          <WorkspaceNav sections={visibleSections} />
+        </div>
         <div className="mt-auto hidden px-5 py-4 lg:block">
           <Link href="/profile" className="block transition hover:opacity-80">
             <p className="text-sm font-medium">{user.name}</p>
@@ -149,7 +137,10 @@ export function WorkspaceShell({ children, user }: { children: React.ReactNode; 
           </Link>
         </div>
       </aside>
-      <div className="min-w-0">{children}</div>
+      <div className="min-w-0 pb-16 lg:pb-0">
+        {children}
+        <WorkspaceBottomNav />
+      </div>
     </div>
   );
 }
