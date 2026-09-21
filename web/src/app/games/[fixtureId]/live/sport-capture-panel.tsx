@@ -63,14 +63,14 @@ export function SportCapturePanel({
               {plan.map((group) => (
                 <div key={group.category} className="mt-3">
                   <p className="text-[10px] uppercase tracking-wider text-text-3">{group.category.replace(/_/g, " ")}</p>
-                  <div className="mt-1 grid grid-cols-3 gap-2">
+                  <div className="mt-1 grid grid-cols-2 gap-2 md:grid-cols-4">
                     {group.actions.map((action) => (
                       <SubmitButton
                         key={action.key}
                         name="typeKey"
                         value={action.key}
                         pendingLabel="…"
-                        className={`${BIG_BTN} border border-brand-400/30 text-xs text-brand-300`}
+                        className={`${BIG_BTN} w-full border border-line bg-ink-700 text-text-1`}
                       >
                         {action.label}
                       </SubmitButton>

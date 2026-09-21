@@ -68,14 +68,17 @@ export function ScoreCapturePanel({
       </p>
     ) : null;
 
-  const actionButtons = (teamId: string) => (    <div className="mt-3 flex flex-wrap gap-2">
+  // Handoff capture surfaces: scoring actions solid brand, in a 2 (mobile) / 4 (tablet+)
+  // grid of 56px+ buttons.
+  const actionButtons = (teamId: string) => (
+    <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
       {actions.map((action) => (
         <form key={action.label} action={recordScoringEvent.bind(null, gameId, fixtureId)}>
           <input type="hidden" name="seasonClubId" value={teamId} />
           <input type="hidden" name="typeKey" value={action.typeKey} />
           {action.runs !== undefined ? <input type="hidden" name="runs" value={action.runs} /> : null}
           {action.points !== undefined ? <input type="hidden" name="points" value={action.points} /> : null}
-          <SubmitButton pendingLabel="…" className={`${BIG_BTN} border border-brand-400/30 px-4 text-xs text-brand-300`}>
+          <SubmitButton pendingLabel="…" className={`${BIG_BTN} w-full bg-brand-400 text-ink-900`}>
             {action.label}
           </SubmitButton>
         </form>

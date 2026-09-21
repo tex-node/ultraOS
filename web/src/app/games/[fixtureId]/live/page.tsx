@@ -43,6 +43,7 @@ import { chaseTarget, inningsConfig, isDelivery, isLegalDelivery, oversDisplay }
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { ScoreCapturePanel } from "./score-capture-panel";
 import { SportCapturePanel } from "./sport-capture-panel";
+import { CaptureConnectivity } from "@/app/components/ui/capture-connectivity";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -188,6 +189,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
 
         {/* Sticky so score/clock/shot clock/Ultra Time stay visible while scrolling to the scoring panels below. */}
         <section className="sticky top-0 z-10 rounded-lg border border-line bg-ink-800/98 p-4 shadow-xl backdrop-blur sm:p-6">
+          <CaptureConnectivity />
           {ultraTime ? (
             <div className="mb-4 rounded-md border border-amber-400/40 bg-warn/10 p-3 text-center text-lg font-black tracking-wide text-warn">
               ⚡ ULTRA TIME — 2× POINTS
@@ -332,7 +334,15 @@ export default async function Live({ params, searchParams }: { params: Promise<{
                   </select>
                   <div className="col-span-2 grid grid-cols-3 gap-2">
                     {["REBOUND","ASSIST","STEAL","BLOCK","TURNOVER","FOUL"].map((event) => (
-                      <SubmitButton key={event} name="eventType" value={event} pendingLabel="…" className={`${BIG_BTN} border border-brand-400/30 text-xs text-brand-400`}>{event}</SubmitButton>
+                      <SubmitButton
+                        key={event}
+                        name="eventType"
+                        value={event}
+                        pendingLabel="…"
+                        className={`${BIG_BTN} w-full ${event === "FOUL" ? "border border-warn/30 bg-warn/10 text-warn" : "border border-brand-400/30 text-xs text-brand-400"}`}
+                      >
+                        {event}
+                      </SubmitButton>
                     ))}
                   </div>
                   <input name="description" placeholder="Description" className="col-span-2 min-h-[44px] rounded-lg bg-white/[.05] p-3" />
