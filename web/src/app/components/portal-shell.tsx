@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { signOut } from "@/auth";
+import { auth } from "@/auth";
 import { PortalBottomNav } from "@/app/components/ui/portal-bottom-nav";
 
 // Fan portal shell (product roadmap F1, restyled D1). Guest-safe by construction: every
@@ -17,14 +19,11 @@ const discoverLinks = [
   { href: "/live", label: "Live Center" },
 ];
 
-const accountLinks = [
-  { href: "/apply", label: "Apply" },
-  { href: "/account", label: "My Account" },
-  { href: "/signup", label: "Sign up" },
-  { href: "/login", label: "Login" },
-];
+// Session-aware: guests see Login/Sign up; signed-in users see My Account and Sign out so
+// a "Login" click never bounces an already-signed-in browser back to the hub.
+export async function PortalShell({ children }: { children: React.ReactNode }) {
+  const session = await auth();
 
-export function PortalShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-ink-900 text-text-1">
       <header className="border-b border-line">
@@ -46,11 +45,35 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
                 {link.label}
               </Link>
             ))}
-            {accountLinks.map((link) => (
-              <Link key={link.href} className="shrink-0 text-brand-400 transition hover:text-brand-300" href={link.href}>
-                {link.label}
-              </Link>
-            ))}
+            <Link href="/apply" className="shrink-0 text-brand-400 transition hover:text-brand-300">
+              Apply
+            </Link>
+            {session?.user ? (
+              <>
+                <Link href="/account" className="shrink-0 text-brand-400 transition hover:text-brand-300">
+                  My Account
+                </Link>
+                <form
+                  action={async () => {
+                    "use server";
+                    await signOut({ redirectTo: "/public/events" });
+                  }}
+                >
+                  <button type="submit" className="shrink-0 text-brand-400 transition hover:text-brand-300">
+                    Sign out
+                  </button>
+                </form>
+              </>
+            ) : (
+              <>
+                <Link href="/signup" className="shrink-0 text-brand-400 transition hover:text-brand-300">
+                  Sign up
+                </Link>
+                <Link href="/login" className="shrink-0 text-brand-400 transition hover:text-brand-300">
+                  Login
+                </Link>
+              </>
+            )}
           </nav>
         </div>
       </header>

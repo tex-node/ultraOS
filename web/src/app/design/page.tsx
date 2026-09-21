@@ -4,11 +4,11 @@ import { Field, SelectInput, TextAreaInput, TextInput } from "@/app/components/u
 import { Badge, Card, EmptyState, LinkTabs, Skeleton, Steps } from "@/app/components/ui/primitives";
 import { BracketNode, QrCard, ScorePill } from "@/app/components/ui/fan";
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 // D1 component gallery, aligned with UI/NEON_ULTRA_CLAUDE_DESIGN_SYSTEM.md.
 // Public but unlinked — reviewers open /design directly.
-export default function DesignGallery() {
+export default async function DesignGallery() {
   const swatch = (name: string, cls: string) => (
     <div className="flex items-center gap-3">
       <span className={`h-10 w-10 shrink-0 rounded-md border border-line-strong ${cls}`} />
