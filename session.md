@@ -4157,3 +4157,44 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - F5.3 unified cart + payment provider decision (owner + date still open).
+
+### 2026-09-21 - Design D1 Tokens + D2 Fan Portal Wave
+
+**Objective**
+
+- Deliver D1 (design tokens + components + shells) and begin D2 (fan portal wave),
+  aligned to the confirmed `UI/NEON_ULTRA_CLAUDE_DESIGN_SYSTEM.md` authority.
+
+**Completed**
+
+- D1: `globals.css` token theme (neon green #00F076 brand, #080A0D/#111318/#1A1F26
+  surfaces, #272D37 hairlines, semantic + sport accents, glow, motion, reduced-motion,
+  visible focus); Space Grotesk + Inter fonts in `layout.tsx`; UI components
+  (Button/Field/Card/Badge/Steps/LinkTabs/EmptyState/Skeleton/QrCard/ScorePill/
+  BracketNode) + `/design` gallery; portal + workspace shells migrated to tokens;
+  sub-site LIVE pill now red per semantics. Deployed `22eb92c`.
+- D2: token-swept the fan portal high-traffic surfaces — discovery hub, tournament
+  sub-sites (layout/overview/fixtures), match-center list + live centre, standings,
+  events/tickets/wallet/orders (fan), login, leaders. Retired the duplicate `/public`
+  home (redirects to the hub). Deployed `6a0820a`.
+
+**Decisions**
+
+- `/public` now redirects to `/` (brief: no two competing homes).
+- LIVE = red, UPCOMING = blue, brand green reserved for CTAs/active per the system doc.
+
+**Verification**
+
+- Typecheck, build, lint clean; tests green; staging routes 200 with token classes
+  verified in rendered HTML (hub, standings, login) and `/public` → 307.
+
+**Known issues**
+
+- Remaining fan screens still on legacy styling: `/public/clubs*`, `/public/players*`,
+  `/public/stats*` (+compare/records), `/public/celebrations`, share cards, `/account`,
+  `/profile`, `/apply*`, `/register*`, `/giesm`, `/signup*`. D2 exit (phone review of
+  the full portal wave) not yet met.
+
+**Next step**
+
+- Complete the remaining D2 fan screens, then D3 (capture + gate wave).
