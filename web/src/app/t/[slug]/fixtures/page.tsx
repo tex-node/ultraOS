@@ -127,22 +127,22 @@ export default async function TournamentFixtures({ params }: { params: Promise<{
           <section key={season.id} className="mb-12">
             <h2 className="text-2xl font-bold">{season.name}</h2>
 
-            <h3 className="mb-3 mt-6 text-lg font-semibold text-zinc-300">Fixtures</h3>
+            <h3 className="mb-3 mt-6 text-lg font-semibold text-text-1">Fixtures</h3>
             {fixtures.length === 0 ? (
-              <p className="text-sm text-zinc-500">No fixtures scheduled yet.</p>
+              <p className="text-sm text-text-3">No fixtures scheduled yet.</p>
             ) : (
               <div className="space-y-3">
                 {[...byDivision.entries()].map(([division, rows]) => (
                   <div key={division}>
-                    <p className="mb-2 text-xs uppercase tracking-[.2em] text-zinc-500">{division}</p>
+                    <p className="mb-2 text-xs uppercase tracking-[.2em] text-text-3">{division}</p>
                     <div className="space-y-2">
                       {rows.map((f) => {
                         const body = (
                           <>
-                            <span className="text-sm text-zinc-500">{formatLagosDateTime(f.scheduledAt)}</span>
+                            <span className="text-sm text-text-3">{formatLagosDateTime(f.scheduledAt)}</span>
                             <b>
                               {f.home.name} {f.status !== "SCHEDULED" ? f.homeScore : ""}{" "}
-                              <span className="text-zinc-500">vs</span> {f.status !== "SCHEDULED" ? f.awayScore : ""} {f.away.name}
+                              <span className="text-text-3">vs</span> {f.status !== "SCHEDULED" ? f.awayScore : ""} {f.away.name}
                             </b>
                             <span className="text-right text-sm">{f.status}</span>
                           </>
@@ -151,14 +151,14 @@ export default async function TournamentFixtures({ params }: { params: Promise<{
                           <Link
                             key={f.id}
                             href={`/public/fixtures/${f.id}`}
-                            className="grid gap-3 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5 transition hover:border-emerald-400/30 md:grid-cols-[1fr_2fr_1fr]"
+                            className="grid gap-3 rounded-lg border border-line bg-ink-800 p-5 transition hover:border-brand-400/40 md:grid-cols-[1fr_2fr_1fr]"
                           >
                             {body}
                           </Link>
                         ) : (
                           <div
                             key={f.id}
-                            className="grid gap-3 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5 md:grid-cols-[1fr_2fr_1fr]"
+                            className="grid gap-3 rounded-lg border border-line bg-ink-800 p-5 md:grid-cols-[1fr_2fr_1fr]"
                           >
                             {body}
                           </div>
@@ -170,23 +170,23 @@ export default async function TournamentFixtures({ params }: { params: Promise<{
               </div>
             )}
 
-            <h3 className="mb-3 mt-8 text-lg font-semibold text-zinc-300">Standings</h3>
+            <h3 className="mb-3 mt-8 text-lg font-semibold text-text-1">Standings</h3>
             {standings.length === 0 ? (
-              <p className="text-sm text-zinc-500">Tables appear once results are finalized.</p>
+              <p className="text-sm text-text-3">Tables appear once results are finalized.</p>
             ) : (
               [...tablesByDivision.entries()].map(([division, rows]) => (
                 <div key={division} className="mb-4">
-                  <p className="mb-2 text-xs uppercase tracking-[.2em] text-zinc-500">{division}</p>
-                  <div className="overflow-x-auto rounded-2xl border border-white/[.08]">
+                  <p className="mb-2 text-xs uppercase tracking-[.2em] text-text-3">{division}</p>
+                  <div className="overflow-x-auto rounded-lg border border-line">
                     <div className="min-w-[640px]">
                       {rows.map((row, index) => (
-                        <div key={row.key} className="grid grid-cols-[50px_1fr_repeat(4,70px)] border-b border-white/[.06] bg-[#0b100e] p-4">
+                        <div key={row.key} className="grid grid-cols-[50px_1fr_repeat(4,70px)] border-b border-line bg-ink-800 p-4">
                           <b>{index + 1}</b>
                           <span>{row.name}</span>
                           <span>{row.played} P</span>
                           <span>{row.won} W</span>
                           <span>{row.pointDifference} PD</span>
-                          <b className="text-emerald-400">{row.leaguePoints}</b>
+                          <b className="text-brand-400">{row.leaguePoints}</b>
                         </div>
                       ))}
                     </div>

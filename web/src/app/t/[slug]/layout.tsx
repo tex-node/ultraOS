@@ -34,7 +34,7 @@ export default async function TournamentLayout({
 
   return (
     <PortalShell>
-      <div className="border-b border-white/[.08] bg-gradient-to-b from-emerald-400/[.06] to-transparent">
+      <div className="border-b border-line bg-gradient-to-b from-brand-400/[.06] to-transparent">
         <div className="mx-auto max-w-6xl px-6 pb-5 pt-10">
           <div className="flex flex-wrap items-center gap-2">
             <span
@@ -42,12 +42,12 @@ export default async function TournamentLayout({
             >
               {status === "LIVE" ? "● LIVE" : status}
             </span>
-            <span className="rounded-full border border-white/10 bg-white/[.04] px-3 py-1 text-[11px] uppercase tracking-wider text-zinc-300">
+            <span className="rounded-full border border-line bg-white/[.04] px-3 py-1 text-[11px] uppercase tracking-wider text-text-2">
               {competition.sport.name}
             </span>
           </div>
-          <h1 className="mt-3 text-4xl font-black sm:text-5xl">{competition.name}</h1>
-          {competition.description ? <p className="mt-2 max-w-3xl text-zinc-400">{competition.description}</p> : null}
+          <h1 className="mt-3 font-display text-4xl font-bold sm:text-5xl">{competition.name}</h1>
+          {competition.description ? <p className="mt-2 max-w-3xl text-text-2">{competition.description}</p> : null}
           <SubSiteTabs basePath={basePath} title={competition.name} />
         </div>
       </div>

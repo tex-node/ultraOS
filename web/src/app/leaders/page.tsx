@@ -64,38 +64,38 @@ export default async function LeadersPage() {
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-6xl px-6 py-10">
-        <h1 className="text-2xl font-semibold">Leaders</h1>
-        <p className="mt-1 text-sm text-zinc-400">Across every tournament, derived live from recorded events.</p>
+        <h1 className="font-display text-2xl font-bold">Leaders</h1>
+        <p className="mt-1 text-sm text-text-2">Across every tournament, derived live from recorded events.</p>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <section className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+          <section className="rounded-lg border border-line bg-ink-800 p-5">
             <h2 className="text-lg font-semibold">Top scorers</h2>
             {scorers.length === 0 ? (
-              <p className="mt-3 text-sm text-zinc-500">No scoring plays recorded yet.</p>
+              <p className="mt-3 text-sm text-text-3">No scoring plays recorded yet.</p>
             ) : (
               <ol className="mt-3 grid gap-2">
                 {scorers.map((row, index) => (
-                  <li key={row.playerId} className="flex items-center justify-between gap-3 rounded-xl border border-white/[.06] px-4 py-2 text-sm">
-                    <span className="text-zinc-500">{index + 1}</span>
+                  <li key={row.playerId} className="flex items-center justify-between gap-3 rounded-md border border-line bg-ink-700 px-4 py-2 text-sm">
+                    <span className="text-text-3">{index + 1}</span>
                     <span className="flex-1 font-medium">{playerName(row.playerId)}</span>
-                    <span className="font-mono font-bold">{row._sum.points ?? 0} pts</span>
+                    <span className="font-mono font-bold tabular-nums">{row._sum.points ?? 0} pts</span>
                   </li>
                 ))}
               </ol>
             )}
           </section>
 
-          <section className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
+          <section className="rounded-lg border border-line bg-ink-800 p-5">
             <h2 className="text-lg font-semibold">Discipline</h2>
             {cards.length === 0 ? (
-              <p className="mt-3 text-sm text-zinc-500">No cards recorded yet.</p>
+              <p className="mt-3 text-sm text-text-3">No cards recorded yet.</p>
             ) : (
               <ol className="mt-3 grid gap-2">
                 {cards.map((row, index) => (
-                  <li key={row.playerId} className="flex items-center justify-between gap-3 rounded-xl border border-white/[.06] px-4 py-2 text-sm">
-                    <span className="text-zinc-500">{index + 1}</span>
+                  <li key={row.playerId} className="flex items-center justify-between gap-3 rounded-md border border-line bg-ink-700 px-4 py-2 text-sm">
+                    <span className="text-text-3">{index + 1}</span>
                     <span className="flex-1 font-medium">{playerName(row.playerId)}</span>
-                    <span className="font-mono font-bold">{row._count._all} cards</span>
+                    <span className="font-mono font-bold tabular-nums">{row._count._all} cards</span>
                   </li>
                 ))}
               </ol>
@@ -103,9 +103,9 @@ export default async function LeadersPage() {
           </section>
         </div>
 
-        <p className="mt-6 text-xs text-zinc-500">
+        <p className="mt-6 text-xs text-text-3">
           Voided and corrected events are excluded automatically. Want per-tournament tables? Open a{" "}
-          <Link href="/competitions" className="text-emerald-300 underline">competition</Link>.
+          <Link href="/competitions" className="text-brand-300 underline">competition</Link>.
         </p>
       </main>
     </OperationsShell>

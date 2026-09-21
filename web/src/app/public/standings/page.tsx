@@ -58,23 +58,23 @@ export default async function Standings() {
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">
-      <p className="text-emerald-400">{season?.name}</p>
-      <h1 className="mt-2 text-4xl font-bold">Standings</h1>
+      <p className="text-brand-400">{season?.name}</p>
+      <h1 className="mt-2 font-display text-4xl font-bold">Standings</h1>
       {!season ? (
-        <p className="mt-6 text-zinc-400">No active season right now — standings will appear once a season is underway.</p>
+        <p className="mt-6 text-text-2">No active season right now — standings will appear once a season is underway.</p>
       ) : rows.length === 0 ? (
-        <p className="mt-6 text-zinc-400">No clubs are set up for {season.name} yet.</p>
+        <p className="mt-6 text-text-2">No clubs are set up for {season.name} yet.</p>
       ) : null}
       {[...groups.entries()].map(([division, raw]) => {
         const rows = sortRows(raw);
         return (
           <section className="mt-8" key={division}>
             <h2 className="mb-4 text-2xl font-semibold">{division}</h2>
-            <div className="overflow-x-auto rounded-2xl border border-white/[.08]">
+            <div className="overflow-x-auto rounded-lg border border-line">
               <div className="min-w-[800px]">
                 {rows.map((row, index) => (
                   <div
-                    className="grid grid-cols-[50px_1fr_repeat(5,70px)] border-b border-white/[.06] bg-[#0b100e] p-4"
+                    className="grid grid-cols-[50px_1fr_repeat(5,70px)] border-b border-line bg-ink-800 p-4"
                     key={row.id}
                   >
                     <b>{index + 1}</b>
@@ -83,7 +83,7 @@ export default async function Standings() {
                     <span>{row.won} W</span>
                     <span>{row.lost} L</span>
                     <span>{row.pointDifference} PD</span>
-                    <b className="text-emerald-400">{row.leaguePoints}</b>
+                    <b className="text-brand-400">{row.leaguePoints}</b>
                   </div>
                 ))}
               </div>

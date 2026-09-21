@@ -23,36 +23,36 @@ export default async function LoginPage({
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#050807] px-6 py-12 text-white">
-      <section className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0b100e] p-8 shadow-2xl shadow-emerald-950/30">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-400">
+    <main className="grid min-h-screen place-items-center bg-ink-900 px-6 py-12 text-text-1">
+      <section className="w-full max-w-md rounded-lg border border-line bg-ink-800 p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-brand-400">
           Neon Ultra
         </p>
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight">
+        <h1 className="mt-4 font-display text-3xl font-bold tracking-tight">
           Tournament management system
         </h1>
-        <p className="mt-3 text-sm leading-6 text-zinc-400">
+        <p className="mt-3 text-sm leading-6 text-text-2">
           Sign in with an authorized Season Zero operations account.
         </p>
         <div className="mt-8">
           <GoogleAuthButton callbackUrl={callbackUrl} label="Sign in with Google" />
         </div>
-        <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-zinc-500">
-          <span className="h-px flex-1 bg-white/10" />
+        <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-text-3">
+          <span className="h-px flex-1 bg-line" />
           or
-          <span className="h-px flex-1 bg-white/10" />
+          <span className="h-px flex-1 bg-line" />
         </div>
         <LoginForm callbackUrl={callbackUrl} />
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           <Link
             href={callbackUrl ? `/signup?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/signup"}
-            className="rounded-xl border border-emerald-400/30 px-4 py-3 text-center text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+            className="rounded-md border border-brand-400/30 px-4 py-3 text-center text-sm font-semibold text-brand-300 transition hover:bg-brand-400/10"
           >
             Sign up
           </Link>
           <Link
             href="/forgot-password"
-            className="rounded-xl border border-white/10 px-4 py-3 text-center text-sm font-semibold text-zinc-200 transition hover:border-emerald-400/50"
+            className="rounded-md border border-line-strong px-4 py-3 text-center text-sm font-semibold text-text-1 transition hover:border-brand-400/50"
           >
             Forgot password
           </Link>

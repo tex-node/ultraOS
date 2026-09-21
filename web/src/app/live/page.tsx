@@ -53,47 +53,47 @@ export default async function PublicLive() {
 
     return (
       <main className="mx-auto max-w-4xl px-6 py-10">
-        <p className="text-xs uppercase tracking-[.2em] text-emerald-400">Season Zero · Live</p>
-        <h1 className="mt-2 text-3xl font-bold">Match centre</h1>
-        <p className="mt-3 text-zinc-400">No game is live right now.</p>
+        <p className="text-xs uppercase tracking-[.2em] text-brand-400">Season Zero · Live</p>
+        <h1 className="mt-2 font-display text-3xl font-bold">Match centre</h1>
+        <p className="mt-3 text-text-2">No game is live right now.</p>
 
         {upcoming[0] ? (
-          <section className="mt-8 rounded-2xl border border-white/[.08] bg-[#0b100e] p-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">Next game</h2>
+          <section className="mt-8 rounded-lg border border-line bg-ink-800 p-6">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-text-3">Next game</h2>
             <p className="mt-3 text-lg">{upcoming[0].homeSeasonClub!.club.name} vs {upcoming[0].awaySeasonClub!.club.name}</p>
-            <p className="mt-1 text-sm text-zinc-500">{formatLagosTime(upcoming[0].scheduledAt)}</p>
+            <p className="mt-1 text-sm text-text-3">{formatLagosTime(upcoming[0].scheduledAt)}</p>
           </section>
         ) : null}
 
         <section className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">Latest result</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-text-3">Latest result</h2>
           {results.length === 0 ? (
-            <p className="mt-3 text-zinc-500">No results yet.</p>
+            <p className="mt-3 text-text-3">No results yet.</p>
           ) : (
-            <Link href={`/public/fixtures/${results[results.length - 1].id}`} className="mt-3 block rounded-lg bg-white/[.04] p-4 text-sm hover:bg-white/[.07]">
+            <Link href={`/public/fixtures/${results[results.length - 1].id}`} className="mt-3 block rounded-lg border border-line bg-ink-800 p-4 text-sm transition hover:border-brand-400/40">
               {results[results.length - 1].homeSeasonClub!.club.shortName} {results[results.length - 1].homeScore} — {results[results.length - 1].awayScore} {results[results.length - 1].awaySeasonClub!.club.shortName}
-              <span className="ml-2 text-emerald-400">View game story →</span>
+              <span className="ml-2 text-brand-400">View game story →</span>
             </Link>
           )}
         </section>
 
         <section className="mt-8">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">Standings</h2>
-            <Link href="/public/standings" className="text-xs text-emerald-400">Full standings</Link>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-text-3">Standings</h2>
+            <Link href="/public/standings" className="text-xs text-brand-400">Full standings</Link>
           </div>
-          <div className="mt-3 overflow-x-auto rounded-xl border border-white/[.08]">
+          <div className="mt-3 overflow-x-auto rounded-lg border border-line">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs uppercase tracking-wider text-zinc-500">
+                <tr className="text-left text-xs uppercase tracking-wider text-text-3">
                   <th className="p-2">Club</th><th className="p-2">Div</th><th className="p-2 text-right">W</th><th className="p-2 text-right">L</th><th className="p-2 text-right">Pts</th>
                 </tr>
               </thead>
               <tbody>
                 {standingRows.map((row) => (
-                  <tr key={row.club.id} className="border-t border-white/[.06]">
+                  <tr key={row.club.id} className="border-t border-line">
                     <td className="p-2">{row.club.name}</td>
-                    <td className="p-2 text-zinc-500">{row.division}</td>
+                    <td className="p-2 text-text-3">{row.division}</td>
                     <td className="p-2 text-right">{row.won}</td>
                     <td className="p-2 text-right">{row.lost}</td>
                     <td className="p-2 text-right font-semibold">{row.leaguePoints}</td>
@@ -103,8 +103,8 @@ export default async function PublicLive() {
             </table>
           </div>
           <div className="mt-4 flex gap-4 text-xs">
-            <Link href="/public/stats" className="text-emerald-400">League stats</Link>
-            <Link href="/public/stats/records" className="text-emerald-400">Record book</Link>
+            <Link href="/public/stats" className="text-brand-400">League stats</Link>
+            <Link href="/public/stats/records" className="text-brand-400">Record book</Link>
           </div>
         </section>
       </main>
@@ -130,8 +130,8 @@ export default async function PublicLive() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
-      <p className="text-xs uppercase tracking-[.2em] text-emerald-400">Season Zero · Live</p>
-      <h1 className="mt-2 text-3xl font-bold">Match centre</h1>
+      <p className="text-xs uppercase tracking-[.2em] text-brand-400">Season Zero · Live</p>
+      <h1 className="mt-2 font-display text-3xl font-bold">Match centre</h1>
       <LiveRefresher />
       <div className="mt-8 space-y-8">
         {live.map((fixture, i) => (

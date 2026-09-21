@@ -58,9 +58,9 @@ export default async function TicketPage({
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">
       <div className="grid gap-8 lg:grid-cols-[340px_1fr]">
-        <section className="rounded-2xl border border-white/[.08] bg-white p-6 text-zinc-950">
-          <p className="text-xs uppercase tracking-[.2em] text-emerald-700">Ultra event ticket</p>
-          <h1 className="mt-2 text-2xl font-semibold">{ticket.reservation.event.name}</h1>
+        <section className="rounded-lg border border-line bg-white p-6 text-zinc-950 shadow-card">
+          <p className="text-xs uppercase tracking-[.2em] text-brand-700">Ultra event ticket</p>
+          <h1 className="mt-2 font-display text-2xl font-semibold">{ticket.reservation.event.name}</h1>
           <p className="mt-2">{ticket.reservation.guestName}</p>
           <p className="text-sm text-zinc-600">{ticket.reservation.seatZone.name} · {ticket.reservation.quantity} admission</p>
           <Image src={`/api/qr/${ticket.code}`} alt="Ticket QR code" width={280} height={280} className="mx-auto mt-6" unoptimized />
@@ -69,18 +69,18 @@ export default async function TicketPage({
           <EmailTicketForm code={ticket.code} emailConfigured={Boolean(process.env.SMTP_HOST)} />
         </section>
         <section>
-          <p className="text-xs uppercase tracking-[.2em] text-emerald-400">Fan wallet</p>
-          <h2 className="mt-2 text-3xl font-semibold">Add food, drinks, or merchandise</h2>
-          <p className="mt-2 text-zinc-400">Your seat and add-ons will be grouped into one payment-ready order.</p>
+          <p className="text-xs uppercase tracking-[.2em] text-brand-400">Fan wallet</p>
+          <h2 className="mt-2 font-display text-3xl font-bold">Add food, drinks, or merchandise</h2>
+          <p className="mt-2 text-text-2">Your seat and add-ons will be grouped into one payment-ready order.</p>
           <form action={createWalletOrder.bind(null,code)} className="mt-6">
             <div className="space-y-3">
               {ticket.reservation.event.inventories.map((inventory) => {
                 const available = inventory.stock - inventory.reserved - inventory.sold;
-                return <label key={inventory.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-4 rounded-xl border border-white/[.08] bg-[#0b100e] p-4"><span><b>{inventory.product.name}</b><span className="block text-xs text-zinc-500">{inventory.product.vendor.name} · {inventory.product.category} · {available} available</span></span><span>{formatNaira(inventory.product.priceKobo)}</span><input name={`quantity:${inventory.id}`} type="number" min="0" max={available} defaultValue="0" className="w-20 rounded-lg bg-white/[.05] p-2" /></label>;
+                return <label key={inventory.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-4 rounded-lg border border-line bg-ink-800 p-4"><span><b>{inventory.product.name}</b><span className="block text-xs text-text-3">{inventory.product.vendor.name} · {inventory.product.category} · {available} available</span></span><span>{formatNaira(inventory.product.priceKobo)}</span><input name={`quantity:${inventory.id}`} type="number" min="0" max={available} defaultValue="0" className="w-20 rounded-md border border-line bg-ink-700 p-2 text-text-1" /></label>;
               })}
             </div>
-            <input name="promoCode" placeholder="Promo code (optional)" className="mt-4 w-full rounded-xl bg-white/[.05] p-4" />
-            <button className="mt-4 w-full rounded-xl bg-emerald-400 p-4 font-semibold text-zinc-950">Create wallet order</button>
+            <input name="promoCode" placeholder="Promo code (optional)" className="mt-4 w-full rounded-md border border-line bg-ink-700 p-4 text-sm text-text-1 placeholder:text-text-3 focus:border-brand-400 focus:shadow-glow-green focus:outline-none" />
+            <button className="mt-4 w-full rounded-md bg-brand-400 p-4 font-semibold text-ink-900 transition hover:bg-brand-300">Create wallet order</button>
           </form>
         </section>
       </div>
