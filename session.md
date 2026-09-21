@@ -4260,3 +4260,38 @@ STAGE_5_5C: NOT_STARTED
 
 - Operator visual review of the full design at all breakpoints; follow-ups: `/access`
   RLS grant, D2 phone review sign-off.
+
+### 2026-09-21 - Handoff Implementation: /access Fix + Fresh Look
+
+**Objective**
+
+- Fix the `/access` 500 and begin implementing the complete fresh look from
+  `UI/design_handoff_neon_ultra` (tokens + components + shells + capture).
+
+**Completed**
+
+- `/access` fixed: `GameControlGrant` was created with RLS but never granted to the
+  restricted app roles; added migration `20260921100000_fix_game_control_grant_grants`
+  (mirrors the Stage 5.5A grant block), applied via deploy `--migrate`, `/access` now 200.
+- Assessed the handoff bundle: complete spec (verbatim `--ul-*` tokens, component
+  contracts, 34-screen map covering 150+ routes, 5 reference decks). Caveats: no imagery
+  ships (placeholders from client) and `.dc.html` files are references, not code.
+- Implemented from the handoff: `--ul-*` tokens ported verbatim into `globals.css` (incl.
+  reduced-motion zeroing); new responsive `DataTable` primitive (scroll min-width track,
+  sticky-style header, mobile stacked layout) adopted on fan standings; `Steps` upgraded
+  to the circular-node stepper; `QrCard` to glow + dashed-divider + spaced mono code;
+  fan portal 5-item mobile bottom nav; workspace sidebar → 224px rail with context chip,
+  active inset green bar, and 4-item mobile bottom nav; capture buttons → 56px
+  `font-display`; gate verdict → full-width ADMIT/HOLD/DENY word with mono code.
+- Deployed `1c81644`; probes: portal bottom nav, standings DataTable, workspace chip +
+  bottom nav, gate verdict, and 56px scorer buttons all verified in rendered HTML.
+
+**Verification**
+
+- Typecheck, build, lint, tests green (694 pass); staging route + content probes green.
+
+**Next step**
+
+- Continue handoff adoption: wire DataTable across workspace index pages, fan bottom nav
+  on all portal routes, capture event-button grid (2/4) + offline amber pill with queued
+  count, then real-device review.
