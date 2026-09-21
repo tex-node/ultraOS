@@ -52,7 +52,7 @@ export default async function SeasonStats() {
     return (
       <main className="mx-auto max-w-6xl px-6 py-12">
         <h1 className="text-4xl font-bold">Season Zero Pulse</h1>
-        <p className="mt-6 text-zinc-400">No active season right now — stats will appear once a season is underway.</p>
+        <p className="mt-6 text-text-2">No active season right now — stats will appear once a season is underway.</p>
       </main>
     );
   }
@@ -67,9 +67,9 @@ export default async function SeasonStats() {
   if (games.length === 0) {
     return (
       <main className="mx-auto max-w-6xl px-6 py-12">
-        <p className="text-cyan-400">{season.name}</p>
+        <p className="text-info">{season.name}</p>
         <h1 className="mt-2 text-4xl font-bold">Season Pulse</h1>
-        <p className="mt-6 text-zinc-400">No completed games yet — stats will appear once the season is underway.</p>
+        <p className="mt-6 text-text-2">No completed games yet — stats will appear once the season is underway.</p>
       </main>
     );
   }
@@ -91,12 +91,12 @@ export default async function SeasonStats() {
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
       <nav className="flex flex-wrap gap-2 text-xs">
         {NAV_LINKS.map((link) => (
-          <Link key={link.href} href={link.href} className="rounded-full border border-white/[.12] px-3 py-1 text-zinc-400 transition hover:border-cyan-400/40 hover:text-cyan-300">
+          <Link key={link.href} href={link.href} className="rounded-full border border-line px-3 py-1 text-text-2 transition hover:border-cyan-400/40 hover:text-info">
             {link.label}
           </Link>
         ))}
       </nav>
-      <p className="mt-6 text-xs font-bold uppercase tracking-[.3em] text-cyan-400">{season.name}</p>
+      <p className="mt-6 text-xs font-bold uppercase tracking-[.3em] text-info">{season.name}</p>
       <h1 className="mt-2 text-3xl font-black sm:text-4xl">Season Zero Pulse</h1>
 
       <PulseSection title="Season Snapshot" cards={seasonSnapshot} />
@@ -110,10 +110,10 @@ export default async function SeasonStats() {
             if (!top) return null;
             const value = top.dimensions.find((d) => d.key === dim)!;
             return (
-              <div key={dim} className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-4">
-                <p className="text-[10px] uppercase tracking-[.15em] text-zinc-500">{TEAM_DNA_DIMENSION_LABEL[dim]} Leader</p>
-                <p className="mt-1 text-xl font-black text-cyan-300">{top.shortName}</p>
-                <p className="mt-1 text-xs text-zinc-500">{value.teamValue} (league {value.leagueAverage})</p>
+              <div key={dim} className="rounded-lg border border-line bg-ink-800 p-4">
+                <p className="text-[10px] uppercase tracking-[.15em] text-text-3">{TEAM_DNA_DIMENSION_LABEL[dim]} Leader</p>
+                <p className="mt-1 text-xl font-black text-info">{top.shortName}</p>
+                <p className="mt-1 text-xs text-text-3">{value.teamValue} (league {value.leagueAverage})</p>
               </div>
             );
           })}
@@ -136,7 +136,7 @@ export default async function SeasonStats() {
       {categoryLeaders.length > 0 ? (
         <section className="mt-10">
           <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Category Leaders</h2>
-          <p className="mt-1 text-xs text-zinc-600">Who dominated each category. {LEADERBOARD_MIN_ATTEMPTS_NOTE}</p>
+          <p className="mt-1 text-xs text-text-3">Who dominated each category. {LEADERBOARD_MIN_ATTEMPTS_NOTE}</p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {categoryLeaders.map((board) => (
               <AnalyticsCard key={board.key} card={buildCategoryLeaderCard(board.label, board.entries[0], null, "BOX_SCORE_ONLY")} />
@@ -153,16 +153,16 @@ export default async function SeasonStats() {
       {emerging.length > 0 ? (
         <section className="mt-10">
           <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Emerging Performers</h2>
-          <p className="mt-1 text-xs text-zinc-600">Strong single-game showings that haven&apos;t yet reached the games-played floor for the leaderboards above — performance discovery, not a prediction.</p>
+          <p className="mt-1 text-xs text-text-3">Strong single-game showings that haven&apos;t yet reached the games-played floor for the leaderboards above — performance discovery, not a prediction.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {emerging.map((p) => (
-              <div key={p.playerId} className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-4">
+              <div key={p.playerId} className="rounded-lg border border-line bg-ink-800 p-4">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold">{p.name}</span>
-                  <span className="rounded-full border border-white/[.15] px-2 py-0.5 text-[9px] uppercase tracking-wide text-zinc-500">{SAMPLE_CONFIDENCE_LABEL.DEVELOPING_PROFILE}</span>
+                  <span className="rounded-full border border-white/[.15] px-2 py-0.5 text-[9px] uppercase tracking-wide text-text-3">{SAMPLE_CONFIDENCE_LABEL.DEVELOPING_PROFILE}</span>
                 </div>
-                <p className="mt-1 text-xs text-zinc-500">{p.seasonClubShortName}</p>
-                <p className="mt-2 text-sm text-cyan-300">{emergingPerformerHeadline(p)}</p>
+                <p className="mt-1 text-xs text-text-3">{p.seasonClubShortName}</p>
+                <p className="mt-2 text-sm text-info">{emergingPerformerHeadline(p)}</p>
               </div>
             ))}
           </div>
@@ -190,10 +190,10 @@ function PulseSection({ title, cards }: { title: string; cards: LeaguePulseCard[
       <h2 className="text-xl font-bold tracking-tight sm:text-2xl">{title}</h2>
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {cards.map((card) => (
-          <div key={card.key} className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-4">
-            <p className="text-[10px] uppercase tracking-[.15em] text-zinc-500">{card.label}</p>
-            <p className="mt-1 text-xl font-black text-cyan-300 sm:text-2xl">{card.value}</p>
-            {card.detail ? <p className="mt-1 text-xs text-zinc-500">{card.detail}</p> : null}
+          <div key={card.key} className="rounded-lg border border-line bg-ink-800 p-4">
+            <p className="text-[10px] uppercase tracking-[.15em] text-text-3">{card.label}</p>
+            <p className="mt-1 text-xl font-black text-info sm:text-2xl">{card.value}</p>
+            {card.detail ? <p className="mt-1 text-xs text-text-3">{card.detail}</p> : null}
           </div>
         ))}
       </div>
@@ -203,27 +203,27 @@ function PulseSection({ title, cards }: { title: string; cards: LeaguePulseCard[
 
 function StoryCard({ card }: { card: SeasonStoryCard }) {
   return (
-    <Link href={`/public/fixtures/${card.fixtureId}`} className="block rounded-2xl border border-white/[.08] bg-[#0b100e] p-4 transition hover:border-cyan-400/40">
-      <p className="text-[10px] uppercase tracking-[.15em] text-cyan-400">{card.title}</p>
+    <Link href={`/public/fixtures/${card.fixtureId}`} className="block rounded-lg border border-line bg-ink-800 p-4 transition hover:border-cyan-400/40">
+      <p className="text-[10px] uppercase tracking-[.15em] text-info">{card.title}</p>
       <p className="mt-1 text-lg font-black">{card.value}</p>
-      <p className="mt-1 text-xs text-zinc-500">{card.detail}</p>
+      <p className="mt-1 text-xs text-text-3">{card.detail}</p>
     </Link>
   );
 }
 
 function LeaderboardCard({ label, entries }: { label: string; entries: LeaderboardEntry[] }) {
   return (
-    <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-4">
-      <p className="text-sm font-bold text-cyan-400">{label}</p>
+    <div className="rounded-lg border border-line bg-ink-800 p-4">
+      <p className="text-sm font-bold text-info">{label}</p>
       <ol className="mt-2 space-y-1.5 text-sm">
         {entries.map((e, i) => (
           <li key={e.playerId} className="flex items-center justify-between gap-2 border-b border-white/[.04] py-1 last:border-0">
             <span className="flex min-w-0 items-center gap-2">
-              <span className="w-4 shrink-0 text-zinc-600">{i + 1}</span>
+              <span className="w-4 shrink-0 text-text-3">{i + 1}</span>
               <span className="truncate">{e.name}</span>
-              <span className="shrink-0 text-xs text-zinc-600">{e.seasonClubShortName}</span>
+              <span className="shrink-0 text-xs text-text-3">{e.seasonClubShortName}</span>
             </span>
-            <span className="shrink-0 font-bold text-zinc-200">{e.value}</span>
+            <span className="shrink-0 font-bold text-text-1">{e.value}</span>
           </li>
         ))}
       </ol>

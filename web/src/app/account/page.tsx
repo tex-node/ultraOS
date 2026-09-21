@@ -53,20 +53,20 @@ export default async function AccountPage() {
   const roles = user.roles.length > 0 ? user.roles.map((role) => role.role) : ["FAN"];
 
   return (
-    <main className="min-h-screen bg-[#050807] px-6 py-10 text-white">
+    <main className="min-h-screen bg-ink-900 px-6 py-10 text-white">
       <section className="mx-auto max-w-6xl">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <Link className="text-sm text-emerald-400 hover:text-emerald-300" href="/public">
+            <Link className="text-sm text-brand-400 hover:text-brand-300" href="/public">
               Back to public site
             </Link>
             <h1 className="mt-6 text-3xl font-semibold tracking-tight">My Account</h1>
-            <p className="mt-2 text-sm text-zinc-400">
+            <p className="mt-2 text-sm text-text-2">
               {user.name} · {user.email}
             </p>
           </div>
           <Link
-            className="rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-300"
+            className="rounded-md bg-brand-400 px-4 py-3 text-sm font-semibold text-ink-900 transition hover:bg-brand-300"
             href="/apply"
           >
             Apply for another role
@@ -74,31 +74,31 @@ export default async function AccountPage() {
         </div>
 
         <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Fan profile</p>
+          <div className="rounded-lg border border-white/[0.08] bg-ink-800 p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-text-3">Fan profile</p>
             <h2 className="mt-2 text-lg font-semibold">Active by default</h2>
-            <p className="mt-2 text-sm text-zinc-400">
+            <p className="mt-2 text-sm text-text-2">
               Reservations, orders, fan memberships, MVP voting, and public pages remain enabled.
             </p>
           </div>
-          <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Active roles</p>
+          <div className="rounded-lg border border-white/[0.08] bg-ink-800 p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-text-3">Active roles</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {roles.map((role) => (
-                <span className="rounded-full border border-emerald-400/30 px-3 py-1 text-xs text-emerald-300" key={role}>
+                <span className="rounded-full border border-brand-400/30 px-3 py-1 text-xs text-brand-300" key={role}>
                   {role}
                 </span>
               ))}
             </div>
           </div>
-          <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Profiles</p>
-            <p className="mt-2 text-sm text-zinc-300">
+          <div className="rounded-lg border border-white/[0.08] bg-ink-800 p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-text-3">Profiles</p>
+            <p className="mt-2 text-sm text-text-1">
               {[user.athleteProfile && "Athlete", user.staffProfile && "Staff", user.vendorProfile && "Vendor", user.mediaProfile && "Media", user.volunteerProfile && "Volunteer"].filter(Boolean).join(", ") || "No participant profiles yet"}
             </p>
           </div>
-          <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Applications</p>
+          <div className="rounded-lg border border-white/[0.08] bg-ink-800 p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-text-3">Applications</p>
             <h2 className="mt-2 text-3xl font-semibold">{user.applicationsSubmitted.length}</h2>
           </div>
         </section>
@@ -158,10 +158,10 @@ export default async function AccountPage() {
 function AccountList({ children, title }: { children: React.ReactNode; title: string }) {
   const hasChildren = Array.isArray(children) ? children.length > 0 : Boolean(children);
   return (
-    <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e]">
+    <div className="rounded-lg border border-white/[0.08] bg-ink-800">
       <h2 className="border-b border-white/[0.06] p-5 text-lg font-semibold">{title}</h2>
       <div className="divide-y divide-white/[0.06]">
-        {hasChildren ? children : <p className="p-5 text-sm text-zinc-500">Nothing recorded yet.</p>}
+        {hasChildren ? children : <p className="p-5 text-sm text-text-3">Nothing recorded yet.</p>}
       </div>
     </div>
   );
@@ -170,8 +170,8 @@ function AccountList({ children, title }: { children: React.ReactNode; title: st
 function AccountRow({ primary, secondary }: { primary: string; secondary: string }) {
   return (
     <div className="p-5">
-      <p className="font-medium text-zinc-100">{primary}</p>
-      <p className="mt-1 text-sm text-zinc-500">{secondary}</p>
+      <p className="font-medium text-text-1">{primary}</p>
+      <p className="mt-1 text-sm text-text-3">{secondary}</p>
     </div>
   );
 }

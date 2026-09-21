@@ -59,10 +59,10 @@ export default async function ShareGameCard({ params, searchParams }: { params: 
   const card = buildGameResultCard(game, tags, keyStat, capability);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-4 bg-[#050807] px-4 py-12">
+    <main className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-4 bg-ink-900 px-4 py-12">
       <GameResultCardView card={card} format={cardFormat} />
       <SocialCopyBlock copy={toSocialCopy(card)} />
-      <p className="text-center text-xs text-zinc-600">Shareable game card — Season Zero. Not an exportable image; this page is the card.</p>
+      <p className="text-center text-xs text-text-3">Shareable game card — Season Zero. Not an exportable image; this page is the card.</p>
     </main>
   );
 }

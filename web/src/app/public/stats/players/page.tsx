@@ -32,7 +32,7 @@ export default async function PlayerDiscovery({ searchParams }: { searchParams: 
     return (
       <main className="mx-auto max-w-6xl px-6 py-12">
         <h1 className="text-3xl font-black">Players</h1>
-        <p className="mt-4 text-zinc-400">No active season right now.</p>
+        <p className="mt-4 text-text-2">No active season right now.</p>
       </main>
     );
   }
@@ -61,37 +61,37 @@ export default async function PlayerDiscovery({ searchParams }: { searchParams: 
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
-      <p className="text-xs font-bold uppercase tracking-[.3em] text-cyan-400">Season Zero</p>
+      <p className="text-xs font-bold uppercase tracking-[.3em] text-info">Season Zero</p>
       <h1 className="mt-2 text-3xl font-black sm:text-4xl">Players</h1>
-      <p className="mt-2 text-sm text-zinc-500">{sorted.length} of {totals.length} players</p>
+      <p className="mt-2 text-sm text-text-3">{sorted.length} of {totals.length} players</p>
 
       <form className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" action="/public/stats/players">
         <input
           name="q"
           defaultValue={params.q ?? ""}
           placeholder="Search name or club"
-          className="col-span-2 rounded-xl border border-white/[.12] bg-[#0b100e] px-3 py-2 text-sm placeholder:text-zinc-600 lg:col-span-2"
+          className="col-span-2 rounded-md border border-line bg-ink-800 px-3 py-2 text-sm placeholder:text-text-3 lg:col-span-2"
         />
-        <select name="club" defaultValue={params.club ?? ""} className="rounded-xl border border-white/[.12] bg-[#0b100e] px-3 py-2 text-sm [color-scheme:dark]">
+        <select name="club" defaultValue={params.club ?? ""} className="rounded-md border border-line bg-ink-800 px-3 py-2 text-sm [color-scheme:dark]">
           <option value="">All Clubs</option>
           {clubs.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
-        <select name="minGames" defaultValue={params.minGames ?? ""} className="rounded-xl border border-white/[.12] bg-[#0b100e] px-3 py-2 text-sm [color-scheme:dark]">
+        <select name="minGames" defaultValue={params.minGames ?? ""} className="rounded-md border border-line bg-ink-800 px-3 py-2 text-sm [color-scheme:dark]">
           <option value="">Any Games</option>
           <option value="1">1+ games</option>
           <option value="2">2+ games</option>
           <option value="3">3+ games</option>
         </select>
-        <select name="confidence" defaultValue={params.confidence ?? ""} className="rounded-xl border border-white/[.12] bg-[#0b100e] px-3 py-2 text-sm [color-scheme:dark]">
+        <select name="confidence" defaultValue={params.confidence ?? ""} className="rounded-md border border-line bg-ink-800 px-3 py-2 text-sm [color-scheme:dark]">
           <option value="">Any Sample</option>
           {(["QUALIFIED", "DEVELOPING_PROFILE", "INSUFFICIENT_SAMPLE"] as QualificationState[]).map((q) => (
             <option key={q} value={q}>{SAMPLE_CONFIDENCE_LABEL[q]}</option>
           ))}
         </select>
-        <select name="sort" defaultValue={sortId} className="rounded-xl border border-white/[.12] bg-[#0b100e] px-3 py-2 text-sm [color-scheme:dark]">
+        <select name="sort" defaultValue={sortId} className="rounded-md border border-line bg-ink-800 px-3 py-2 text-sm [color-scheme:dark]">
           {SORT_OPTIONS.map((s) => <option key={s.id} value={s.id}>Sort: {s.label}</option>)}
         </select>
-        <button type="submit" className="col-span-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 sm:col-span-1 lg:col-span-6">
+        <button type="submit" className="col-span-2 rounded-md border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-info sm:col-span-1 lg:col-span-6">
           Apply
         </button>
       </form>
@@ -100,7 +100,7 @@ export default async function PlayerDiscovery({ searchParams }: { searchParams: 
         {sorted.map((r) => (
           <PlayerRow key={r.totals.playerId} row={r} />
         ))}
-        {sorted.length === 0 ? <p className="py-8 text-center text-sm text-zinc-500">No players match these filters.</p> : null}
+        {sorted.length === 0 ? <p className="py-8 text-center text-sm text-text-3">No players match these filters.</p> : null}
       </div>
     </main>
   );
@@ -129,31 +129,31 @@ function PlayerRow({ row }: { row: PlayerDiscoveryRow }) {
   return (
     <Link
       href={`/public/players/${totals.athleteId}`}
-      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[.08] bg-[#0b100e] p-3 transition hover:border-cyan-400/40"
+      className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-ink-800 p-3 transition hover:border-cyan-400/40"
     >
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span className="truncate font-semibold">{totals.name}</span>
-          <span className="shrink-0 text-xs text-zinc-600">{totals.seasonClubShortName}</span>
+          <span className="shrink-0 text-xs text-text-3">{totals.seasonClubShortName}</span>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           {archetype ? (
-            <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[9px] uppercase tracking-wide text-cyan-300">
+            <span className="rounded-full border border-info/30 bg-cyan-400/10 px-2 py-0.5 text-[9px] uppercase tracking-wide text-info">
               {PLAYER_ARCHETYPE_LABEL[archetype]}
             </span>
           ) : null}
           {qualification !== "QUALIFIED" ? (
-            <span className="rounded-full border border-white/[.15] px-2 py-0.5 text-[9px] uppercase tracking-wide text-zinc-500">
+            <span className="rounded-full border border-white/[.15] px-2 py-0.5 text-[9px] uppercase tracking-wide text-text-3">
               {SAMPLE_CONFIDENCE_LABEL[qualification]}
             </span>
           ) : null}
         </div>
       </div>
-      <div className="flex shrink-0 gap-4 text-xs text-zinc-400">
-        <span>{ppg} <span className="text-zinc-600">PPG</span></span>
-        <span>{rpg} <span className="text-zinc-600">RPG</span></span>
-        <span>{apg} <span className="text-zinc-600">APG</span></span>
-        <span>{totals.gamesPlayed} <span className="text-zinc-600">GP</span></span>
+      <div className="flex shrink-0 gap-4 text-xs text-text-2">
+        <span>{ppg} <span className="text-text-3">PPG</span></span>
+        <span>{rpg} <span className="text-text-3">RPG</span></span>
+        <span>{apg} <span className="text-text-3">APG</span></span>
+        <span>{totals.gamesPlayed} <span className="text-text-3">GP</span></span>
       </div>
     </Link>
   );

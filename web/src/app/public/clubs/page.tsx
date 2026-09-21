@@ -34,11 +34,11 @@ export default async function Clubs() {
             <Link
               href={`/public/clubs/${club.id}`}
               key={club.id}
-              className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-6"
+              className="rounded-lg border border-line bg-ink-800 p-6"
             >
               <div className="flex items-center gap-4">
                 <div
-                  className="grid h-14 w-14 place-items-center overflow-hidden rounded-xl font-black"
+                  className="grid h-14 w-14 place-items-center overflow-hidden rounded-md font-black"
                   style={{
                     color: displayPrimaryColor,
                     background: `${displayPrimaryColor}15`,
@@ -57,10 +57,10 @@ export default async function Clubs() {
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold">{club.name}</h2>
-                  <p className="text-xs text-zinc-500">Permanent {club.sport.name} club</p>
+                  <p className="text-xs text-text-3">Permanent {club.sport.name} club</p>
                 </div>
               </div>
-              <div className="mt-5 space-y-1 text-sm text-zinc-400">
+              <div className="mt-5 space-y-1 text-sm text-text-2">
                 {club.seasonClubs.map((seasonClub) => (
                   <p key={seasonClub.id}>
                     {seasonClub.season.name} · {seasonClub.division.name} ·{" "}

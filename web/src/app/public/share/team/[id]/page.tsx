@@ -72,10 +72,10 @@ export default async function ShareTeamCard({ params, searchParams }: { params: 
   const card = buildTeamProfileCard(totals, dna, club.logoUrl, ranks, "BOX_SCORE_ONLY");
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-4 bg-[#050807] px-4 py-12">
+    <main className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-4 bg-ink-900 px-4 py-12">
       <AnalyticsCard card={card} format={cardFormat} />
       <SocialCopyBlock copy={toSocialCopy(card)} />
-      <p className="text-center text-xs text-zinc-600">Shareable team card — Season Zero. Not an exportable image; this page is the card.</p>
+      <p className="text-center text-xs text-text-3">Shareable team card — Season Zero. Not an exportable image; this page is the card.</p>
     </main>
   );
 }

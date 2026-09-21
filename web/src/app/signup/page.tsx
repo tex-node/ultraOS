@@ -23,32 +23,32 @@ export default async function SignupPage({
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#050807] px-6 py-12 text-white">
-      <section className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0b100e] p-8 shadow-2xl shadow-emerald-950/30">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-400">
+    <main className="grid min-h-screen place-items-center bg-ink-900 px-6 py-12 text-white">
+      <section className="w-full max-w-md rounded-lg border border-line bg-ink-800 p-8 shadow-none shadow-none">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-brand-400">
           Neon Ultra
         </p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight">
           Signup
         </h1>
-        <p className="mt-3 text-sm leading-6 text-zinc-400">
+        <p className="mt-3 text-sm leading-6 text-text-2">
           Create your account to reserve seats, join fan clubs, vote for MVP,
           follow Season Zero events, or apply for participant roles.
         </p>
         <div className="mt-8">
           <GoogleAuthButton callbackUrl={callbackUrl || "/signup/support-club"} label="Signup with Google" />
         </div>
-        <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-zinc-500">
+        <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-text-3">
           <span className="h-px flex-1 bg-white/10" />
           or
           <span className="h-px flex-1 bg-white/10" />
         </div>
         <SignupForm callbackUrl={callbackUrl} />
-        <p className="mt-6 text-center text-sm text-zinc-400">
+        <p className="mt-6 text-center text-sm text-text-2">
           Already have an account?{" "}
           <Link
             href={callbackUrl ? `/login?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/login"}
-            className="font-medium text-emerald-400"
+            className="font-medium text-brand-400"
           >
             Sign in
           </Link>

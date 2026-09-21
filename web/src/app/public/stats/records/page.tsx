@@ -13,7 +13,7 @@ export default async function RecordBook() {
     return (
       <main className="mx-auto max-w-5xl px-6 py-12">
         <h1 className="text-3xl font-black">Season Zero Record Book</h1>
-        <p className="mt-4 text-zinc-400">No active season right now.</p>
+        <p className="mt-4 text-text-2">No active season right now.</p>
       </main>
     );
   }
@@ -29,7 +29,7 @@ export default async function RecordBook() {
     return (
       <main className="mx-auto max-w-5xl px-6 py-12">
         <h1 className="text-3xl font-black">Season Zero Record Book</h1>
-        <p className="mt-4 text-zinc-400">No completed games yet.</p>
+        <p className="mt-4 text-text-2">No completed games yet.</p>
       </main>
     );
   }
@@ -41,9 +41,9 @@ export default async function RecordBook() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-12">
-      <p className="text-xs font-bold uppercase tracking-[.3em] text-cyan-400">{season.name}</p>
+      <p className="text-xs font-bold uppercase tracking-[.3em] text-info">{season.name}</p>
       <h1 className="mt-2 text-3xl font-black sm:text-4xl">Season Zero Record Book</h1>
-      <p className="mt-2 text-sm text-zinc-500">Every record below is a direct calculation from the official box scores — official box score data, not reconstructed.</p>
+      <p className="mt-2 text-sm text-text-3">Every record below is a direct calculation from the official box scores — official box score data, not reconstructed.</p>
 
       <RecordSection title="Player Single-Game Records" entries={playerSingleGame} />
       <RecordSection title="Player Season Records" entries={playerSeason} />
@@ -68,18 +68,18 @@ function RecordSection({ title, entries }: { title: string; entries: RecordEntry
 function RecordCard({ entry }: { entry: RecordEntry }) {
   const content = (
     <>
-      <p className="text-[10px] uppercase tracking-[.15em] text-cyan-400">{entry.title}</p>
+      <p className="text-[10px] uppercase tracking-[.15em] text-info">{entry.title}</p>
       <p className="mt-1 text-2xl font-black">{entry.value}</p>
-      <p className="mt-1 text-sm text-zinc-300">{entry.holderName}{entry.holderClubShortName ? ` · ${entry.holderClubShortName}` : ""}</p>
-      <p className="text-xs text-zinc-600">{entry.context}</p>
+      <p className="mt-1 text-sm text-text-1">{entry.holderName}{entry.holderClubShortName ? ` · ${entry.holderClubShortName}` : ""}</p>
+      <p className="text-xs text-text-3">{entry.context}</p>
     </>
   );
   return (
-    <div className="rounded-2xl border border-white/[.08] bg-[#0b100e] p-4">
+    <div className="rounded-lg border border-line bg-ink-800 p-4">
       {entry.fixtureId ? (
         <Link href={`/public/fixtures/${entry.fixtureId}`} className="block transition hover:opacity-80">{content}</Link>
       ) : content}
-      <Link href={`/public/share/record/${encodeURIComponent(entry.key)}`} className="mt-2 inline-block text-[10px] font-bold uppercase tracking-wide text-cyan-400 hover:underline">
+      <Link href={`/public/share/record/${encodeURIComponent(entry.key)}`} className="mt-2 inline-block text-[10px] font-bold uppercase tracking-wide text-info hover:underline">
         Shareable Card
       </Link>
     </div>

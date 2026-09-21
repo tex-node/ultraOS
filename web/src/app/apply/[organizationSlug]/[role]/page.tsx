@@ -36,53 +36,53 @@ export default async function ApplyRolePage({ params }: ApplyRolePageProps) {
   const isClosed = closedTypes.includes(type);
 
   return (
-    <main className="min-h-screen bg-[#050807] px-6 py-12 text-white">
+    <main className="min-h-screen bg-ink-900 px-6 py-12 text-white">
       <section className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.8fr_1.2fr]">
         <div>
-          <Link className="text-sm text-emerald-400 hover:text-emerald-300" href={`/apply/${organizationSlug}`}>
+          <Link className="text-sm text-brand-400 hover:text-brand-300" href={`/apply/${organizationSlug}`}>
             Back to applications
           </Link>
-          <p className="mt-8 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">
+          <p className="mt-8 text-xs font-semibold uppercase tracking-[0.24em] text-brand-400">
             {config.type} intake — {organization.name}
           </p>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight">{config.title}</h1>
-          <p className="mt-4 text-sm leading-6 text-zinc-400">{config.description}</p>
-          <div className="mt-6 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Review rule</p>
-            <p className="mt-2 text-sm leading-6 text-zinc-300">{config.reviewNote}</p>
+          <p className="mt-4 text-sm leading-6 text-text-2">{config.description}</p>
+          <div className="mt-6 rounded-lg border border-white/[0.08] bg-white/[0.03] p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-text-3">Review rule</p>
+            <p className="mt-2 text-sm leading-6 text-text-1">{config.reviewNote}</p>
           </div>
         </div>
         {isClosed ? (
-          <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-300">
+          <div className="rounded-lg border border-warn/20 bg-amber-400/[0.06] p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-warn">
               Applications closed
             </p>
             <h2 className="mt-2 text-2xl font-semibold">Not accepting new {config.type.toLowerCase()} applications right now</h2>
-            <p className="mt-3 text-sm leading-6 text-zinc-400">
+            <p className="mt-3 text-sm leading-6 text-text-2">
               This intake is temporarily closed. Please check back later.
             </p>
           </div>
         ) : session?.user ? (
           <ApplicationForm config={config} action={submitApplication.bind(null, organizationSlug)} />
         ) : (
-          <div className="rounded-2xl border border-white/[0.08] bg-[#0b100e] p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">
+          <div className="rounded-lg border border-white/[0.08] bg-ink-800 p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-brand-400">
               Account required
             </p>
             <h2 className="mt-2 text-2xl font-semibold">Create or sign in to continue</h2>
-            <p className="mt-3 text-sm leading-6 text-zinc-400">
+            <p className="mt-3 text-sm leading-6 text-text-2">
               Applications must attach to one login identity. This prevents duplicate
               accounts and lets a fan apply for another role from the same account.
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               <Link
-                className="rounded-xl bg-emerald-400 px-4 py-3 text-center text-sm font-semibold text-zinc-950 transition hover:bg-emerald-300"
+                className="rounded-md bg-brand-400 px-4 py-3 text-center text-sm font-semibold text-ink-900 transition hover:bg-brand-300"
                 href={`/signup?callbackUrl=${encodeURIComponent(callbackUrl)}`}
               >
                 Signup
               </Link>
               <Link
-                className="rounded-xl border border-white/10 px-4 py-3 text-center text-sm font-semibold text-zinc-200 transition hover:border-emerald-400/50"
+                className="rounded-md border border-line px-4 py-3 text-center text-sm font-semibold text-text-1 transition hover:border-emerald-400/50"
                 href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
               >
                 Sign in

@@ -38,11 +38,11 @@ export default async function SupportClubPage({ searchParams }: { searchParams: 
   if (existingMembership) redirect(callbackUrl || "/public/events");
 
   return (
-    <main className="min-h-screen bg-[#050807] px-6 py-12 text-white">
+    <main className="min-h-screen bg-ink-900 px-6 py-12 text-white">
       <section className="mx-auto max-w-4xl text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-400">Neon Ultra</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-brand-400">Neon Ultra</p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">Do you want to support a club?</h1>
-        <p className="mt-4 text-sm leading-6 text-zinc-400">
+        <p className="mt-4 text-sm leading-6 text-text-2">
           Pick one club to follow as your own — get their fan updates, and be part of their community from day one.
           You can only pick one, and it&apos;s completely optional.
         </p>
@@ -52,11 +52,11 @@ export default async function SupportClubPage({ searchParams }: { searchParams: 
             <form action={chooseSupportedClub} key={fanClub.id}>
               <input name="fanClubId" type="hidden" value={fanClub.id} />
               <input name="callbackUrl" type="hidden" value={callbackUrl ?? ""} />
-              <button className="group w-full rounded-2xl border border-white/10 bg-[#0b100e] p-4 transition hover:border-emerald-400/60 hover:bg-emerald-400/[0.06]" type="submit">
-                <div className="relative mx-auto h-20 w-20 overflow-hidden rounded-xl bg-white/5">
+              <button className="group w-full rounded-lg border border-line bg-ink-800 p-4 transition hover:border-emerald-400/60 hover:bg-brand-400/[0.06]" type="submit">
+                <div className="relative mx-auto h-20 w-20 overflow-hidden rounded-md bg-white/5">
                   <Image alt={`${fanClub.club.name} logo`} className="object-contain" fill sizes="80px" src={CLUB_DISPLAY_IMAGE[fanClub.club.name] ?? fanClub.club.logoUrl ?? "/club-fan-display/apex.png"} />
                 </div>
-                <p className="mt-3 font-semibold group-hover:text-emerald-300">{fanClub.club.name}</p>
+                <p className="mt-3 font-semibold group-hover:text-brand-300">{fanClub.club.name}</p>
               </button>
             </form>
           ))}
@@ -64,7 +64,7 @@ export default async function SupportClubPage({ searchParams }: { searchParams: 
 
         <form action={skipSupportedClub} className="mt-8">
           <input name="callbackUrl" type="hidden" value={callbackUrl ?? ""} />
-          <button className="text-sm text-zinc-500 underline decoration-dotted hover:text-zinc-300" type="submit">
+          <button className="text-sm text-text-3 underline decoration-dotted hover:text-text-1" type="submit">
             Skip for now
           </button>
         </form>

@@ -61,14 +61,14 @@ export default async function PublicClubPage({ params }: { params: Promise<{ id:
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">
-      <section className="overflow-hidden rounded-3xl border p-8" style={{ borderColor: `${displayPrimaryColor}40`, background: `linear-gradient(135deg, ${displayPrimaryColor}12, #050807 65%)` }}>
+      <section className="overflow-hidden rounded-lg border p-8" style={{ borderColor: `${displayPrimaryColor}40`, background: `linear-gradient(135deg, ${displayPrimaryColor}12, #050807 65%)` }}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex flex-wrap items-center gap-6">
             {club.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img alt={`${club.name} logo`} className="h-28 w-28 rounded-3xl object-contain" src={club.logoUrl} />
+              <img alt={`${club.name} logo`} className="h-28 w-28 rounded-lg object-contain" src={club.logoUrl} />
             ) : (
-              <div className="grid h-28 w-28 place-items-center rounded-3xl border text-2xl font-black" style={{ borderColor: `${displayPrimaryColor}55`, color: displayPrimaryColor }}>
+              <div className="grid h-28 w-28 place-items-center rounded-lg border text-2xl font-black" style={{ borderColor: `${displayPrimaryColor}55`, color: displayPrimaryColor }}>
                 {club.shortName}
               </div>
             )}
@@ -78,17 +78,17 @@ export default async function PublicClubPage({ params }: { params: Promise<{ id:
               {club.officialSlogan ? <p className="mt-3 text-2xl font-semibold" style={{ color: displayPrimaryColor }}>{club.officialSlogan}</p> : null}
             </div>
           </div>
-          <Link href={`/public/share/team/${club.id}`} className="shrink-0 rounded-lg border border-cyan-400/30 bg-cyan-400/[.06] px-3 py-1.5 text-xs font-bold text-cyan-300">Shareable Card</Link>
+          <Link href={`/public/share/team/${club.id}`} className="shrink-0 rounded-lg border border-info/30 bg-info/[.06] px-3 py-1.5 text-xs font-bold text-info">Shareable Card</Link>
         </div>
-        {club.crowdChant ? <p className="mt-8 text-sm text-zinc-300"><span className="text-zinc-500">Crowd Chant:</span> <b>{club.crowdChant}</b></p> : null}
-        {club.identityKeywords.length ? <p className="mt-3 text-sm text-zinc-300"><span className="text-zinc-500">Identity:</span> {club.identityKeywords.join(" • ")}</p> : null}
-        {club.publicBio ? <p className="mt-6 max-w-3xl text-sm leading-6 text-zinc-300">{club.publicBio}</p> : null}
+        {club.crowdChant ? <p className="mt-8 text-sm text-text-1"><span className="text-text-3">Crowd Chant:</span> <b>{club.crowdChant}</b></p> : null}
+        {club.identityKeywords.length ? <p className="mt-3 text-sm text-text-1"><span className="text-text-3">Identity:</span> {club.identityKeywords.join(" • ")}</p> : null}
+        {club.publicBio ? <p className="mt-6 max-w-3xl text-sm leading-6 text-text-1">{club.publicBio}</p> : null}
       </section>
 
       {club.seasonClubs.map((seasonClub) => (
         <section className="mt-8" key={seasonClub.id}>
           <h2 className="text-2xl font-semibold">{seasonClub.season.name} · {seasonClub.division.name}</h2>
-          <p className="mt-2 text-zinc-400">Record {seasonClub.standing?.won ?? 0}-{seasonClub.standing?.lost ?? 0} · {seasonClub.standing?.leaguePoints ?? 0} points</p>
+          <p className="mt-2 text-text-2">Record {seasonClub.standing?.won ?? 0}-{seasonClub.standing?.lost ?? 0} · {seasonClub.standing?.leaguePoints ?? 0} points</p>
           <TeamDnaSection
             organizationId={organizationId}
             seasonId={seasonClub.seasonId}
@@ -101,7 +101,7 @@ export default async function PublicClubPage({ params }: { params: Promise<{ id:
           <TeamGameLogSection organizationId={organizationId} seasonId={seasonClub.seasonId} seasonClubId={seasonClub.id} />
           {seasonClub.headCoach || seasonClub.assistantCoach ? (
             <div
-              className="mt-4 flex flex-wrap gap-6 rounded-xl border p-4"
+              className="mt-4 flex flex-wrap gap-6 rounded-md border p-4"
               style={{ background: `${displayPrimaryColor}14`, borderColor: `${displayPrimaryColor}30` }}
             >
               {seasonClub.headCoach ? (
@@ -120,9 +120,9 @@ export default async function PublicClubPage({ params }: { params: Promise<{ id:
           ) : null}
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             {seasonClub.players.map((player) => (
-              <Link className="rounded-xl border border-white/[.08] bg-[#0b100e] p-4" href={`/public/players/${player.athlete.id}`} key={player.id}>
+              <Link className="rounded-md border border-line bg-ink-800 p-4" href={`/public/players/${player.athlete.id}`} key={player.id}>
                 <b>{player.athlete.firstName} {player.athlete.lastName}</b>
-                <p className="text-xs text-zinc-500">#{player.jerseyNumber ?? "-"} · {player.position}</p>
+                <p className="text-xs text-text-3">#{player.jerseyNumber ?? "-"} · {player.position}</p>
               </Link>
             ))}
           </div>
@@ -175,19 +175,19 @@ async function TeamDnaSection({
   ];
 
   return (
-    <div className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
-      <div className="grid grid-cols-4 gap-3 border-b border-white/[.06] pb-4 sm:grid-cols-8">
+    <div className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
+      <div className="grid grid-cols-4 gap-3 border-b border-line pb-4 sm:grid-cols-8">
         {summary.map((s) => (
           <div key={s.label} className="text-center">
-            <p className="text-sm font-bold text-zinc-200">{s.value}</p>
-            <p className="mt-0.5 text-[9px] uppercase tracking-wide text-zinc-600">{s.label}</p>
+            <p className="text-sm font-bold text-text-1">{s.value}</p>
+            <p className="mt-0.5 text-[9px] uppercase tracking-wide text-text-3">{s.label}</p>
           </div>
         ))}
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-bold uppercase tracking-[.15em]" style={{ color: accentColor }}>Team DNA</h3>
         {dna.qualification !== "QUALIFIED" ? (
-          <span className="rounded-full border border-white/[.15] px-2 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
+          <span className="rounded-full border border-white/[.15] px-2 py-0.5 text-[10px] uppercase tracking-wide text-text-3">
             {SAMPLE_CONFIDENCE_LABEL[dna.qualification]} · {dna.gamesPlayed} game{dna.gamesPlayed === 1 ? "" : "s"}
           </span>
         ) : null}
@@ -195,7 +195,7 @@ async function TeamDnaSection({
       {dna.tags.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {dna.tags.map((t) => (
-            <span key={t} className="rounded-full border border-white/[.15] bg-white/[.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-300">
+            <span key={t} className="rounded-full border border-white/[.15] bg-white/[.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-1">
               {TEAM_DNA_TAG_LABEL[t]}
             </span>
           ))}
@@ -204,21 +204,21 @@ async function TeamDnaSection({
       {ranks.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-2">
           {ranks.map((r) => (
-            <span key={r.metricId} className="rounded-lg border border-cyan-400/25 bg-cyan-400/[.06] px-2.5 py-1.5 text-xs">
-              <span className="font-black text-cyan-300">#{r.rank}</span> <span className="text-zinc-400">{r.shortLabel} · {r.value}</span>
-              <span className="ml-1 text-zinc-700">of {r.totalQualified}</span>
+            <span key={r.metricId} className="rounded-lg border border-cyan-400/25 bg-info/[.06] px-2.5 py-1.5 text-xs">
+              <span className="font-black text-info">#{r.rank}</span> <span className="text-text-2">{r.shortLabel} · {r.value}</span>
+              <span className="ml-1 text-text-3">of {r.totalQualified}</span>
             </span>
           ))}
         </div>
       ) : null}
-      <p className="mt-3 text-sm text-zinc-400">{identity}</p>
+      <p className="mt-3 text-sm text-text-2">{identity}</p>
       {strengths.length > 0 ? (
         <div className="mt-3">
-          <p className="text-[10px] uppercase tracking-wide text-zinc-600">Category Strengths</p>
+          <p className="text-[10px] uppercase tracking-wide text-text-3">Category Strengths</p>
           <div className="mt-1 flex flex-wrap gap-2">
             {strengths.map((s) => (
-              <span key={s.dimension} className="rounded-lg border border-white/[.1] bg-white/[.03] px-2 py-1 text-xs text-zinc-300">
-                {s.label} <span className="text-cyan-400">{s.index.toFixed(2)}×</span> league avg ({s.teamValue} vs {s.leagueAverage})
+              <span key={s.dimension} className="rounded-lg border border-white/[.1] bg-white/[.03] px-2 py-1 text-xs text-text-1">
+                {s.label} <span className="text-info">{s.index.toFixed(2)}×</span> league avg ({s.teamValue} vs {s.leagueAverage})
               </span>
             ))}
           </div>
@@ -226,11 +226,11 @@ async function TeamDnaSection({
       ) : null}
       {belowAverage.length > 0 ? (
         <div className="mt-2">
-          <p className="text-[10px] uppercase tracking-wide text-zinc-600">Below Season Zero Average</p>
+          <p className="text-[10px] uppercase tracking-wide text-text-3">Below Season Zero Average</p>
           <div className="mt-1 flex flex-wrap gap-2">
             {belowAverage.map((s) => (
-              <span key={s.dimension} className="rounded-lg border border-white/[.08] bg-transparent px-2 py-1 text-xs text-zinc-500">
-                {s.label}: {s.teamValue} <span className="text-zinc-600">(league {s.leagueAverage})</span>
+              <span key={s.dimension} className="rounded-lg border border-line bg-transparent px-2 py-1 text-xs text-text-3">
+                {s.label}: {s.teamValue} <span className="text-text-3">(league {s.leagueAverage})</span>
               </span>
             ))}
           </div>
@@ -241,7 +241,7 @@ async function TeamDnaSection({
           <TeamDnaBar key={d.key} dimension={d} accentColor={accentColor} />
         ))}
       </div>
-      <p className="mt-3 text-[11px] text-zinc-600">{TEAM_DNA_MIN_GAMES_NOTE} Index is team rate ÷ league average rate — 1.00 is exactly average.</p>
+      <p className="mt-3 text-[11px] text-text-3">{TEAM_DNA_MIN_GAMES_NOTE} Index is team rate ÷ league average rate — 1.00 is exactly average.</p>
 
       {dna.qualification === "QUALIFIED" ? (
         <div className="mt-4 max-w-xs">
@@ -262,19 +262,19 @@ async function SimilarTeams({ organizationId, matches }: { organizationId: strin
   const byId = new Map(seasonClubs.map((sc) => [sc.id, sc.club]));
 
   return (
-    <div className="mt-4 border-t border-white/[.06] pt-4">
-      <p className="text-xs font-bold uppercase tracking-[.15em] text-cyan-400">Similar Team Profiles</p>
+    <div className="mt-4 border-t border-line pt-4">
+      <p className="text-xs font-bold uppercase tracking-[.15em] text-info">Similar Team Profiles</p>
       <div className="mt-2 space-y-2">
         {matches.map((m) => {
           const club = byId.get(m.seasonClubId);
           if (!club) return null;
           return (
-            <Link key={m.seasonClubId} href={`/public/clubs/${club.id}`} className="block rounded-xl border border-white/[.08] bg-[#0b100e] p-3 transition hover:border-cyan-400/40">
+            <Link key={m.seasonClubId} href={`/public/clubs/${club.id}`} className="block rounded-md border border-line bg-ink-800 p-3 transition hover:border-cyan-400/40">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">{club.name}</span>
-                <span className="text-xs text-cyan-400">{SIMILARITY_BAND_LABEL[m.band]}</span>
+                <span className="text-xs text-info">{SIMILARITY_BAND_LABEL[m.band]}</span>
               </div>
-              <p className="mt-1 text-xs text-zinc-500">
+              <p className="mt-1 text-xs text-text-3">
                 {m.mostSimilarDimension ? `Both relied on ${TEAM_DNA_DIMENSION_LABEL[m.mostSimilarDimension].toLowerCase()}` : "Overlapping profile"}
                 {m.mostDifferentDimension ? `, but differed most in ${TEAM_DNA_DIMENSION_LABEL[m.mostDifferentDimension].toLowerCase()}` : ""}.
               </p>
@@ -293,21 +293,21 @@ async function TeamGameLogSection({ organizationId, seasonId, seasonClubId }: { 
   const best = selectBestTeamPerformance(log);
 
   return (
-    <div className="mt-6 rounded-2xl border border-white/[.08] bg-[#0b100e] p-5">
-      <p className="text-sm font-bold uppercase tracking-[.15em] text-cyan-400">Game Log</p>
-      <p className="mt-1 flex flex-wrap gap-2 text-xs text-zinc-500">
+    <div className="mt-6 rounded-lg border border-line bg-ink-800 p-5">
+      <p className="text-sm font-bold uppercase tracking-[.15em] text-info">Game Log</p>
+      <p className="mt-1 flex flex-wrap gap-2 text-xs text-text-3">
         {log.map((r) => (
-          <span key={r.fixtureId} className={`rounded px-1.5 py-0.5 font-bold ${r.result === "W" ? "bg-cyan-400/15 text-cyan-300" : "bg-white/[.06] text-zinc-500"}`}>
+          <span key={r.fixtureId} className={`rounded px-1.5 py-0.5 font-bold ${r.result === "W" ? "bg-cyan-400/15 text-info" : "bg-white/[.06] text-text-3"}`}>
             {r.result}
           </span>
         ))}
-        <span className="text-zinc-700">— season results, not a form prediction</span>
+        <span className="text-text-3">— season results, not a form prediction</span>
       </p>
 
       {best ? (
-        <Link href={`/public/fixtures/${best.row.fixtureId}`} className="mt-3 block rounded-xl border border-cyan-400/20 bg-cyan-400/[.04] p-3 transition hover:border-cyan-400/40">
-          <p className="text-[10px] uppercase tracking-wide text-cyan-400">Best Team Performance</p>
-          <p className="mt-1 text-sm text-zinc-200">
+        <Link href={`/public/fixtures/${best.row.fixtureId}`} className="mt-3 block rounded-md border border-info/20 bg-info/[.04] p-3 transition hover:border-cyan-400/40">
+          <p className="text-[10px] uppercase tracking-wide text-info">Best Team Performance</p>
+          <p className="mt-1 text-sm text-text-1">
             vs {best.row.opponentShortName} · {best.row.pointsFor}-{best.row.pointsAgainst} ({best.row.margin > 0 ? "+" : ""}{best.row.margin})
           </p>
         </Link>
@@ -315,10 +315,10 @@ async function TeamGameLogSection({ organizationId, seasonId, seasonClubId }: { 
 
       <TeamMilestonesStrip games={games} seasonClubId={seasonClubId} />
 
-      <div className="mt-3 overflow-x-auto rounded-xl border border-white/[.08]">
+      <div className="mt-3 overflow-x-auto rounded-md border border-line">
         <table className="w-full min-w-[560px] text-left text-xs">
           <thead>
-            <tr className="border-b border-white/[.08] text-zinc-500">
+            <tr className="border-b border-line text-text-3">
               <th className="px-2 py-2 font-semibold">Date</th>
               <th className="px-2 py-2 font-semibold">Opp</th>
               <th className="px-2 py-2 font-semibold">Result</th>
@@ -337,13 +337,13 @@ async function TeamGameLogSection({ organizationId, seasonId, seasonClubId }: { 
             {log.map((row) => (
               <tr key={row.fixtureId} className="border-b border-white/[.04] last:border-0">
                 <td className="px-2 py-2">
-                  <Link href={`/public/fixtures/${row.fixtureId}`} className="text-cyan-400 hover:underline">
+                  <Link href={`/public/fixtures/${row.fixtureId}`} className="text-info hover:underline">
                     {formatLagosDate(row.scheduledAt)}
                   </Link>
                 </td>
                 <td className="px-2 py-2">{row.opponentShortName}</td>
                 <td className="px-2 py-2 font-bold">{row.result}</td>
-                <td className="px-2 py-2 font-bold text-zinc-200">{row.pointsFor}</td>
+                <td className="px-2 py-2 font-bold text-text-1">{row.pointsFor}</td>
                 <td className="px-2 py-2">{row.pointsAgainst}</td>
                 <td className="px-2 py-2">{row.margin > 0 ? `+${row.margin}` : row.margin}</td>
                 <td className="px-2 py-2">{formatPercent(row.fieldGoalPct)}</td>
@@ -381,8 +381,8 @@ function TeamDnaBar({ dimension, accentColor }: { dimension: TeamDna["dimensions
   return (
     <div>
       <div className="flex items-baseline justify-between text-xs">
-        <span className="text-zinc-400">{TEAM_DNA_DIMENSION_LABEL[dimension.key]}</span>
-        <span className="text-zinc-500">{dimension.teamValue} <span className="text-zinc-700">(league {dimension.leagueAverage})</span></span>
+        <span className="text-text-2">{TEAM_DNA_DIMENSION_LABEL[dimension.key]}</span>
+        <span className="text-text-3">{dimension.teamValue} <span className="text-text-3">(league {dimension.leagueAverage})</span></span>
       </div>
       <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-white/[.06]">
         {index != null ? (
