@@ -4352,3 +4352,39 @@ STAGE_5_5C: NOT_STARTED
 
 - Operator sign-in review on production; then real-device review (courtside tablet + gate
   phone) and the remaining handoff adoption (DataTable across workspace index pages).
+
+### 2026-09-21 - Critical Fix: Root Layout Was Not Importing globals.css
+
+**Objective**
+
+- Resolve the production report that `app.neonultra.ng` rendered as unstyled HTML.
+
+**Root cause**
+
+- `web/src/app/layout.tsx` imported `"tailwindcss"` directly instead of `"./globals.css"`
+  (a casualty of the D1 build-fix). As a result no bundler emitted any global stylesheet
+  output: builds contained only the next/font chunk, so every Tailwind utility, token, and
+  body rule was missing app-wide — the app had never been visibly styled since D1.
+- Confirmed by bisect: pristine pre-D1 globals.css also emitted nothing because layout.tsx
+  still imported the wrong module; the PostCSS plugin itself produced 113KB when invoked
+  directly; both Turbopack and webpack produced font-only CSS.
+
+**Completed**
+
+- Fixed `layout.tsx` to `import "./globals.css"` (which itself starts with
+  `@import "tailwindcss"`, per the Next 16 + Tailwind v4 docs).
+- Rebuilt: a single 90KB globals chunk now carries fonts + all utilities + tokens
+  (`.bg-ink-900`, `body{}`, `--ul-primary`).
+- Deployed `b27e02c` to staging and production; production `/login` now serves
+  `/_next/static/chunks/2j2d306k0ynzq.css` (200, 90,871 bytes) containing utilities,
+  body rules, and tokens — the UI is now genuinely styled.
+
+**Verification**
+
+- Local: typecheck, build, lint, tests green; build emits utilities.
+- Live: production stylesheet 200 with `.bg-ink-900`/`body`/`--ul-primary` present.
+
+**Next step**
+
+- Operator visual sign-off on production; real-device review (courtside tablet + gate
+  phone); remaining handoff adoption.
