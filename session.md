@@ -4628,3 +4628,51 @@ STAGE_5_5C: NOT_STARTED
 - None outstanding for LBCL's opening weekend. Future games: same ingestion pipeline,
   `scripts/recompute-standings.ts` after ingesting if the eligibility/points rules ever
   change again.
+
+### 2026-09-22 - Tournament Highlights (Widest Margin, Closest Game, Best FT% etc.) + a Real Bug Found Building It
+
+**Objective**
+
+- User asked for tournament highlights (biggest margin, closest game, highest points, best
+  free-throw shooter, etc.) on the LBCL vanity pages.
+
+**Completed**
+
+- Added a "Highlights" tab to `/[vanitySlug]` (`/lbcl/highlights`) by reusing the existing
+  record-book engine (`src/lib/analytics/records.ts` + `game-analytics.ts`) already live at
+  Neon Ultra's `/public/stats/records` — no new calculation logic, just wired the same
+  `buildGameRecords`/`buildTeamRecords`/`buildPlayerSingleGameRecords`/
+  `buildPlayerSeasonRecords` functions to LBCL's own org+season. Covers Biggest Margin,
+  Closest Game, Highest/Lowest-Scoring Game, Biggest Comeback, team records, and player
+  single-game/season records including qualified-rate leaders (best FT%/FG%/3PT%, PPG/RPG)
+  with the existing minimum-attempts/minimum-games floors.
+  `src/app/t/[slug]/sub-site-tabs.tsx` gained an optional `extraTabs` prop so Neon Ultra's own
+  `/t/[slug]` tab bar is unaffected (still exactly 2 tabs).
+- **Bug found while verifying it**: `buildGameRecords`'s "Highest-Scoring Game" sorted games
+  by combined score descending, then piped the *whole* array through `tieBreakEarliest` —
+  which re-sorts by `scheduledAt` and discards the score ordering entirely, so it always
+  returned the season's chronologically first game regardless of score. This has been live
+  on Neon Ultra's own record book this whole time (undetected — no test file existed for
+  `records.ts` before today). Fixed to compute the max first and tie-break only the tied
+  subset, matching every other record builder in the file; added `records.test.ts` (4 new
+  tests) covering the regression plus lowest/closest/biggest-margin.
+- Deployed to staging then production (fresh verified `pg_dump` backup before the production
+  write, per standing doctrine).
+
+**Verification**
+
+- tsc/705+4 new tests/lint green locally before every deploy.
+- Staging: `/lbcl/highlights` returns 200 with correct entries across all 4 sections;
+  confirmed the records bug live (both "Highest" and "Lowest" showed the same 79-pt game)
+  before the fix, and the correct 133-pt game (SSH 65–68 CPS) after it.
+- Cross-checked the fix against Neon Ultra's own `/public/stats/records`: now shows 82 pts,
+  exactly the documented Season Zero score-distribution ceiling (`analytics/config.ts`'s
+  own comment: "11 games, combined points 21-82") — strong evidence this was silently wrong
+  before and is now correct, not just changed.
+- Production: identical result, verified via direct fetch.
+
+**Next step**
+
+- None outstanding. If LBCL's Highlights page turns out to want fixture-detail links or a
+  shareable-card route (like Neon Ultra's `/public/share/record/[key]`), that's a
+  `/[vanitySlug]`-scoped follow-up, not a reason to widen the Neon-Ultra-only routes.
