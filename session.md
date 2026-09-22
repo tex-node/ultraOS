@@ -4563,3 +4563,68 @@ STAGE_5_5C: NOT_STARTED
   `scripts/external-stats-ingest.ts` pipeline — organization mode `"existing"` with this
   organization's id, reusing `scripts/data/build-lbcl-batch.mjs`'s pattern for the next
   batch file.
+
+### 2026-09-22 - LBCL Standings Bug, Missing Game 2, and a Real Per-League Points Rule
+
+**Objective**
+
+- User noticed LBCL's `/lbcl/fixtures` standings table was all zeros despite 9 imported
+  games, and shared the league's own official standings graphic as ground truth to
+  reconcile against.
+
+**Completed**
+
+- **Root cause**: `competitiveFixtureScope()` (`src/lib/competitive-scope.ts`) is an
+  allow-list that only counted `recordOrigin: "PRODUCTION"` fixtures toward standings/
+  leaderboards/records — `external-stats-ingestion.ts`'s fixtures are `IMPORT`-origin, so
+  every LBCL game was silently excluded from `recalculateStandings()`, producing an
+  all-zero table. `IMPORT` is a legitimate origin for real, officially completed games
+  transcribed from an external box score (not a rehearsal/demo/test artifact) and is used
+  nowhere else in the codebase, so it now joins the allow-list.
+- **Divergence discovered**: `presentation-scope.ts` (broadcast/live visibility) used to
+  delegate to `competitive-scope.ts` because the two questions had an identical answer.
+  They no longer do — an LBCL game is competitive but was never live-produced through Neon
+  Ultra's broadcast pipeline, so it must stay off `/live`/`/broadcast/stats`/graphics.
+  `presentation-scope.ts` now keeps its own independent PRODUCTION-only allow-list, exactly
+  the fork its own doc comment had anticipated.
+- Added `scripts/recompute-standings.ts` (generic, per-organization) since
+  `recalculateStandings()` only ever runs as a side effect of a fresh game import — a rule
+  change alone never touches already-written `Standing` rows without an explicit re-run.
+- **Missing Game 2 found**: comparing our recomputed standings to the user's reference
+  graphic showed Leo Kareem Foundation and Cantonment Braves one game short each — Game 2
+  (Cantonment Braves 62–63 Leo Kareem Foundation, Fri 18 Sep) was never in the original 11
+  images. The user supplied it as a proper file upload (`C:\UltraLeagueOS\lbcl\1790072249405.jpg`)
+  after an initial inline-paste attempt couldn't be zoom/crop-verified; transcribed and
+  checksum-verified the same way as the other 9 (every player's points independently sum to
+  the exact final score for both teams). Both clubs recur from Games 6/10 — names
+  reconciled to each club's established canonical spelling (e.g. "Ahmed Soji" → "Ahmed
+  Olusoji", "Agbonkwese Joshua" → "Joshua Agbonkese"), `jerseyNumber: null` for 4 genuinely
+  new players whose sheet-reported jersey was already held by a different real player.
+- **Real per-league scoring rule**: the reference graphic's PTS column is 2-for-a-win/
+  1-for-a-loss, not the platform's 3-win/0-loss basketball default. Added an optional
+  `standingsPoints` field to `SportDefinitionOverride`'s config (`src/lib/sports/
+  overrides.ts`, WIN_DRAW_LOSS models only — validated and unit-tested), and
+  `scripts/set-standings-points-override.ts` to set it per-organization. User confirmed
+  this should apply (an org-level scoring choice, not a bug) — Neon Ultra and every other
+  organization keep the 3/0 default.
+- Deployed both fixes + Game 2 + the override to staging then production, in that order,
+  with a fresh verified `pg_dump` backup before each production write.
+
+**Verification**
+
+- tsc/699+2 new tests/lint green locally (`overrides.test.ts` covers the new
+  `standingsPoints` validate/apply/reject paths) before every deploy.
+- Staging: standings recomputed correctly after the scope fix (real P/W/PD/PTS, no longer
+  zero); Game 2 imported cleanly (4 new players, rest matched by reconciled name); override
+  set and standings recomputed again — final table matches the user's reference graphic
+  exactly except Seaside Hoopers' point differential (+2 here vs -8 on the graphic; both of
+  their games are independently checksum-verified against their own box sheets, so this
+  looks like a small error in the official graphic rather than in this data).
+- Production: identical sequence, identical final standings table, verified via direct
+  `/lbcl/fixtures` fetch.
+
+**Next step**
+
+- None outstanding for LBCL's opening weekend. Future games: same ingestion pipeline,
+  `scripts/recompute-standings.ts` after ingesting if the eligibility/points rules ever
+  change again.

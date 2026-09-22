@@ -169,6 +169,44 @@ assumptions; middleware may not even exist in the same form in this version).
 6. If any game fails on a `Player(seasonClubId, jerseyNumber)` unique-constraint error,
    see Section 5 — reconcile names/jerseys against the already-created roster and re-run
    (already-imported games report `BLOCKED`/already-FINAL harmlessly, not a double-import).
-7. Smoke-test `/[vanitySlug]` and `/[vanitySlug]/fixtures` and the homepage on staging.
+7. Smoke-test `/[vanitySlug]` and `/[vanitySlug]/fixtures` and the homepage on staging —
+   check the **standings table specifically**, not just that fixtures list (see Section 8).
 8. Get explicit sign-off before deploying to production — this pipeline creates a new,
    permanent organization and its games; production is outward-facing.
+
+## 8. Standings will read as all-zero unless you check this
+
+`recalculateStandings()` (called after every successful import) filters fixtures through
+`competitiveFixtureScope()` (`src/lib/competitive-scope.ts`), an allow-list of
+`Fixture.recordOrigin` values that count toward standings/leaderboards/records. As of
+2026-09-22 this allow-list is `["PRODUCTION", "IMPORT"]`, so a fresh ingestion's fixtures
+(created with `recordOrigin: "IMPORT"`) already count — but if a future `RecordOrigin` value
+is ever used for a new ingestion path, it must be added to that allow-list explicitly, or
+every fixture using it will import successfully, look completely normal on the fixtures
+list, and silently produce an all-zero standings table with no error anywhere. There is no
+warning for this - the only symptom is a standings table that never moves. Verify the
+standings table shows real numbers after your first ingestion of a new organization, not
+just that the fixture list and box scores render.
+
+If eligibility rules change (or a bug like the above is fixed) **after** fixtures are
+already imported and `FINAL`, the fix does not retroactively touch already-written
+`Standing` rows — `recalculateStandings()` only runs as a side effect of a fresh import, so
+run `npx tsx scripts/recompute-standings.ts <organizationId>` once after any such change.
+
+Note the same allow-list is deliberately **not** shared with `presentation-scope.ts`
+(broadcast/live visibility) — an imported historical game is competitive (must count for
+standings) but was never live-produced through Neon Ultra's own broadcast pipeline, so it
+must stay off `/live`, `/broadcast/stats`, and broadcast graphics. Don't "fix" this by
+re-merging the two scopes.
+
+## 9. A league's own points formula may not be the platform default
+
+Basketball's platform default is 3 points for a win, 0 for a loss
+(`src/lib/sports/basketball.ts`). A real community league may use a different, equally
+legitimate convention (LBCL's own published standings use 2-for-a-win/1-for-a-loss). This is
+a per-organization decision, not something to silently normalize to the platform default or
+silently override without asking — confirm with whoever supplied the source data before
+changing it. Once confirmed, it's `SportDefinitionOverride.config.standingsPoints` (only
+valid for a `WIN_DRAW_LOSS` standings model), set via
+`npx tsx scripts/set-standings-points-override.ts <organizationId> <sportSlug> <win> <loss> [draw]`,
+then re-run `scripts/recompute-standings.ts` to apply it to already-imported games.
