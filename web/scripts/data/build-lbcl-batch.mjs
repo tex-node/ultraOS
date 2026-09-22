@@ -243,17 +243,20 @@ games.push(game({
     { period: 4, label: "Q4", homeScore: 23, awayScore: 19 },
   ],
   home: team("Campos Basketballers", "CMP", { points: 69, rebounds: 41, assists: 12, turnovers: 15, fouls: 13 }, [
-    ["Nasir Abdulmalik", 0, 17, 2, 1, 4, 1, 2, 0, 2, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, -2, 2],
+    // Same club as Game 4; names reconciled to that game's canonical spelling where a jersey
+    // match makes the identity clear, and jerseyNumber nulled (not guessed) where two different
+    // names share a jersey worn by a different real player in Game 4 (see session.md).
+    ["Nasir Abdulmalik", null, 17, 2, 1, 4, 1, 2, 0, 2, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, -2, 2],
     ["Salawu Korede", 1, 34, 11, 4, 16, 3, 13, 1, 3, 2, 4, 0, 4, 2, 4, 2, 0, 2, 4, 12, 1],
-    ["Donald Uzomo", 3, 13, 5, 2, 4, 2, 4, 0, 0, 1, 2, 2, 3, 0, 0, 0, 0, 1, 1, 6, 7],
-    ["Stephen Unachuwkwu", 6, 27, 7, 2, 6, 2, 5, 0, 1, 3, 4, 0, 3, 2, 4, 1, 0, 2, 3, 7, 4],
-    ["Adesuyi Adekunle", 8, 30, 20, 7, 13, 4, 5, 3, 8, 3, 3, 1, 4, 0, 1, 3, 0, 0, 1, 7, 21],
-    ["Ugonna Joshua", 11, "DNP"],
+    ["Uzoma Donald", 3, 13, 5, 2, 4, 2, 4, 0, 0, 1, 2, 2, 3, 0, 0, 0, 0, 1, 1, 6, 7],
+    ["Stephen Q", 6, 27, 7, 2, 6, 2, 5, 0, 1, 3, 4, 0, 3, 2, 4, 1, 0, 2, 3, 7, 4],
+    ["Adesuyi Adekunle", null, 30, 20, 7, 13, 4, 5, 3, 8, 3, 3, 1, 4, 0, 1, 3, 0, 0, 1, 7, 21],
+    ["Ugonna Joshua", null, "DNP"],
     ["Muiz Salam", 12, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -3, 0],
-    ["Andrew Iyere", 15, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    ["Umenwaniri Somto", 23, 14, 10, 5, 7, 5, 7, 0, 0, 0, 0, 2, 1, 0, 1, 1, 2, 4, 0, 7, 13],
+    ["Andrew Iyere", null, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    ["Somto T", 23, 14, 10, 5, 7, 5, 7, 0, 0, 0, 0, 2, 1, 0, 1, 1, 2, 4, 0, 7, 13],
     ["Gideon Danjuma", 24, "DNP"],
-    ["Shedrack Wharton", 30, 29, 10, 3, 9, 2, 7, 1, 2, 3, 4, 0, 7, 7, 3, 4, 0, 1, 5, 15, 18],
+    ["Whatson Shedrack", 30, 29, 10, 3, 9, 2, 7, 1, 2, 3, 4, 0, 7, 7, 3, 4, 0, 1, 5, 15, 18],
     ["Tawo Adedoyin", 45, 32, 4, 2, 3, 2, 3, 0, 0, 0, 0, 2, 6, 0, 2, 0, 1, 2, 4, 11, 10],
   ]),
   away: team("Cantonment Braves", "CTB", { points: 58, rebounds: 40, assists: 8, turnovers: 15, fouls: 18 }, [
@@ -292,7 +295,7 @@ games.push(game({
     ["Anicho Precious", 4, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, -1],
     ["Opene Nathaniel", 5, "DNP"],
     ["Augustine Timothy", 6, 40, 19, 6, 13, 4, 9, 2, 4, 5, 8, 2, 5, 0, 1, 3, 0, 0, 6, 5, 18],
-    ["Oluwasegun Juniour", 7, 23, 6, 3, 7, 3, 7, 0, 0, 0, 0, 0, 3, 1, 0, 1, 1, 2, 0, -2, 8],
+    ["Oluwasegun Junior", 7, 23, 6, 3, 7, 3, 7, 0, 0, 0, 0, 0, 3, 1, 0, 1, 1, 2, 0, -2, 8],
     ["Evans Amadi", 10, 40, 8, 2, 4, 2, 4, 0, 0, 4, 12, 4, 10, 1, 1, 1, 0, 4, 7, 5, 13],
     ["Bright Adedeji", 11, 17, 5, 1, 2, 1, 2, 0, 0, 3, 4, 0, 0, 0, 2, 2, 0, 2, 2, 1, 3],
     ["Segun George", 12, 40, 14, 7, 12, 7, 11, 0, 1, 0, 4, 2, 1, 4, 4, 7, 2, 2, 3, 5, 17],
@@ -331,31 +334,35 @@ games.push(game({
     { period: 4, label: "Q4", homeScore: 15, awayScore: 9 },
   ],
   home: team("LXB Surulere", "LXB", { points: 44, rebounds: 47, assists: 6, turnovers: 20, fouls: 21 }, [
+    // Same club as Game 1; reconciled to that game's canonical spelling / nulled where the
+    // jersey collides with a different real player from Game 1 (see session.md).
     ["Sunday Joshua", 2, 15, 6, 3, 7, 3, 6, 0, 1, 0, 2, 0, 4, 2, 0, 0, 0, 0, 1, 5, 6],
     ["Njere Ikechukwu", 6, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1],
     ["Thomas Ayomide", 8, 15, 2, 1, 6, 1, 6, 0, 0, 0, 0, 1, 3, 0, 5, 1, 0, 3, 0, 2, -3],
-    ["Ifeanyi Udeh", 12, 28, 11, 4, 7, 4, 7, 0, 0, 3, 4, 4, 4, 1, 0, 1, 1, 1, 3, 5, 18],
-    ["Abdulkareem Ahmad", 13, 31, 2, 0, 3, 0, 3, 0, 0, 2, 6, 3, 1, 1, 3, 1, 0, 4, 6, 3, -2],
-    ["Promise Ezennaya", 14, 19, 2, 1, 5, 1, 3, 0, 2, 0, 2, 1, 1, 0, 3, 2, 0, 2, 3, 5, -3],
-    ["Roosevelt Gaga", 16, "DNP"],
-    ["Florunsho Segun", 17, 33, 6, 2, 10, 2, 7, 0, 3, 2, 5, 1, 1, 1, 4, 1, 0, 4, 2, 7, -5],
+    ["Ifeanyi Udeli", 12, 28, 11, 4, 7, 4, 7, 0, 0, 3, 4, 4, 4, 1, 0, 1, 1, 1, 3, 5, 18],
+    ["Ahmed Abdul", 13, 31, 2, 0, 3, 0, 3, 0, 0, 2, 6, 3, 1, 1, 3, 1, 0, 4, 6, 3, -2],
+    ["Promise Eze", 14, 19, 2, 1, 5, 1, 3, 0, 2, 0, 2, 1, 1, 0, 3, 2, 0, 2, 3, 5, -3],
+    ["Rooseven Gaga", 16, "DNP"],
+    ["Florunsho Segun", null, 33, 6, 2, 10, 2, 7, 0, 3, 2, 5, 1, 1, 1, 4, 1, 0, 4, 2, 7, -5],
     ["Salisu Umar", 22, 16, 4, 2, 6, 2, 6, 0, 0, 0, 1, 2, 2, 0, 2, 0, 0, 4, 2, -6, 1],
     ["Ik Igwe", 25, 9, 2, 1, 2, 1, 2, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, -9, 2],
-    ["Chibueze Ralph", 28, "DNP"],
+    ["Chibuere Rapheal", 28, "DNP"],
     ["Anekwere Francis", 29, 26, 9, 3, 5, 2, 4, 1, 1, 2, 4, 1, 4, 0, 0, 1, 0, 2, 2, 11, 11],
   ]),
   away: team("White Fire", "WHT", { points: 40, rebounds: 33, assists: 9, turnovers: 17, fouls: 20 }, [
-    ["Boluwatife Jebutu", 2, 29, 0, 0, 2, 0, 1, 0, 1, 0, 2, 0, 0, 3, 4, 2, 0, 2, 2, 0, -3],
-    ["Emmanuel Irekhore", 5, 13, 4, 1, 5, 1, 4, 0, 1, 2, 2, 0, 3, 1, 3, 1, 0, 3, 1, 0, 2],
+    // Same club as Game 5; reconciled to that game's canonical spelling / nulled where the
+    // jersey collides with a different real player from Game 5 (see session.md).
+    ["Boluwadoro Jeboto", 2, 29, 0, 0, 2, 0, 1, 0, 1, 0, 2, 0, 0, 3, 4, 2, 0, 2, 2, 0, -3],
+    ["Emmanuel Ireleore", 5, 13, 4, 1, 5, 1, 4, 0, 1, 2, 2, 0, 3, 1, 3, 1, 0, 3, 1, 0, 2],
     ["Daniel Izondo", 6, 3, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 3, 1],
-    ["Madoua Fofana", 9, 11, 0, 0, 1, 0, 1, 0, 0, 0, 2, 0, 2, 0, 1, 0, 0, 1, 2, -5, -2],
-    ["Elisha Oreye", 10, 25, 0, 0, 5, 0, 2, 0, 3, 0, 0, 0, 2, 0, 4, 1, 0, 1, 0, -11, -6],
-    ["Stanley Emeka", 12, 30, 12, 4, 8, 4, 8, 0, 0, 4, 5, 2, 6, 0, 2, 2, 5, 4, 8, 1, 20],
-    ["Okoye Faith", 13, 23, 5, 2, 7, 2, 5, 0, 2, 1, 2, 1, 3, 2, 0, 0, 0, 2, 1, -6, 5],
+    ["Madoud Fofana", 9, 11, 0, 0, 1, 0, 1, 0, 0, 0, 2, 0, 2, 0, 1, 0, 0, 1, 2, -5, -2],
+    ["Udo-Oreye Elisha", 10, 25, 0, 0, 5, 0, 2, 0, 3, 0, 0, 0, 2, 0, 4, 1, 0, 1, 0, -11, -6],
+    ["Stanley Olisaemeka", 12, 30, 12, 4, 8, 4, 8, 0, 0, 4, 5, 2, 6, 0, 2, 2, 5, 4, 8, 1, 20],
+    ["Okeye Faith", 13, 23, 5, 2, 7, 2, 5, 0, 2, 1, 2, 1, 3, 2, 0, 0, 0, 2, 1, -6, 5],
     ["Vihni Obioma", 15, 27, 12, 5, 13, 5, 11, 0, 2, 2, 2, 1, 1, 1, 0, 1, 0, 1, 3, -2, 8],
     ["Ikenna Arthur", 18, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 4, 1],
-    ["Iynoluwa Laitan", 19, 14, 1, 0, 1, 0, 1, 0, 0, 1, 2, 0, 3, 1, 1, 1, 0, 2, 3, -2, 3],
-    ["Negedo Joseph", 27, 19, 4, 1, 6, 0, 1, 1, 5, 1, 2, 1, 0, 1, 1, 3, 2, 2, 1, 0, 4],
+    ["Iynoluwa Laditan", 19, 14, 1, 0, 1, 0, 1, 0, 0, 1, 2, 0, 3, 1, 1, 1, 0, 2, 3, -2, 3],
+    ["Negedo Joseph", null, 19, 4, 1, 6, 0, 1, 1, 5, 1, 2, 1, 0, 1, 1, 3, 2, 2, 1, 0, 4],
   ]),
 }));
 
@@ -374,17 +381,19 @@ games.push(game({
     { period: 4, label: "Q4", homeScore: 14, awayScore: 13 },
   ],
   home: team("Lagos Raptors", "LRA", { points: 54, rebounds: 39, assists: 8, turnovers: 12, fouls: 14 }, [
-    ["Osaretin U", 1, 12, 0, 0, 3, 0, 1, 0, 2, 0, 2, 1, 0, 2, 0, 0, 0, 1, 1, 0, -2],
-    ["Emmanuel S", 2, 20, 7, 3, 7, 3, 4, 0, 3, 1, 1, 0, 4, 0, 1, 0, 0, 2, 1, 4, 6],
-    ["Farayibi Tamilore", 3, 31, 9, 4, 5, 3, 3, 1, 2, 0, 0, 0, 1, 0, 3, 2, 0, 2, 0, 6, 8],
+    // Same club as Game 3; reconciled to that game's canonical spelling / nulled where the
+    // jersey collides with a different real player from Game 3 (see session.md).
+    ["Uhunmwangho Osaretin", 1, 12, 0, 0, 3, 0, 1, 0, 2, 0, 2, 1, 0, 2, 0, 0, 0, 1, 1, 0, -2],
+    ["Emmanuel S", null, 20, 7, 3, 7, 3, 4, 0, 3, 1, 1, 0, 4, 0, 1, 0, 0, 2, 1, 4, 6],
+    ["Farayibi Oluwatamilore", 3, 31, 9, 4, 5, 3, 3, 1, 2, 0, 0, 0, 1, 0, 3, 2, 0, 2, 0, 6, 8],
     ["Joseph O", 4, 34, 7, 1, 2, 1, 2, 0, 0, 5, 10, 0, 0, 3, 1, 0, 0, 2, 6, -1, 3],
     ["Ayomide Adeeko", 5, 12, 2, 0, 1, 0, 1, 0, 0, 2, 4, 1, 4, 0, 0, 0, 0, 2, 2, 10, 4],
-    ["David Chidera", 6, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, -1, 1],
-    ["Samuel M", 7, 5, 2, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 1, 0, 4, 4],
-    ["Dennis Goodwill", 8, 7, 4, 2, 3, 2, 3, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 5],
-    ["Timmy T", 10, 40, 10, 4, 15, 4, 14, 0, 1, 2, 2, 0, 4, 3, 2, 3, 0, 1, 4, 8, 7],
+    ["David Chidera", null, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, -1, 1],
+    ["Timi Samuel", 7, 5, 2, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 1, 0, 4, 4],
+    ["Dannis Godwill", 8, 7, 4, 2, 3, 2, 3, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 5],
+    ["Timmy T", null, 40, 10, 4, 15, 4, 14, 0, 1, 2, 2, 0, 4, 3, 2, 3, 0, 1, 4, 8, 7],
     ["Dele Ajigboye", 11, 29, 9, 3, 7, 3, 7, 0, 0, 3, 6, 1, 6, 0, 0, 0, 4, 1, 5, 0, 13],
-    ["Tobi Ojajani", 12, 6, 4, 2, 2, 2, 2, 0, 0, 0, 0, 0, 1, 0, 3, 0, 0, 1, 0, 9, 2],
+    ["Ojajuni Oluwatobi", null, 6, 4, 2, 2, 2, 2, 0, 0, 0, 0, 0, 1, 0, 3, 0, 0, 1, 0, 9, 2],
   ]),
   away: team("Ultra Basketball", "ULT", { points: 46, rebounds: 44, assists: 5, turnovers: 10, fouls: 19 }, [
     ["Benjamin Chibuzor", 0, 31, 15, 6, 20, 4, 14, 2, 6, 1, 2, 0, 1, 0, 0, 0, 0, 1, 3, -4, 1],
@@ -431,14 +440,16 @@ games.push(game({
     ["Samuel O", 15, 19, 4, 2, 5, 2, 4, 0, 1, 0, 0, 1, 0, 3, 0, 1, 1, 0, 1, 37, 6],
   ]),
   away: team("Square Team", "SQT", { points: 16, rebounds: 19, assists: 2, turnovers: 25, fouls: 5 }, [
-    ["Ibrahim Qadir", 2, 12, 2, 1, 5, 1, 3, 0, 2, 0, 0, 0, 0, 0, 4, 1, 0, 1, 0, -21, -5],
+    // Same club as Game 5; reconciled to that game's canonical spelling / nulled where the
+    // jersey collides with a different real player from Game 5 (see session.md).
+    ["Ibrahim Qadir", null, 12, 2, 1, 5, 1, 3, 0, 2, 0, 0, 0, 0, 0, 4, 1, 0, 1, 0, -21, -5],
     ["Gideon Emmanuel", 3, 35, 0, 0, 4, 0, 3, 0, 1, 0, 0, 0, 1, 0, 2, 0, 0, 1, 0, -63, -5],
     ["Bamadyi B", 4, 26, 0, 0, 2, 0, 1, 0, 1, 0, 0, 1, 0, 1, 2, 1, 0, 0, 1, -57, -1],
-    ["Ibrahim Qudus", 5, 14, 2, 1, 3, 1, 2, 0, 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 2, -28, -2],
-    ["Sadiq P", 6, 28, 4, 2, 6, 2, 3, 0, 3, 0, 0, 1, 1, 0, 1, 1, 0, 1, 1, -49, 2],
+    ["Qudus Ibrahim", 5, 14, 2, 1, 3, 1, 2, 0, 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 2, -28, -2],
+    ["Sodiq Fetuga", 6, 28, 4, 2, 6, 2, 3, 0, 3, 0, 0, 1, 1, 0, 1, 1, 0, 1, 1, -49, 2],
     ["Peter Okeke", 7, 16, 4, 2, 7, 2, 6, 0, 1, 0, 0, 0, 0, 1, 3, 1, 0, 0, 1, -36, -2],
-    ["Creon O", 9, 30, 1, 0, 4, 0, 2, 0, 2, 1, 1, 1, 2, 0, 6, 0, 0, 0, 0, -58, -6],
-    ["Bilal M", 10, 40, 3, 1, 6, 1, 5, 0, 1, 1, 2, 0, 2, 0, 4, 0, 0, 2, 2, -78, -5],
+    ["Creon Okwuzu", 9, 30, 1, 0, 4, 0, 2, 0, 2, 1, 1, 1, 2, 0, 6, 0, 0, 0, 0, -58, -6],
+    ["Bilal M", null, 40, 3, 1, 6, 1, 5, 0, 1, 1, 2, 0, 2, 0, 4, 0, 0, 2, 2, -78, -5],
   ]),
 }));
 

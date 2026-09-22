@@ -2803,7 +2803,7 @@
           {
             "fullName": "Nasir Abdulmalik",
             "reportedName": "Nasir Abdulmalik",
-            "jerseyNumber": 0,
+            "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 17,
             "points": 2,
@@ -2853,8 +2853,8 @@
             "efficiency": 1
           },
           {
-            "fullName": "Donald Uzomo",
-            "reportedName": "Donald Uzomo",
+            "fullName": "Uzoma Donald",
+            "reportedName": "Uzoma Donald",
             "jerseyNumber": 3,
             "didNotPlay": false,
             "minutesPlayed": 13,
@@ -2879,8 +2879,8 @@
             "efficiency": 7
           },
           {
-            "fullName": "Stephen Unachuwkwu",
-            "reportedName": "Stephen Unachuwkwu",
+            "fullName": "Stephen Q",
+            "reportedName": "Stephen Q",
             "jerseyNumber": 6,
             "didNotPlay": false,
             "minutesPlayed": 27,
@@ -2907,7 +2907,7 @@
           {
             "fullName": "Adesuyi Adekunle",
             "reportedName": "Adesuyi Adekunle",
-            "jerseyNumber": 8,
+            "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 30,
             "points": 20,
@@ -2933,7 +2933,7 @@
           {
             "fullName": "Ugonna Joshua",
             "reportedName": "Ugonna Joshua",
-            "jerseyNumber": 11,
+            "jerseyNumber": null,
             "didNotPlay": true,
             "minutesPlayed": 0,
             "points": 0,
@@ -2985,7 +2985,7 @@
           {
             "fullName": "Andrew Iyere",
             "reportedName": "Andrew Iyere",
-            "jerseyNumber": 15,
+            "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 1,
             "points": 0,
@@ -3009,8 +3009,8 @@
             "efficiency": 0
           },
           {
-            "fullName": "Umenwaniri Somto",
-            "reportedName": "Umenwaniri Somto",
+            "fullName": "Somto T",
+            "reportedName": "Somto T",
             "jerseyNumber": 23,
             "didNotPlay": false,
             "minutesPlayed": 14,
@@ -3061,8 +3061,8 @@
             "efficiency": 0
           },
           {
-            "fullName": "Shedrack Wharton",
-            "reportedName": "Shedrack Wharton",
+            "fullName": "Whatson Shedrack",
+            "reportedName": "Whatson Shedrack",
             "jerseyNumber": 30,
             "didNotPlay": false,
             "minutesPlayed": 29,
@@ -3667,8 +3667,8 @@
             "efficiency": 18
           },
           {
-            "fullName": "Oluwasegun Juniour",
-            "reportedName": "Oluwasegun Juniour",
+            "fullName": "Oluwasegun Junior",
+            "reportedName": "Oluwasegun Junior",
             "jerseyNumber": 7,
             "didNotPlay": false,
             "minutesPlayed": 23,
@@ -4351,8 +4351,8 @@
             "efficiency": -3
           },
           {
-            "fullName": "Ifeanyi Udeh",
-            "reportedName": "Ifeanyi Udeh",
+            "fullName": "Ifeanyi Udeli",
+            "reportedName": "Ifeanyi Udeli",
             "jerseyNumber": 12,
             "didNotPlay": false,
             "minutesPlayed": 28,
@@ -4377,8 +4377,8 @@
             "efficiency": 18
           },
           {
-            "fullName": "Abdulkareem Ahmad",
-            "reportedName": "Abdulkareem Ahmad",
+            "fullName": "Ahmed Abdul",
+            "reportedName": "Ahmed Abdul",
             "jerseyNumber": 13,
             "didNotPlay": false,
             "minutesPlayed": 31,
@@ -4403,8 +4403,8 @@
             "efficiency": -2
           },
           {
-            "fullName": "Promise Ezennaya",
-            "reportedName": "Promise Ezennaya",
+            "fullName": "Promise Eze",
+            "reportedName": "Promise Eze",
             "jerseyNumber": 14,
             "didNotPlay": false,
             "minutesPlayed": 19,
@@ -4429,8 +4429,8 @@
             "efficiency": -3
           },
           {
-            "fullName": "Roosevelt Gaga",
-            "reportedName": "Roosevelt Gaga",
+            "fullName": "Rooseven Gaga",
+            "reportedName": "Rooseven Gaga",
             "jerseyNumber": 16,
             "didNotPlay": true,
             "minutesPlayed": 0,
@@ -4457,7 +4457,7 @@
           {
             "fullName": "Florunsho Segun",
             "reportedName": "Florunsho Segun",
-            "jerseyNumber": 17,
+            "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 33,
             "points": 6,
@@ -4533,8 +4533,8 @@
             "efficiency": 2
           },
           {
-            "fullName": "Chibueze Ralph",
-            "reportedName": "Chibueze Ralph",
+            "fullName": "Chibuere Rapheal",
+            "reportedName": "Chibuere Rapheal",
             "jerseyNumber": 28,
             "didNotPlay": true,
             "minutesPlayed": 0,
@@ -4614,8 +4614,8 @@
         },
         "players": [
           {
-            "fullName": "Boluwatife Jebutu",
-            "reportedName": "Boluwatife Jebutu",
+            "fullName": "Boluwadoro Jeboto",
+            "reportedName": "Boluwadoro Jeboto",
             "jerseyNumber": 2,
             "didNotPlay": false,
             "minutesPlayed": 29,
@@ -4640,8 +4640,8 @@
             "efficiency": -3
           },
           {
-            "fullName": "Emmanuel Irekhore",
-            "reportedName": "Emmanuel Irekhore",
+            "fullName": "Emmanuel Ireleore",
+            "reportedName": "Emmanuel Ireleore",
             "jerseyNumber": 5,
             "didNotPlay": false,
             "minutesPlayed": 13,
@@ -4692,8 +4692,8 @@
             "efficiency": 1
           },
           {
-            "fullName": "Madoua Fofana",
-            "reportedName": "Madoua Fofana",
+            "fullName": "Madoud Fofana",
+            "reportedName": "Madoud Fofana",
             "jerseyNumber": 9,
             "didNotPlay": false,
             "minutesPlayed": 11,
@@ -4718,8 +4718,8 @@
             "efficiency": -2
           },
           {
-            "fullName": "Elisha Oreye",
-            "reportedName": "Elisha Oreye",
+            "fullName": "Udo-Oreye Elisha",
+            "reportedName": "Udo-Oreye Elisha",
             "jerseyNumber": 10,
             "didNotPlay": false,
             "minutesPlayed": 25,
@@ -4744,8 +4744,8 @@
             "efficiency": -6
           },
           {
-            "fullName": "Stanley Emeka",
-            "reportedName": "Stanley Emeka",
+            "fullName": "Stanley Olisaemeka",
+            "reportedName": "Stanley Olisaemeka",
             "jerseyNumber": 12,
             "didNotPlay": false,
             "minutesPlayed": 30,
@@ -4770,8 +4770,8 @@
             "efficiency": 20
           },
           {
-            "fullName": "Okoye Faith",
-            "reportedName": "Okoye Faith",
+            "fullName": "Okeye Faith",
+            "reportedName": "Okeye Faith",
             "jerseyNumber": 13,
             "didNotPlay": false,
             "minutesPlayed": 23,
@@ -4848,8 +4848,8 @@
             "efficiency": 1
           },
           {
-            "fullName": "Iynoluwa Laitan",
-            "reportedName": "Iynoluwa Laitan",
+            "fullName": "Iynoluwa Laditan",
+            "reportedName": "Iynoluwa Laditan",
             "jerseyNumber": 19,
             "didNotPlay": false,
             "minutesPlayed": 14,
@@ -4876,7 +4876,7 @@
           {
             "fullName": "Negedo Joseph",
             "reportedName": "Negedo Joseph",
-            "jerseyNumber": 27,
+            "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 19,
             "points": 4,
@@ -4983,8 +4983,8 @@
         },
         "players": [
           {
-            "fullName": "Osaretin U",
-            "reportedName": "Osaretin U",
+            "fullName": "Uhunmwangho Osaretin",
+            "reportedName": "Uhunmwangho Osaretin",
             "jerseyNumber": 1,
             "didNotPlay": false,
             "minutesPlayed": 12,
@@ -5011,7 +5011,7 @@
           {
             "fullName": "Emmanuel S",
             "reportedName": "Emmanuel S",
-            "jerseyNumber": 2,
+            "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 20,
             "points": 7,
@@ -5035,8 +5035,8 @@
             "efficiency": 6
           },
           {
-            "fullName": "Farayibi Tamilore",
-            "reportedName": "Farayibi Tamilore",
+            "fullName": "Farayibi Oluwatamilore",
+            "reportedName": "Farayibi Oluwatamilore",
             "jerseyNumber": 3,
             "didNotPlay": false,
             "minutesPlayed": 31,
@@ -5115,7 +5115,7 @@
           {
             "fullName": "David Chidera",
             "reportedName": "David Chidera",
-            "jerseyNumber": 6,
+            "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 5,
             "points": 0,
@@ -5139,8 +5139,8 @@
             "efficiency": 1
           },
           {
-            "fullName": "Samuel M",
-            "reportedName": "Samuel M",
+            "fullName": "Timi Samuel",
+            "reportedName": "Timi Samuel",
             "jerseyNumber": 7,
             "didNotPlay": false,
             "minutesPlayed": 5,
@@ -5165,8 +5165,8 @@
             "efficiency": 4
           },
           {
-            "fullName": "Dennis Goodwill",
-            "reportedName": "Dennis Goodwill",
+            "fullName": "Dannis Godwill",
+            "reportedName": "Dannis Godwill",
             "jerseyNumber": 8,
             "didNotPlay": false,
             "minutesPlayed": 7,
@@ -5193,7 +5193,7 @@
           {
             "fullName": "Timmy T",
             "reportedName": "Timmy T",
-            "jerseyNumber": 10,
+            "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 40,
             "points": 10,
@@ -5243,9 +5243,9 @@
             "efficiency": 13
           },
           {
-            "fullName": "Tobi Ojajani",
-            "reportedName": "Tobi Ojajani",
-            "jerseyNumber": 12,
+            "fullName": "Ojajuni Oluwatobi",
+            "reportedName": "Ojajuni Oluwatobi",
+            "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 6,
             "points": 4,
@@ -6036,7 +6036,7 @@
           {
             "fullName": "Ibrahim Qadir",
             "reportedName": "Ibrahim Qadir",
-            "jerseyNumber": 2,
+            "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 12,
             "points": 2,
@@ -6112,8 +6112,8 @@
             "efficiency": -1
           },
           {
-            "fullName": "Ibrahim Qudus",
-            "reportedName": "Ibrahim Qudus",
+            "fullName": "Qudus Ibrahim",
+            "reportedName": "Qudus Ibrahim",
             "jerseyNumber": 5,
             "didNotPlay": false,
             "minutesPlayed": 14,
@@ -6138,8 +6138,8 @@
             "efficiency": -2
           },
           {
-            "fullName": "Sadiq P",
-            "reportedName": "Sadiq P",
+            "fullName": "Sodiq Fetuga",
+            "reportedName": "Sodiq Fetuga",
             "jerseyNumber": 6,
             "didNotPlay": false,
             "minutesPlayed": 28,
@@ -6190,8 +6190,8 @@
             "efficiency": -2
           },
           {
-            "fullName": "Creon O",
-            "reportedName": "Creon O",
+            "fullName": "Creon Okwuzu",
+            "reportedName": "Creon Okwuzu",
             "jerseyNumber": 9,
             "didNotPlay": false,
             "minutesPlayed": 30,
@@ -6218,7 +6218,7 @@
           {
             "fullName": "Bilal M",
             "reportedName": "Bilal M",
-            "jerseyNumber": 10,
+            "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 40,
             "points": 3,
