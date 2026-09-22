@@ -6,12 +6,24 @@ import { useState } from "react";
 
 // Sub-site tabs + share button (product roadmap F2). Client-side only for the active-tab
 // highlight and the Web Share API (with clipboard fallback); everything else is static.
-export function SubSiteTabs({ basePath, title }: { basePath: string; title: string }) {
+// `extraTabs` is additive and optional so /t/[slug] (Neon Ultra) keeps its existing two tabs
+// unchanged; only a caller that actually has the extra page (e.g. /[vanitySlug]'s Highlights)
+// passes one in.
+export function SubSiteTabs({
+  basePath,
+  title,
+  extraTabs = [],
+}: {
+  basePath: string;
+  title: string;
+  extraTabs?: { href: string; label: string }[];
+}) {
   const pathname = usePathname();
   const [shared, setShared] = useState(false);
   const tabs = [
     { href: basePath, label: "Overview" },
     { href: `${basePath}/fixtures`, label: "Fixtures & Stats" },
+    ...extraTabs,
   ];
   const share = async () => {
     const url = window.location.href;

@@ -51,7 +51,11 @@ export default async function VanityTournamentLayout({
           </div>
           <h1 className="mt-3 font-display text-4xl font-bold sm:text-5xl">{competition.name}</h1>
           {competition.description ? <p className="mt-2 max-w-3xl text-text-2">{competition.description}</p> : null}
-          <SubSiteTabs basePath={basePath} title={competition.name} />
+          <SubSiteTabs
+            basePath={basePath}
+            title={competition.name}
+            extraTabs={[{ href: `${basePath}/highlights`, label: "Highlights" }]}
+          />
         </div>
       </div>
       {children}
