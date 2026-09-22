@@ -4423,3 +4423,27 @@ STAGE_5_5C: NOT_STARTED
 
 - Operator connects a real vendor payout account + onboarding; funds settle -> automatic
   transfers flow. Enable Payouts/Refunds scopes on the key as needed.
+
+### 2026-09-21 - Bachs Vendor Connect Verified + Auto Transfers
+
+**Completed**
+
+- Added `createTransfer` + per-vendor net-share transfers on paid orders (webhook issues
+  a transfer per vendor with a connected account, grouped by the charge, best-effort).
+- Corrected the Connect client to the live API shapes: `contact_email` +
+  `configuration.recipient.capabilities.{transfers,payouts}.requested`, and account-links
+  `type:"onboarding"` with required refresh/return URLs.
+- Verified against the live gateway: connected account created
+  (`acct_CuToTDfBgFg21YrY`, status active) and hosted onboarding URL minted
+  (`https://connect.bachs.io/setup/c/acct_CuToTDfBgFg21YrY/al_...`).
+- Deployed `684db5a` to staging + production.
+
+**Verification**
+
+- typecheck/build/tests/lint green; live Connect account + onboarding link verified.
+
+**Next step**
+
+- Operators connect real vendors (button on vendor page) and send them through onboarding;
+  settled sales then auto-transfer net-of-commission shares to each vendor account. The
+  test Connect account `acct_CuToTDfBgFg21YrY` can be archived if unwanted.
