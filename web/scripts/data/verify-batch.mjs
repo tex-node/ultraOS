@@ -9,8 +9,6 @@ for (const g of batch.games) {
     const sumPts = team.players.reduce((a, p) => a + p.points, 0);
     const sumAst = team.players.reduce((a, p) => a + p.assists, 0);
     const sumReb = team.players.reduce((a, p) => a + p.offensiveRebounds + p.defensiveRebounds, 0);
-    const sumTo = team.players.reduce((a, p) => a + p.turnovers, 0);
-    const sumPf = team.players.reduce((a, p) => a + p.foulsCommitted, 0);
     const label = `${g.sourceLabel} / ${side} (${team.clubName})`;
     if (sumPts !== team.totals.points) {
       console.log(`PTS MISMATCH: ${label} sum=${sumPts} totals=${team.totals.points}`);
