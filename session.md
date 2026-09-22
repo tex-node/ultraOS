@@ -4547,14 +4547,18 @@ STAGE_5_5C: NOT_STARTED
   correctly reports BLOCKED/already-FINAL rather than double-importing); `/lbcl` and
   `/lbcl/fixtures` return 200 on staging with all 10 real clubs and final scores/standings;
   homepage shows "Lagos Basketball Community League" linking to `/lbcl` alongside Neon Ultra.
+- User confirmed both open questions: the club merges (Lagos Raptors = Lagos Raptors
+  Academy; Ogra Hoop Kings = Ogra Basketball) are correct, and the whole league is
+  all-male — no data changes needed.
+- Deployed to **production** (`b46d61e`) 2026-09-22: verified `pg_dump` backup taken first
+  (`/var/backups/ultraleagueos-production/ultraleagueos-pre-lbcl-ingest-20260922T090433Z.dump`),
+  `prisma migrate deploy` applied the `COMPETITION` locator-type migration, dry-run then
+  `--apply` — all 9 games IMPORTED cleanly on the first attempt (the staging identity fixes
+  carried straight over, no repeat jersey-collision failures). `/lbcl`, `/lbcl/fixtures`, and
+  the homepage verified 200 with all 10 clubs live on production.
 
 **Next step**
 
-- Get the user's sign-off on the club-name merges and the all-male gender inference above,
-  and on the `jerseyNumber: null` placeholders, before treating this as the tournament's
-  permanent record.
-- Deploy to production once approved (staging-only so far, per this project's standing
-  outward-facing-change doctrine).
 - More LBCL games as they're played can go through the same
   `scripts/external-stats-ingest.ts` pipeline — organization mode `"existing"` with this
   organization's id, reusing `scripts/data/build-lbcl-batch.mjs`'s pattern for the next
