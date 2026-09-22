@@ -106,6 +106,51 @@ games.push(game({
 }));
 
 // ---------------------------------------------------------------------------
+// Game 2: Cantonment Braves 62 - 63 Leo Kareem Foundation - Fri 18 Sep 2026
+// Both clubs recur (CNT from Game 6, LEO from Game 10); names reconciled to each club's
+// already-established canonical spelling, jerseyNumber nulled where a different real player
+// already holds that jersey in the other game (see session.md).
+// ---------------------------------------------------------------------------
+games.push(game({
+  sourceLabel: "LBCL Game 2 - Cantonment Braves vs Leo Kareem Foundation - Fri 18 Sep 2026",
+  venue: VENUE_TBC,
+  scheduledAt: "2026-09-18T17:47:00.000Z",
+  homeScore: 62, awayScore: 63,
+  periods: [
+    { period: 1, label: "Q1", homeScore: 16, awayScore: 16 },
+    { period: 2, label: "Q2", homeScore: 16, awayScore: 14 },
+    { period: 3, label: "Q3", homeScore: 13, awayScore: 18 },
+    { period: 4, label: "Q4", homeScore: 17, awayScore: 15 },
+  ],
+  home: team("Cantonment Braves", "CNT", { points: 62, rebounds: 28, assists: 8, turnovers: 9, fouls: 20 }, [
+    ["Otunyemi Seun", 4, 8, 0, 0, 5, 0, 3, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -13, -5],
+    ["Agindigbadi Wasiu", 5, 14, 2, 1, 3, 1, 2, 0, 1, 0, 0, 0, 1, 0, 2, 1, 1, 2, 0, 4, 1],
+    ["Ahmed Olusoji", 6, 22, 9, 3, 6, 2, 4, 1, 2, 2, 2, 2, 2, 3, 2, 2, 1, 2, 1, -8, 14],
+    ["Salako Fisayo", 7, 10, 1, 0, 0, 0, 0, 0, 0, 1, 2, 0, 1, 0, 0, 0, 0, 1, 1, 8, 1],
+    ["Otowo Emmanuel", 8, 13, 4, 1, 1, 1, 1, 0, 0, 2, 2, 1, 2, 0, 0, 0, 0, 3, 1, -6, 7],
+    ["Afulukwe Marvellous", 9, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, -4, 3],
+    ["Kayode Olakunle", 10, 23, 4, 2, 5, 2, 5, 0, 0, 0, 0, 2, 4, 0, 0, 0, 0, 2, 0, -5, 7],
+    ["Eli Francis", 11, 19, 2, 1, 6, 1, 3, 0, 3, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 7, -1],
+    ["Oparaugo Ikay", 12, 31, 5, 1, 8, 0, 2, 1, 6, 2, 2, 1, 2, 2, 1, 0, 0, 2, 2, 5, 2],
+    ["Clinton Koko", 13, 32, 20, 5, 9, 4, 6, 1, 3, 9, 12, 1, 1, 1, 3, 1, 1, 4, 8, -1, 15],
+    ["Oluwanifemi Kuti", 14, 28, 13, 5, 7, 5, 7, 0, 0, 3, 5, 1, 1, 2, 1, 1, 0, 3, 3, 10, 13],
+  ]),
+  away: team("Leo Kareem Foundation", "LEO", { points: 63, rebounds: 35, assists: 10, turnovers: 10, fouls: 17 }, [
+    ["Jackson Felix", null, 14, 2, 1, 3, 1, 3, 0, 0, 0, 0, 2, 1, 1, 0, 1, 0, 1, 0, 7, 5],
+    ["Oche Nworie", 5, 32, 16, 6, 12, 6, 8, 0, 4, 4, 4, 0, 3, 3, 3, 1, 0, 3, 2, 0, 14],
+    ["Obasana Sunday", null, 30, 6, 2, 5, 1, 3, 1, 2, 1, 2, 1, 3, 0, 1, 2, 0, 2, 5, -3, 7],
+    ["Matthew Daniel", null, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
+    ["Joshua Agbonkese", 9, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, -4, -2],
+    ["Kamal Ayanlere", 10, 18, 3, 1, 4, 0, 0, 1, 4, 0, 0, 0, 1, 0, 0, 0, 0, 0, 2, 7, 1],
+    ["Akinofa Ope", 11, 33, 13, 6, 9, 6, 9, 0, 0, 1, 1, 1, 2, 2, 2, 1, 0, 5, 2, -4, 14],
+    ["John I", 12, 27, 11, 3, 4, 3, 4, 0, 0, 5, 8, 2, 2, 2, 0, 1, 0, 3, 4, 0, 14],
+    ["Urenwoke Morrison", null, 9, 5, 2, 6, 2, 5, 0, 1, 1, 2, 0, 2, 0, 1, 0, 1, 0, 1, 3, 2],
+    ["Balogun Divine", 14, 17, 3, 1, 1, 1, 1, 0, 0, 1, 2, 1, 1, 1, 0, 0, 0, 1, 3, 6, 5],
+    ["Samuel O", 15, 16, 4, 2, 5, 2, 4, 0, 1, 0, 2, 1, 2, 0, 2, 0, 0, 2, 1, -1, 0],
+  ]),
+}));
+
+// ---------------------------------------------------------------------------
 // Game 3: Lagos Raptors 39 - 40 Ogra Hoop Kings - Sat 19 Sep 2026
 // ---------------------------------------------------------------------------
 games.push(game({

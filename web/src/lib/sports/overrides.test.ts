@@ -46,3 +46,18 @@ test("applySportOverride ignores undeclared keys", () => {
   assert.equal(applied.rules?.some((rule) => rule.key === "NOT_A_RULE"), false);
   assert.equal(applied.rules?.length, BASKETBALL.rules?.length);
 });
+
+test("standingsPoints override replaces a WIN_DRAW_LOSS model's win/loss points without mutating the base (LBCL: 2 win / 1 loss, not the 3/0 basketball default)", () => {
+  assert.deepEqual(validateSportOverride(BASKETBALL, { standingsPoints: { win: 2, loss: 1 } }), []);
+
+  const applied = applySportOverride(BASKETBALL, { standingsPoints: { win: 2, loss: 1 } });
+  assert.deepEqual(applied.standings.primaryPoints, { model: "WIN_DRAW_LOSS", win: 2, draw: 0, loss: 1 });
+  assert.deepEqual(BASKETBALL.standings.primaryPoints, { model: "WIN_DRAW_LOSS", win: 3, draw: 0, loss: 0 });
+});
+
+test("standingsPoints override is rejected for a non-WIN_DRAW_LOSS standings model", () => {
+  const cricketLikeStandings = { model: "CRICKET" as const, win: 2, tie: 1, draw: 1, noResult: 0 };
+  const definition = { ...BASKETBALL, standings: { ...BASKETBALL.standings, primaryPoints: cricketLikeStandings } };
+  const issues = validateSportOverride(definition, { standingsPoints: { win: 2, loss: 1 } });
+  assert.ok(issues.some((issue) => issue.includes("WIN_DRAW_LOSS")));
+});
