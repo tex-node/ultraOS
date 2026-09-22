@@ -4469,3 +4469,93 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - None — covered by the payments and design sessions above.
+
+### 2026-09-22 - External Stats Ingestion Pipeline + Lagos Basketball Community League (LBCL)
+
+**Objective**
+
+- Build a reusable way to onboard a real-world tournament whose games are scored outside
+  ultraOS (photographed FIBA/Genius-Sports-style box scores), as a first step toward the
+  site aggregating other sporting events. Bring in the Lagos Basketball Community League's
+  first 9 games as the pilot, give it a short public URL (`app.neonultra.ng/lbcl`), and
+  surface ongoing tournaments across organizations on the homepage.
+
+**Completed**
+
+- `src/lib/external-stats-ingestion.ts` (new): `ensureOrganizationForIngestion` /
+  `ensureCompetition` / `ensureDivision` / `ensureSeason` / `ensureVenue` / `ensureClub` /
+  `ensureSeasonClub` / `ensurePlayer` / `ensureFixture` / `ingestBoxScoreGame` — every
+  `ensure*` is a find-or-create keyed on a natural identity, so re-running an already-loaded
+  game's ingestion is a safe no-op on shared entities. Player biographical fields the box
+  score never reports (DOB, hand, height, weight, position) use obviously-fake sentinel
+  placeholders (2000-01-01, 0, "Unknown"), never a plausible-looking guess; `gender` is
+  inferred from the roster and documented here, not silently assumed (LBCL rosters read as
+  all-male; not stated on the sheets).
+- `scripts/external-stats-ingest.ts` (new): dry-run-by-default CLI over a batch JSON file.
+  The batch's `organization` field is the "create new tournament or add to an existing one"
+  decision — made explicit and reviewable in the file rather than an interactive prompt.
+- `src/lib/vanity-tournament.ts` (new): a `COMPETITION` `PublicResourceLocator` (new enum
+  value, additive migration `20260922100000_external_stats_locator_type`) mapping a short,
+  globally-unique vanity slug (e.g. "lbcl") to one organization's competition — deliberately
+  separate from `/t/[slug]`, which stays Neon-Ultra-only by design (see
+  `resolveDefaultPublicOrganization`'s doc comment). Registration is opt-in per competition,
+  not automatic, since the vanity namespace is shared across every organization.
+- `src/app/[vanitySlug]/{layout,page,fixtures/page}.tsx` (new): a top-level catch-all route
+  (Next's static-route precedence keeps every existing literal path safe) rendering any
+  other organization's tournament overview + fixtures/standings, adapted from `/t/[slug]`.
+- `src/lib/game-result-import.ts`: `previewGameResultImport`/`importGameResult` now take an
+  explicit `organizationId` (closing the last caller that relied on the Neon-Ultra-only
+  default) and an optional `db`/`tx` so `ingestBoxScoreGame` can pass its own still-open
+  transaction through instead of opening a second one that can't see the just-created
+  Fixture row (same `inOrganization` pattern as `broadcast-presentation-state.ts`).
+- `src/app/page.tsx`: the discovery-hub homepage now queries every `ACTIVE` organization's
+  competitions (+ any registered vanity slug) alongside Neon Ultra's, so live/upcoming
+  tournaments and the main grid aggregate across organizations, each card labelled with its
+  org name; a tournament with no public route yet shows "Public page coming soon."
+  instead of a link.
+- Data: `scripts/data/build-lbcl-batch.mjs` builds `scripts/data/lbcl-2026-batch1.json`
+  (9 games, Sep 18-20 2026) from compact per-player tuples, expanding them into the full
+  `IngestBoxScoreInput` shape; `scripts/data/verify-batch.mjs` cross-checks every team's
+  summed player points and quarter-score sums against the sheet's own reported totals before
+  any write — this caught and fixed one real transcription error (a DNP flag on a player who
+  actually scored 3 points) before it reached the database. Advanced team stats (points off
+  turnovers, fast-break points, biggest lead, etc.) were not transcribed from the source
+  sheets and are stored as explicit 0 placeholders, not fabricated numbers — only the box
+  score fundamentals (points/rebounds/assists/shooting splits/etc., independently verified
+  per player) are authoritative.
+- Player-identity reconciliation: several clubs recur across games with the same real person
+  spelled differently sheet-to-sheet (e.g. "Salawu Korede" clean both times, but "Dannis
+  Godwill"/"Dennis Goodwill", "Boluwadoro Jeboto"/"Boluwatife Jebutu", "Ifeanyi
+  Udeli"/"Ifeanyi Udeh"). `Player` has a `(seasonClubId, jerseyNumber)` unique constraint, so
+  a second game's "new" player at a jersey another real player already holds fails loudly —
+  this surfaced 5 of 9 games failing on first `--apply` and was fixed by renaming to each
+  club's first-seen canonical spelling where the match was confident, and setting
+  `jerseyNumber: null` (never guessing a safe-looking number) where two different names
+  genuinely collide on the same jersey across games. **Flagged for operator review, not
+  auto-merged without confidence:** "Lagos Raptors" (G3) = "Lagos Raptors Academy" (G9) and
+  "Ogra Hoop Kings" (G7) = "Ogra Basketball" (G3) were treated as the same club (identical
+  rosters); "Tobi Ojajani" (G9) was merged into "Ojajuni Oluwatobi" (G3) on a moderate-
+  confidence letter-transposition read — worth a human glance.
+- Deployed to staging (`fcf2237` then `1c9da80` after the reconciliation fix), migration
+  applied, verified pg_dump backup taken first
+  (`ultraos_staging_pre_lbcl_ingest_20260922T082557Z.dump`).
+
+**Verification**
+
+- tsc/lint/tests green locally before deploy; staging dry-run then `--apply` — all 9 games
+  IMPORTED (4 on the first apply, the other 5 after the identity fix; re-running the first 4
+  correctly reports BLOCKED/already-FINAL rather than double-importing); `/lbcl` and
+  `/lbcl/fixtures` return 200 on staging with all 10 real clubs and final scores/standings;
+  homepage shows "Lagos Basketball Community League" linking to `/lbcl` alongside Neon Ultra.
+
+**Next step**
+
+- Get the user's sign-off on the club-name merges and the all-male gender inference above,
+  and on the `jerseyNumber: null` placeholders, before treating this as the tournament's
+  permanent record.
+- Deploy to production once approved (staging-only so far, per this project's standing
+  outward-facing-change doctrine).
+- More LBCL games as they're played can go through the same
+  `scripts/external-stats-ingest.ts` pipeline — organization mode `"existing"` with this
+  organization's id, reusing `scripts/data/build-lbcl-batch.mjs`'s pattern for the next
+  batch file.
