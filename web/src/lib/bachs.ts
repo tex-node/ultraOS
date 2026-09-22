@@ -141,6 +141,7 @@ export type ConnectedAccount = { account_id: string; status: string };
 export async function createConnectedAccount(input: {
   name: string;
   email: string;
+  country?: string;
   metadata?: Record<string, string>;
 }): Promise<ConnectedAccount> {
   const config = bachsConfig();
@@ -149,9 +150,15 @@ export async function createConnectedAccount(input: {
     method: "POST",
     headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      type: "connected",
-      company: { name: input.name },
-      contact: { email: input.email },
+      contact_email: input.email,
+      display_name: input.name,
+      country: input.country ?? "NG",
+      entity_type: "individual",
+      configuration: {
+        recipient: {
+          capabilities: { transfers: { requested: true }, payouts: { requested: true } },
+        },
+      },
       ...(input.metadata ? { metadata: input.metadata } : {}),
     }),
   });
@@ -159,16 +166,26 @@ export async function createConnectedAccount(input: {
     const body = await response.text();
     throw new Error(`BACHS_ACCOUNT_FAILED:${response.status}:${body.slice(0, 300)}`);
   }
-  return (await response.json()) as ConnectedAccount;
+  const created = (await response.json()) as { id: string; is_active?: boolean };
+  return { account_id: created.id, status: created.is_active ? "active" : "pending" };
 }
 
-export async function createAccountLink(accountId: string): Promise<{ url: string }> {
+// Hosted onboarding link (docs: "Onboard with a hosted link"). `type: "onboarding"`,
+// both URLs required; the returned `url` is single-use and expires.
+export async function createAccountLink(
+  accountId: string,
+  urls: { refreshUrl: string; returnUrl: string },
+): Promise<{ url: string }> {
   const config = bachsConfig();
   if (!config) throw new Error("BACHS_NOT_CONFIGURED");
   const response = await fetch(`${config.apiBase}/v1/accounts/${accountId}/account-links`, {
     method: "POST",
     headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "account_onboarding", refresh_url: "", return_url: "" }),
+    body: JSON.stringify({
+      type: "onboarding",
+      refresh_url: urls.refreshUrl,
+      return_url: urls.returnUrl,
+    }),
   });
   if (!response.ok) {
     const body = await response.text();

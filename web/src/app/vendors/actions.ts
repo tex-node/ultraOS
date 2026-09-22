@@ -343,7 +343,11 @@ export async function connectBachsAccount(vendorId: string) {
     email: vendor.email ?? `vendor-${vendor.id}@neonultra.ng`,
     metadata: { vendorId: vendor.id, organizationId },
   });
-  const link = await createAccountLink(account.account_id);
+  const baseUrl = (process.env.AUTH_URL ?? "").replace(/\/$/, "");
+  const link = await createAccountLink(account.account_id, {
+    refreshUrl: `${baseUrl}/vendors/${vendorId}`,
+    returnUrl: `${baseUrl}/vendors/${vendorId}`,
+  });
   await withOrganizationContext(organizationId, async (tx) => {
     await tx.vendor.update({
       where: { id: vendorId },
