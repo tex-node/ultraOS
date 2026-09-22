@@ -4447,3 +4447,25 @@ STAGE_5_5C: NOT_STARTED
 - Operators connect real vendors (button on vendor page) and send them through onboarding;
   settled sales then auto-transfer net-of-commission shares to each vendor account. The
   test Connect account `acct_CuToTDfBgFg21YrY` can be archived if unwanted.
+
+### 2026-09-21 - Session-Aware Portal Header
+
+**Objective**
+
+- Stop the portal header from bouncing already-signed-in users to `/public/events` when
+  they click "Login" (they were signed in; the header always said "Login").
+
+**Completed**
+
+- `PortalShell` is now async and reads the session: guests see Sign up / Login; signed-in
+  users see My Account + a Sign out form. `/design` gallery switched to dynamic so it can
+  use the session shell. Deployed `cd23117` to staging + production.
+
+**Verification**
+
+- typecheck/build/lint green; production anonymous header shows Login/Sign up, `/login`
+  renders the form (no redirect) for logged-out browsers.
+
+**Next step**
+
+- None — covered by the payments and design sessions above.

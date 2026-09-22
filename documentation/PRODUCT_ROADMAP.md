@@ -546,9 +546,11 @@ Deliverables:
 - Live order tracking pipeline (Received → Preparing → Ready for pickup / Out for seat
   delivery) with fan-facing status updates.
 - Unified cart: tickets + food + merchandise in a single checkout flow.
-- **External dependency:** a real payment provider decision + signed webhook
-  reconciliation. The platform is provider-neutral today (operators confirm references
-  manually); single-checkout cannot launch until this is resolved.
+- **Payment provider: resolved.** Bachs is the selected gateway (live keys wired server-side;
+  never committed). Hosted checkout is used for paid reservations and wallet orders; the
+  signed `collection.succeeded` webhook is the source of truth for marking paid and running
+  fulfilment. Bachs Connect gives each vendor its own sub-account, and paid orders
+  auto-transfer each vendor's net share (gross minus league commission), grouped by charge.
 
 Usability acceptance:
 
@@ -699,7 +701,7 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | F4.2 | Gate Scanner web app + Gate Manager role | P12/F4 | `Done` | F4.1 |
 | F5.1 | Vendor onboarding, menu approvals, commission configuration | P12/F5 | `Done` | F2.1 |
 | F5.2 | Order status pipeline + live tracking | P12/F5 | `Done` | F5.1 |
-| F5.3 | Unified cart (tickets + food + merch) + payment provider decision | P12/F5 | `Not started` | F4.1 |
+| F5.3 | Unified cart (tickets + food + merch) + payment provider decision | P12/F5 | `Done` | F4.1 |
 | F6.1 | Tournament Director / Scorekeeper-Referee / Vendor Manager roles + scoped grants | P12/F6 | `Done` | F1.2 |
 | F6.2 | Workspace dashboard (revenue, sales, live status, payouts) | P12/F6 | `Done` | F6.1 |
 
