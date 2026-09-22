@@ -1,8 +1,8 @@
 ---
 title: Product Roadmap
 status: Active
-version: product-0.4
-last_updated: 2026-09-20
+version: product-0.5
+last_updated: 2026-09-22
 ---
 
 # Product Roadmap
@@ -611,6 +611,55 @@ What "Done" means for F1–F6, precisely:
 - **Not in scope:** subdomain-per-tournament hosting, individual seat maps, native
   mobile apps, social publishing, dynamic ticket pricing.
 
+### F7 — External tournament ingestion + cross-organization aggregation
+
+**Goal:** bring a real-world tournament that was never live-scored through ultraOS — a
+paper or PDF box score, photographed and transcribed after the fact — onto the platform
+under its own organization and short public URL, and let the fan-facing homepage surface
+every organization's tournaments, not just Neon Ultra's.
+
+Deliverables:
+
+- Reusable, dry-run-by-default box-score ingestion pipeline (`scripts/external-stats-
+  ingest.ts` + `src/lib/external-stats-ingestion.ts`): one batch JSON file per tournament,
+  explicit new-vs-existing-organization decision, find-or-create for every entity
+  (competition/division/season/venue/clubs/players/fixtures), idempotent re-runs.
+- Short vanity URL for any other organization's tournament (`/[vanitySlug]`, e.g. `/lbcl`)
+  via a new global `COMPETITION` `PublicResourceLocator` type — additive, deliberately
+  separate from Neon Ultra's own `/t/:slug`.
+- Fan discovery hub (F3) aggregates ongoing tournaments across every `ACTIVE`
+  organization, each card labelled with its organization name.
+- Standings, leaderboards, and the tournament record book correctly include real,
+  officially completed externally-scored games (`RecordOrigin.IMPORT`) without those
+  games ever appearing on live-broadcast presentation surfaces (`/live`, broadcast
+  graphics) — two questions that look identical for Neon Ultra's own games but diverge for
+  an import.
+- Per-organization standings points-formula override (`SportDefinitionOverride.config.
+  standingsPoints`) for a league whose own official standings use a different real
+  win/loss points convention than the platform default.
+- Tournament Highlights tab (widest margin, closest game, best qualified FT%/FG%/3PT%,
+  season leaders, etc.) reusing the same record-book engine as Neon Ultra's own
+  `/public/stats/records`, wired to any `/[vanitySlug]` tournament.
+
+Usability acceptance:
+
+- An operator with a folder of photographed box scores and no live-scoring setup gets a
+  full tournament (fixtures, standings, box scores, highlights) live at a short URL within
+  one working session.
+- A fan visiting the homepage discovers an externally-ingested tournament exactly the way
+  they'd discover a native one — same grid, same card format, own organization label.
+
+Depends on: F2/F3 patterns (sub-site chrome, discovery hub), Stage 5.5A's
+`PublicResourceLocator` bootstrap mechanism. Engine impact: additive only — new
+`PublicResourceLocatorType.COMPETITION` value, `IMPORT` added to
+`competitiveFixtureScope()`'s allow-list, optional `standingsPoints` field on
+`SportDefinitionOverride`'s config; no change to any existing organization's data,
+defaults, or live-scoring flow.
+
+Pilot: Lagos Basketball Community League (`/lbcl`), 10 games, live in production
+2026-09-22. See `documentation/architecture/EXTERNAL_STATS_INGESTION.md` for the full
+mechanism and `session.md`'s 2026-09-22 entries for the pilot's build/verify history.
+
 ## 7. Progress tracker
 
 Reality check (2026-09-15): the engine (Stages 1–9) is implemented and applied to **staging and
@@ -704,6 +753,12 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | F5.3 | Unified cart (tickets + food + merch) + payment provider decision | P12/F5 | `Done` | F4.1 |
 | F6.1 | Tournament Director / Scorekeeper-Referee / Vendor Manager roles + scoped grants | P12/F6 | `Done` | F1.2 |
 | F6.2 | Workspace dashboard (revenue, sales, live status, payouts) | P12/F6 | `Done` | F6.1 |
+| F7.1 | External box-score ingestion pipeline (batch JSON, dry-run CLI) | P12/F7 | `Done` | — |
+| F7.2 | Vanity short-URL tournament sub-site (`/[vanitySlug]`) | P12/F7 | `Done` | F2.1, Stage 5.5A |
+| F7.3 | Homepage cross-organization tournament aggregation | P12/F7 | `Done` | F3.1 |
+| F7.4 | IMPORT-origin standings/leaderboard/record-book eligibility | P12/F7 | `Done` | — |
+| F7.5 | Per-organization standings points-formula override | P12/F7 | `Done` | — |
+| F7.6 | Tournament Highlights tab for external tournaments | P12/F7 | `Done` | F7.2 |
 
 ## 8. Relationship to the engine roadmap
 

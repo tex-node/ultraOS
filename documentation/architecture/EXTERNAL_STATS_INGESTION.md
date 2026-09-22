@@ -149,12 +149,36 @@ confidence wasn't total).
   competitionId }` for the public `/[vanitySlug]` route, re-checking the competition is still
   active before trusting the locator.
 
-`src/app/[vanitySlug]/{layout,page,fixtures/page}.tsx` is a **top-level catch-all** route.
-Next.js's static-route precedence (a literal path segment always beats a dynamic one at the
-same level) is what keeps every existing top-level route (`/login`, `/dashboard`, `/t`, …)
-safe from being swallowed by this catch-all — there is no middleware involved, and this
-project has none (`AGENTS.md` flags Next 16.2.9 as having breaking changes from training-data
-assumptions; middleware may not even exist in the same form in this version).
+`src/app/[vanitySlug]/{layout,page,fixtures/page,highlights/page}.tsx` is a **top-level
+catch-all** route. Next.js's static-route precedence (a literal path segment always beats a
+dynamic one at the same level) is what keeps every existing top-level route (`/login`,
+`/dashboard`, `/t`, …) safe from being swallowed by this catch-all — there is no middleware
+involved, and this project has none (`AGENTS.md` flags Next 16.2.9 as having breaking changes
+from training-data assumptions; middleware may not even exist in the same form in this
+version).
+
+The `layout.tsx` chrome renders `SubSiteTabs` (`src/app/t/[slug]/sub-site-tabs.tsx`, shared
+with Neon Ultra's own `/t/[slug]`) with an `extraTabs` prop for the Highlights tab — additive
+and optional, so `/t/[slug]`'s own tab bar is unaffected; a page other than Overview/Fixtures/
+Highlights should follow the same pattern rather than hard-coding a new tab into the shared
+component.
+
+### Highlights tab
+
+`src/app/[vanitySlug]/highlights/page.tsx` reuses `src/lib/analytics/records.ts` +
+`game-analytics.ts`'s `loadSeasonGameCores`/`loadSeasonPlayerTotals` unchanged — the exact
+engine already live at Neon Ultra's `/public/stats/records`. It resolves the vanity slug to
+an organization/competition, then calls the same `buildGameRecords`/`buildTeamRecords`/
+`buildPlayerSingleGameRecords`/`buildPlayerSeasonRecords` functions scoped to that
+organization's own season instead of `resolveDefaultPublicOrganization()`'s default. No new
+calculation logic — this is the same "additive route, shared engine" pattern as the Fixtures
+tab, just for the record book instead of standings.
+
+Building this surfaced a real, previously-undetected bug in `buildGameRecords` itself
+("Highest-Scoring Game" always returned the season's earliest-played game, not the actual
+highest-scoring one — see `records.test.ts`, added alongside the fix since no test file
+existed for this module before). The fix and its test benefit every organization on the
+platform, not just external ones.
 
 ## 7. Onboarding another tournament
 
