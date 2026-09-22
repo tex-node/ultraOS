@@ -2,11 +2,30 @@ import { Prisma } from "@/generated/prisma/client";
 import type { StatDataSource } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
+
+type Db = Prisma.TransactionClient | typeof prisma;
+
+// Same shape as broadcast-presentation-state.ts's own helper: opens a fresh scoped transaction
+// when the caller has no transaction of its own yet, or reuses the caller's tx directly when one
+// is supplied (e.g. external-stats-ingestion.ts calling this from inside its own already-open
+// withOrganizationContext - opening a second, independent transaction there would not see that
+// outer transaction's not-yet-committed writes, such as a Fixture created moments earlier).
+async function inOrganization<T>(organizationId: string, db: Db | undefined, fn: (tx: Db) => Promise<T>) {
+  return db ? fn(db) : withOrganizationContext(organizationId, fn);
+}
 
 // Imports a completed game's result from an external stats report (e.g. a FIBA/Genius
 // Sports box score) — used when the live scorer console was not the system of record for
 // a game. Never infers Ultra-specific data (4PT, Ultra Time) that the source doesn't report;
 // those simply stay absent. Never overwrites an already-imported/live-scored game silently.
+//
+// External stats ingestion (2026-09-22): this function previously ran on the bare, unscoped
+// client with no organization at all - safe only because its one caller (g84, a historical
+// script) always meant Neon Ultra. Now that a second real organization exists and this pipeline
+// is being wired into a live, reusable ingestion path, both entry points require an explicit
+// organizationId and run the whole preview/import flow inside one real tenant context - a
+// foreign-org fixtureId now fails closed (RLS-invisible) instead of ever being reachable.
 
 export type ImportPlayerLine = {
   reportedName: string;
@@ -141,8 +160,8 @@ async function matchTeamPlayers(
   });
 }
 
-export async function previewGameResultImport(input: GameResultImportInput): Promise<GameResultImportReport> {
-  return prisma.$transaction(async (tx) => {
+export async function previewGameResultImport(organizationId: string, input: GameResultImportInput, db?: Db): Promise<GameResultImportReport> {
+  return inOrganization(organizationId, db, async (tx) => {
     const fixture = await tx.fixture.findUnique({
       where: { id: input.fixtureId },
       select: {
@@ -161,8 +180,8 @@ export async function previewGameResultImport(input: GameResultImportInput): Pro
   });
 }
 
-export async function importGameResult(input: GameResultImportInput, actorId: string): Promise<GameResultImportReport> {
-  return prisma.$transaction(async (tx) => {
+export async function importGameResult(organizationId: string, input: GameResultImportInput, actorId: string, db?: Db): Promise<GameResultImportReport> {
+  return inOrganization(organizationId, db, async (tx) => {
     const fixture = await tx.fixture.findUnique({
       where: { id: input.fixtureId },
       include: {
@@ -204,6 +223,7 @@ export async function importGameResult(input: GameResultImportInput, actorId: st
     const game = await tx.game.upsert({
       where: { fixtureId: input.fixtureId },
       create: {
+        organizationId,
         fixtureId: input.fixtureId,
         status: "FINAL",
         currentPeriod: finalPeriod,
@@ -231,7 +251,7 @@ export async function importGameResult(input: GameResultImportInput, actorId: st
     for (const p of input.periods) {
       await tx.gamePeriodScore.upsert({
         where: { gameId_period: { gameId: game.id, period: p.period } },
-        create: { gameId: game.id, period: p.period, label: p.label, homeScore: p.homeScore, awayScore: p.awayScore },
+        create: { organizationId, gameId: game.id, period: p.period, label: p.label, homeScore: p.homeScore, awayScore: p.awayScore },
         update: { label: p.label, homeScore: p.homeScore, awayScore: p.awayScore },
       });
     }
@@ -245,6 +265,7 @@ export async function importGameResult(input: GameResultImportInput, actorId: st
       await tx.teamStat.upsert({
         where: { gameId_seasonClubId: { gameId: game.id, seasonClubId: side.seasonClubId } },
         create: {
+          organizationId,
           gameId: game.id,
           seasonClubId: side.seasonClubId,
           points: side.line.totals.points,
@@ -273,6 +294,7 @@ export async function importGameResult(input: GameResultImportInput, actorId: st
         await tx.playerStat.upsert({
           where: { gameId_playerId: { gameId: game.id, playerId: match.playerId } },
           create: {
+            organizationId,
             gameId: game.id,
             playerId: match.playerId,
             seasonClubId: side.seasonClubId,
@@ -330,6 +352,7 @@ export async function importGameResult(input: GameResultImportInput, actorId: st
     }
 
     await writeAuditLog(tx, {
+      organizationId,
       userId: actorId,
       action: "GAME_RESULT_IMPORTED",
       entityType: "Game",

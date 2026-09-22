@@ -3,6 +3,7 @@ import { PortalShell } from "@/app/components/portal-shell";
 import { filterHubTournaments } from "@/lib/discovery-hub";
 import { TOURNAMENT_STATUS_STYLE, tournamentStatusFromFixtureStatuses } from "@/lib/tournament-subsite";
 import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,29 +23,20 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
   const q = (query.q ?? "").trim();
 
   const organization = await resolveDefaultPublicOrganization();
-  const [competitions, venues, clubHits] = await withOrganizationContext(organization.id, (tx) =>
+
+  // Cross-organization tournament aggregation (external stats ingestion, 2026-09-22): the
+  // discovery hub now shows every ACTIVE organization's tournaments, not only Neon Ultra's own.
+  // Organization itself is platform-global (excluded from Stage 4a's 104-table RLS rollout on
+  // purpose - it IS the tenant boundary, not tenant-owned data), so listing active organizations
+  // via the bare client is safe; every organization's own competitions/fixtures are still read
+  // inside that organization's own withOrganizationContext, one at a time - no cross-tenant read
+  // ever happens without its own real scoped transaction. Venue/club text search stays scoped to
+  // Neon Ultra only (unchanged) - cross-org club/venue search is a separate, not-yet-built
+  // feature, not silently expanded here.
+  const activeOrganizations = await prisma.organization.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true, slug: true } });
+
+  const [venues, clubHits] = await withOrganizationContext(organization.id, (tx) =>
     Promise.all([
-      tx.competition.findMany({
-        where: { organizationId: organization.id, isActive: true },
-        include: {
-          sport: true,
-          seasons: {
-            include: {
-              fixtures: {
-                include: {
-                  venue: true,
-                  game: { select: { id: true } },
-                  homeSeasonClub: { include: { club: true } },
-                  awaySeasonClub: { include: { club: true } },
-                  homeEntrant: true,
-                  awayEntrant: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: { name: "asc" },
-      }),
       tx.venue.findMany({ orderBy: [{ city: "asc" }, { name: "asc" }], select: { id: true, name: true, city: true } }),
       q
         ? tx.club.findMany({
@@ -70,30 +62,68 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
       : [],
   );
 
+  const perOrgCompetitions = await Promise.all(
+    activeOrganizations.map((org) =>
+      withOrganizationContext(org.id, (tx) =>
+        Promise.all([
+          tx.competition.findMany({
+            where: { organizationId: org.id, isActive: true },
+            include: {
+              sport: true,
+              seasons: {
+                include: {
+                  fixtures: {
+                    include: {
+                      venue: true,
+                      game: { select: { id: true } },
+                      homeSeasonClub: { include: { club: true } },
+                      awaySeasonClub: { include: { club: true } },
+                      homeEntrant: true,
+                      awayEntrant: true,
+                    },
+                  },
+                },
+              },
+            },
+            orderBy: { name: "asc" },
+          }),
+          // Vanity short-URL lookup (registerVanityTournamentSlug) - competitions without one
+          // fall back to /t/<slug> (Neon Ultra) or show without a link (any other organization).
+          tx.publicResourceLocator.findMany({ where: { organizationId: org.id, resourceType: "COMPETITION", status: "ACTIVE" }, select: { publicKey: true, resourceId: true } }),
+        ]),
+      ).then(([competitions, vanityLocators]) => ({ org, competitions, vanityLocators })),
+    ),
+  );
+
   const cities = [...new Set(venues.map((v) => v.city).filter(Boolean))].sort();
   const sports = new Map<string, { slug: string; name: string; count: number }>();
-  for (const c of competitions) {
-    const entry = sports.get(c.sport.slug) ?? { slug: c.sport.slug, name: c.sport.name, count: 0 };
-    entry.count += 1;
-    sports.set(c.sport.slug, entry);
-  }
+  const shaped = perOrgCompetitions.flatMap(({ org, competitions, vanityLocators }) => {
+    const vanityByCompetitionId = new Map(vanityLocators.map((l) => [l.resourceId, l.publicKey]));
+    return competitions.map((c) => {
+      const entry = sports.get(c.sport.slug) ?? { slug: c.sport.slug, name: c.sport.name, count: 0 };
+      entry.count += 1;
+      sports.set(c.sport.slug, entry);
 
-  const shaped = competitions.map((c) => {
-    const fixtures = c.seasons.flatMap((s) => s.fixtures);
-    const fixtureCities = [...new Set(fixtures.map((f) => f.venue.city).filter(Boolean))];
-    const starts = c.seasons.map((s) => s.startDate.getTime());
-    const ends = c.seasons.map((s) => s.endDate.getTime());
-    return {
-      slug: c.slug,
-      name: c.name,
-      sportSlug: c.sport.slug,
-      sportName: c.sport.name,
-      cities: fixtureCities,
-      status: tournamentStatusFromFixtureStatuses(fixtures.map((f) => f.status)),
-      dateRange: starts.length > 0 ? { from: new Date(Math.min(...starts)), to: new Date(Math.max(...ends)) } : null,
-      live: fixtures.filter((f) => f.status === "LIVE"),
-      next: fixtures.filter((f) => f.status === "SCHEDULED").sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())[0] ?? null,
-    };
+      const fixtures = c.seasons.flatMap((s) => s.fixtures);
+      const fixtureCities = [...new Set(fixtures.map((f) => f.venue.city).filter(Boolean))];
+      const starts = c.seasons.map((s) => s.startDate.getTime());
+      const ends = c.seasons.map((s) => s.endDate.getTime());
+      const vanitySlug = vanityByCompetitionId.get(c.id);
+      const href = org.id === organization.id ? `/t/${c.slug}` : vanitySlug ? `/${vanitySlug}` : null;
+      return {
+        slug: c.slug,
+        name: c.name,
+        organizationName: org.id === organization.id ? null : org.name,
+        href,
+        sportSlug: c.sport.slug,
+        sportName: c.sport.name,
+        cities: fixtureCities,
+        status: tournamentStatusFromFixtureStatuses(fixtures.map((f) => f.status)),
+        dateRange: starts.length > 0 ? { from: new Date(Math.min(...starts)), to: new Date(Math.max(...ends)) } : null,
+        live: fixtures.filter((f) => f.status === "LIVE"),
+        next: fixtures.filter((f) => f.status === "SCHEDULED").sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())[0] ?? null,
+      };
+    });
   });
   const tournaments = filterHubTournaments(shaped, { sport, city, q });
 
@@ -139,7 +169,10 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
             <div className="mt-6 grid gap-4 md:grid-cols-3">
               {liveAcross.map(({ tournament, fixture }) => (
                 <article key={fixture.id} className="rounded-lg border border-danger/25 bg-danger/[.05] p-5">
-                  <p className="text-xs font-bold text-danger">● LIVE · {tournament.name}</p>
+                  <p className="text-xs font-bold text-danger">
+                    ● LIVE · {tournament.name}
+                    {tournament.organizationName ? <span className="text-text-3"> · {tournament.organizationName}</span> : null}
+                  </p>
                   <p className="mt-2 text-lg font-bold">
                     <span className="font-mono tabular-nums">
                       {fixture.homeScore} – {fixture.awayScore}
@@ -156,12 +189,14 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
                         Watch live
                       </Link>
                     ) : null}
-                    <Link
-                      href={`/t/${tournament.slug}`}
-                      className="rounded-md border border-line-strong px-3 py-2 text-xs text-text-2 transition hover:border-brand-400/40 hover:text-white"
-                    >
-                      Tournament
-                    </Link>
+                    {tournament.href ? (
+                      <Link
+                        href={tournament.href}
+                        className="rounded-md border border-line-strong px-3 py-2 text-xs text-text-2 transition hover:border-brand-400/40 hover:text-white"
+                      >
+                        Tournament
+                      </Link>
+                    ) : null}
                   </div>
                 </article>
               ))}
@@ -170,7 +205,10 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
             <div className="mt-6 grid gap-4 md:grid-cols-3">
               {upcomingAcross.map(({ tournament, fixture }) => (
                 <article key={fixture.id} className="rounded-lg border border-line bg-ink-800 p-5">
-                  <p className="text-xs font-bold text-info">UPCOMING · {tournament.name}</p>
+                  <p className="text-xs font-bold text-info">
+                    UPCOMING · {tournament.name}
+                    {tournament.organizationName ? <span className="text-text-3"> · {tournament.organizationName}</span> : null}
+                  </p>
                   <p className="mt-2 font-bold">
                     {sideName(fixture.homeSeasonClub, fixture.homeEntrant)} <span className="text-text-3">vs</span>{" "}
                     {sideName(fixture.awaySeasonClub, fixture.awayEntrant)}
@@ -178,12 +216,14 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
                   <p className="mt-1 text-xs text-text-3">
                     {fixture.scheduledAt.toLocaleString()} · {fixture.venue.name}
                   </p>
-                  <Link
-                    href={`/t/${tournament.slug}`}
-                    className="mt-3 inline-block rounded-md border border-line-strong px-3 py-2 text-xs text-text-2 transition hover:border-brand-400/40 hover:text-white"
-                  >
-                    View tournament
-                  </Link>
+                  {tournament.href ? (
+                    <Link
+                      href={tournament.href}
+                      className="mt-3 inline-block rounded-md border border-line-strong px-3 py-2 text-xs text-text-2 transition hover:border-brand-400/40 hover:text-white"
+                    >
+                      View tournament
+                    </Link>
+                  ) : null}
                 </article>
               ))}
             </div>
@@ -306,7 +346,7 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
           ) : (
             <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {tournaments.map((t) => (
-                <article key={t.slug} className="rounded-lg border border-line bg-ink-800 p-5">
+                <article key={`${t.organizationName ?? "neon-ultra"}:${t.slug}`} className="rounded-lg border border-line bg-ink-800 p-5">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${TOURNAMENT_STATUS_STYLE[t.status]}`}>
                       {t.status === "LIVE" ? "● LIVE" : t.status}
@@ -314,6 +354,11 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
                     <span className="rounded-full border border-line px-2.5 py-0.5 text-[11px] uppercase tracking-wider text-text-2">
                       {t.sportName}
                     </span>
+                    {t.organizationName ? (
+                      <span className="rounded-full border border-line px-2.5 py-0.5 text-[11px] uppercase tracking-wider text-text-3">
+                        {t.organizationName}
+                      </span>
+                    ) : null}
                   </div>
                   <h3 className="mt-2 font-display text-lg font-semibold">{t.name}</h3>
                   <p className="mt-1 text-xs text-text-3">
@@ -325,12 +370,16 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
                       {t.live.length} live now{t.live.length === 1 ? `: ${sideName(t.live[0].homeSeasonClub, t.live[0].homeEntrant)} ${t.live[0].homeScore}–${t.live[0].awayScore} ${sideName(t.live[0].awaySeasonClub, t.live[0].awayEntrant)}` : ""}
                     </p>
                   ) : null}
-                  <Link
-                    href={`/t/${t.slug}`}
-                    className="mt-3 inline-block rounded-md bg-brand-400 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-300"
-                  >
-                    View tournament
-                  </Link>
+                  {t.href ? (
+                    <Link
+                      href={t.href}
+                      className="mt-3 inline-block rounded-md bg-brand-400 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-300"
+                    >
+                      View tournament
+                    </Link>
+                  ) : (
+                    <p className="mt-3 text-xs text-text-3">Public page coming soon.</p>
+                  )}
                 </article>
               ))}
             </div>

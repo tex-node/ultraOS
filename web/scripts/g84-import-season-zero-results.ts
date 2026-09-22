@@ -710,7 +710,7 @@ async function main() {
 
   let imported = 0;
   for (const g of GAMES) {
-    const report = await importGameResult(g, ACTOR_ID);
+    const report = await importGameResult("cmt4odhgn0000wokk8fbwr6ro", g, ACTOR_ID);
     console.log(`${g.fixtureLabel}: ${report.status}${report.reason ? " - " + report.reason : ""}`);
     if (report.status === "BLOCKED") {
       console.log("home matches:", JSON.stringify(report.homeMatches));

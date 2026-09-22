@@ -2758,6 +2758,12 @@ enum PublicResourceLocatorType {
   EVENT
   FIXTURE
   MEDIA_ASSET
+  // External stats ingestion / tournament aggregation: a short, cross-organization vanity slug
+  // (e.g. "lbcl") mapped to one Competition, resolved by the top-level [vanitySlug] catch-all
+  // page. Deliberately NOT `/t/[slug]`'s own resolution mechanism (that route stays Neon-Ultra-
+  // only by design - see resolveDefaultPublicOrganization's doc comment on Pattern A) - this is
+  // a separate, additive short-URL convenience, not a replacement.
+  COMPETITION
 }
 
 enum PublicTokenLocatorType {
