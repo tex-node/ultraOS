@@ -185,8 +185,8 @@ export function buildGameRecords(games: GameCore[]): RecordEntry[] {
 
   function context(g: GameCore) { return `${g.home.shortName} ${g.home.score} – ${g.away.score} ${g.away.shortName}`; }
 
-  const byCombined = tieBreakEarliest([...games].sort((a, b) => (b.home.score + b.away.score) - (a.home.score + a.away.score)));
-  const highest = byCombined[0];
+  const maxCombined = Math.max(...games.map((g) => g.home.score + g.away.score));
+  const highest = tieBreakEarliest(games.filter((g) => g.home.score + g.away.score === maxCombined))[0];
   entries.push({ key: "Highest-Scoring Game", category: "GAME", title: "Highest-Scoring Game", value: `${highest.home.score + highest.away.score} pts`, holderName: context(highest), holderClubShortName: "", context: "combined score", fixtureId: highest.fixtureId });
 
   const lowest = [...games].sort((a, b) => (a.home.score + a.away.score) - (b.home.score + b.away.score))[0];
