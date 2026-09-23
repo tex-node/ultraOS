@@ -4729,3 +4729,34 @@ STAGE_5_5C: NOT_STARTED
 
 - None outstanding. Season One 2026 is a placeholder (`DRAFT`, no clubs/fixtures) - clubs,
   divisions, and a real schedule are a separate future session once that content exists.
+
+### 2026-09-23 - Homepage Completed Tab
+
+**Objective**
+
+- User: add a tab for completed tournaments on the homepage.
+
+**Completed**
+
+- The main Tournaments grid is one card per *competition* with a single combined status
+  (product roadmap F3), so a finished season becomes unfindable the moment its competition
+  announces a next one and the combined badge moves to `UPCOMING` - exactly Ultra
+  Basketball's Season Zero right now. Rather than special-case that, exported
+  `seasonDisplayStatus` from `tournament-subsite.ts` (the per-season half of yesterday's
+  status redesign) so the homepage can filter individual seasons directly.
+- `src/app/page.tsx`: added an Active/Completed tab (`?tab=completed`, sport/city/search
+  filters still apply) next to the Tournaments heading. Completed lists every season across
+  every active organization whose own status is `COMPLETED` as its own card (competition
+  name + season name + date range + a "View results" link), computed from the same
+  `perOrgCompetitions` query already fetched for the main grid - no extra query.
+
+**Verification**
+
+- tsc/710 tests/lint/build green.
+- Staging then production: `/?tab=completed` returns 200 and shows "Ultra Basketball /
+  Season Zero 2026" as its own card; the default Active tab (`/`) is unchanged (same 3
+  cards as yesterday's cleanup).
+
+**Next step**
+
+- None outstanding.
