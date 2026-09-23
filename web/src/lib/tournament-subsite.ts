@@ -15,7 +15,11 @@ export type TournamentSubSiteStatus = "LIVE" | "UPCOMING" | "ONGOING" | "COMPLET
 
 export type SeasonFixtureSummary = { fixtureStatuses: readonly string[]; seasonStatus: string };
 
-function seasonDisplayStatus({ fixtureStatuses, seasonStatus }: SeasonFixtureSummary): Exclude<TournamentSubSiteStatus, "DRAFT"> {
+// Exported so a caller that needs to distinguish individual seasons - e.g. the homepage's
+// Completed tab, which must surface a finished season (Ultra Basketball's Season Zero) even
+// while its competition's own combined badge reads UPCOMING because of an announced Season
+// One - doesn't have to reimplement this per-season rule itself.
+export function seasonDisplayStatus({ fixtureStatuses, seasonStatus }: SeasonFixtureSummary): Exclude<TournamentSubSiteStatus, "DRAFT"> {
   if (fixtureStatuses.includes("LIVE")) return "LIVE";
   if (fixtureStatuses.includes("SCHEDULED")) return "UPCOMING";
   if (fixtureStatuses.includes("FINAL")) return seasonStatus === "COMPLETED" ? "COMPLETED" : "ONGOING";

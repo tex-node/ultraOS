@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { PortalShell } from "@/app/components/portal-shell";
 import { filterHubTournaments } from "@/lib/discovery-hub";
-import { TOURNAMENT_STATUS_STYLE, tournamentStatusFromSeasons } from "@/lib/tournament-subsite";
+import { TOURNAMENT_STATUS_STYLE, seasonDisplayStatus, tournamentStatusFromSeasons } from "@/lib/tournament-subsite";
 import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type SearchParams = { sport?: string; city?: string; q?: string };
+type SearchParams = { sport?: string; city?: string; q?: string; tab?: string };
 
 function sideName(seasonClub: { club: { name: string } } | null, entrant: { name: string } | null) {
   return seasonClub?.club.name ?? entrant?.name ?? "TBD";
@@ -21,6 +21,7 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
   const sport = query.sport ?? "all";
   const city = query.city ?? "all";
   const q = (query.q ?? "").trim();
+  const tab = query.tab === "completed" ? "completed" : "active";
 
   const organization = await resolveDefaultPublicOrganization();
 
@@ -129,6 +130,40 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
   });
   const tournaments = filterHubTournaments(shaped, { sport, city, q });
 
+  // Completed tab: surfaces an individual finished SEASON (e.g. Ultra Basketball's Season
+  // Zero) even while its competition's own combined badge above reads UPCOMING because of an
+  // announced next season - the competition-level `shaped`/`tournaments` cards intentionally
+  // collapse every season into one status per product roadmap F3, so a completed season with
+  // no card of its own would otherwise be unfindable once its competition moves on.
+  const completedSeasons = perOrgCompetitions.flatMap(({ org, competitions, vanityLocators }) => {
+    const vanityByCompetitionId = new Map(vanityLocators.map((l) => [l.resourceId, l.publicKey]));
+    return competitions.flatMap((c) =>
+      c.seasons
+        .filter((s) => seasonDisplayStatus({ fixtureStatuses: s.fixtures.map((f) => f.status), seasonStatus: s.status }) === "COMPLETED")
+        .map((s) => {
+          const vanitySlug = vanityByCompetitionId.get(c.id);
+          const href = org.id === organization.id ? `/t/${c.slug}` : vanitySlug ? `/${vanitySlug}` : null;
+          return {
+            key: `${org.id}:${c.slug}:${s.id}`,
+            competitionName: c.name,
+            seasonName: s.name,
+            organizationName: org.id === organization.id ? null : org.name,
+            href,
+            sportSlug: c.sport.slug,
+            sportName: c.sport.name,
+            cities: [...new Set(s.fixtures.map((f) => f.venue.city).filter(Boolean))],
+            dateRange: { from: s.startDate, to: s.endDate },
+          };
+        }),
+    );
+  });
+  const filteredCompletedSeasons = completedSeasons.filter((s) => {
+    if (sport !== "all" && s.sportSlug.toLowerCase() !== sport.toLowerCase()) return false;
+    if (city !== "all" && !s.cities.some((c) => c.toLowerCase() === city.toLowerCase())) return false;
+    if (q && !`${s.competitionName} ${s.seasonName} ${s.sportName}`.toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  });
+
   const liveAcross = shaped
     .flatMap((t) => t.live.map((f) => ({ tournament: t, fixture: f })))
     .filter(({ tournament, fixture }) => {
@@ -153,6 +188,7 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
   if (sport !== "all") params.set("sport", sport);
   if (city !== "all") params.set("city", city);
   if (q) params.set("q", q);
+  if (tab !== "active") params.set("tab", tab);
   const withParam = (key: string, value: string) => {
     const next = new URLSearchParams(params);
     if (value === "all" || value === "") next.delete(key);
@@ -335,10 +371,79 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
         ) : null}
 
         <section id="tournaments" className="mt-10">
-          <h2 className="text-2xl font-bold">
-            Tournaments <span className="text-base font-normal text-text-3">({tournaments.length})</span>
-          </h2>
-          {tournaments.length === 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-2xl font-bold">
+              {tab === "completed" ? "Completed" : "Tournaments"}{" "}
+              <span className="text-base font-normal text-text-3">
+                ({tab === "completed" ? filteredCompletedSeasons.length : tournaments.length})
+              </span>
+            </h2>
+            <nav className="flex gap-1 rounded-xl border border-white/[.08] bg-white/[.02] p-1">
+              <Link
+                href={withParam("tab", "active")}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                  tab === "active" ? "bg-brand-400/15 text-brand-300" : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                Active
+              </Link>
+              <Link
+                href={withParam("tab", "completed")}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                  tab === "completed" ? "bg-brand-400/15 text-brand-300" : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                Completed
+              </Link>
+            </nav>
+          </div>
+
+          {tab === "completed" ? (
+            filteredCompletedSeasons.length === 0 ? (
+              <p className="mt-3 text-text-2">
+                No completed tournaments match these filters.{" "}
+                <Link href="/?tab=completed" className="text-brand-400">
+                  Clear filters
+                </Link>
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {filteredCompletedSeasons.map((s) => (
+                  <article key={s.key} className="rounded-lg border border-line bg-ink-800 p-5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${TOURNAMENT_STATUS_STYLE.COMPLETED}`}>
+                        COMPLETED
+                      </span>
+                      <span className="rounded-full border border-line px-2.5 py-0.5 text-[11px] uppercase tracking-wider text-text-2">
+                        {s.sportName}
+                      </span>
+                      {s.organizationName ? (
+                        <span className="rounded-full border border-line px-2.5 py-0.5 text-[11px] uppercase tracking-wider text-text-3">
+                          {s.organizationName}
+                        </span>
+                      ) : null}
+                    </div>
+                    <h3 className="mt-2 font-display text-lg font-semibold">{s.competitionName}</h3>
+                    <p className="text-sm text-text-2">{s.seasonName}</p>
+                    <p className="mt-1 text-xs text-text-3">
+                      {s.dateRange.from.toLocaleDateString()} – {s.dateRange.to.toLocaleDateString()}
+                      {s.cities.length > 0 ? ` · ${s.cities.join(", ")}` : ""}
+                    </p>
+                    {s.href ? (
+                      <Link
+                        href={s.href}
+                        className="mt-3 inline-block rounded-md border border-line-strong px-4 py-2 text-sm text-text-2 transition hover:border-brand-400/40 hover:text-white"
+                      >
+                        View results
+                      </Link>
+                    ) : (
+                      <p className="mt-3 text-xs text-text-3">Public page coming soon.</p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )
+          ) : tournaments.length === 0 ? (
             <p className="mt-3 text-text-2">
               No tournaments match these filters.{" "}
               <Link href="/" className="text-brand-400">
