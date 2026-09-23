@@ -4676,3 +4676,56 @@ STAGE_5_5C: NOT_STARTED
 - None outstanding. If LBCL's Highlights page turns out to want fixture-detail links or a
   shareable-card route (like Neon Ultra's `/public/share/record/[key]`), that's a
   `/[vanitySlug]`-scoped follow-up, not a reason to widen the Neon-Ultra-only routes.
+
+### 2026-09-23 - Homepage Cleanup: LBCL Kept Open, Test Events Hidden, Season One Announced
+
+**Objective**
+
+- User: LBCL is not a completed tournament, keep it open; delete or hide test events;
+  homepage should show exactly 3 real tournaments (Ultra Basketball incl. an announced
+  Season One, GIESM, LBCL).
+
+**Completed**
+
+- **Root cause of "LBCL shows Completed"**: `tournamentStatusFromFixtureStatuses` inferred
+  status purely from "every currently-known fixture is FINAL" - true the moment a season
+  has no `SCHEDULED` fixtures queued yet, regardless of whether more rounds are coming.
+  Replaced with `tournamentStatusFromSeasons` (`src/lib/tournament-subsite.ts`), which
+  derives each season's own status first, then combines across seasons (`LIVE > UPCOMING >
+  ONGOING > COMPLETED`): a season with FINAL fixtures reads `ONGOING` unless its own
+  `Season.status` is explicitly `COMPLETED` (an operator decision, never inferred); a season
+  with zero fixtures at all reads `UPCOMING`, not `DRAFT` (registration-open-but-nothing-
+  scheduled-yet is "coming soon", not "not ready"); `DRAFT` is now reserved for a
+  competition with no seasons at all. This also fixes a real multi-season case: Ultra
+  Basketball (Season Zero completed, Season One announced with zero fixtures yet) now reads
+  `UPCOMING` overall instead of the old code's `ONGOING`/`COMPLETED` confusion. Added an
+  `ONGOING` status/pill (green, `success` token) alongside the existing four.
+- **Audit found real production clutter**, all traceable to a 2026-09-20 smoke-test run that
+  wrote directly against production: 4 "ZZTEST *" competitions (Soccer/Gridiron/Tennis/Table
+  Tennis Cup), each with a stray `LIVE` fixture, plus one fake fixture ("ZZ Test VB A" vs
+  "ZZ Test VB B") planted *inside* the real GIESM competition itself - that stray fixture
+  alone was why GIESM showed `LIVE` instead of `UPCOMING`.
+- Added `scripts/cleanup-homepage-test-data.ts` (dry-run by default, per-organization):
+  hides the 4 ZZTEST competitions (`isActive: false` - reversible, not a hard delete),
+  deletes the one stray GIESM fixture (cascades to its Game/stats rows via `onDelete:
+  Cascade`, confirmed empty of anything real first), marks "Season Zero 2026" `COMPLETED`
+  (it was still `ACTIVE` despite being finished), and creates "Season One 2026" (Nov 14-15 &
+  21-22, 2026 - real announced dates from the user, no clubs/fixtures yet) as a placeholder.
+- Ran dry-run then `--apply` on staging (Season Zero/Season One only - staging has its own,
+  separate "Click-Test *"/pilot clutter from past multi-sport verification work, left alone
+  since it wasn't part of this request) and production (full cleanup), each after a fresh
+  verified `pg_dump` backup.
+
+**Verification**
+
+- tsc/710+ tests (9 new/rewritten in `tournament-subsite.test.ts`)/lint/build green before
+  every deploy.
+- Staging then production, in order: homepage shows exactly 3 tournament cards (Ultra
+  Basketball, GIESM 2026 Volleyball Championship, Lagos Basketball Community League) with no
+  ZZTEST entries; `/lbcl` → `ONGOING`, `/t/ultra-basketball` → `UPCOMING`, `/t/giesm-2026` →
+  `UPCOMING` - confirmed via direct fetch on both environments.
+
+**Next step**
+
+- None outstanding. Season One 2026 is a placeholder (`DRAFT`, no clubs/fixtures) - clubs,
+  divisions, and a real schedule are a separate future session once that content exists.
