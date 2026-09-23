@@ -24,12 +24,15 @@ export default async function TournamentLayout({
       where: { organizationId: organization.id, slug, isActive: true },
       include: {
         sport: true,
-        seasons: { select: { id: true, fixtures: { select: { status: true } } } },
+        seasons: { select: { id: true, status: true, fixtures: { select: { status: true } } } },
       },
     }),
   );
   if (!competition) notFound();
-  const status = tournamentStatusFromFixtureStatuses(competition.seasons.flatMap((s) => s.fixtures.map((f) => f.status)));
+  const status = tournamentStatusFromFixtureStatuses(
+    competition.seasons.flatMap((s) => s.fixtures.map((f) => f.status)),
+    competition.seasons.map((s) => s.status),
+  );
   const basePath = `/t/${competition.slug}`;
 
   return (

@@ -118,7 +118,10 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
         sportSlug: c.sport.slug,
         sportName: c.sport.name,
         cities: fixtureCities,
-        status: tournamentStatusFromFixtureStatuses(fixtures.map((f) => f.status)),
+        status: tournamentStatusFromFixtureStatuses(
+          fixtures.map((f) => f.status),
+          c.seasons.map((s) => s.status),
+        ),
         dateRange: starts.length > 0 ? { from: new Date(Math.min(...starts)), to: new Date(Math.max(...ends)) } : null,
         live: fixtures.filter((f) => f.status === "LIVE"),
         next: fixtures.filter((f) => f.status === "SCHEDULED").sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())[0] ?? null,
