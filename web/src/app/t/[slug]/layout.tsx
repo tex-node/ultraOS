@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { PortalShell } from "@/app/components/portal-shell";
 import { SubSiteTabs } from "./sub-site-tabs";
-import { TOURNAMENT_STATUS_STYLE, tournamentStatusFromFixtureStatuses } from "@/lib/tournament-subsite";
+import { TOURNAMENT_STATUS_STYLE, tournamentStatusFromSeasons } from "@/lib/tournament-subsite";
 import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
@@ -29,9 +29,8 @@ export default async function TournamentLayout({
     }),
   );
   if (!competition) notFound();
-  const status = tournamentStatusFromFixtureStatuses(
-    competition.seasons.flatMap((s) => s.fixtures.map((f) => f.status)),
-    competition.seasons.map((s) => s.status),
+  const status = tournamentStatusFromSeasons(
+    competition.seasons.map((s) => ({ fixtureStatuses: s.fixtures.map((f) => f.status), seasonStatus: s.status })),
   );
   const basePath = `/t/${competition.slug}`;
 

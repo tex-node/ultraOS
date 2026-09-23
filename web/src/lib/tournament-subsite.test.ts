@@ -1,31 +1,53 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { tournamentStatusFromFixtureStatuses } from "@/lib/tournament-subsite";
+import { tournamentStatusFromSeasons, type SeasonFixtureSummary } from "@/lib/tournament-subsite";
 
-test("live fixtures dominate every other status", () => {
-  assert.equal(tournamentStatusFromFixtureStatuses(["FINAL", "LIVE", "SCHEDULED"]), "LIVE");
+function season(fixtureStatuses: string[], seasonStatus: string): SeasonFixtureSummary {
+  return { fixtureStatuses, seasonStatus };
+}
+
+test("no seasons at all means draft", () => {
+  assert.equal(tournamentStatusFromSeasons([]), "DRAFT");
 });
 
-test("scheduled fixtures mean upcoming when nothing is live", () => {
-  assert.equal(tournamentStatusFromFixtureStatuses(["FINAL", "SCHEDULED"]), "UPCOMING");
+test("a season with no fixtures yet reads upcoming, not draft", () => {
+  // Regression (2026-09-23): GIESM has registration open and a real public page, but no
+  // fixtures scheduled yet - that must read as "coming soon", not "not ready".
+  assert.equal(tournamentStatusFromSeasons([season([], "DRAFT")]), "UPCOMING");
 });
 
-test("all-final means ongoing unless every season is explicitly marked completed", () => {
-  // Regression (2026-09-23): LBCL's season is ACTIVE with 10 FINAL fixtures and more rounds
-  // still to come - it must never read as "Completed" just because nothing is SCHEDULED yet.
-  assert.equal(tournamentStatusFromFixtureStatuses(["FINAL", "CANCELLED"]), "ONGOING");
-  assert.equal(tournamentStatusFromFixtureStatuses(["FINAL"], ["ACTIVE"]), "ONGOING");
-  assert.equal(tournamentStatusFromFixtureStatuses(["FINAL"], ["DRAFT"]), "ONGOING");
+test("a live fixture in any season dominates every other status", () => {
+  assert.equal(
+    tournamentStatusFromSeasons([season(["FINAL", "LIVE"], "ACTIVE"), season([], "DRAFT")]),
+    "LIVE",
+  );
 });
 
-test("all-final is completed only when every season is explicitly COMPLETED", () => {
-  assert.equal(tournamentStatusFromFixtureStatuses(["FINAL"], ["COMPLETED"]), "COMPLETED");
-  // A multi-season competition (e.g. Ultra Basketball with a completed Season Zero and an
-  // upcoming Season One) is not "Completed" just because its oldest season is.
-  assert.equal(tournamentStatusFromFixtureStatuses(["FINAL"], ["COMPLETED", "ACTIVE"]), "ONGOING");
+test("a scheduled fixture means upcoming when nothing is live", () => {
+  assert.equal(tournamentStatusFromSeasons([season(["FINAL", "SCHEDULED"], "ACTIVE")]), "UPCOMING");
 });
 
-test("empty fixture list means draft regardless of season status", () => {
-  assert.equal(tournamentStatusFromFixtureStatuses([]), "DRAFT");
-  assert.equal(tournamentStatusFromFixtureStatuses(["CANCELLED", "POSTPONED"]), "DRAFT");
+test("all-final in a season not marked COMPLETED reads ongoing, never completed", () => {
+  // Regression: LBCL's season is ACTIVE with 10 FINAL fixtures and more rounds still to
+  // come - it must never read as "Completed" just because nothing is SCHEDULED yet.
+  assert.equal(tournamentStatusFromSeasons([season(["FINAL", "CANCELLED"], "ACTIVE")]), "ONGOING");
+  assert.equal(tournamentStatusFromSeasons([season(["FINAL"], "DRAFT")]), "ONGOING");
+});
+
+test("completed only when every season is explicitly COMPLETED", () => {
+  assert.equal(tournamentStatusFromSeasons([season(["FINAL"], "COMPLETED")]), "COMPLETED");
+});
+
+test("a completed season plus a brand-new empty season reads upcoming (Ultra Basketball: Season Zero done, Season One announced)", () => {
+  assert.equal(
+    tournamentStatusFromSeasons([season(["FINAL"], "COMPLETED"), season([], "DRAFT")]),
+    "UPCOMING",
+  );
+});
+
+test("a completed season plus an in-progress season reads ongoing, not upcoming", () => {
+  assert.equal(
+    tournamentStatusFromSeasons([season(["FINAL"], "COMPLETED"), season(["FINAL"], "ACTIVE")]),
+    "ONGOING",
+  );
 });

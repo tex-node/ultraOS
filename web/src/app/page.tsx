@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PortalShell } from "@/app/components/portal-shell";
 import { filterHubTournaments } from "@/lib/discovery-hub";
-import { TOURNAMENT_STATUS_STYLE, tournamentStatusFromFixtureStatuses } from "@/lib/tournament-subsite";
+import { TOURNAMENT_STATUS_STYLE, tournamentStatusFromSeasons } from "@/lib/tournament-subsite";
 import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 import { prisma } from "@/lib/prisma";
 
@@ -118,9 +118,8 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
         sportSlug: c.sport.slug,
         sportName: c.sport.name,
         cities: fixtureCities,
-        status: tournamentStatusFromFixtureStatuses(
-          fixtures.map((f) => f.status),
-          c.seasons.map((s) => s.status),
+        status: tournamentStatusFromSeasons(
+          c.seasons.map((s) => ({ fixtureStatuses: s.fixtures.map((f) => f.status), seasonStatus: s.status })),
         ),
         dateRange: starts.length > 0 ? { from: new Date(Math.min(...starts)), to: new Date(Math.max(...ends)) } : null,
         live: fixtures.filter((f) => f.status === "LIVE"),

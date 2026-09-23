@@ -1,25 +1,34 @@
 // Tournament sub-site status derivation (product roadmap F2). Pure function so the rule
 // is unit-tested and shared by every surface that renders a tournament status pill.
 //
-// "COMPLETED" is an explicit operator decision (Season.status), never inferred from "every
-// fixture we currently know about happens to be FINAL" - a real multi-round tournament (e.g.
-// LBCL, playing more rounds over several weeks) is FINAL-only between rounds, before its next
-// games are even scheduled yet, and is not remotely "completed". Without an explicit
-// seasonStatuses signal (the 1-arg call some existing sites still make) this fails safe to
-// ONGOING rather than the stronger, harder-to-walk-back claim that a tournament is finished.
+// Computed per-season, then combined, rather than flattening every fixture across every
+// season into one bag - a competition with a COMPLETED Season Zero and a brand new Season
+// One that has no fixtures yet (Ultra Basketball) must read UPCOMING (something new is
+// coming), not ONGOING (nothing is currently in progress) and not COMPLETED (Season One
+// isn't done - it hasn't started). A season with real FINAL fixtures and more rounds still
+// to come (LBCL) must read ONGOING, never COMPLETED, until its own Season.status says so -
+// an explicit operator decision, never inferred from "every fixture we currently know about
+// happens to be FINAL". A season with zero fixtures at all (registration open, nothing
+// scheduled yet, e.g. GIESM) reads UPCOMING, not DRAFT - DRAFT is reserved for a
+// competition with no seasons at all yet.
 export type TournamentSubSiteStatus = "LIVE" | "UPCOMING" | "ONGOING" | "COMPLETED" | "DRAFT";
 
-export function tournamentStatusFromFixtureStatuses(
-  statuses: readonly string[],
-  seasonStatuses: readonly string[] = [],
-): TournamentSubSiteStatus {
+export type SeasonFixtureSummary = { fixtureStatuses: readonly string[]; seasonStatus: string };
+
+function seasonDisplayStatus({ fixtureStatuses, seasonStatus }: SeasonFixtureSummary): Exclude<TournamentSubSiteStatus, "DRAFT"> {
+  if (fixtureStatuses.includes("LIVE")) return "LIVE";
+  if (fixtureStatuses.includes("SCHEDULED")) return "UPCOMING";
+  if (fixtureStatuses.includes("FINAL")) return seasonStatus === "COMPLETED" ? "COMPLETED" : "ONGOING";
+  return "UPCOMING";
+}
+
+export function tournamentStatusFromSeasons(seasons: readonly SeasonFixtureSummary[]): TournamentSubSiteStatus {
+  if (seasons.length === 0) return "DRAFT";
+  const statuses = seasons.map(seasonDisplayStatus);
   if (statuses.includes("LIVE")) return "LIVE";
-  if (statuses.includes("SCHEDULED")) return "UPCOMING";
-  if (statuses.includes("FINAL")) {
-    const allSeasonsCompleted = seasonStatuses.length > 0 && seasonStatuses.every((s) => s === "COMPLETED");
-    return allSeasonsCompleted ? "COMPLETED" : "ONGOING";
-  }
-  return "DRAFT";
+  if (statuses.includes("UPCOMING")) return "UPCOMING";
+  if (statuses.includes("ONGOING")) return "ONGOING";
+  return "COMPLETED";
 }
 
 // Status pill styles follow the design system (§13): Live is RED, Upcoming blue,
