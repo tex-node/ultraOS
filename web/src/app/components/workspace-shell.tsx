@@ -109,13 +109,14 @@ export function WorkspaceShell({ children, user }: { children: React.ReactNode; 
             </p>
           </div>
           <form
+            className="m-0 shrink-0"
             action={async () => {
               "use server";
               await signOut({ redirectTo: "/login" });
             }}
           >
             <button
-              className="rounded-md border border-line-strong px-3 py-2 text-xs text-text-2 transition hover:border-brand-400/40 hover:text-white"
+              className="cursor-pointer rounded-md border border-line-strong px-3 py-2 text-xs text-text-2 transition hover:border-brand-400/40 hover:text-white"
               type="submit"
             >
               Sign out

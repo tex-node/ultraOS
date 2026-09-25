@@ -54,12 +54,16 @@ export async function PortalShell({ children }: { children: React.ReactNode }) {
                   My Account
                 </Link>
                 <form
+                  className="m-0 shrink-0"
                   action={async () => {
                     "use server";
                     await signOut({ redirectTo: "/public/events" });
                   }}
                 >
-                  <button type="submit" className="shrink-0 text-brand-400 transition hover:text-brand-300">
+                  <button
+                    type="submit"
+                    className="shrink-0 cursor-pointer rounded-md border border-line-strong px-3 py-2 text-xs text-brand-400 transition hover:border-brand-400/50 hover:text-brand-300"
+                  >
                     Sign out
                   </button>
                 </form>
