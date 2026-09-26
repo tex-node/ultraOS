@@ -10,14 +10,14 @@ import { auth } from "@/auth";
 export const dynamic = "force-dynamic";
 
 const cards = [
+  { href: "/gameday", title: "Game Control Board", body: "Live match control: open consoles, track games, finalize results." },
   { href: "/dashboard", title: "Dashboard", body: "Revenue, ticket sales, live match status, vendor payouts at a glance." },
   { href: "/competitions", title: "Tournament builder", body: "Create tournaments, set formats and rules, manage teams and rosters." },
-  { href: "/fixtures", title: "Scheduler", body: "Generate and adjust fixtures across venues and timeslots." },
-  { href: "/gameday", title: "Live scorekeeping", body: "Match-day command: open scorepads, track live games, finalize results." },
-  { href: "/events", title: "Ticketing & access", body: "Inventory, pricing tiers, discount codes, gate check-in." },
+  { href: "/fixtures", title: "Fixtures & stats", body: "Generate and adjust fixtures; standings and leaders for every tournament." },
+  { href: "/events", title: "Ticketing & passes", body: "Zones, pricing tiers, passes, promo codes, gate check-in." },
   { href: "/vendors", title: "Vendors & concessions", body: "Onboard vendors, approve menus, track orders and payouts." },
   { href: "/check-in", title: "Gate scanner", body: "Validate tickets and QR codes at venue entry." },
-  { href: "/access", title: "Staff access", body: "Grant tournament-scoped game control without league-wide roles." },
+  { href: "/access", title: "Game-control access", body: "Grant tournament-scoped game control without league-wide roles." },
 ];
 
 const ELEVATED_ROLES = new Set([

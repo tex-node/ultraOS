@@ -18,35 +18,35 @@ type NavSection = { label: string; links: NavLink[] };
 // everyone else keeps exactly the visibility they had before.
 const sections: NavSection[] = [
   {
+    label: "Live & Game Control",
+    links: [
+      { href: "/gameday", label: "Game Control Board" },
+      { href: "/broadcast", label: "Broadcast" },
+      { href: "/novelty-matches", label: "Exhibition" },
+    ],
+  },
+  {
     label: "Manage",
     links: [
       { href: "/dashboard", label: "Dashboard" },
       { href: "/competitions", label: "Tournaments", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
-      { href: "/events", label: "Events", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
+      { href: "/events", label: "Events & Tickets", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
       { href: "/launch-readiness", label: "Launch", adminOnly: true },
     ],
   },
   {
     label: "Tournament",
     links: [
+      { href: "/fixtures", label: "Fixtures & Stats" },
+      { href: "/standings", label: "Standings" },
+      { href: "/leaders", label: "Leaders" },
       { href: "/clubs", label: "Clubs" },
       { href: "/players", label: "Athletes" },
       { href: "/coaches", label: "Coaches" },
       { href: "/coaches/season-zero-selection", label: "Coach Selection", adminOnly: true },
-      { href: "/fixtures", label: "Fixtures" },
-      { href: "/standings", label: "Standings" },
-      { href: "/leaders", label: "Leaders" },
       { href: "/drafts", label: "Drafts" },
       { href: "/draft-events", label: "Draft Day" },
       { href: "/applications", label: "Applications", adminOnly: true },
-    ],
-  },
-  {
-    label: "Live",
-    links: [
-      { href: "/gameday", label: "Game Day" },
-      { href: "/broadcast", label: "Broadcast" },
-      { href: "/novelty-matches", label: "Exhibition" },
     ],
   },
   {
@@ -61,8 +61,8 @@ const sections: NavSection[] = [
   {
     label: "System",
     links: [
+      { href: "/access", label: "Game-Control Access", adminOnly: true },
       { href: "/operations", label: "Operations", adminOnly: true },
-      { href: "/access", label: "Access", adminOnly: true },
       { href: "/content", label: "Content", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
       { href: "/media", label: "Media", adminOnly: true },
       { href: "/imports", label: "Imports", adminOnly: true },
