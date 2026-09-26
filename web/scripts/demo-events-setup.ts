@@ -65,11 +65,11 @@ async function main() {
     for (const spec of SPORTS) {
       const definition = getSportDefinition(spec.slug);
       const sportLabel = definition?.name ?? spec.name;
-      const compSlug = `demo-${spec.slug}`;
-      const compName = `Demo ${sportLabel}`;
       const isFiba = spec.label.includes("FIBA");
-      const divisionName = isFiba ? "FIBA Rules" : "Open";
-      const divisionSlug = divisionName.toLowerCase();
+      const compSlug = isFiba ? `demo-basketball-fiba` : `demo-${spec.slug}`;
+      const compName = isFiba ? `Demo ${sportLabel} (FIBA)` : `Demo ${sportLabel}`;
+      const divisionName = "Open";
+      const divisionSlug = "open";
 
       // Sport catalog row.
       const sportRow = apply
