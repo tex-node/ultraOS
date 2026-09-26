@@ -8166,7 +8166,7 @@
           {
             "fullName": "Joshua Anthony",
             "reportedName": "Joshua Anthony",
-            "jerseyNumber": 24,
+            "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 11,
             "points": 0,
@@ -8770,8 +8770,8 @@
             "efficiency": 0
           },
           {
-            "fullName": "Irozuru Nathaniel",
-            "reportedName": "Irozuru Nathaniel",
+            "fullName": "Nathaniel Chibueze",
+            "reportedName": "Nathaniel Chibueze",
             "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 7,
@@ -9901,8 +9901,8 @@
             "efficiency": 2
           },
           {
-            "fullName": "Stanley Emeka",
-            "reportedName": "Stanley Emeka",
+            "fullName": "Stanley Olisaemeka",
+            "reportedName": "Stanley Olisaemeka",
             "jerseyNumber": 21,
             "didNotPlay": false,
             "minutesPlayed": 31,
@@ -9929,7 +9929,7 @@
           {
             "fullName": "Joseph Reginald",
             "reportedName": "Joseph Reginald",
-            "jerseyNumber": 22,
+            "jerseyNumber": null,
             "didNotPlay": false,
             "minutesPlayed": 27,
             "points": 3,
