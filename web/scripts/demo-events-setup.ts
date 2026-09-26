@@ -76,12 +76,17 @@ async function main() {
         ? await tx.sport.upsert({ where: { slug: spec.slug }, update: { isActive: true }, create: { name: sportLabel, slug: spec.slug, isActive: true }, select: { id: true } })
         : await tx.sport.findUnique({ where: { slug: spec.slug }, select: { id: true } });
 
-      let competition = await tx.competition.findFirst({ where: { organizationId: organization.id, slug: compSlug }, select: { id: true } });
+      let competition = await tx.competition.findFirst({ where: { organizationId: organization.id, slug: compSlug }, select: { id: true, isActive: true } });
       if (!competition && apply && sportRow) {
         competition = await tx.competition.create({
-          data: { organizationId: organization.id, sportId: sportRow.id, name: compName, slug: compSlug, description: `Demonstration competition — ${spec.label}. DEMO origin: never shown publicly.` },
-          select: { id: true },
+          data: { organizationId: organization.id, sportId: sportRow.id, name: compName, slug: compSlug, description: `Demonstration competition — ${spec.label}. DEMO origin: never shown publicly.`, isActive: false },
+          select: { id: true, isActive: true },
         });
+      }
+      // Demo competitions are always hidden from the homepage, even if a previous run
+      // created them before the isActive:false rule existed.
+      if (apply && competition && competition.isActive) {
+        await tx.competition.update({ where: { id: competition.id }, data: { isActive: false } });
       }
 
       let season = competition
