@@ -61,7 +61,7 @@ test("drain excludes already-synced and failed records", async () => {
 
 test("markSynced stamps syncedAt and removes the record from the pending set", async () => {
   const db = freshDb();
-  const id = await enqueue({ entityType: "PlayerStat", entityId: "p1", operation: "UPDATE", payload: {}, deviceId: "d" }, db);
+  const id = await enqueue({ entityType: "Game", entityId: "p1", operation: "UPDATE", payload: {}, deviceId: "d" }, db);
   await markSynced([id], db);
   const record = await db.outbox.get(id);
   assert.ok(record?.syncedAt);

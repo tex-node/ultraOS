@@ -121,9 +121,14 @@ export class LocalScoringRepository implements ScoringRepository {
     return this.db.gameEvents.where("gameId").equals(gameId).sortBy("sequenceNumber");
   }
 
+  // Local-only write, deliberately never enqueued: PlayerStat is a projection, not a wire
+  // entity (see OutboxEntityType). This exists purely for offline UI responsiveness - showing a
+  // live-updating stat line without waiting for a network round trip - not as a sync source of
+  // truth. The server reconstructs the real PlayerStat from the synced GameEvent ledger; this
+  // local row is discarded/overwritten once that authoritative version comes back post-sync.
   async updatePlayerStat(statsId: string, patch: UpdatePlayerStatInput): Promise<void> {
     const timestamp = now();
-    await this.db.transaction("rw", this.db.playerStats, this.db.outbox, async () => {
+    await this.db.transaction("rw", this.db.playerStats, async () => {
       const existing = await this.db.playerStats.get(statsId);
       if (!existing) throw new Error("PLAYER_STAT_NOT_FOUND");
       const merged: LocalPlayerStat = {
@@ -133,17 +138,6 @@ export class LocalScoringRepository implements ScoringRepository {
         clientUpdatedAt: timestamp,
       };
       await this.db.playerStats.put(merged);
-      await enqueue(
-        {
-          entityType: "PlayerStat",
-          entityId: statsId,
-          operation: "UPDATE",
-          payload: merged,
-          clientUpdatedAt: timestamp,
-          deviceId: this.deviceId,
-        },
-        this.db,
-      );
     });
   }
 

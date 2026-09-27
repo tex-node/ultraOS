@@ -107,7 +107,7 @@ test("logEvent clientUpdatedAt is carried into the outbox ordering key", async (
   assert.equal(record?.clientUpdatedAt, "2026-02-01T00:00:00.000Z");
 });
 
-test("updatePlayerStat merges the patch, stamps clientUpdatedAt, and enqueues an UPDATE", async () => {
+test("updatePlayerStat merges the patch and stamps clientUpdatedAt, but never enqueues to the outbox", async () => {
   const { db, repo } = setup();
   await repo.createGame({ id: "g1", organizationId: "org", fixtureId: "f1" });
   await db.playerStats.put({
@@ -136,9 +136,10 @@ test("updatePlayerStat merges the patch, stamps clientUpdatedAt, and enqueues an
   assert.equal(stats[0].rebounds, 2);
   assert.notEqual(stats[0].clientUpdatedAt, "2026-01-01T00:00:00.000Z");
 
+  // PlayerStat is a local-only projection, never a wire entity (OutboxEntityType) - this write
+  // must not leave a trace in the outbox for any sync endpoint to ever pick up.
   const record = await db.outbox.where("entityId").equals("ps1").first();
-  assert.equal(record?.entityType, "PlayerStat");
-  assert.equal(record?.operation, "UPDATE");
+  assert.equal(record, undefined);
 });
 
 test("updatePlayerStat rejects an unknown stat row", async () => {
