@@ -756,6 +756,131 @@ games.push(game({
   ]),
 }));
 
+// ---------------------------------------------------------------------------
+// Game 17: White Fire 49 - 66 Seaside Hoopers - Sun 27 Sep 2026
+// ---------------------------------------------------------------------------
+games.push(game({
+  sourceLabel: "LBCL Game 17 - White Fire vs Seaside Hoopers - Sun 27 Sep 2026",
+  venue: VENUE_IKEJA,
+  scheduledAt: "2026-09-27T11:08:00.000Z",
+  homeScore: 49, awayScore: 66,
+  periods: [
+    { period: 1, label: "Q1", homeScore: 12, awayScore: 17 },
+    { period: 2, label: "Q2", homeScore: 13, awayScore: 16 },
+    { period: 3, label: "Q3", homeScore: 9, awayScore: 16 },
+    { period: 4, label: "Q4", homeScore: 15, awayScore: 17 },
+  ],
+  home: team("White Fire", "WHF", { points: 49, rebounds: 35, assists: 8, turnovers: 12, fouls: 23 }, [
+    ["Debo Osipitan", 1, 29, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 1, 4, 0, 4, 1, -9, 9],
+    ["Vihni Obioma", 2, 21, 13, 5, 17, 5, 15, 0, 2, 3, 4, 0, 2, 0, 1, 2, 0, 1, 3, -17, 3],
+    ["Boluwadoro Jeboto", 4, 16, 7, 3, 7, 2, 4, 1, 3, 0, 0, 0, 2, 0, 2, 1, 1, 3, 0, 0, 5],
+    ["Okoye Faith", 11, 14, 0, 0, 6, 0, 4, 0, 2, 0, 0, 2, 1, 1, 1, 0, 0, 3, 1, -11, -3],
+    ["Madoud Fofana", 14, 14, 2, 1, 2, 1, 1, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 1, 2, -8, -1],
+    ["Stanley Olisaemeka", 21, 25, 9, 4, 11, 4, 11, 0, 0, 1, 1, 1, 3, 0, 2, 0, 0, 4, 1, -5, 4],
+    ["Reginald Kelechi", 22, 29, 4, 2, 9, 2, 2, 0, 7, 0, 0, 0, 0, 3, 1, 5, 0, 1, 1, -13, 4],
+    ["Dauda Ayomide", 23, 37, 14, 7, 14, 7, 13, 0, 1, 0, 0, 4, 5, 1, 4, 1, 0, 4, 1, -14, 14],
+    ["Clinton David", 31, 10, 0, 0, 2, 0, 0, 0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, -8, -1],
+  ]),
+  away: team("Seaside Hoopers", "SSH", { points: 66, rebounds: 46, assists: 15, turnovers: 19, fouls: 10 }, [
+    ["Evans Christopher", 0, "DNP"],
+    ["Makonjuola Oluwasegun", 1, 28, 3, 1, 3, 1, 2, 0, 1, 1, 2, 0, 3, 3, 6, 0, 0, 1, 1, 6, 0],
+    ["Chike Emmanuel", 2, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 4, 0, 0, 2, 1, -2, -3],
+    ["Opene Nathaniel", 5, 27, 12, 4, 8, 3, 5, 1, 3, 3, 6, 0, 0, 4, 1, 1, 0, 1, 4, 16, 9],
+    ["Augustine Timothy", 6, 21, 4, 1, 5, 0, 1, 1, 4, 1, 2, 1, 4, 1, 0, 5, 1, 0, 2, 11, 11],
+    ["Evans Amadi", 10, 31, 21, 9, 13, 9, 13, 0, 0, 3, 7, 6, 10, 2, 3, 0, 0, 1, 5, 12, 28],
+    ["Bright Adedeji", 11, "DNP"],
+    ["Segun George", 12, 18, 4, 2, 6, 2, 4, 0, 2, 0, 0, 0, 2, 1, 1, 0, 0, 0, 0, 12, 2],
+    ["Ayomide Mashebinu", 13, "DNP"],
+    ["Timilehin Ebenezer", 17, 18, 3, 1, 4, 1, 2, 0, 2, 1, 8, 0, 2, 1, 4, 1, 0, 3, 4, -7, -7],
+    ["Chioke Anthony", null, "DNP"],
+    ["Nwata Destiny", null, 34, 19, 9, 14, 9, 13, 0, 1, 1, 6, 4, 6, 3, 0, 1, 1, 2, 5, 20, 24],
+  ]),
+}));
+
+// ---------------------------------------------------------------------------
+// Game 18: Cantonment Braves 41 - 37 Ultra Basketball - Sun 27 Sep 2026
+// ---------------------------------------------------------------------------
+games.push(game({
+  sourceLabel: "LBCL Game 18 - Cantonment Braves vs Ultra Basketball - Sun 27 Sep 2026",
+  venue: VENUE_IKEJA,
+  scheduledAt: "2026-09-27T11:14:00.000Z",
+  homeScore: 41, awayScore: 37,
+  periods: [
+    { period: 1, label: "Q1", homeScore: 11, awayScore: 14 },
+    { period: 2, label: "Q2", homeScore: 15, awayScore: 7 },
+    { period: 3, label: "Q3", homeScore: 10, awayScore: 8 },
+    { period: 4, label: "Q4", homeScore: 5, awayScore: 8 },
+  ],
+  home: team("Cantonment Braves", "CTB", { points: 41, rebounds: 44, assists: 7, turnovers: 12, fouls: 22 }, [
+    ["Otunyemi Seun", 4, 14, 7, 0, 3, 0, 2, 0, 1, 7, 10, 0, 2, 3, 3, 2, 0, 1, 5, 1, 5],
+    ["Agindigbadi Wasiu", 5, 13, 0, 0, 3, 0, 2, 0, 1, 0, 0, 0, 1, 0, 2, 2, 0, 2, 0, -3, -2],
+    ["Ahmed Olusoji", 6, 13, 3, 1, 7, 1, 5, 0, 2, 1, 2, 0, 0, 0, 2, 2, 0, 1, 1, -3, -4],
+    ["Salako Fisayo", 7, "DNP"],
+    ["Otowo Emmanuel", 8, 23, 0, 0, 2, 0, 2, 0, 0, 0, 2, 2, 2, 1, 0, 0, 0, 3, 2, 2, 1],
+    ["Emmanuel Idornigie", 9, 20, 4, 2, 5, 2, 4, 0, 1, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 3, 3],
+    ["Kayode Olakunle", 10, 10, 2, 1, 3, 1, 3, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0, -6, 1],
+    ["Eli Francis", 11, 23, 4, 2, 9, 2, 6, 0, 3, 0, 0, 0, 3, 0, 2, 2, 0, 2, 1, -2, 0],
+    ["Oparaugo Ikay", 12, 26, 7, 3, 12, 2, 5, 1, 7, 0, 0, 1, 3, 0, 0, 0, 0, 1, 0, 7, 2],
+    ["Clinton Koko", 13, 27, 6, 2, 7, 2, 7, 0, 0, 2, 8, 1, 4, 3, 2, 4, 0, 3, 5, 5, 5],
+    ["Oluwanifemi Kuti", 14, "DNP"],
+    ["Ajala A", 15, 25, 8, 4, 7, 4, 7, 0, 0, 0, 2, 4, 7, 0, 1, 0, 3, 5, 3, 16, 16],
+  ]),
+  away: team("Ultra Basketball", "UTA", { points: 37, rebounds: 48, assists: 5, turnovers: 21, fouls: 17 }, [
+    ["Benjamin Chibuzor", 0, 25, 9, 3, 14, 2, 8, 1, 6, 2, 4, 0, 4, 0, 3, 0, 0, 3, 3, 1, -3],
+    ["Musa Ibrahim", 1, 9, 4, 2, 3, 2, 3, 0, 0, 0, 0, 0, 1, 0, 2, 0, 0, 2, 0, 1, 2],
+    ["David Udanyi", 2, 4, 1, 0, 3, 0, 2, 0, 1, 1, 2, 0, 0, 0, 0, 1, 0, 0, 1, -2, -2],
+    ["Adam Oladipor", 4, 30, 2, 1, 5, 1, 4, 0, 1, 0, 1, 4, 2, 2, 3, 1, 0, 2, 2, -5, 3],
+    ["Amir Kabiru", null, 10, 4, 1, 1, 0, 0, 1, 1, 1, 4, 0, 1, 0, 3, 1, 0, 4, 4, 0, 4],
+    ["Lanre Shittu", null, 4, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2, 0, 0, 1, 1, 0, 0, 0, -2, 1],
+    ["Ebuka Elebuchi", 8, 24, 0, 0, 2, 0, 2, 0, 0, 0, 0, 1, 3, 1, 0, 0, 1, 2, 0, 2, 4],
+    ["Tawo Bamidele", null, 6, 2, 0, 0, 0, 0, 0, 0, 2, 4, 0, 2, 0, 2, 0, 0, 0, 2, 5, 0],
+    ["Elijah Nwodo", 10, 24, 4, 2, 5, 2, 5, 0, 0, 0, 0, 1, 5, 1, 0, 1, 0, 2, 1, 6, 9],
+    ["Haleem Akinyemi", 9, 22, 0, 0, 4, 0, 2, 0, 2, 0, 2, 2, 2, 0, 3, 0, 2, 2, 2, -14, -3],
+    ["Micheal Igbanesi", 23, 34, 11, 3, 10, 3, 8, 0, 2, 5, 8, 0, 6, 1, 3, 0, 0, 1, 6, -9, 5],
+    ["Tobi Egunjobi", 32, 2, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 3, 0, -7, -2],
+  ]),
+}));
+
+// ---------------------------------------------------------------------------
+// Game 19: Square Team 33 - 74 Lagos Raptors - Sun 27 Sep 2026
+// ---------------------------------------------------------------------------
+games.push(game({
+  sourceLabel: "LBCL Game 19 - Square Team vs Lagos Raptors Basketball Academy - Sun 27 Sep 2026",
+  venue: VENUE_IKEJA,
+  scheduledAt: "2026-09-27T11:16:00.000Z",
+  homeScore: 33, awayScore: 74,
+  periods: [
+    { period: 1, label: "Q1", homeScore: 12, awayScore: 17 },
+    { period: 2, label: "Q2", homeScore: 13, awayScore: 15 },
+    { period: 3, label: "Q3", homeScore: 6, awayScore: 18 },
+    { period: 4, label: "Q4", homeScore: 2, awayScore: 24 },
+  ],
+  home: team("Square Team", "STM", { points: 33, rebounds: 42, assists: 7, turnovers: 33, fouls: 7 }, [
+    ["Bilal M", 2, 16, 2, 1, 3, 1, 2, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, -23, -1],
+    ["Gideon Emmanuel", 3, 24, 0, 0, 2, 0, 2, 0, 0, 0, 0, 2, 6, 0, 0, 0, 0, 1, 0, -19, -6],
+    ["Bameyi Benjamin", 4, 8, 0, 0, 3, 0, 1, 0, 2, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, -12, -2],
+    ["Biu David", 5, 35, 6, 3, 10, 3, 9, 0, 1, 0, 0, 0, 1, 3, 7, 1, 0, 1, 0, -29, -3],
+    ["Peter Okeke", 7, 32, 9, 4, 9, 4, 9, 0, 0, 1, 4, 3, 7, 0, 7, 1, 1, 2, 3, -36, 6],
+    ["Creon Okwuzu", 9, 24, 8, 4, 7, 4, 6, 0, 1, 1, 1, 0, 4, 2, 1, 0, 0, 0, 0, -19, 6],
+    ["Felix David", 17, 22, 2, 1, 6, 1, 6, 0, 0, 0, 2, 3, 3, 1, 2, 0, 0, 0, 2, -26, 0],
+    ["Onyedikachi Anekwe", 55, 36, 6, 2, 10, 2, 9, 0, 1, 2, 4, 4, 6, 1, 4, 0, 0, 2, 2, -41, 3],
+  ]),
+  away: team("Lagos Raptors", "LAR", { points: 74, rebounds: 41, assists: 14, turnovers: 9, fouls: 7 }, [
+    ["Worship Adele", null, 23, 6, 3, 12, 3, 7, 0, 5, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 21, -4],
+    ["Sopuchukwu Emmanuell", 2, 16, 13, 6, 13, 6, 11, 0, 2, 1, 2, 3, 0, 0, 1, 0, 0, 2, 2, 20, 7],
+    ["Timi Samuel", 3, 23, 10, 5, 15, 5, 12, 0, 3, 0, 2, 0, 0, 2, 0, 5, 0, 0, 1, 21, 5],
+    ["Neuman Ejirinade", 4, 16, 6, 3, 5, 3, 5, 0, 0, 0, 0, 1, 0, 1, 0, 3, 0, 0, 1, 20, 9],
+    ["Farayibi Oluwatamilore", 5, 16, 8, 4, 7, 4, 6, 0, 1, 0, 0, 1, 3, 0, 6, 0, 0, 0, 0, 20, 15],
+    ["Lucky Kisiso", 6, 15, 6, 3, 3, 3, 3, 0, 0, 0, 0, 5, 5, 3, 2, 1, 0, 1, 0, 9, 18],
+    ["Ojajuni Oluwatobi", 7, 16, 6, 2, 4, 2, 4, 0, 0, 2, 4, 0, 1, 0, 1, 0, 0, 2, 0, 20, 4],
+    ["Dannis Godwill", 8, 10, 4, 2, 2, 2, 2, 0, 0, 0, 0, 1, 1, 1, 1, 2, 0, 2, 0, 16, 8],
+    ["Joseph O", 9, "DNP"],
+    ["Damilare Sowere", 10, 23, 6, 3, 7, 3, 6, 0, 1, 0, 0, 0, 5, 2, 1, 1, 1, 0, 1, 21, 10],
+    ["Dele Ajigboye", 11, 23, 7, 3, 7, 3, 7, 0, 1, 2, 4, 5, 9, 0, 1, 2, 3, 1, 1, 21, 15],
+    ["Ayomide Adeeko", 12, 13, 2, 1, 2, 1, 2, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 16, 4],
+  ]),
+}));
+
 const batch = {
   organization: {
     mode: "new",
