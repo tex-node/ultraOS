@@ -230,8 +230,8 @@ export function buildOpponentScoutingReports(games: GameCore[], focusSeasonClubI
       const scorerFgPct = percent(primaryScorer.fgm, primaryScorer.fga);
       gamePlanParts.push(`${primaryScorer.name} (${round1(primaryScorer.points / primaryScorer.gamesPlayed)} PPG${scorerFgPct != null ? `, ${round1(scorerFgPct)}% FG` : ""}) leads their scoring.`);
     }
-    if (threats.length > 0) gamePlanParts.push(`Watch for: ${threats.slice(0, 2).map((t) => t.label.toLowerCase()).join("; ")}.`);
-    if (weaknesses.length > 0) gamePlanParts.push(`Exploit: ${weaknesses.slice(0, 2).map((w) => w.label.toLowerCase()).join("; ")}.`);
+    if (threats.length > 0) gamePlanParts.push(`Watch for: ${threats.slice(0, 2).map((t) => t.label).join("; ")}.`);
+    if (weaknesses.length > 0) gamePlanParts.push(`Exploit: ${weaknesses.slice(0, 2).map((w) => w.label).join("; ")}.`);
     if (h2h.gamesPlayed > 0) gamePlanParts.push(`Head-to-head this season: ${h2h.focusWins}-${h2h.focusLosses}.`);
 
     reports.push({
