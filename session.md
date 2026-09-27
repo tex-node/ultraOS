@@ -5562,3 +5562,43 @@ production.
   White Fire, Square Team, Leo Kareem Foundation) — head-to-head fills in
   automatically once those games are ingested, no code change needed.
 
+### 2026-09-27 - LBCL: Ingest Game 20 (Campos Basketballers 48-40 Ogra Hoop Kings)
+
+**Objective**
+
+- One more scoresheet for the day. Same rigor as always.
+
+**Completed**
+
+- `web/scripts/data/build-lbcl-batch.mjs`: added Game 20. Sheet labels the
+  home team "Campos Basketball" but its roster matches the existing "Campos
+  Basketballers" club by name/jersey anchor for 11 of 12 rows (e.g. "Oguh
+  Donald" -> "Uzoma Donald" via shared surname + exact jersey #3; "Stephen
+  Unachukwu" -> "Stephen Q" via shared first name + exact jersey #6). Only
+  "Jamelo U" (DNP) is genuinely new, nulled due to a jersey-0 collision with
+  the existing "Whatson Shedrack".
+- Ogra Hoop Kings: 10 of 12 rows matched existing canonical names cleanly;
+  "Chukwu Obi" and "Nana Anu" are genuinely new/unmatched with real jersey
+  collisions (#41 vs Chuka Sampson, #44 vs Kenneth Nnanna) - both nulled.
+  Notably, this game's "Irozuru Nathaniel" (jersey 9) is a clean exact match
+  this time, confirming the Sep-26 Game 13 fix (where a different row was
+  wrongly using this same name for what turned out to be a separate player,
+  "Nathaniel Chibueze") was correct - both are now distinct, correctly
+  separated canonical players in the roster.
+- Deployed to staging then production; games 1-19 correctly `BLOCKED`
+  (idempotent), Game 20 imported cleanly on both with `players_created=3`
+  (Jamelo U, Chukwu Obi, Nana Anu) on each environment independently.
+
+**Verification**
+
+- `verify-batch.mjs`: all 20 games' PTS/quarter checksums pass.
+- tsc/lint clean.
+- Both environments: fixture confirmed `FINAL`, 48-40, points sum 88 exactly.
+- Live `/lbcl/fixtures` on production shows all 20 games and updated
+  standings (Campos Basketballers now 4-0, tied atop the table on PD with
+  LXB Surulere).
+
+**Next step**
+
+- None outstanding.
+
