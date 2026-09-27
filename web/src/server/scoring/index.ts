@@ -17,6 +17,8 @@ export {
   type CorrectionResult,
 } from "./correctStatisticianEvent";
 export { voidGameEvent } from "./voidGameEvent";
+export { applyPlayerShotStatDeltas, applyTeamShotStatDeltas } from "./applyShotStatDeltas";
+export { mergeShotStatDeltas } from "@/lib/scoring/shot-stat-deltas";
 export { assignNextSequence } from "./sequence";
 export type {
   AuthActor,

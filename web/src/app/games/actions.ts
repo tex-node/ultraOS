@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { MissingOrganizationContextError, requireFixturePermission, requireSession } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
-import { createGameEvent } from "@/server/scoring";
+import { createGameEvent, applyPlayerShotStatDeltas, applyTeamShotStatDeltas } from "@/server/scoring";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { remainingShotClockSeconds } from "@/lib/game-rules";
 import { withOrganizationContext } from "@/lib/tenant-context";
@@ -17,7 +17,6 @@ import {
   negateShotStatDeltas,
   scoreShot,
   shotStatDeltas,
-  type ShotStatDeltas,
 } from "@/lib/ultra-scoring-engine";
 import { recalculateStandings } from "@/lib/standings-recalculate";
 import { getSportDefinition } from "@/lib/sports/registry";
@@ -82,84 +81,6 @@ async function syncUltraTimeState(
     { actor: { id: actorId, organizationId }, source: "LIVE_UI", tx },
   );
   return { isUltraTimeActive: isActive, nextEventSequence: game.nextEventSequence + 1 };
-}
-
-function mergeShotStatDeltas(
-  existing: Partial<Record<keyof ShotStatDeltas, number | null>> | null,
-  deltas: ShotStatDeltas,
-): Record<keyof ShotStatDeltas, number> {
-  const merged = {} as Record<keyof ShotStatDeltas, number>;
-  for (const key of Object.keys(deltas) as (keyof ShotStatDeltas)[]) {
-    merged[key] = (existing?.[key] ?? 0) + deltas[key];
-  }
-  return merged;
-}
-
-// Applies a made shot's per-category deltas (and its raw point delta) to a player's stat
-// line for this game - or reverses them, when called with negateShotStatDeltas(deltas) and a
-// negative pointsDelta, from the void/correction paths. NULL fields become real zeros the
-// first time a native shot touches this row, per the "0 is captured, null is not" convention -
-// correct here because live scoring genuinely observes every shot category.
-async function applyPlayerShotStatDeltas(
-  tx: Prisma.TransactionClient,
-  organizationId: string,
-  gameId: string,
-  playerId: string,
-  seasonClubId: string,
-  deltas: ShotStatDeltas,
-  pointsDelta: number,
-) {
-  const existing = await tx.playerStat.findUnique({ where: { gameId_playerId: { gameId, playerId } } });
-  const merged = mergeShotStatDeltas(existing, deltas);
-  await tx.playerStat.upsert({
-    where: { gameId_playerId: { gameId, playerId } },
-    create: { organizationId, gameId, playerId, seasonClubId, points: Math.max(0, pointsDelta), ...merged, statSource: "ULTRA_NATIVE_LIVE_SCORER" },
-    update: { points: Math.max(0, (existing?.points ?? 0) + pointsDelta), ...merged, statSource: "ULTRA_NATIVE_LIVE_SCORER" },
-  });
-}
-
-// Team-level Ultra aggregates are narrower than the player-level ones (no plain-time FG
-// breakdown is tracked at team granularity - see TeamStat in schema.prisma), so this only
-// carries the subset that model actually has columns for.
-async function applyTeamShotStatDeltas(
-  tx: Prisma.TransactionClient,
-  organizationId: string,
-  gameId: string,
-  seasonClubId: string,
-  deltas: Pick<ShotStatDeltas, "fourPointsMade" | "fourPointsAttempted" | "ultraTimeFieldGoalsMade" | "ultraTimeFieldGoalsAttempted">,
-  ultraTimePointsForDelta: number,
-  ultraTimePointsAgainstDelta: number,
-  absolutePoints: number,
-) {
-  const existing = await tx.teamStat.findUnique({ where: { gameId_seasonClubId: { gameId, seasonClubId } } });
-  const merge = (field: keyof typeof deltas | "ultraTimePointsFor" | "ultraTimePointsAgainst", delta: number) =>
-    (existing?.[field] ?? 0) + delta;
-  await tx.teamStat.upsert({
-    where: { gameId_seasonClubId: { gameId, seasonClubId } },
-    create: {
-      organizationId,
-      gameId,
-      seasonClubId,
-      points: absolutePoints,
-      fourPointsMade: deltas.fourPointsMade,
-      fourPointsAttempted: deltas.fourPointsAttempted,
-      ultraTimeFieldGoalsMade: deltas.ultraTimeFieldGoalsMade,
-      ultraTimeFieldGoalsAttempted: deltas.ultraTimeFieldGoalsAttempted,
-      ultraTimePointsFor: ultraTimePointsForDelta,
-      ultraTimePointsAgainst: ultraTimePointsAgainstDelta,
-      statSource: "ULTRA_NATIVE_LIVE_SCORER",
-    },
-    update: {
-      points: absolutePoints,
-      fourPointsMade: merge("fourPointsMade", deltas.fourPointsMade),
-      fourPointsAttempted: merge("fourPointsAttempted", deltas.fourPointsAttempted),
-      ultraTimeFieldGoalsMade: merge("ultraTimeFieldGoalsMade", deltas.ultraTimeFieldGoalsMade),
-      ultraTimeFieldGoalsAttempted: merge("ultraTimeFieldGoalsAttempted", deltas.ultraTimeFieldGoalsAttempted),
-      ultraTimePointsFor: merge("ultraTimePointsFor", ultraTimePointsForDelta),
-      ultraTimePointsAgainst: merge("ultraTimePointsAgainst", ultraTimePointsAgainstDelta),
-      statSource: "ULTRA_NATIVE_LIVE_SCORER",
-    },
-  });
 }
 
 const STAT_FIELD: Record<string, "rebounds" | "assists" | "steals" | "blocks" | "turnovers" | "fouls"> = {
