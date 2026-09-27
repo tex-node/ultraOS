@@ -5033,19 +5033,29 @@ STAGE_5_5C: NOT_STARTED
   keys. A crash mid-drain replays the same persisted keys, so the server dedupes and the replay
   is a no-op. This is exactly the property A3 needs.
 
-**Check 2 — "flat dir" import gotcha: MISDIAGNOSIS, corrected**
+**Check 2 — relative-import resolution: definitively diagnosed (was a wrong path)**
 
-- The A1 note claimed `tsx --test` cannot resolve parent imports in a flat directory and that
-  tests must live in nested dirs. That is wrong.
-- Real cause: a wrong relative path. A test in `src/lib/offline/` importing `"../db"` pointed at
-  `src/lib/db` (nonexistent); it should have been `"./db"`. Moving the test to `repositories/`
-  only appeared to fix it because `"../db"` from there resolves to the real
-  `src/lib/offline/db.ts`.
-- Verified by isolation: with a valid target, both `./x` and `../x` resolve from both flat and
-  nested dirs. No config interaction (tsconfig `paths`/`baseUrl` are not involved; neither is the
-  package.json test glob). No workaround required — future offline test files may live in any dir
-  as long as relative paths are correct.
-- Session note corrected in the A1 entry.
+- The A1 note first claimed `tsx --test` cannot resolve parent imports in a flat directory. A
+  follow-up then asked whether this is a cwd-relative resolution problem (the Node test runner
+  spawning each file as a child process, with tsx resolving `../` against the child's cwd rather
+  than `import.meta.url`). Both were tested directly with instrumentation.
+- **Result: tsx resolves relative imports file-relatively and correctly in this repo.** Measured
+  inside the child process: `process.cwd()` is the project root (`web/`), **not** the test file's
+  directory, and `import.meta.url` is the test file. With valid targets present at every candidate
+  location, `../_target` resolved to the file-relative parent in both flat and nested layouts:
+  - `./_target` from `_fmttest/` → `src/lib/_fmttest/_target`
+  - `../_target` from `_fmttest/` → `src/lib/_target`
+  - `../_target` from `_fmttest/nested/` → `src/lib/_fmttest/_target`
+- The apparent "depth changes the outcome" was an artifact of the repro: the *targets* differed by
+  depth, so the differing outcomes came from the paths, not the resolver.
+- **Actual A1 cause (confirmed): a wrong relative path.** `outbox.test.ts` lived in
+  `src/lib/offline/` and imported `"../db"` = `src/lib/db` (nonexistent); the correct import from
+  that directory is `"./db"`. Moving it to `repositories/` only appeared to fix it because `../db`
+  from there reaches the real `src/lib/offline/db.ts`.
+- **Conclusion: no workaround needed, no directory-layout constraint, no cwd fix required.** A2's
+  tests (and B0's) live wherever is cleanest. If a genuine cwd-relative tsx issue ever appears
+  (e.g. a runner that pins cwd to the test file's dir), the fix is to resolve via
+  `fileURLToPath(new URL(".", import.meta.url))` — but that is not needed here.
 
 **Notes**
 
