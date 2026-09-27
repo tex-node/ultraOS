@@ -41,7 +41,8 @@ Unit of a batch = "sites that collapse to the same service-call shape," not file
 
 | Bucket | Sites | Status |
 | --- | --- | --- |
-| **Statistician console - event-only** | 9 | 8 migrated (flipPossession, recordJumpBall, recordGameTimeout, verifyScoreboard, recordStatisticianStat, recordStatisticianShot, recordSubstitution, recordWaveSubstitution); 1 pending (correctStatisticianEventPostFinal) |
+| **Statistician console - event-only** | 8 | 8 migrated (flipPossession, recordJumpBall, recordGameTimeout, verifyScoreboard, recordStatisticianStat, recordStatisticianShot, recordSubstitution, recordWaveSubstitution) — all done |
+| **Statistician console - sibling service (supersession)** | 1 | Migrated (Batch 7): correctStatisticianEventPostFinal → `correctStatisticianEvent`, not a `createGameEvent` caller |
 | **Statistician console - status flips** | 2 | Pending (voidStatisticianEvent, undoLastStatisticianEvent) |
 | **Scorer console - event-only** | 11 | Pending (Ultra Time helper, recordScore, correctScoreEventAction, ...) |
 | **Scorer console - status flips** | 2 | Pending (voidScoreEventAction, correctScoreEventAction) |
@@ -162,7 +163,7 @@ migration complete."
 | 785 | `undoLastStatisticianEvent` | `gameEvent.update` | IN | status flip |
 | 877/908 | `rebuildGameStatsFromEvents` | `playerStat.upsert`, `teamStat.upsert` | DERIVED | **the** derive; sole legitimate PlayerStat writer |
 | 959 | `verifyStatistics` | `game.update` | IN | verification gate |
-| 1050/1052/1063/1068/1074 | `correctStatisticianEventPostFinal` | `game.update`, `gameEvent.create`, `gameEvent.update` | IN | **service target** (supersession) |
+| 1036 | `correctStatisticianEventPostFinal` | (none — calls `correctStatisticianEvent`) | IN | **migrated** (Batch 7, sibling service — see "Sites that don't fit `createGameEvent`") |
 
 ## A3a in-scope service targets (the sites that become `createGameEvent`/`createGame` callers)
 
@@ -170,10 +171,23 @@ migration complete."
 
 These sites only create game events. No stat writes. File header (line 130) confirms: "does not touch Fixture.homeScore/awayScore or PlayerStat/TeamStat".
 
-**createGameEvent (create sites)** — 9:
-`stats-actions.ts` 183 (recordStatisticianShot), 281 (recordStatisticianStat), 359 (recordSubstitution), 442 (recordWaveSubstitution), 543 (recordGameTimeout), 596 (recordJumpBall), 634 (flipPossession), 685 (verifyScoreboard), 1052 (correctStatisticianEventPostFinal)
+**createGameEvent (create sites)** — 8:
+`stats-actions.ts` 183 (recordStatisticianShot), 281 (recordStatisticianStat), 359 (recordSubstitution), 442 (recordWaveSubstitution), 543 (recordGameTimeout), 596 (recordJumpBall), 634 (flipPossession), 685 (verifyScoreboard)
 
 **Event status flips (update)** — 2: `stats-actions.ts` 494 (voidStatisticianEvent), 785 (undoLastStatisticianEvent)
+
+**Sibling service (not a `createGameEvent` caller)** — `stats-actions.ts` 1036 (correctStatisticianEventPostFinal), migrated in Batch 7 to `correctStatisticianEvent` — see "Sites that don't fit `createGameEvent`" below.
+
+### Sites that don't fit `createGameEvent`
+
+Not every canonical write is a parameterization of "insert one event into a mutable game." `correctStatisticianEventPostFinal` needed a genuinely different shape: a FINAL-only gate (the opposite of `createGameEvent`'s mutable-game check), a mutation of an existing `GameEvent` row rather than a plain insert, and a VOID mode that creates no event at all. Rather than bolting an `allowPostFinal` escape hatch onto `createGameEvent`, this became a sibling service under the same `src/server/scoring/**` boundary:
+
+- `load-final-game.ts` / `loadFinalGameForCorrection` — the FINAL-only counterpart to `loadMutableGame`, same `FOR UPDATE` lock on Fixture, opposite status assertion. Its own (unconditional) verification-stamp reset — deliberately not shared with `loadMutableGame`'s conditional, separately-audited version; they're different operations, not one operation expressed two ways.
+- `with-final-game-write.ts` / `withFinalGameWrite` — mirrors `withGameWrite` exactly, so the two service shapes share a calling convention.
+- `correctStatisticianEvent.ts` / `correctStatisticianEvent` — the mutation itself, discriminated on `mode: "REPLACE" | "VOID"` in both input and output so a caller can't lose track of which branch ran.
+- `sequence.ts` / `assignNextSequence` — the one primitive genuinely shared with `createGameEvent` (sequence-counter increment; was duplicated inline in both places before this batch).
+
+Any future site that turns out to be a distinct shape (e.g. `undoLastEvent` in Batch S, once its scorer-console stat-write model is corrected) should follow the same pattern: a sibling service under `src/server/scoring/**`, reusing primitives where the operation is actually the same, staying local where it isn't.
 
 ### Scorer console (event + stat writes, model correction needed)
 

@@ -12,7 +12,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireFixturePermission, requireSession, MissingOrganizationContextError } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
-import { createGameEvent, withGameWrite } from "@/server/scoring";
+import {
+  createGameEvent,
+  withGameWrite,
+  correctStatisticianEvent,
+  withFinalGameWrite,
+  type CorrectionResult,
+} from "@/server/scoring";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { prisma } from "@/lib/prisma";
 import { withOrganizationContext } from "@/lib/tenant-context";
@@ -998,19 +1004,12 @@ export async function verifyStatistics(gameId: string, fixtureId: string, formDa
 }
 
 // --- G.17 Part VII: post-final statistical correction ---
-
-async function loadFinalGameForCorrection(tx: Prisma.TransactionClient, gameId: string, fixtureId: string) {
-  await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
-  const game = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true, ruleSnapshot: true } });
-  if (game.fixtureId !== fixtureId) throw new Error("INVALID_EVENT");
-  if (game.fixture.status === "CANCELLED" || game.fixture.status === "POSTPONED") throw new Error("GAME_NOT_MUTABLE");
-  // Deliberately the opposite gate from loadMutableGame(): this workflow exists specifically
-  // for a FINAL game. A still-live game should use the ordinary undo/void/re-record flow above
-  // instead - routing a live correction through here would bypass loadMutableGame's LIVE/PAUSED
-  // check for no reason.
-  if (game.status !== "FINAL") throw new Error("GAME_NOT_FINAL_USE_LIVE_CORRECTION_INSTEAD");
-  return game;
-}
+//
+// Migrated to the correctStatisticianEvent sibling service (A3a Batch 7) - see
+// docs/canonical-write-audit.md, "Sites that don't fit createGameEvent." This site needed its
+// own service, not a parameterization of createGameEvent: a FINAL-only gate (the opposite of
+// createGameEvent's mutable-game check), a mutation of an existing event rather than a plain
+// insert, and a VOID branch that creates no event at all.
 
 const postFinalCorrectionSchema = z.object({
   eventId: z.string().min(1),
@@ -1038,70 +1037,75 @@ export async function correctStatisticianEventPostFinal(gameId: string, fixtureI
   const input = postFinalCorrectionSchema.parse(Object.fromEntries(formData.entries()));
   const hasReplacement = input.replacementShotValue !== undefined && input.replacementMade !== undefined;
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    const game = await loadFinalGameForCorrection(tx, gameId, fixtureId);
+  await withFinalGameWrite(
+    gameId,
+    fixtureId,
+    { actor: { id: session.user.id, organizationId }, source: "LIVE_UI", ledgerSourceHint: "STATISTICIAN" },
+    async (writeCtx) => {
+      const game = writeCtx.game;
+      // Plain read for the fields scoreShot()/the replacement payload need - the service does
+      // its own authoritative (gameId/source/status) validation on this same row a moment
+      // later, inside the same transaction, so there's no race to guard against here.
+      const original = await writeCtx.tx.gameEvent.findUniqueOrThrow({ where: { id: input.eventId } });
 
-    const original = await tx.gameEvent.findUniqueOrThrow({ where: { id: input.eventId } });
-    if (original.gameId !== gameId) throw new Error("INVALID_EVENT");
-    if (original.source !== STATISTICIAN_SOURCE) throw new Error("NOT_A_STATISTICIAN_EVENT");
-    if (original.status !== "ACTIVE") throw new Error("EVENT_NOT_ACTIVE");
+      const verificationBefore = game.statisticsVerifiedAt
+        ? { verifiedAt: game.statisticsVerifiedAt.toISOString(), verifiedById: game.statisticsVerifiedById }
+        : null;
 
-    const verificationBefore = game.statisticsVerifiedAt
-      ? { verifiedAt: game.statisticsVerifiedAt.toISOString(), verifiedById: game.statisticsVerifiedById }
-      : null;
+      let result: CorrectionResult;
+      if (hasReplacement) {
+        const shot = scoreShot({
+          rules: effectiveRuleSnapshot(game.ruleSnapshot),
+          shotValue: input.replacementShotValue!,
+          gameStatus: "LIVE", // re-evaluated under the ORIGINAL event's own frozen clock context below, not "now"
+          currentPeriod: original.period,
+          remainingClockSeconds: original.clockSeconds,
+        });
+        if (!shot.valid) throw new Error(shot.error);
+        const made = input.replacementMade === "true";
+        const eventType = input.replacementShotValue === 1 ? (made ? "FREE_THROW_MADE" : "FREE_THROW_MISSED") : (made ? "SHOT_MADE" : "SHOT_MISSED");
+        result = await correctStatisticianEvent(
+          {
+            mode: "REPLACE",
+            originalEventId: input.eventId,
+            reason: input.reason,
+            replacement: {
+              eventType,
+              seasonClubId: original.seasonClubId,
+              playerId: original.playerId,
+              period: original.period,
+              clockSeconds: original.clockSeconds,
+              description: `Post-final correction: ${input.reason}`,
+              points: made ? shot.pointsAwarded : 0,
+              basePointValue: shot.basePointValue,
+              multiplier: shot.multiplier,
+              made,
+              isFourPointAttempt: input.replacementShotValue === 4,
+              isUltraTime: shot.isUltraTime,
+            },
+          },
+          writeCtx,
+        );
+      } else {
+        result = await correctStatisticianEvent({ mode: "VOID", originalEventId: input.eventId, reason: input.reason }, writeCtx);
+      }
 
-    let replacementEventId: string | null = null;
-    if (hasReplacement) {
-      const shot = scoreShot({
-        rules: effectiveRuleSnapshot(game.ruleSnapshot),
-        shotValue: input.replacementShotValue!,
-        gameStatus: "LIVE", // re-evaluated under the ORIGINAL event's own frozen clock context below, not "now"
-        currentPeriod: original.period,
-        remainingClockSeconds: original.clockSeconds,
-      });
-      if (!shot.valid) throw new Error(shot.error);
-      const made = input.replacementMade === "true";
-      const sequenceNumber = game.nextEventSequence;
-      await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
-      const eventType = input.replacementShotValue === 1 ? (made ? "FREE_THROW_MADE" : "FREE_THROW_MISSED") : (made ? "SHOT_MADE" : "SHOT_MISSED");
-      const replacement = await tx.gameEvent.create({
-        data: {
-          organizationId, gameId, seasonClubId: original.seasonClubId, playerId: original.playerId, eventType,
-          points: made ? shot.pointsAwarded : 0, basePointValue: shot.basePointValue, multiplier: shot.multiplier, made,
-          isFourPointAttempt: input.replacementShotValue === 4, isUltraTime: shot.isUltraTime,
-          period: original.period, clockSeconds: original.clockSeconds,
-          description: `Post-final correction: ${input.reason}`, sequenceNumber,
-          source: STATISTICIAN_SOURCE, createdById: session.user.id, supersedesEventId: original.id,
+      await writeAuditLog(writeCtx.tx, {
+        organizationId,
+        userId: session.user.id,
+        action: "POST_FINAL_STATISTICAL_CORRECTION",
+        entityType: "GameEvent",
+        entityId: result.original.id,
+        details: {
+          fixtureId, gameId,
+          originalEventType: result.original.eventType, originalDescription: result.original.description,
+          replacementEventId: result.mode === "REPLACE" ? result.replacement.id : null,
+          reason: input.reason,
+          verificationBefore, verificationAfter: null,
         },
       });
-      replacementEventId = replacement.id;
-      await tx.gameEvent.update({
-        where: { id: original.id },
-        data: { status: "CORRECTED", correctedAt: new Date(), correctedById: session.user.id, correctionReason: input.reason },
-      });
-    } else {
-      await tx.gameEvent.update({
-        where: { id: original.id },
-        data: { status: "VOIDED", correctedAt: new Date(), correctedById: session.user.id, correctionReason: input.reason },
-      });
-    }
-
-    await tx.game.update({ where: { id: gameId }, data: { statisticsVerifiedAt: null, statisticsVerifiedById: null } });
-
-    await writeAuditLog(tx, {
-      organizationId,
-      userId: session.user.id,
-      action: "POST_FINAL_STATISTICAL_CORRECTION",
-      entityType: "GameEvent",
-      entityId: original.id,
-      details: {
-        fixtureId, gameId,
-        originalEventType: original.eventType, originalDescription: original.description,
-        replacementEventId, reason: input.reason,
-        verificationBefore, verificationAfter: null,
-      },
-    });
-  });
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/stats`);
   revalidatePath(`/games/${fixtureId}/live`);

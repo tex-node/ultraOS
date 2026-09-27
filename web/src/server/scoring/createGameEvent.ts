@@ -4,6 +4,7 @@ import { remainingClockSeconds } from "@/lib/game-clock";
 import { ledgerSourceFor } from "@/lib/scoring/provenance";
 import { buildGameEventCreateData } from "@/lib/scoring/build-game-event";
 import { loadMutableGame } from "./load-mutable-game";
+import { assignNextSequence } from "./sequence";
 import type { CreateGameEventInput, WriteContext } from "./types";
 
 // The single canonical write path for a GameEvent. Three callers, one function:
@@ -42,12 +43,8 @@ export async function createGameEvent(
   // 2. Compute clock (use provided value for sync replay, otherwise compute from game state)
   const clockSeconds = input.clockSeconds ?? remainingClockSeconds(game);
 
-  // 3. Assign sequence (increment counter, use old value — matches the old `nextSequence` helper)
-  const sequenceNumber = game.nextEventSequence;
-  await tx.game.update({
-    where: { id: input.gameId },
-    data: { nextEventSequence: { increment: 1 } },
-  });
+  // 3. Assign sequence (increment counter, use old value)
+  const sequenceNumber = await assignNextSequence(tx, input.gameId, game.nextEventSequence);
 
   // 4. Validate seasonClubId if provided
   if (input.seasonClubId) {
