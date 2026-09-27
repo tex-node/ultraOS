@@ -16,6 +16,7 @@ export {
   type CorrectStatisticianEventInput,
   type CorrectionResult,
 } from "./correctStatisticianEvent";
+export { voidGameEvent } from "./voidGameEvent";
 export { assignNextSequence } from "./sequence";
 export type {
   AuthActor,

@@ -17,6 +17,7 @@ import {
   withGameWrite,
   correctStatisticianEvent,
   withFinalGameWrite,
+  voidGameEvent,
   type CorrectionResult,
 } from "@/server/scoring";
 import { remainingClockSeconds } from "@/lib/game-clock";
@@ -499,28 +500,31 @@ export async function voidStatisticianEvent(gameId: string, fixtureId: string, f
   const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
   const eventId = z.string().min(1).parse(formData.get("eventId"));
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
+  await withGameWrite(
+    gameId,
+    fixtureId,
+    { actor: { id: session.user.id, organizationId }, source: "LIVE_UI", ledgerSourceHint: "STATISTICIAN" },
+    async (writeCtx) => {
+      // Target selection (including the source check) is a policy/lookup concern, not a write
+      // mechanic - stays here, not in voidGameEvent, so a future scorer-console void can reuse
+      // the same service without inheriting a statistician-only restriction.
+      const target = await writeCtx.tx.gameEvent.findFirst({
+        where: { id: eventId, gameId, source: STATISTICIAN_SOURCE, status: "ACTIVE" },
+      });
+      if (!target) throw new Error("EVENT_NOT_VOIDABLE");
 
-    const target = await tx.gameEvent.findFirst({
-      where: { id: eventId, gameId, source: STATISTICIAN_SOURCE, status: "ACTIVE" },
-    });
-    if (!target) throw new Error("EVENT_NOT_VOIDABLE");
+      const voided = await voidGameEvent(target.id, "OPERATOR_VOID", writeCtx);
 
-    await tx.gameEvent.update({
-      where: { id: target.id },
-      data: { status: "VOIDED", correctedAt: new Date(), correctedById: session.user.id, correctionReason: "OPERATOR_VOID" },
-    });
-
-    await writeAuditLog(tx, {
-      organizationId,
-      userId: session.user.id,
-      action: "STATISTICIAN_EVENT_VOIDED",
-      entityType: "GameEvent",
-      entityId: target.id,
-      details: { fixtureId, gameId, voidedEventType: target.eventType, voidedDescription: target.description },
-    });
-  });
+      await writeAuditLog(writeCtx.tx, {
+        organizationId,
+        userId: session.user.id,
+        action: "STATISTICIAN_EVENT_VOIDED",
+        entityType: "GameEvent",
+        entityId: voided.id,
+        details: { fixtureId, gameId, voidedEventType: target.eventType, voidedDescription: target.description },
+      });
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/stats`);
   revalidatePath(`/games/${fixtureId}/stats/live`);
@@ -794,29 +798,29 @@ export async function confirmStartingFive(gameId: string, fixtureId: string, for
 export async function undoLastStatisticianEvent(gameId: string, fixtureId: string) {
   const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
+  await withGameWrite(
+    gameId,
+    fixtureId,
+    { actor: { id: session.user.id, organizationId }, source: "LIVE_UI", ledgerSourceHint: "STATISTICIAN" },
+    async (writeCtx) => {
+      const last = await writeCtx.tx.gameEvent.findFirst({
+        where: { gameId, source: STATISTICIAN_SOURCE, status: "ACTIVE" },
+        orderBy: { createdAt: "desc" },
+      });
+      if (!last) throw new Error("NO_EVENTS_TO_UNDO");
 
-    const last = await tx.gameEvent.findFirst({
-      where: { gameId, source: STATISTICIAN_SOURCE, status: "ACTIVE" },
-      orderBy: { createdAt: "desc" },
-    });
-    if (!last) throw new Error("NO_EVENTS_TO_UNDO");
+      const voided = await voidGameEvent(last.id, "OPERATOR_UNDO", writeCtx);
 
-    await tx.gameEvent.update({
-      where: { id: last.id },
-      data: { status: "VOIDED", correctedAt: new Date(), correctedById: session.user.id, correctionReason: "OPERATOR_UNDO" },
-    });
-
-    await writeAuditLog(tx, {
-      organizationId,
-      userId: session.user.id,
-      action: "STATISTICIAN_EVENT_UNDONE",
-      entityType: "GameEvent",
-      entityId: last.id,
-      details: { fixtureId, gameId, undoneEventType: last.eventType, undoneDescription: last.description },
-    });
-  });
+      await writeAuditLog(writeCtx.tx, {
+        organizationId,
+        userId: session.user.id,
+        action: "STATISTICIAN_EVENT_UNDONE",
+        entityType: "GameEvent",
+        entityId: voided.id,
+        details: { fixtureId, gameId, undoneEventType: last.eventType, undoneDescription: last.description },
+      });
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/stats`);
   revalidatePath(`/games/${fixtureId}/stats/live`);

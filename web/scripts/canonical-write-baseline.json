@@ -1,4 +1,4 @@
 {
-  "maxEntries": 25,
+  "maxEntries": 23,
   "note": "Canonical-write suppression ceiling (P13/A3a). Never increase to add a violation; decrease as src/server/scoring/** replaces the inline sites. See docs/canonical-write-audit.md."
 }
