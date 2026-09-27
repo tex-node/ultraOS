@@ -5142,3 +5142,71 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - Phase B0 (vision service skeleton) in parallel, then A3 (sync endpoint + conflict resolution).
+
+### 2026-09-27 - Phase B0: Vision Inference Service Skeleton
+
+**Objective**
+
+- Phase B0 of P14: a standalone Python vision service shell (FastAPI + Celery + Redis), a job queue
+  that reads analysis-ready `GameVideo` rows, a stub analyzer driving the `VisionAnalysisRun`
+  lifecycle, and a storage adapter interface. No model, no inference.
+
+**Key decisions / corrections vs. the brief**
+
+- Brief said status `QUEUED -> RUNNING -> COMPLETED | FAILED`; the real Prisma enum is
+  `VisionAnalysisRunStatus = QUEUED | PROCESSING | COMPLETED | FAILED | CANCELLED`. B0 uses
+  **PROCESSING** (the enum value), and a test asserts parity with `schema.prisma`.
+- Brief said the queue reads `GameVideo` rows with status `UPLOADED`; there is no `UPLOADED`
+  ingest status. The analysis-ready state is **`READY_FOR_ANALYSIS`** (`VideoIngestStatus`); the
+  poller uses that and excludes videos with a non-terminal run.
+- Brief offered "BullMQ in Node or Celery in Python"; per the signed-off reconciliation, B0 uses
+  **Celery + Redis** (Python).
+- Stack pinned per the reconciliation note: Python 3.12, FastAPI, Celery+Redis, boto3 storage
+  adapter. PyTorch/ONNX Runtime/detector arrive in B1/B2; B0 requirements deliberately exclude them.
+
+**Completed**
+
+- `services/vision/` new tree: `app/main.py` (FastAPI `/health`, `/analyze`), `app/api/`
+  (schemas + routes), `app/core/` (config, logging, enums, db, storage, analyzer, run_lifecycle),
+  `app/workers/` (celery_app, tasks), `tests/`.
+- `app/core/enums.py` mirrors `VisionAnalysisRunStatus`, `VideoIngestStatus`,
+  `VisionObservationStatus` from `schema.prisma`, with a parity test.
+- `app/core/db.py` — psycopg access scoped to Vision tables; `game_videos_ready_for_analysis()`.
+- `app/core/storage.py` — `VideoStorage` ABC + `StubVideoStorage` (segment fetch raises until B2).
+- `app/core/analyzer.py` — `Analyzer` ABC + `StubAnalyzer` (emits zero observations, truthful note).
+- `app/core/run_lifecycle.py` — `create_run` / `mark_processing` / `mark_completed` / `mark_failed`
+  / `ensure_stub_model`, all touching `VisionAnalysisRun`/`VisionModel` only.
+- `app/workers/tasks.py` — `poll_ready_videos` + `analyze_video` (drives QUEUED→PROCESSING→
+  COMPLETED|FAILED); `app/workers/celery_app.py` with a 5-min beat poll.
+- `Dockerfile` (python:3.12-slim), `docker-compose.yml` (api + worker + beat + redis),
+  `requirements.txt`, `.env.example`, `.gitignore`, `README.md`.
+- `tests/test_b0_shell.py` — 5 tests: stub analyzer contract, unknown-analyzer rejection,
+  Prisma enum parity, `/health`, `/analyze` validation. All pass.
+
+**Migration ordering (coordination point)**
+
+- **B0 adds no Prisma migration** — the vision schema (`GameVideo`, `VisionAnalysisRun`,
+  `VisionModel`, `VisionObservation`, `VisionTrack`, `VisionSpatialSummary`, `VideoTimelineAnchor`)
+  already exists from G.21/G.22. Only `VisionModel` *seed* rows are created at runtime by the
+  service (upsert), not by a migration. Therefore there is **no migration race** with A3's
+  `SyncIdempotency`/`SyncConflictLog`: A3 will be the only branch adding a migration. Latest
+  migration is still `20260922100000_external_stats_locator_type`.
+
+**Verification**
+
+- `python -m pytest -q` in `services/vision`: 5 passed.
+- `python -m compileall app`: exit 0.
+- `docker compose config`: exit 0 (api/worker/beat/redis resolve, image + ports interpolate).
+- App imports; routes are `/health`, `/analyze`, plus docs/openapi.
+
+**Gotchas found**
+
+- Docker Compose's env/YAML parser choked on a non-ASCII em-dash in a comment; rewrote
+  `docker-compose.yml` + `.env.example` ASCII-only. Compose validates now.
+- `pythonjsonlogger.jsonlogger` is deprecated; switched to `pythonjsonlogger.json`.
+- Test path used `parents[2]` (wrong); repo root is `parents[3]` from `services/vision/tests/`.
+
+**Next step**
+
+- Phase B1 (FastAPI inference wiring + real lifecycle integration test against Postgres) and
+  Phase A3 (sync endpoint + conflict resolution) — A3 owns the only new Prisma migration.

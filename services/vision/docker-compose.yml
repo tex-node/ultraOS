@@ -1,0 +1,50 @@
+# B0 (P14): vision service. Config comes from the environment (see .env.example).
+# The service is scoped to the Vision tables only and never writes canonical scoring data
+# (GameEvent/PlayerStat/TeamStat/Standing). See documentation/vision/AI_VISION_ARCHITECTURE.md.
+
+name: ultraos-vision
+
+services:
+  vision-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${VISION_IMAGE:-ultraos-vision:dev}
+    env_file:
+      - .env
+    ports:
+      - "${VISION_API_PORT:-8000}:8000"
+    depends_on:
+      - vision-redis
+    restart: unless-stopped
+
+  vision-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${VISION_IMAGE:-ultraos-vision:dev}
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=1
+    env_file:
+      - .env
+    depends_on:
+      - vision-redis
+    restart: unless-stopped
+
+  vision-redis:
+    image: redis:7-alpine
+    command: redis-server --save "" --appendonly no
+    ports:
+      - "${VISION_REDIS_PORT:-6380}:6379"
+    restart: unless-stopped
+
+  vision-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${VISION_IMAGE:-ultraos-vision:dev}
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    env_file:
+      - .env
+    depends_on:
+      - vision-redis
+    restart: unless-stopped
