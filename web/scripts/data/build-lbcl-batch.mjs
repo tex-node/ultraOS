@@ -713,6 +713,49 @@ games.push(game({
   ]),
 }));
 
+// ---------------------------------------------------------------------------
+// Game 16: LXB Surulere 50 - 40 Leo Kareem Foundation - Sat 26 Sep 2026
+// ---------------------------------------------------------------------------
+games.push(game({
+  sourceLabel: "LBCL Game 16 - LXB Surulere vs Leo Kareem Foundation - Sat 26 Sep 2026",
+  venue: VENUE_IKEJA,
+  scheduledAt: "2026-09-26T16:18:00.000Z",
+  homeScore: 50, awayScore: 40,
+  periods: [
+    { period: 1, label: "Q1", homeScore: 16, awayScore: 14 },
+    { period: 2, label: "Q2", homeScore: 11, awayScore: 12 },
+    { period: 3, label: "Q3", homeScore: 11, awayScore: 9 },
+    { period: 4, label: "Q4", homeScore: 12, awayScore: 5 },
+  ],
+  home: team("LXB Surulere", "LBS", { points: 50, rebounds: 52, assists: 7, turnovers: 16, fouls: 24 }, [
+    ["Sunday Joshua", 2, 6, 0, 0, 2, 0, 2, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, -5, -1],
+    ["Njere Ikechukwu", 6, "DNP"],
+    ["Thomas Ayomide", 8, 26, 4, 2, 6, 2, 6, 0, 0, 0, 0, 1, 2, 3, 1, 2, 0, 1, 0, 8, 7],
+    ["Ifeanyi Udeli", 12, 34, 12, 6, 12, 6, 12, 0, 0, 0, 0, 4, 13, 0, 2, 1, 0, 2, 1, 18, 22],
+    ["Ahmad Momoh", null, 33, 11, 3, 7, 3, 7, 0, 0, 5, 7, 5, 7, 0, 1, 0, 2, 3, 6, 6, 18],
+    ["Promise Eze", 14, 17, 4, 2, 6, 2, 5, 0, 1, 0, 0, 0, 2, 1, 0, 1, 0, 2, 2, 14, 4],
+    ["Sesimi Olorunsho", null, 21, 4, 2, 7, 2, 4, 0, 3, 0, 0, 2, 0, 1, 4, 1, 0, 5, 2, 5, -1],
+    ["Jeku Madu", 20, 9, 4, 2, 3, 2, 3, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 5, 0, 2, 3],
+    ["Adekoya Toheeb", 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, -3, 1],
+    ["Salisu Umar", 22, 10, 1, 0, 2, 0, 2, 0, 0, 1, 2, 1, 0, 0, 1, 0, 0, 3, 1, 2, -2],
+    ["Ik Igwe", 25, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, -1],
+    ["Anekwere Francis", 29, 37, 10, 3, 10, 3, 10, 0, 0, 4, 7, 2, 2, 2, 4, 2, 0, 1, 4, 7, 4],
+  ]),
+  away: team("Leo Kareem Foundation", "LFK", { points: 40, rebounds: 35, assists: 4, turnovers: 17, fouls: 16 }, [
+    ["Jackson Felix", 4, 14, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, -9, -1],
+    ["Oche Nworie", 5, 40, 10, 2, 11, 2, 8, 0, 3, 6, 10, 2, 5, 2, 6, 0, 0, 2, 6, -10, 0],
+    ["Obasana Sunday", 7, 40, 11, 4, 13, 3, 9, 1, 4, 2, 4, 3, 6, 1, 3, 0, 1, 1, 2, -10, 8],
+    ["Matthew Daniel", 8, 2, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, -2, -2],
+    ["Musa Alfa", 9, 14, 0, 0, 2, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 1, -3],
+    ["Somadina Dike", null, "DNP"],
+    ["Akinofa Ope", 11, 27, 7, 2, 9, 1, 7, 1, 2, 2, 6, 1, 4, 0, 3, 3, 0, 4, 4, -2, 1],
+    ["John I", null, "DNP"],
+    ["Urenwoke Morrison", 13, 33, 7, 2, 6, 2, 6, 0, 0, 3, 6, 2, 1, 1, 2, 0, 1, 2, 5, -16, 3],
+    ["Balogun Divine", 14, 26, 5, 1, 4, 0, 3, 1, 1, 2, 6, 1, 2, 0, 1, 0, 0, 4, 5, -2, 0],
+    ["Tawo Ademola", null, "DNP"],
+  ]),
+}));
+
 const batch = {
   organization: {
     mode: "new",
