@@ -4874,3 +4874,49 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - None outstanding for this batch.
+
+### 2026-09-27 - P13/P14 Brief Reconciliation (signed off)
+
+**Objective**
+
+- Reconcile the P13 (offline scoring) / P14 (AI vision) implementation brief with the
+  actual repo before writing any implementation code.
+
+**Completed**
+
+- Added `documentation/P13_P14_RECONCILIATION.md` — a conflict-by-conflict source-of-truth
+  note, signed off by the user.
+- Reconciled 6 conflict areas:
+  1. **Package manager** — brief says pnpm; repo uses npm. Decision: npm.
+  2. **Referenced docs** — brief said they were missing from `documentation/`; they exist at
+     `documentation/vision/*` (25 files) and `PROJECT_REPORT.md` (root).
+  3. **Write provenance** — no `source = LIVE_UI | OFFLINE_SYNC | VISION_PROMOTED | MANUAL_ADMIN`.
+     Real provenance is the existing `StatDataSource` enum (`schema.prisma:211`) on
+     `GameEvent.source` (:3439), `Game.statSource` (:3225), `PlayerStat.statSource` (:3561),
+     `TeamStat.statSource` (:3607), `GameMetricValue.statSource` (:3709). Decision: extend
+     `StatDataSource` with `OFFLINE_SYNC` via additive migration; no new column.
+  4. **Vision → canonical promotion** — brief B4 wanted a `VISION_PROMOTED` GameEvent write,
+     but `AI_VISION_ARCHITECTURE.md` + `HUMAN_REVIEW_WORKFLOW.md` forbid vision→canonical
+     writes, enforced by `capability-separation.test.ts` (fails the build). Decision **(4a)**:
+     keep the hard boundary — P14 is review-only, never writes GameEvent/PlayerStat/TeamStat.
+  5. **Vision stack** — decision **(5b)**: Python 3.12 + PyTorch 2.x, RF-DETR-Small (baseline) /
+     YOLOv11-M (fallback), ByteTrack, Tesseract→CNN jersey OCR, ONNX Runtime default (TensorRT
+     later), FastAPI + Celery + Redis, Docker Compose. Rust stays conditional (B6).
+  6. **P4.6 overlap** — ran the deliverable-by-deliverable mapping; all P4.6 items map to
+     P13/A1–A4, so marked `P4.6` `SUPERSEDED_BY: P13/A1–A4` (row kept, criteria carried
+     forward into P13's DoD; `P7.1` dependency repointed P4.6 → P13/A4).
+- Updated `documentation/PRODUCT_ROADMAP.md` accordingly: P13 non-negotiable rules now
+  reference the real `StatDataSource`; P14 goal/architecture/B0/B2/B4 rows rewritten to the
+  Python/ONNX stack and review-only boundary; P14 risk register wording aligned.
+
+**Notes**
+
+- `canonical-event-alignment.ts` already exists (`web/src/lib/vision/`), so B4's alignment
+  deliverable is partly built; B4 now says "wire/extend" it.
+- No implementation code started — this was reconciliation only.
+
+**Next step**
+
+- Begin Phase A0 (offline: flag, Dexie + fake-indexeddb deps, `src/lib/offline/` skeleton) and
+  B0 (vision: `/services/vision` FastAPI+Celery+Redis skeleton, Docker Compose, storage adapter)
+  in parallel.

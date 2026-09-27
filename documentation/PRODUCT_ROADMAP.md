@@ -74,7 +74,7 @@ These apply to every phase and every screen.
 | P11 | Tournament engine extensions | Swiss/double-elim/ladder formats, H2H + discipline tiebreaks, cross-sport leaders | `Not started` |
 | P12 | Fan & organizer dual experience | Public portal + organizer workspace + tournament sub-sites (F1–F6 below) | `Done` |
 | P13 | Offline scoring & sync (Workstream A) | Scorekeeper can score a full game with network disabled; all writes sync cleanly on reconnect | `Not started` |
-| P14 | AI vision player profiling (Workstream B) | Upload game video → AI-derived player metrics → human review → canonical stats | `Not started` |
+| P14 | AI vision player profiling (Workstream B) | Upload game video → AI-derived player metrics → human review (review-only; never writes canonical stats) | `Not started` |
 
 P0-P5 are partly delivered for basketball Season Zero; the roadmap makes them complete and sport-agnostic.
 
@@ -704,7 +704,7 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | P4.3 | Clock and period/set/innings control | P4 | `Done` | — |
 | P4.4 | Player attribution and lineup awareness | P4 | `In progress` | Engine S2 |
 | P4.5 | Undo/correction with audit trail | P4 | `In progress` | — |
-| P4.6 | Offline-tolerant queueing and sync | P4 | `Not started` | P4.2 |
+| P4.6 | Offline-tolerant queueing and sync | P4 | `SUPERSEDED_BY: P13/A1–A4` | P4.2 |
 | P4.7 | Scorer/statistician reconciliation | P4 | `In progress` | — |
 | P4.8 | Actions-under-review workflow | P4 | `Not started` | P4.2 |
 | P4.9 | Substitution holding bay | P4 | `Not started` | P4.2 |
@@ -720,7 +720,7 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | P6.3 | Cricket end-to-end | P6 | `In progress` | P6.1 |
 | P6.4 | Tennis end-to-end | P6 | `In progress` | P6.1 |
 | P6.5 | Knockout and group-stage formats | P6 | `In progress` | Engine S9 |
-| P7.1 | Offline hardening and recovery drills | P7 | `Not started` | P4.6 |
+| P7.1 | Offline hardening and recovery drills | P7 | `Not started` | P13/A4 |
 | P7.2 | Command palette, shortcuts, bulk ops | P7 | `Not started` | — |
 | P7.3 | Accessibility audit and fixes | P7 | `Not started` | — |
 | P7.4 | Localization and timezone support | P7 | `Not started` | — |
@@ -766,11 +766,11 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | A2 | Serwist SW, PWA manifest, SyncStatusBadge, Background Sync + fallback | P13/A | `Not started` | A1 |
 | A3 | `POST /api/sync/outbox`, LWW, SyncIdempotency + SyncConflictLog, sync dashboard | P13/A | `Not started` | A2 |
 | A4 | Retry/backoff/DLQ, `/admin/sync-health`, load test 50×500, runbook, rollout | P13/A | `Not started` | A3 |
-| B0 | Vision: project setup (flag, `/services/vision`, Docker, job queue, storage adapter) | P14/B | `Not started` | — |
+| B0 | Vision: project setup (flag, `/services/vision` FastAPI+Celery+Redis, Docker, storage adapter) | P14/B | `Not started` | — |
 | B1 | FastAPI inference service with `/analyze` + `/health`, VisionAnalysisRun lifecycle | P14/B | `Not started` | B0 |
-| B2 | YOLOv8 + ByteTrack detection/tracking, jersey OCR, homography, VisionTrack rows | P14/B | `Not started` | B1 |
+| B2 | RF-DETR-Small/YOLOv11-M detector + ByteTrack, ONNX Runtime, jersey OCR, homography, VisionTrack rows | P14/B | `Not started` | B1 |
 | B3 | Derived metrics: speed, distance, passes, VisionSpatialSummary (all PENDING_REVIEW) | P14/B | `Not started` | B2 |
-| B4 | Canonical alignment, review queue UI, VISION_PROMOTED GameEvent writes | P14/B | `Not started` | B3 |
+| B4 | Canonical alignment + review queue UI (review-only — never writes canonical tables) | P14/B | `Not started` | B3 |
 | B5 | Coach player profile, team insights, vision-evaluation nightly, model versioning | P14/B | `Not started` | B4 |
 | B6 | Rust acceleration & edge deployment (conditional — triggers only if cost/latency/on-prem demands) | P14/B | `Not started` | B5 + trigger |
 
@@ -789,9 +789,16 @@ resolution. Feature-flagged per league; zero data loss is the non-negotiable gat
 - Canonical scoring data (GameEvent, PlayerStat, TeamStat) is written only through the
   server-side canonical write path. No client, sync replay, or vision job writes directly
   to these tables.
-- Every synced write carries `source = OFFLINE_SYNC` alongside the existing
-  `LIVE_UI | MANUAL_ADMIN` values.
+- Every synced write carries `source = OFFLINE_SYNC`, a new value added to the existing
+  `StatDataSource` enum (`GameEvent.source` / `Game.statSource` / `PlayerStat.statSource`),
+  alongside the current `ULTRA_NATIVE_LIVE_SCORER`, `ULTRA_NATIVE_LIVE_STATISTICIAN`, and
+  `MANUAL_ADMIN_ENTRY` values.
 - Never modify an existing migration; new migrations only.
+
+**Carried forward from P4.6 (superseded):** P4.6's acceptance criteria are absorbed here and must
+remain met — offline-tolerant queueing with sync, visible connection status, and "a dropped
+connection does not lose events; recovery is automatic and visible" (P4 usability acceptance,
+`PRODUCT_ROADMAP.md` P4). Re-check P4.6's criteria at P13 close.
 
 | Phase | Name | Deliverables | Exit criteria |
 | --- | --- | --- | --- |
@@ -815,24 +822,33 @@ resolution. Feature-flagged per league; zero data loss is the non-negotiable gat
 ### P14 — AI Vision Player Profiling (Workstream B)
 
 **Goal:** upload game video → AI detects players, ball, jersey numbers → derived metrics
-(speed, distance, passes) → human review queue → promoted to canonical events with
-`source = VISION_PROMOTED`. Never writes directly to PlayerStat/TeamStat.
+(speed, distance, passes) → human review queue. Vision output is **review-only**: it never
+promotes into canonical `GameEvent`/`PlayerStat`/`TeamStat` — the existing hard boundary in
+`documentation/vision/AI_VISION_ARCHITECTURE.md` stands.
 
-**Architecture:** standalone Python inference service (FastAPI + YOLOv8 + ByteTrack) in
-`/services/vision`, job queue reading GameVideo rows, canonical-event-alignment for
-human review, coach-facing player profile dashboard. Existing schema (G.21:
-VisionAnalysisRun, VisionModel, VisionObservation, VisionTrack, GameVideo,
-VideoTimelineAnchor) is the foundation.
+**Architecture:** Python 3.12 service (FastAPI + Celery + Redis) under `/services/vision`, using
+PyTorch 2.x for training/export and **ONNX Runtime as the default inference runtime** (TensorRT a
+later upgrade path, behind profiling). Detector: RF-DETR-Small (baseline) or YOLOv11-M (fallback);
+tracker: ByteTrack; jersey OCR: Tesseract baseline → fine-tuned CNN only if < 90%; spatial math:
+OpenCV `findHomography` + NumPy/SciPy (per `FOUR_POINT_SPATIAL_RULE.md`). Model format:
+`.pt` (training) → `.onnx` (serving) → `.engine` (optional TensorRT). Job queue reads `GameVideo`
+rows with status UPLOADED; existing schema (G.21: VisionAnalysisRun, VisionModel,
+VisionObservation, VisionTrack, GameVideo, VideoTimelineAnchor) is the foundation; JSON DTO shape
+matches `VisionObservation`/`VisionTrack`/`GameMetricValue` (`VISION_OBSERVATION_MODEL.md`).
+
+**Enforced boundary (non-negotiable):** `capability-separation.test.ts` forbids anything under
+`src/lib/vision/` from writing `PlayerStat`/`TeamStat`/`Standing`; P14 adds no promotion path and
+does not weaken that test.
 
 | Phase | Name | Deliverables | Exit criteria |
 | --- | --- | --- | --- |
-| B0 | Project setup | Feature flag (`ai_vision`), `/services/vision` skeleton, Docker Compose entry, BullMQ/Celery job queue reading GameVideo with status UPLOADED, stub VisionAnalysisRun lifecycle (QUEUED→RUNNING→COMPLETED/FAILED), S3/storage adapter | Upload a video, see VisionAnalysisRun lifecycle with dummy analyzer |
+| B0 | Project setup | Feature flag (`ai_vision`), `/services/vision` skeleton (FastAPI + Celery + Redis), Docker Compose entry in the existing stack, Celery job queue reading GameVideo with status UPLOADED, stub VisionAnalysisRun lifecycle (QUEUED→RUNNING→COMPLETED/FAILED), S3/storage adapter | Upload a video, see VisionAnalysisRun lifecycle with a dummy analyzer |
 | B1 | Inference service | FastAPI `/analyze` + `/health` endpoints, Docker alongside Next.js in dev, VisionAnalysisRun status transitions, storage adapter for video segments | Upload a video, see a VisionAnalysisRun row go through its lifecycle |
-| B2 | Detection & tracking | YOLOv8/RF-DETR player + ball detector fine-tuned on footage; ByteTrack tracker; jersey OCR (Tesseract → CNN if < 90%); homography from 4-point court rule; VisionTrack rows (frameIndex, courtX, courtY, bbox, confidence) | Track continuity ≥ 95% on-court, jersey ID ≥ 90%, ball recall ≥ 85% on 10-min holdout |
+| B2 | Detection & tracking | RF-DETR-Small (baseline) / YOLOv11-M (fallback) player + ball detector fine-tuned on footage, exported to ONNX and served via ONNX Runtime; ByteTrack tracker; jersey OCR (Tesseract → CNN if < 90%); homography from the 4-point court rule; VisionTrack rows (frameIndex, courtX, courtY, bbox, confidence) | Track continuity ≥ 95% on-court, jersey ID ≥ 90%, ball recall ≥ 85% on 10-min holdout |
 | B3 | Derived metrics | Speed (Savitzky-Golay smoothed), distance covered, pass detection (possession change + travel + teammate check), VisionSpatialSummary heatmap rows per player per game; all PENDING_REVIEW with sourceRunId | Pass detection F1 ≥ 0.80; speed MAE ≤ 0.5 km/h on annotated clips |
-| B4 | Canonical alignment & review | `canonical-event-alignment.ts` matches VisionObservation → GameEvent candidates; review queue UI ("confirm/correct/reject"); approval writes GameEvent with `source = VISION_PROMOTED`; rejection marks REJECTED with reason; never writes PlayerStat/TeamStat directly | Full game's observations reviewable in < 10 minutes; promoted to canonical events |
+| B4 | Canonical alignment & review | Wire/extend the existing `canonical-event-alignment.ts` (already present in `src/lib/vision/`) to match VisionObservation → GameEvent candidates; review queue UI ("confirm/correct/reject") reusing the existing `/vision/games/[fixtureId]` console and `reviewObservation()`/`reviewEventMatch()`; rejection marks REJECTED with reason + failure category. **Review changes status only — never writes GameEvent/PlayerStat/TeamStat** | Full game's observations reviewable in < 10 minutes; reviewed signals remain non-canonical (boundary test still green) |
 | B5 | Coach dashboard & evaluation | Player profile (top speed, distance, pass accuracy, heatmap, trend vs previous); team passing network + pace; `vision-evaluation.ts` nightly against gold-standard set; internal metrics dashboard; model versioning (each VisionObservation references VisionModel row) | Coach opens player profile, sees AI metrics with confidence + source clip link |
-| B6 | Rust acceleration & edge (conditional) | Trigger only if: inference cost > $X/month, on-prem camera deployment requested, P95 latency > 10-min SLA, or browser-side inference needed. Port decode + homography + tracker to Rust (napi-rs + PyO3); keep Python inference unchanged | Not started — conditional |
+| B6 | Rust acceleration & edge (conditional) | Trigger only if: inference cost > $X/month, on-prem camera deployment requested, P95 latency > 10-min SLA, or browser-side inference needed. Port decode + homography + tracker to Rust (napi-rs + PyO3); keep the ONNX-runtime Python inference unchanged. Do not port detector training or jersey OCR fine-tuning | Not started — conditional |
 
 **Risk register:**
 
@@ -840,7 +856,7 @@ VideoTimelineAnchor) is the foundation.
 | --- | --- | --- |
 | iOS Safari lacks Background Sync | Offline users on iPads may not sync automatically | Fallback to visibilitychange + online event; manual "Sync now" button |
 | Jersey OCR fails on blurry footage | Player identity mapping breaks | Fallback to lineup + position + track continuity heuristic; flag low-confidence for review |
-| Pass detection false positives | Coach trust erodes | Conservative thresholds + mandatory human review before canonical promotion |
+| Pass detection false positives | Coach trust erodes | Conservative thresholds + mandatory human review; signals stay non-canonical (never promoted into stats) |
 | Video storage costs balloon | Budget overrun | Tier to cold storage after 30 days; downsample inference frames to 15 fps |
 | Concurrent multi-scorekeeper edits | Data loss | LWW for MVP; evaluate CRDT (Yjs + PowerSync) if simultaneous scoring is requested |
 
