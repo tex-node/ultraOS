@@ -5741,8 +5741,15 @@ production.
 
 - Typecheck clean. Tests: 744 total, 743 pass, 1 skip, 0 fail. Lint: 0 errors (7 pre-existing
   warnings). Build exit 0.
-- Ratchet: `eslint --prune-suppressions` dropped `stats-actions.ts`'s count from 7 to 4 (the
-  removed `gameEvent.create`/two `gameEvent.update` calls); ceiling lowered 28 -> 25.
+- Ratchet arithmetic (drop of 3, not 1, explained): `correctStatisticianEventPostFinal` had
+  exactly 3 raw `tx.gameEvent.*` write call sites - `gameEvent.create` (REPLACE branch, the
+  replacement event), `gameEvent.update` (REPLACE branch, marking original CORRECTED),
+  `gameEvent.update` (VOID branch, marking original VOIDED). Mutually exclusive at runtime (only
+  one of the two `.update` calls executes per invocation) but three distinct static call sites,
+  so three baseline entries. Confirmed by diffing the pre-migration function against the ESLint
+  rule's selector (`create|createMany|upsert|update|delete` on `gameEvent|playerStat|teamStat`) -
+  no other write left the file, no accidental over-match. `eslint --prune-suppressions` dropped
+  `stats-actions.ts`'s count from 7 to 4 accordingly; ceiling lowered 28 -> 25.
 
 **What this establishes:** the pattern for any future site that turns out to be a distinct
 shape - sibling service under `src/server/scoring/**`, reusing primitives where the operation
