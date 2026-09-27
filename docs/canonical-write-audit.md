@@ -23,9 +23,9 @@ The ESLint canonical-write guard flags **36** existing sites. Triaged into bucke
 
 | Site | Owner | Target phase |
 | --- | --- | --- |
-| `actions.ts` 112/135 (`applyPlayerShotStatDeltas`/`applyTeamShotStatDeltas`) | A3a (projection) | when `projectPlayerStats.ts` lands |
-| `actions.ts` 1092/1097/1120 (undo reversals) | A3a | with the projection batch |
-| `stats-actions.ts` 877/908 (`rebuildGameStatsFromEvents`) | A3a | this becomes the recompute entry point; stays the sole legitimate writer |
+| `actions.ts` 112/135 (`applyPlayerShotStatDeltas`/`applyTeamShotStatDeltas`) | Batch S | **superseded, see below** - relocate into `src/server/scoring/**` as a primitive; the incremental model stays, does not converge onto `rebuildGameStatsFromEvents` |
+| `actions.ts` 1092/1097/1120 (undo reversals) | Batch S | with the relocation above |
+| `stats-actions.ts` 877/908 (`rebuildGameStatsFromEvents`) | done | the statistician console's own recompute entry point - **not** "the sole legitimate writer" project-wide, see "Open question before A3b" below: this line assumed a single-model canonical that the dual-authority finding (Batch S reading) contradicts |
 | `game-result-import.ts` 265/294 | imports track | not P13 scope |
 
 **Baseline mechanics:** ESLint 9 native suppression (`eslint-suppressions.json`), keyed by
@@ -89,6 +89,52 @@ fixture at sync time. Two options:
    status transitions (`updateGameStatus`). No ID reconciliation; A3b is much simpler.
 
 Option 2 eliminates a whole class of sync complexity. Decide before extracting `createGame`.
+
+## Open question before A3b: which stat model does sync replay apply?
+
+**Surfaced while sketching Batch S** (deciding the fate of `applyPlayerShotStatDeltas`/
+`applyTeamShotStatDeltas`), not a Batch S question itself - an A3a/A3b boundary question this
+project has been quietly assuming an answer to without stating it.
+
+**The premise A3a inherited, stated in Batch 0's decisions:** *"PlayerStat is DERIVED, not
+synced... PlayerStat/TeamStat are recomputed server-side from the canonical event ledger."* This
+row in the original bucket-C plan made the assumption explicit: `rebuildGameStatsFromEvents`
+"becomes the recompute entry point; **stays the sole legitimate writer**." That's a single-model
+assumption - one canonical derivation, everything converges on it.
+
+**What reading the scorer/statistician consoles for Batch S found:** there isn't one canonical
+model, there are two, and the split is deliberate, not incidental. `stats-actions.ts`'s own header:
+*"The scorer's console remains the sole write path for the official score and the canonical box
+score; the statistician's ledger exists purely as an independently-derived cross-check... the
+safest way to add a second, genuinely independent set of eyes without risking a
+duplicate/competing scoring truth."* `reconciliation.ts`: *"reconciliation between the two
+independently-operated live consoles... deliberately does not auto-resolve a mismatch in either
+direction."* Both models were introduced together, in the same founding commit - this is an
+N-version-programming safety property, not a historical wart to migrate away from.
+
+**The tension this creates for A3b's replay design:** the outbox syncs `Game` + `GameEvent` only
+(Batch 0's decision); the server has to reconstruct `PlayerStat`/`TeamStat` from that ledger during
+replay. Which model does it apply?
+
+1. **Replay rebuilds via `rebuildGameStatsFromEvents`** — applies the statistician's model
+   server-side. The scorer's incremental authority becomes a client-side-only fiction; the server
+   never actually maintains it as its own thing.
+2. **Replay reapplies the scorer's incremental deltas in event order** — applies the scorer's
+   model. But then server-side `PlayerStat` is not "derived from events" in the sense Batch 0
+   meant - it's derived from an *ordered application of deltas*, a different operation with
+   different failure modes (replay order now matters for a sum that should be order-independent).
+   Batch 0's "stats are derived" framing was written assuming one model; it needs re-reading
+   against this path specifically.
+3. **Replay maintains both and reconciles server-side** — preserves the dual-authority
+   architecture faithfully, but is a materially bigger sync design than A3a has assumed anywhere
+   so far (two recomputations per replay, a reconciliation check, a decision about what happens
+   on a genuine mismatch mid-sync).
+
+**Not resolved here.** This decision shapes A3b's replay design, the sync payload shape, and
+whether Batch 0's "derived" framing stands as originally written or needs a qualifying note for
+the scorer path specifically. Sketch and decide before A3b starts, with the same rigor as the
+`createGame` question above - this is now the load-bearing open question for that phase, not
+Batch S's.
 
 ## Post-migration issue: `data` field null semantics
 
