@@ -37,14 +37,15 @@ shrink, never grow.
 
 Unit of a batch = "sites that collapse to the same service-call shape," not file or count.
 
-**Actual bucket sizes (updated after Batches 0-2):**
+**Actual bucket sizes (updated after Batches 0-3):**
 
 | Bucket | Sites | Status |
 | --- | --- | --- |
-| **Plain create** (no audit, no derivation) | 2 | ✅ Done (flipPossession, recordJumpBall) |
-| **Audit log only** (no derivation) | 2 | ✅ Done (recordGameTimeout, verifyScoreboard) |
-| **Stat recompute** (derives PlayerStat/TeamStat) | 2+ | Pending (recordStatisticianShot, recordStatisticianStat, ...) |
-| **Status flips** (gameEvent.update) | 4 | Pending (voidScoreEventAction, voidStatisticianEvent, undoLastEvent, undoLastStatisticianEvent) |
+| **Statistician console - event-only** | 9 | Pending (recordStatisticianShot, recordStatisticianStat, recordSubstitution, recordWaveSubstitution, ...) |
+| **Statistician console - status flips** | 2 | Pending (voidStatisticianEvent, undoLastStatisticianEvent) |
+| **Scorer console - event-only** | 11 | Pending (Ultra Time helper, recordScore, correctScoreEventAction, ...) |
+| **Scorer console - status flips** | 2 | Pending (voidScoreEventAction, correctScoreEventAction) |
+| **Scorer console - direct stat writes (model correction)** | 5 | Pending - Batch S (applyPlayerShotStatDeltas, applyTeamShotStatDeltas, recordStatEvent, undoLastEvent) |
 | **Multi-entity writes** | 3+ | Pending (recordSubstitution, recordWaveSubstitution, ...) |
 
 **Batch progression:**
@@ -54,15 +55,22 @@ Unit of a batch = "sites that collapse to the same service-call shape," not file
   clearing, sequence, clock, validation, insert); migrate flipPossession. ✅ Done
 - **Batch 2:** migrate recordJumpBall (plain create). ✅ Done
 - **Batch 3:** migrate recordGameTimeout + verifyScoreboard (audit log sites). ✅ Done
-- **Batch 4+:** migrate stat-recompute sites, status flips, multi-entity writes.
+- **Batch 4:** migrate recordStatisticianStat (statistician console, event-only, simple shape)
+- **Batch 5:** migrate recordStatisticianShot + recordSubstitution (single event + upstream validation)
+- **Batch 6:** migrate recordWaveSubstitution (multi-event, design question first)
+- **Batch S (model correction):** refactor scorer console sites to use createGameEvent + rebuildGameStatsFromEvents, remove direct PlayerStat/TeamStat writes
 
-Realistic total: **8-12 PRs** for Bucket B (smaller than the original 8-14 estimate because the
-plain-create bucket was smaller than expected). Bucket C is separate.
+Realistic total: **10-14 PRs** for Bucket B + Batch S. Bucket C is separate.
 
-**Key finding:** verifyScoreboard derives TeamStat for comparison but doesn't write it. TeamStat is
-derived like PlayerStat (not direct-written). The derivation is only for the verification check,
-not for persistence. This simplifies the migration: verifyScoreboard is event-only + audit log,
-no TeamStat write needed.
+**Key findings:**
+- verifyScoreboard derives TeamStat for comparison but doesn't write it. TeamStat is derived like
+  PlayerStat (not direct-written). The derivation is only for the verification check, not for
+  persistence. This simplifies the migration: verifyScoreboard is event-only + audit log, no
+  TeamStat write needed.
+- Scorer console sites (recordScore, recordStatEvent, undoLastEvent) write PlayerStat/TeamStat
+  directly, contradicting the "stats are derived" model. This is a model correction (Batch S),
+  not just a migration. Each site should write its event via createGameEvent, then call
+  rebuildGameStatsFromEvents(gameId, tx) to derive stats. Direct stat writes are deleted.
 
 ## Open question before extracting `createGame`
 
@@ -158,19 +166,38 @@ migration complete."
 
 ## A3a in-scope service targets (the sites that become `createGameEvent`/`createGame` callers)
 
+### Statistician console (event-only, simple migration)
+
+These sites only create game events. No stat writes. File header (line 130) confirms: "does not touch Fixture.homeScore/awayScore or PlayerStat/TeamStat".
+
+**createGameEvent (create sites)** — 9:
+`stats-actions.ts` 183 (recordStatisticianShot), 281 (recordStatisticianStat), 359 (recordSubstitution), 442 (recordWaveSubstitution), 543 (recordGameTimeout), 596 (recordJumpBall), 634 (flipPossession), 685 (verifyScoreboard), 1052 (correctStatisticianEventPostFinal)
+
+**Event status flips (update)** — 2: `stats-actions.ts` 494 (voidStatisticianEvent), 785 (undoLastStatisticianEvent)
+
+### Scorer console (event + stat writes, model correction needed)
+
+These sites write PlayerStat/TeamStat directly, contradicting the "stats are derived" model. This is a model correction (Batch S), not just a migration.
+
 **createGameEvent (create sites)** — 11:
-`actions.ts` 70, 518, 756, 913, 1078, 1104, 1358, 1508, 1558, 1646, 1680
-`stats-actions.ts` 183, 281, 359, 442, 543, 596, 634, 685, 1052
+`actions.ts` 70 (Ultra Time helper), 518 (recordScore), 756 (correctScoreEventAction), 913 (recordStatEvent), 1078/1104 (undoLastEvent), 1358 (recordSportEvent), 1508/1558 (recordScoringEvent), 1646/1680 (recordShootoutKick)
 
-**createGame / game lifecycle (upsert + create)** — `actions.ts` 215 (`startGame`), plus the
-`game.update` sites that are part of event recording.
+**Event status flips (update)** — 2: `actions.ts` 632 (voidScoreEventAction), 745 (correctScoreEventAction)
 
-**Event status flips (update)** — 4: `actions.ts` 632, 745; `stats-actions.ts` 494, 785, 1063,
-1068. Consolidate into `createGameEvent`'s supersession helper or a sibling `voidGameEvent`.
+**Direct stat writes (model correction)** — 5:
+- `actions.ts` 112 (`applyPlayerShotStatDeltas`) — playerStat.upsert
+- `actions.ts` 135 (`applyTeamShotStatDeltas`) — teamStat.upsert
+- `actions.ts` 932 (`recordStatEvent`) — playerStat.upsert
+- `actions.ts` 1092/1120 (`undoLastEvent`) — playerStat.update
+- `actions.ts` 1097 (`undoLastEvent`) — teamStat.upsert
 
-**DERIVED (PlayerStat/TeamStat)** — `stats-actions.ts` `rebuildGameStatsFromEvents` (877/908) is
-the sole source of truth. `actions.ts` 112/135/1092/1097/1120 are the incremental scorer writes
-that A3a moves behind `projectPlayerStats.ts`.
+### createGame / game lifecycle (upsert + create)
+
+`actions.ts` 215 (`startGame`), plus the `game.update` sites that are part of event recording.
+
+### DERIVED (PlayerStat/TeamStat) — sole legitimate writer
+
+`stats-actions.ts` `rebuildGameStatsFromEvents` (877/908) is the sole source of truth. Called by `verifyStatistics` (line 963). All other PlayerStat/TeamStat writes are legacy and will be removed in Batch S.
 
 **Derivation call graph (verified Batch 3):**
 
