@@ -52,6 +52,10 @@ function assertGameIsMutable(status: string, fixtureStatus: string) {
 async function syncUltraTimeState(
   tx: Prisma.TransactionClient,
   game: { id: string; status: string; currentPeriod: number; isUltraTimeActive: boolean; nextEventSequence: number; ruleSnapshot: Parameters<typeof effectiveRuleSnapshot>[0] },
+  // Threaded through in this commit but not yet used in the write below - prep for the next
+  // commit, which migrates the write to createGameEvent and starts attributing this event to
+  // the user who triggered the surrounding pause/resume/advance/score/stat action.
+  actorId: string,
   remainingSeconds: number,
 ) {
   const { isActive, transition } = detectUltraTimeTransition(
@@ -289,7 +293,7 @@ export async function startGame(fixtureId: string) {
 }
 
 export async function pauseGame(gameId: string, fixtureId: string) {
-  const { organizationId } = await requireFixturePermission("game:operate", fixtureId);
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await tx.game.findUniqueOrThrow({
       where: { id: gameId },
@@ -301,7 +305,7 @@ export async function pauseGame(gameId: string, fixtureId: string) {
     const remaining = remainingClockSeconds(game);
     // A pause ends Ultra Time (nothing is being played), even if the clock value would
     // otherwise still qualify - resumeGame re-detects and re-starts it if still in range.
-    await syncUltraTimeState(tx, { ...game, status: "PAUSED" }, remaining);
+    await syncUltraTimeState(tx, { ...game, status: "PAUSED" }, session.user.id, remaining);
     await tx.game.update({
       where: { id: gameId },
       data: {
@@ -317,7 +321,7 @@ export async function pauseGame(gameId: string, fixtureId: string) {
 }
 
 export async function resumeGame(gameId: string, fixtureId: string) {
-  const { organizationId } = await requireFixturePermission("game:operate", fixtureId);
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await tx.game.findUniqueOrThrow({
       where: { id: gameId },
@@ -326,7 +330,7 @@ export async function resumeGame(gameId: string, fixtureId: string) {
     assertGameIsMutable(game.status, game.fixture.status);
     if (game.status !== "PAUSED") throw new Error("GAME_NOT_PAUSED");
 
-    await syncUltraTimeState(tx, { ...game, status: "LIVE" }, remainingClockSeconds(game));
+    await syncUltraTimeState(tx, { ...game, status: "LIVE" }, session.user.id, remainingClockSeconds(game));
     await tx.game.update({
       where: { id: gameId },
       data: { status: "LIVE", clockStartedAt: new Date() },
@@ -336,7 +340,7 @@ export async function resumeGame(gameId: string, fixtureId: string) {
 }
 
 export async function advancePeriod(gameId: string, fixtureId: string) {
-  const { organizationId } = await requireFixturePermission("game:operate", fixtureId);
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   await withOrganizationContext(organizationId, async (tx) => {
     const game = await tx.game.findUniqueOrThrow({
       where: { id: gameId },
@@ -358,6 +362,7 @@ export async function advancePeriod(gameId: string, fixtureId: string) {
     await syncUltraTimeState(
       tx,
       { ...game, currentPeriod: nextPeriod, status: "PAUSED" },
+      session.user.id,
       nextPeriodSeconds,
     );
     await tx.game.update({
@@ -485,7 +490,7 @@ export async function recordScore(
       : null;
     if (input.playerId && !player) throw new Error("INVALID_PLAYER");
 
-    const sync = await syncUltraTimeState(tx, game, remainingClockSeconds(game));
+    const sync = await syncUltraTimeState(tx, game, session.user.id, remainingClockSeconds(game));
 
     // Games without a persisted GameRuleSnapshot (every Season Zero game) score under the
     // same legacy defaults they always have - the engine only enforces something new (e.g.
@@ -866,7 +871,7 @@ export async function recordStatEvent(
   fixtureId: string,
   formData: FormData,
 ) {
-  const { organizationId } = await requireFixturePermission("game:operate", fixtureId);
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const input = statEvent.parse(Object.fromEntries(formData.entries()));
 
   await withOrganizationContext(organizationId, async (tx) => {
@@ -906,7 +911,7 @@ export async function recordStatEvent(
 
     const field = STAT_FIELD[input.eventType];
     const remaining = remainingClockSeconds(game);
-    const sync = await syncUltraTimeState(tx, game, remaining);
+    const sync = await syncUltraTimeState(tx, game, session.user.id, remaining);
     const ultraTime = isUltraTimeUnderRules(effectiveRuleSnapshot(game.ruleSnapshot), game.status, game.currentPeriod, remaining);
     const sequenceNumber = sync.nextEventSequence;
     await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
