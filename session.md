@@ -4992,12 +4992,19 @@ STAGE_5_5C: NOT_STARTED
 
 **Notes / gotchas**
 
-- The test runner (`tsx --test`) resolves `../x` parent imports within a nested directory but
-  NOT relative imports in the flat `src/lib/offline/` directory. Tests that need parent imports
-  live in `repositories/` (a nested dir) and import `../db` / `../outbox` — those resolve fine.
-- `web/src/lib/offline/repositories/scoringRepository.ts` must import `../db`, not `./db`
-  (the first draft had a wrong relative path; caught by the failing test).
-- No Prisma migration this phase. Dexie is client-side only.
+- **Corrected after review (the "flat-dir import" note was a misdiagnosis).** The real cause of
+  the failing import was a wrong relative path, not a `tsx --test` limitation. A test sitting in
+  `src/lib/offline/` importing `"../db"` means `src/lib/db` (which does not exist); the correct
+  import from that location is `"./db"`. Moving the test into `repositories/` only worked because
+  `"../db"` from `repositories/` resolves to the real `src/lib/offline/db.ts`. Verified by
+  isolation: `./target` and `../target` both resolve correctly from flat and nested dirs once the
+  target path is actually valid. No workaround is needed; nested test dirs are fine but not
+  required. `repositories/scoringRepository.ts` must import `../db`, `../outbox`, `../entities`
+  (it lives one level below them).
+- Idempotency key is generated and persisted at enqueue time (`outbox.ts:18`,
+  `idempotencyKey: input.idempotencyKey ?? generateIdempotencyKey()`), not synthesized in
+  `drain()`. A crash mid-drain replays the same persisted keys, so the server sees duplicates and
+  the replay is a no-op — the property A3 depends on.
 
 **Verification**
 
@@ -5005,8 +5012,49 @@ STAGE_5_5C: NOT_STARTED
 - `npm run typecheck` clean; `npm run lint` 0 errors (7 pre-existing warnings elsewhere).
 - `npm test`: 729 tests, 728 pass, 1 skipped, 0 fail.
 - `npm run build`: compiles successfully (exit 0).
+- Pre-A2 review checks (#1 idempotency key at enqueue; #2 flat-dir import) both investigated and
+  closed — see Notes.
 
 **Next step**
 
 - Phase B0 (vision service skeleton) and/or Phase A2 (Serwist service worker + PWA shell +
   SyncStatusBadge).
+
+### 2026-09-27 - A1 Review Follow-up: Two Pre-A2 Checks Closed
+
+**Objective**
+
+- Close the two non-blocking checks raised at A1 acceptance before starting A2.
+
+**Check 1 — idempotency key generation point: CONFIRMED SAFE**
+
+- Key is generated at enqueue time and stored on the persisted outbox row
+  (`web/src/lib/offline/outbox.ts:18`). `drain()` only reads stored rows; it never synthesizes
+  keys. A crash mid-drain replays the same persisted keys, so the server dedupes and the replay
+  is a no-op. This is exactly the property A3 needs.
+
+**Check 2 — "flat dir" import gotcha: MISDIAGNOSIS, corrected**
+
+- The A1 note claimed `tsx --test` cannot resolve parent imports in a flat directory and that
+  tests must live in nested dirs. That is wrong.
+- Real cause: a wrong relative path. A test in `src/lib/offline/` importing `"../db"` pointed at
+  `src/lib/db` (nonexistent); it should have been `"./db"`. Moving the test to `repositories/`
+  only appeared to fix it because `"../db"` from there resolves to the real
+  `src/lib/offline/db.ts`.
+- Verified by isolation: with a valid target, both `./x` and `../x` resolve from both flat and
+  nested dirs. No config interaction (tsconfig `paths`/`baseUrl` are not involved; neither is the
+  package.json test glob). No workaround required — future offline test files may live in any dir
+  as long as relative paths are correct.
+- Session note corrected in the A1 entry.
+
+**Notes**
+
+- The acceptance substitution (unit tests vs. a real browser test) is acknowledged: fake-indexeddb
+  does not fully model transaction isolation/concurrency or quota behavior. The real-device manual
+  test (iPad Safari + Android Chrome: install PWA, airplane mode, score a quarter, reconnect,
+  verify drain) is scheduled as the A2 checkpoint, not deferred to A4.
+
+**Next step**
+
+- Phase A2 (Serwist + PWA manifest + SyncStatusBadge + Background Sync with visibilitychange
+  fallback), with the five pitfalls tracked as sub-tasks; Phase B0 in parallel.
