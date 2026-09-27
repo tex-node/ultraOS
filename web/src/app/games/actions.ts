@@ -51,10 +51,8 @@ function assertGameIsMutable(status: string, fixtureStatus: string) {
 // ULTRA_TIME_STARTED/ULTRA_TIME_ENDED ledger event, not just a value re-derived on read.
 async function syncUltraTimeState(
   tx: Prisma.TransactionClient,
-  game: { id: string; status: string; currentPeriod: number; isUltraTimeActive: boolean; nextEventSequence: number; ruleSnapshot: Parameters<typeof effectiveRuleSnapshot>[0] },
-  // Threaded through in this commit but not yet used in the write below - prep for the next
-  // commit, which migrates the write to createGameEvent and starts attributing this event to
-  // the user who triggered the surrounding pause/resume/advance/score/stat action.
+  game: { id: string; fixtureId: string; status: string; currentPeriod: number; isUltraTimeActive: boolean; nextEventSequence: number; ruleSnapshot: Parameters<typeof effectiveRuleSnapshot>[0] },
+  organizationId: string,
   actorId: string,
   remainingSeconds: number,
 ) {
@@ -67,23 +65,22 @@ async function syncUltraTimeState(
   );
   if (!transition) return { isUltraTimeActive: game.isUltraTimeActive, nextEventSequence: game.nextEventSequence };
 
-  const sequenceNumber = game.nextEventSequence;
   await tx.game.update({
     where: { id: game.id },
-    data: { isUltraTimeActive: isActive, nextEventSequence: { increment: 1 } },
+    data: { isUltraTimeActive: isActive },
   });
-  await tx.gameEvent.create({
-    data: {
+  await createGameEvent(
+    {
       gameId: game.id,
+      fixtureId: game.fixtureId,
       eventType: transition === "STARTED" ? "ULTRA_TIME_STARTED" : "ULTRA_TIME_ENDED",
       period: game.currentPeriod,
       clockSeconds: remainingSeconds,
       description: transition === "STARTED" ? "Ultra Time started (×2 scoring active)" : "Ultra Time ended",
-      sequenceNumber,
       isUltraTime: isActive,
-      source: "ULTRA_NATIVE_LIVE_SCORER",
     },
-  });
+    { actor: { id: actorId, organizationId }, source: "LIVE_UI", tx },
+  );
   return { isUltraTimeActive: isActive, nextEventSequence: game.nextEventSequence + 1 };
 }
 
@@ -305,7 +302,7 @@ export async function pauseGame(gameId: string, fixtureId: string) {
     const remaining = remainingClockSeconds(game);
     // A pause ends Ultra Time (nothing is being played), even if the clock value would
     // otherwise still qualify - resumeGame re-detects and re-starts it if still in range.
-    await syncUltraTimeState(tx, { ...game, status: "PAUSED" }, session.user.id, remaining);
+    await syncUltraTimeState(tx, { ...game, status: "PAUSED" }, organizationId, session.user.id, remaining);
     await tx.game.update({
       where: { id: gameId },
       data: {
@@ -330,7 +327,7 @@ export async function resumeGame(gameId: string, fixtureId: string) {
     assertGameIsMutable(game.status, game.fixture.status);
     if (game.status !== "PAUSED") throw new Error("GAME_NOT_PAUSED");
 
-    await syncUltraTimeState(tx, { ...game, status: "LIVE" }, session.user.id, remainingClockSeconds(game));
+    await syncUltraTimeState(tx, { ...game, status: "LIVE" }, organizationId, session.user.id, remainingClockSeconds(game));
     await tx.game.update({
       where: { id: gameId },
       data: { status: "LIVE", clockStartedAt: new Date() },
@@ -362,6 +359,7 @@ export async function advancePeriod(gameId: string, fixtureId: string) {
     await syncUltraTimeState(
       tx,
       { ...game, currentPeriod: nextPeriod, status: "PAUSED" },
+      organizationId,
       session.user.id,
       nextPeriodSeconds,
     );
@@ -490,7 +488,7 @@ export async function recordScore(
       : null;
     if (input.playerId && !player) throw new Error("INVALID_PLAYER");
 
-    const sync = await syncUltraTimeState(tx, game, session.user.id, remainingClockSeconds(game));
+    const sync = await syncUltraTimeState(tx, game, organizationId, session.user.id, remainingClockSeconds(game));
 
     // Games without a persisted GameRuleSnapshot (every Season Zero game) score under the
     // same legacy defaults they always have - the engine only enforces something new (e.g.
@@ -911,7 +909,7 @@ export async function recordStatEvent(
 
     const field = STAT_FIELD[input.eventType];
     const remaining = remainingClockSeconds(game);
-    const sync = await syncUltraTimeState(tx, game, session.user.id, remaining);
+    const sync = await syncUltraTimeState(tx, game, organizationId, session.user.id, remaining);
     const ultraTime = isUltraTimeUnderRules(effectiveRuleSnapshot(game.ruleSnapshot), game.status, game.currentPeriod, remaining);
     const sequenceNumber = sync.nextEventSequence;
     await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
