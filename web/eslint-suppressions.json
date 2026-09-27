@@ -6,7 +6,7 @@
   },
   "src/app/games/stats-actions.ts": {
     "no-restricted-syntax": {
-      "count": 14
+      "count": 13
     }
   },
   "src/lib/game-result-import.ts": {

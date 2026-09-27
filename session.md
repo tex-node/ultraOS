@@ -5313,3 +5313,27 @@ STAGE_5_5C: NOT_STARTED
 **Verification:** Typecheck clean, 744 tests (743 pass, 1 skip, 0 fail), lint 0 errors, ratchet 35/35, build exit 0. Baseline pruned from 36 → 35; ceiling lowered to 35.
 
 **Next step:** A3a Batch 2 — migrate next low-risk createGameEvent site group (plain creates, 3-5 sites).
+
+### 2026-09-27 - A3a Batch 2: recordJumpBall migration
+
+**Batch size:** 1 site (recordJumpBall). Only one site matched the plain-create shape (single GameEvent create, no audit log, no stat recompute, no external call). All other candidates had additional complexity (stat recompute, audit logs, multi-entity writes, validation logic).
+
+**Pre-Batch-2 fixes:**
+1. Logged Prisma.JsonNull vs SQL NULL question in audit doc (post-migration audit needed)
+2. Fixed withGameWrite double-load: now loads game under FOR UPDATE lock and passes it to callback, preventing stale-description race condition
+
+**recordJumpBall migration:**
+- Refactored to use withGameWrite + createGameEvent
+- Derives description from locked game (no separate load)
+- Removed loadMutableGame, nextSequence, remainingClockSeconds from caller
+
+**Verification:**
+- Typecheck clean
+- Tests: 744 total, 743 pass, 1 skip, 0 fail
+- Lint: 0 errors (7 pre-existing warnings)
+- Ratchet: baseline pruned 35 → 34; ceiling lowered to 34
+- Build: exit 0
+
+**Signature stability:** Zero signature changes needed. The Batch 1 reshape holds.
+
+**Next step:** A3a Batch 3 — migrate sites with audit logs or other side effects (recordGameTimeout, verifyScoreboard).

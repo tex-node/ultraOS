@@ -582,34 +582,35 @@ export async function recordJumpBall(gameId: string, fixtureId: string, formData
   const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
   const input = sideSchema.parse(Object.fromEntries(formData.entries()));
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    const homeId = requireSeasonClubId(game.fixture, "HOME");
-    const awayId = requireSeasonClubId(game.fixture, "AWAY");
-    if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
-      throw new Error("INVALID_TEAM");
-    }
+  await withGameWrite(
+    gameId,
+    fixtureId,
+    {
+      actor: { id: session.user.id, organizationId },
+      source: "LIVE_UI",
+      ledgerSourceHint: "STATISTICIAN",
+    },
+    async ({ game, ...writeCtx }) => {
+      const homeId = requireSeasonClubId(game.fixture, "HOME");
+      const awayId = requireSeasonClubId(game.fixture, "AWAY");
+      if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
+        throw new Error("INVALID_TEAM");
+      }
+      const side = input.seasonClubId === homeId ? "Home" : "Away";
 
-    const remaining = remainingClockSeconds(game);
-    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
-    const side = input.seasonClubId === homeId ? "Home" : "Away";
-
-    await tx.gameEvent.create({
-      data: {
-        organizationId,
-        gameId,
-        seasonClubId: input.seasonClubId,
-        eventType: "NOTE",
-        typeKey: "JUMP_BALL",
-        period: game.currentPeriod,
-        clockSeconds: remaining,
-        description: `Jump ball won by ${side} — possession arrow to ${side}`,
-        sequenceNumber,
-        source: STATISTICIAN_SOURCE,
-        createdById: session.user.id,
-      },
-    });
-  });
+      await createGameEvent(
+        {
+          fixtureId,
+          gameId,
+          seasonClubId: input.seasonClubId,
+          eventType: "NOTE",
+          typeKey: "JUMP_BALL",
+          description: `Jump ball won by ${side} — possession arrow to ${side}`,
+        },
+        writeCtx,
+      );
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/stats`);
   revalidatePath(`/games/${fixtureId}/stats/live`);
