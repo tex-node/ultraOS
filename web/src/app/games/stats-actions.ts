@@ -523,48 +523,50 @@ export async function recordGameTimeout(gameId: string, fixtureId: string, formD
   const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
   const input = timeoutSchema.parse(Object.fromEntries(formData.entries()));
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    if (input.seasonClubId) {
-      const homeId = requireSeasonClubId(game.fixture, "HOME");
-      const awayId = requireSeasonClubId(game.fixture, "AWAY");
-      if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
-        throw new Error("INVALID_TEAM");
+  await withGameWrite(
+    gameId,
+    fixtureId,
+    {
+      actor: { id: session.user.id, organizationId },
+      source: "LIVE_UI",
+      ledgerSourceHint: "STATISTICIAN",
+    },
+    async ({ game, tx, ...writeCtx }) => {
+      if (input.seasonClubId) {
+        const homeId = requireSeasonClubId(game.fixture, "HOME");
+        const awayId = requireSeasonClubId(game.fixture, "AWAY");
+        if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
+          throw new Error("INVALID_TEAM");
+        }
       }
-    }
 
-    const remaining = remainingClockSeconds(game);
-    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
-    const side = !input.seasonClubId
-      ? "Officials"
-      : input.seasonClubId === game.fixture.homeSeasonClubId
-        ? "Home"
-        : "Away";
+      const side = !input.seasonClubId
+        ? "Officials"
+        : input.seasonClubId === game.fixture.homeSeasonClubId
+          ? "Home"
+          : "Away";
 
-    await tx.gameEvent.create({
-      data: {
+      const event = await createGameEvent(
+        {
+          fixtureId,
+          gameId,
+          seasonClubId: input.seasonClubId ?? null,
+          eventType: "TIMEOUT",
+          description: `Timeout — ${side}`,
+        },
+        { ...writeCtx, tx },
+      );
+
+      await writeAuditLog(tx, {
         organizationId,
-        gameId,
-        seasonClubId: input.seasonClubId ?? null,
-        eventType: "TIMEOUT",
-        period: game.currentPeriod,
-        clockSeconds: remaining,
-        description: `Timeout — ${side}`,
-        sequenceNumber,
-        source: STATISTICIAN_SOURCE,
-        createdById: session.user.id,
-      },
-    });
-
-    await writeAuditLog(tx, {
-      organizationId,
-      userId: session.user.id,
-      action: "STATISTICIAN_TIMEOUT_RECORDED",
-      entityType: "Game",
-      entityId: gameId,
-      details: { fixtureId, seasonClubId: input.seasonClubId ?? null },
-    });
-  });
+        userId: session.user.id,
+        action: "STATISTICIAN_TIMEOUT_RECORDED",
+        entityType: "Game",
+        entityId: gameId,
+        details: { fixtureId, seasonClubId: input.seasonClubId ?? null, eventId: event.id },
+      });
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/stats`);
   revalidatePath(`/games/${fixtureId}/stats/live`);
@@ -670,52 +672,53 @@ export async function verifyScoreboard(gameId: string, fixtureId: string, formDa
   const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
   const input = verifyScoreboardSchema.parse(Object.fromEntries(formData.entries()));
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    const homeId = requireSeasonClubId(game.fixture, "HOME");
-    const awayId = requireSeasonClubId(game.fixture, "AWAY");
+  await withGameWrite(
+    gameId,
+    fixtureId,
+    {
+      actor: { id: session.user.id, organizationId },
+      source: "LIVE_UI",
+      ledgerSourceHint: "STATISTICIAN",
+    },
+    async ({ game, tx, ...writeCtx }) => {
+      const homeId = requireSeasonClubId(game.fixture, "HOME");
+      const awayId = requireSeasonClubId(game.fixture, "AWAY");
 
-    const events = await loadActiveStatisticianEvents(tx, gameId);
-    const teamStats = deriveTeamStats(derivePlayerStats(events));
-    const official = { home: game.fixture.homeScore, away: game.fixture.awayScore };
-    const statistician = { home: deriveTeamScore(teamStats, homeId), away: deriveTeamScore(teamStats, awayId) };
-    const venue = { home: input.venueHomeScore, away: input.venueAwayScore };
-    const comparison = compareScores(official, statistician, venue);
+      const events = await loadActiveStatisticianEvents(tx, gameId);
+      const teamStats = deriveTeamStats(derivePlayerStats(events));
+      const official = { home: game.fixture.homeScore, away: game.fixture.awayScore };
+      const statistician = { home: deriveTeamScore(teamStats, homeId), away: deriveTeamScore(teamStats, awayId) };
+      const venue = { home: input.venueHomeScore, away: input.venueAwayScore };
+      const comparison = compareScores(official, statistician, venue);
 
-    const remaining = remainingClockSeconds(game);
-    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
-
-    await tx.gameEvent.create({
-      data: {
-        organizationId,
-        gameId,
-        eventType: "NOTE",
-        typeKey: "SCORE_VERIFIED",
-        period: game.currentPeriod,
-        clockSeconds: remaining,
-        description: verificationSummary(official, statistician, venue, comparison),
-        sequenceNumber,
-        source: STATISTICIAN_SOURCE,
-        createdById: session.user.id,
-        data: {
-          official,
-          statistician,
-          venue,
-          comparison,
-          note: input.note?.trim() || null,
+      const event = await createGameEvent(
+        {
+          fixtureId,
+          gameId,
+          eventType: "NOTE",
+          typeKey: "SCORE_VERIFIED",
+          description: verificationSummary(official, statistician, venue, comparison),
+          data: {
+            official,
+            statistician,
+            venue,
+            comparison,
+            note: input.note?.trim() || null,
+          },
         },
-      },
-    });
+        { ...writeCtx, tx },
+      );
 
-    await writeAuditLog(tx, {
-      organizationId,
-      userId: session.user.id,
-      action: "SCOREBOARD_VERIFIED",
-      entityType: "Game",
-      entityId: gameId,
-      details: { fixtureId, official, statistician, venue, allMatch: comparison.allMatch },
-    });
-  });
+      await writeAuditLog(tx, {
+        organizationId,
+        userId: session.user.id,
+        action: "SCOREBOARD_VERIFIED",
+        entityType: "Game",
+        entityId: gameId,
+        details: { fixtureId, official, statistician, venue, allMatch: comparison.allMatch, eventId: event.id },
+      });
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/stats`);
   revalidatePath(`/games/${fixtureId}/stats/live`);

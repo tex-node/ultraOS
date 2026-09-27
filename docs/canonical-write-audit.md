@@ -37,13 +37,32 @@ shrink, never grow.
 
 Unit of a batch = "sites that collapse to the same service-call shape," not file or count.
 
-- **Batch 0 (template PR):** extract `createGameEvent` + migrate ONE low-risk site; establishes the
-  service signature, the `server-only` boundary, and the characterization-test pattern.
-- **createGameEvent track** (grouped by side-effect profile): plain creates (3–5/PR) → + audit
-  (2–3/PR) → + stat recompute (1/PR).
-- **createGame track** (see the open question below).
+**Actual bucket sizes (updated after Batches 0-2):**
 
-Realistic total: **8–14 PRs** for Bucket B. Bucket C is separate.
+| Bucket | Sites | Status |
+| --- | --- | --- |
+| **Plain create** (no audit, no derivation) | 2 | ✅ Done (flipPossession, recordJumpBall) |
+| **Audit log only** (no derivation) | 2 | ✅ Done (recordGameTimeout, verifyScoreboard) |
+| **Stat recompute** (derives PlayerStat/TeamStat) | 2+ | Pending (recordStatisticianShot, recordStatisticianStat, ...) |
+| **Status flips** (gameEvent.update) | 4 | Pending (voidScoreEventAction, voidStatisticianEvent, undoLastEvent, undoLastStatisticianEvent) |
+| **Multi-entity writes** | 3+ | Pending (recordSubstitution, recordWaveSubstitution, ...) |
+
+**Batch progression:**
+- **Batch 0 (template PR):** extract `createGameEvent` + migrate ONE low-risk site; establishes the
+  service signature, the `server-only` boundary, and the characterization-test pattern. ✅ Done
+- **Batch 1:** reshape service to own full canonical write (lock, mutable check, verification-stamp
+  clearing, sequence, clock, validation, insert); migrate flipPossession. ✅ Done
+- **Batch 2:** migrate recordJumpBall (plain create). ✅ Done
+- **Batch 3:** migrate recordGameTimeout + verifyScoreboard (audit log sites). ✅ Done
+- **Batch 4+:** migrate stat-recompute sites, status flips, multi-entity writes.
+
+Realistic total: **8-12 PRs** for Bucket B (smaller than the original 8-14 estimate because the
+plain-create bucket was smaller than expected). Bucket C is separate.
+
+**Key finding:** verifyScoreboard derives TeamStat for comparison but doesn't write it. TeamStat is
+derived like PlayerStat (not direct-written). The derivation is only for the verification check,
+not for persistence. This simplifies the migration: verifyScoreboard is event-only + audit log,
+no TeamStat write needed.
 
 ## Open question before extracting `createGame`
 
@@ -128,10 +147,10 @@ migration complete."
 | 359 | `recordSubstitution` | `gameEvent.create` | IN | **service target** |
 | 442 | `recordWaveSubstitution` | `gameEvent.create` | IN | **service target** |
 | 494 | `voidStatisticianEvent` | `gameEvent.update` | IN | status flip |
-| 543 | `recordGameTimeout` | `gameEvent.create` | IN | **service target** |
-| 596 | `recordJumpBall` | `gameEvent.create` | IN | **service target** |
-| 634 | `flipPossession` | `gameEvent.create` | IN | **service target** |
-| 685 | `verifyScoreboard` | `gameEvent.create` | IN | **service target** |
+| 543 | `recordGameTimeout` | `gameEvent.create` | IN | **migrated** (Batch 3) |
+| 596 | `recordJumpBall` | `gameEvent.create` | IN | **migrated** (Batch 2) |
+| 634 | `flipPossession` | `gameEvent.create` | IN | **migrated** (Batch 1) |
+| 685 | `verifyScoreboard` | `gameEvent.create` | IN | **migrated** (Batch 3) |
 | 785 | `undoLastStatisticianEvent` | `gameEvent.update` | IN | status flip |
 | 877/908 | `rebuildGameStatsFromEvents` | `playerStat.upsert`, `teamStat.upsert` | DERIVED | **the** derive; sole legitimate PlayerStat writer |
 | 959 | `verifyStatistics` | `game.update` | IN | verification gate |

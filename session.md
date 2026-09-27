@@ -5337,3 +5337,40 @@ STAGE_5_5C: NOT_STARTED
 **Signature stability:** Zero signature changes needed. The Batch 1 reshape holds.
 
 **Next step:** A3a Batch 3 â€” migrate sites with audit logs or other side effects (recordGameTimeout, verifyScoreboard).
+
+### 2026-09-27 - A3a Batch 3: recordGameTimeout + verifyScoreboard migration
+
+**TeamStat question settled:** verifyScoreboard derives team stats for comparison but doesn't write them. TeamStat is derived like PlayerStat (not direct-written). The derivation is only for the verification check, not for persistence. This simplifies the migration: verifyScoreboard is event-only + audit log, no TeamStat write needed.
+
+**Batch size:** 2 sites (recordGameTimeout, verifyScoreboard). Both are audit-log sites with no stat recompute.
+
+**recordGameTimeout migration:**
+- Refactored to use withGameWrite + createGameEvent
+- Audit log written in callback using writeCtx.tx
+- Event ID included in audit log details
+
+**verifyScoreboard migration:**
+- Refactored to use withGameWrite + createGameEvent
+- Derives team stats for comparison (not persistence)
+- Audit log written in callback using writeCtx.tx
+- Event ID included in audit log details
+- TeamStat derivation stays in callback (for comparison only)
+
+**Verification:**
+- Typecheck clean
+- Tests: 744 total, 743 pass, 1 skip, 0 fail
+- Lint: 0 errors (7 pre-existing warnings)
+- Ratchet: baseline pruned 34 ? 32; ceiling lowered to 32
+- Build: exit 0
+
+**Signature stability:** Zero signature changes needed. The callback-owned side effects pattern (audit log using writeCtx.tx) works cleanly.
+
+**Updated batching plan:** Actual bucket sizes are smaller than estimated:
+- Plain create: 2 (done)
+- Audit log only: 2 (done)
+- Stat recompute: 2+ (pending)
+- Status flips: 4 (pending)
+- Multi-entity writes: 3+ (pending)
+
+**Next step:** A3a Batch 4 — migrate stat-recompute sites (recordStatisticianShot, recordStatisticianStat).
+
