@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { MissingOrganizationContextError, requireFixturePermission, requireSession } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
+import { createGameEvent } from "@/server/scoring";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { remainingShotClockSeconds } from "@/lib/game-rules";
 import { withOrganizationContext } from "@/lib/tenant-context";
@@ -1352,13 +1353,11 @@ export async function recordSportEvent(gameId: string, fixtureId: string, formDa
     const eventPoints = eventDefinition.scores
       ? input.points ?? eventDefinition.pointValues?.[0] ?? 1
       : null;
-    const sequenceNumber = game.nextEventSequence;
-    await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
 
-    await tx.gameEvent.create({
-      data: {
-        organizationId,
+    await createGameEvent(
+      {
         gameId,
+        fixtureId,
         seasonClubId: capturedIsEntrant ? null : input.seasonClubId,
         entrantId: capturedIsEntrant ? input.seasonClubId : null,
         playerId: player?.id ?? null,
@@ -1371,11 +1370,9 @@ export async function recordSportEvent(gameId: string, fixtureId: string, formDa
         description:
           input.description?.trim() ||
           `${eventDefinition.label}${player ? ` — ${player.athlete.firstName} ${player.athlete.lastName}` : ""}`,
-        sequenceNumber,
-        source: "ULTRA_NATIVE_LIVE_SCORER",
-        createdById: session.user.id,
       },
-    });
+      { actor: { id: session.user.id, organizationId }, source: "LIVE_UI", tx },
+    );
 
     await writeAuditLog(tx, {
       organizationId,
@@ -1503,12 +1500,10 @@ points: input.points,
       ? await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } })
       : null;
 
-    const sequenceNumber = game.nextEventSequence;
-    await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
-    await tx.gameEvent.create({
-      data: {
-        organizationId,
+    await createGameEvent(
+      {
         gameId,
+        fixtureId,
         seasonClubId: capturedIsEntrant ? null : input.seasonClubId,
         entrantId: capturedIsEntrant ? input.seasonClubId : null,
         playerId: player?.id ?? null,
@@ -1521,15 +1516,13 @@ points: input.points,
         description:
           input.description?.trim() ||
           `${result.typeKey.replace(/_/g, " ")}${result.points ? ` (${result.points})` : ""}${player ? ` — ${player.athlete.firstName} ${player.athlete.lastName}` : ""}`,
-        sequenceNumber,
         homeScoreBefore: homeBefore,
         awayScoreBefore: awayBefore,
         homeScoreAfter: result.homeScore,
         awayScoreAfter: result.awayScore,
-        source: "ULTRA_NATIVE_LIVE_SCORER",
-        createdById: session.user.id,
       },
-    });
+      { actor: { id: session.user.id, organizationId }, source: "LIVE_UI", tx },
+    );
 
     if (result.nextPeriod) {
       await tx.game.update({ where: { id: gameId }, data: { currentPeriod: result.nextPeriod } });
@@ -1549,24 +1542,23 @@ points: input.points,
             ? game.fixture.awayEntrantId
             : null;
       // GAME_ENDED must be created before the FINAL flips below, not after (terminal event
-      // ordering - see docs/canonical-write-audit.md): a canonical event write's mutable-game
-      // gate rejects a FINAL game, and read-your-own-writes within this transaction means the
-      // flip below would already be visible to it. Every field here is already computed above,
-      // so moving the create earlier changes nothing about what gets written - the two
-      // orderings are externally equivalent since everything commits atomically together.
-      await tx.gameEvent.create({
-        data: {
-          organizationId,
+      // ordering - see docs/canonical-write-audit.md): createGameEvent's mutable-game gate
+      // rejects a FINAL game, and read-your-own-writes within this transaction means the flip
+      // below would already be visible to it. Every field here is already computed above, so
+      // creating it here changes nothing about what gets written - the two orderings are
+      // externally equivalent since everything commits atomically together.
+      await createGameEvent(
+        {
           gameId,
+          fixtureId,
           eventType: "GAME_ENDED",
           typeKey: "GAME_ENDED",
           period: result.period?.period ?? game.currentPeriod,
           clockSeconds: 0,
           description: `Final ${result.homeScore}\u2013${result.awayScore}`,
-          source: "ULTRA_NATIVE_LIVE_SCORER",
-          createdById: session.user.id,
         },
-      });
+        { actor: { id: session.user.id, organizationId }, source: "LIVE_UI", tx },
+      );
       await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId, winnerEntrantId } });
       await tx.game.update({
         where: { id: gameId },
@@ -1647,12 +1639,10 @@ export async function recordShootoutKick(gameId: string, fixtureId: string, form
       }
     }
 
-    const sequenceNumber = game.nextEventSequence;
-    await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
-    await tx.gameEvent.create({
-      data: {
-        organizationId,
+    await createGameEvent(
+      {
         gameId,
+        fixtureId,
         seasonClubId: parsed.side === "HOME" ? game.fixture.homeSeasonClubId : game.fixture.awaySeasonClubId,
         entrantId: parsed.side === "HOME" ? game.fixture.homeEntrantId : game.fixture.awayEntrantId,
         eventType: "SCORE",
@@ -1662,15 +1652,13 @@ export async function recordShootoutKick(gameId: string, fixtureId: string, form
         period: game.currentPeriod,
         clockSeconds: remainingClockSeconds(game),
         description: `Shootout — ${parsed.side === "HOME" ? "home" : "away"} ${parsed.scored ? "scored" : "missed"}`,
-        sequenceNumber,
         homeScoreBefore: game.fixture.homeScore,
         awayScoreBefore: game.fixture.awayScore,
         homeScoreAfter: game.fixture.homeScore,
         awayScoreAfter: game.fixture.awayScore,
-        source: "ULTRA_NATIVE_LIVE_SCORER",
-        createdById: session.user.id,
       },
-    });
+      { actor: { id: session.user.id, organizationId }, source: "LIVE_UI", tx },
+    );
 
     const winner = shootoutWinner([...kicks, { side: parsed.side, scored: parsed.scored }]);
     if (winner) {
@@ -1678,19 +1666,18 @@ export async function recordShootoutKick(gameId: string, fixtureId: string, form
       const winnerEntrantId = winner === "HOME" ? game.fixture.homeEntrantId : game.fixture.awayEntrantId;
       // GAME_ENDED must be created before the FINAL flips below, not after - see the identical
       // note in recordScoringEvent and docs/canonical-write-audit.md's "terminal event ordering".
-      await tx.gameEvent.create({
-        data: {
-          organizationId,
+      await createGameEvent(
+        {
           gameId,
+          fixtureId,
           eventType: "GAME_ENDED",
           typeKey: "GAME_ENDED",
           period: game.currentPeriod,
           clockSeconds: 0,
           description: `Shootout won by ${winner === "HOME" ? "home" : "away"}`,
-          source: "ULTRA_NATIVE_LIVE_SCORER",
-          createdById: session.user.id,
         },
-      });
+        { actor: { id: session.user.id, organizationId }, source: "LIVE_UI", tx },
+      );
       await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId, winnerEntrantId } });
       await tx.game.update({
         where: { id: gameId },
