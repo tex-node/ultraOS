@@ -4920,3 +4920,42 @@ STAGE_5_5C: NOT_STARTED
 - Begin Phase A0 (offline: flag, Dexie + fake-indexeddb deps, `src/lib/offline/` skeleton) and
   B0 (vision: `/services/vision` FastAPI+Celery+Redis skeleton, Docker Compose, storage adapter)
   in parallel.
+
+### 2026-09-27 - Phase A0: Offline Scoring Project Setup
+
+**Objective**
+
+- Phase A0 of P13 (Workstream A): feature flag, dependencies, `src/lib/offline/` skeleton, and
+  a runbook draft. No scoring behaviour yet — setup only.
+
+**Completed**
+
+- Installed deps in `web/`: `dexie@^4.4.6` (runtime), `fake-indexeddb@^6.2.5` (dev, for A1 tests).
+- `web/src/lib/offline/feature-flag.ts` — `isOfflineScoringEnabled(env)` reading
+  `NEXT_PUBLIC_OFFLINE_SCORING_ENABLED`; true only for the exact string `"true"` (defaults off).
+- `web/src/lib/offline/types.ts` — shared `OutboxRecord` (localId, entityType, entityId,
+  operation, payload, clientUpdatedAt, idempotencyKey, deviceId, syncedAt, failureReason) and
+  `SyncResult`/`SyncResultStatus` types for the A3 endpoint.
+- `web/src/lib/offline/feature-flag.test.ts` — 4 unit tests (absent → false, non-"true" → false,
+  exact "true" → true, production default off). All pass.
+- `web/.env.example` — documented `NEXT_PUBLIC_OFFLINE_SCORING_ENABLED="false"`.
+- `documentation/OFFLINE_SCORING_RUNBOOK.md` — skeleton; A2/A3/A4 sections filled in later.
+- `web/package.json` test script quoted (`"src/lib/*.test.ts" "src/lib/**/*.test.ts"`) so nested
+  `src/lib/offline/**` tests are picked up cross-platform.
+
+**Verification**
+
+- Focused: 4/4 offline tests pass.
+- `npm run typecheck` clean; `npm run lint` 0 errors (7 pre-existing warnings elsewhere).
+- `npm test`: 715 tests, 714 pass, 1 skipped, 0 fail (includes the new offline tests).
+- `npm run build`: succeeds.
+
+**Notes**
+
+- Feature flag defaults to off in production (A0 DoD); rollout order is 1 league → 1 region → all.
+- No Prisma migration this phase (A1 adds Dexie schema; Prisma `StatDataSource.OFFLINE_SYNC` lands
+  in A3).
+
+**Next step**
+
+- Phase B0 (vision service skeleton) and/or Phase A1 (Dexie local data layer + outbox + unit tests).
