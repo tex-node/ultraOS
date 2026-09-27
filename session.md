@@ -5673,5 +5673,82 @@ production.
 - Cross-event validation (causedByEventId) stayed in callback, not service
 - Documented replay-semantics difference in audit doc (status: ACTIVE check is live-only, not replay-safe)
 
-**Next step:** A3a Batch 7 � migrate correctStatisticianEventPostFinal (supersession pattern). This is the last statistician console site before moving to scorer console sites.
+**Next step:** A3a Batch 7 - migrate correctStatisticianEventPostFinal (supersession pattern). This is the last statistician console site before moving to scorer console sites.
+
+### 2026-09-27 - A3a Batch 7: correctStatisticianEvent sibling service
+
+**Pre-migration reading (no code until findings confirmed):**
+
+- Verified `nextSequence` removal from Batch 6 was safe: `grep -rn nextSequence src/` returns
+  only a comment, no live import/call/re-export.
+- Read `correctStatisticianEventPostFinal` and `assertGameIsMutable` before touching anything.
+  Confirmed the mutable check DOES block `FINAL` games (`if (status === "FINAL" || ...) throw
+  new GameNotMutableError()`), and the site already has its own separate loader
+  (`loadFinalGameForCorrection`) with the deliberately opposite gate, a comment saying so.
+  `createGameEvent` could not be used as-is - an escape hatch or a sibling service, not a
+  mechanical migration.
+- Confirmed the site mutates a prior event in both branches (REPLACE inserts + marks original
+  CORRECTED; VOID marks original VOIDED with zero inserts) and that `rebuildGameStatsFromEvents`
+  already filters `status: "ACTIVE"`, excluding CORRECTED/VOIDED rows - no double-counting, no
+  Batch S prerequisite for this site.
+
+**Design sketch (before code), per explicit request - five decisions:**
+
+1. Primitives: extract `assignNextSequence` (genuinely duplicated inline in both
+   `createGameEvent` and the pre-A3a correction site); reuse `ledgerSourceFor` and
+   `buildGameEventCreateData` (already shared/pure, just not being called by the pre-A3a site).
+2. Signature: discriminated union on `mode: "REPLACE" | "VOID"` for both input and output.
+   Caught in review: my first draft's `Omit<CreateGameEventInput, "supersedesEventId">` didn't
+   actually make `period`/`clockSeconds` required despite the prose saying they must be -
+   `Omit` only removes the one key named. Fixed to `Omit<..., "period" | "clockSeconds"> &
+   { period: number; clockSeconds: number }` so the type enforces what the prose claims: this
+   service never falls back to "current" clock state, which is meaningless for a FINAL game.
+3. Loading gate: `withFinalGameWrite`, mirroring `withGameWrite` exactly, so both service shapes
+   share one calling convention.
+4. `FOR UPDATE` lock: already present in the pre-A3a `loadFinalGameForCorrection` (same Fixture
+   row `loadMutableGame` locks) - a deliberate decision that predates this batch, not a gap.
+5. Audit log: callback-owned (`ctx.tx`), matching Batch 5/6 precedent - it needs the
+   `CorrectionResult` the service returns.
+- Verification-stamp reset: confirmed NOT shared with `loadMutableGame`'s version by reading
+  both side by side - different conditionality (unconditional vs. gated on
+  `isStatisticianWrite && statisticsVerifiedAt`) and different audit representation (folded into
+  the correction's own audit entry vs. `loadMutableGame`'s dedicated
+  `STATISTICS_VERIFICATION_CLEARED` row). Kept local to `load-final-game.ts`.
+- Two more findings from review before building: (a) the original-event lookup must stay scoped
+  by `gameId`/`source`/`status` (matching `recordStatisticianShot`'s `causedByEventId` scoping
+  discipline) - confirmed the pre-A3a code already does this as three separate checks with
+  distinct error messages, preserved exactly rather than collapsed to one compound-where lookup,
+  since collapsing would lose which precondition failed; (b) confirmed the
+  `verificationBefore`/`verificationAfter` audit fields are current (pre-existing) behavior, not
+  a new addition bundled into the migration.
+
+**Completed:**
+
+- `src/server/scoring/sequence.ts` (new) - `assignNextSequence`, now used by both
+  `createGameEvent` and `correctStatisticianEvent`.
+- `src/server/scoring/load-final-game.ts` (new) - `loadFinalGameForCorrection` + `FinalGame`.
+- `src/server/scoring/with-final-game-write.ts` (new) - `withFinalGameWrite`.
+- `src/server/scoring/correctStatisticianEvent.ts` (new) - the sibling service.
+- `stats-actions.ts`: `correctStatisticianEventPostFinal` migrated to call the new service; old
+  local `loadFinalGameForCorrection` removed (the still-unmigrated local `loadMutableGame`/
+  `assertGameIsMutable` duplicate elsewhere in the same file is untouched - out of scope, still
+  load-bearing for other pending sites).
+- `docs/canonical-write-audit.md` - new "Sites that don't fit `createGameEvent`" section; batch
+  plan table and the stats-actions.ts site table corrected to reflect the sibling-service
+  migration rather than a `createGameEvent` one.
+
+**Verification:**
+
+- Typecheck clean. Tests: 744 total, 743 pass, 1 skip, 0 fail. Lint: 0 errors (7 pre-existing
+  warnings). Build exit 0.
+- Ratchet: `eslint --prune-suppressions` dropped `stats-actions.ts`'s count from 7 to 4 (the
+  removed `gameEvent.create`/two `gameEvent.update` calls); ceiling lowered 28 -> 25.
+
+**What this establishes:** the pattern for any future site that turns out to be a distinct
+shape - sibling service under `src/server/scoring/**`, reusing primitives where the operation
+is genuinely the same, staying local where it isn't. Logged in the audit doc as the answer for
+Batch S's `undoLastEvent`, once the scorer-console stat-write model correction lands.
+
+**Next step:** Batch 8 - the remaining statistician-console status flips (voidStatisticianEvent,
+undoLastStatisticianEvent), then move to scorer-console sites.
 
