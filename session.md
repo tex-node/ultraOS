@@ -5921,3 +5921,67 @@ migrate its own `tx.gameEvent.create` to `createGameEvent`. Then Batch S's five-
 (the fourth shape, the stat-delta reversal semantics, and the fate of
 `applyPlayerShotStatDeltas`/`applyTeamShotStatDeltas`) - the load-bearing remaining work in A3a.
 
+### 2026-09-27 - A3a Batch 9b: syncUltraTimeState migration, last mechanical step
+
+**Sequencing decided before starting:** 9b before Batch S, not after. 9b had zero open design
+questions (decision on the actor already made, session invariant already confirmed) - starting
+Batch S's harder design conversation while a mechanical step was still outstanding would have
+entangled two conversations into one sketch, the same shape-stacking failure mode avoided all
+batch. The double-touch on `recordScore`/`recordStatEvent` (9b threads an actor through their
+`syncUltraTimeState` call; Batch S will touch them again for the stat-model correction) is one
+line per site and orthogonal to the stat logic - not worth reordering for.
+
+**Two commits, same structure as every batch since 7:**
+
+1. `d702d8f` - actor threading, prep only. Checked per-call-site, not just "a session exists
+   somewhere": 4 of `syncUltraTimeState`'s 5 callers (`pauseGame`, `resumeGame`, `advancePeriod`,
+   `recordStatEvent`) only destructured `{ organizationId }` from `requireFixturePermission`, not
+   `session` - `recordScore` was the only one that already had it. Added `session` to the other
+   four's destructuring, added `actorId: string` as a new parameter to `syncUltraTimeState`,
+   threaded `session.user.id` through all five calls. The function's own write is untouched in
+   this commit (still the raw `tx.gameEvent.create`, still not using `actorId` for anything) -
+   confirmed genuinely no-op via unchanged 744/743/1/0 tests and an unchanged ratchet count.
+2. `bca575a` - the migration itself, plus one finding the sketch didn't anticipate. Swapped the
+   raw create for `createGameEvent(...)`. Two data-content changes, both named explicitly in the
+   commit message rather than hidden inside "just a refactor":
+   - **Actor attribution** (the planned one): ultra-time events go from `createdById: null` to
+     the user who triggered the surrounding action. Matches the earlier decision - a
+     pause/resume/advance is a user action, the ledger should say who.
+   - **`organizationId`** (found while doing the diff, not in the sketch): the raw create also
+     omitted `organizationId` entirely, relying on a schema-level default
+     (`@default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))`, the fixed Neon Ultra org id) that
+     the same pattern reuses across dozens of other models. For any organization other than Neon
+     Ultra, every Ultra Time event would have been silently miscoded to the wrong tenant - a
+     tenant-isolation bug, not just an attribution gap. `createGameEvent` always sets
+     `organizationId` from the actor's own organization explicitly, so this call site is fixed as
+     an unavoidable side effect of using the canonical service correctly - there's no way to opt
+     out and keep the old (defaulted) behavior even deliberately. Logged in the audit doc as a
+     known issue *wider than A3a* (the default spans far more models than this one) rather than
+     attempting to fix the schema-wide pattern here.
+
+**Verification:**
+
+- Typecheck clean both commits. Tests: 744/743/1/0, unchanged by the prep commit (as expected -
+  it changes nothing observable) and unchanged by the migration commit too (no test currently
+  exercises `createdById`/`organizationId` on ultra-time events specifically).
+- Lint 0 errors (7 pre-existing warnings), both commits. Build exit 0, both commits.
+- Ratchet: prep commit left the count unchanged (no write site touched). Migration commit:
+  `eslint --prune-suppressions` dropped `actions.ts` from 14 to 13 (exactly the one write site,
+  as predicted); ceiling lowered 18 -> 17.
+
+**A3a's event-only migration work is now fully closed** - every genuinely event-only site in both
+the statistician and scorer consoles routes through one of `createGameEvent`,
+`correctStatisticianEvent`, or `voidGameEvent`. What's left is entirely Batch S: `recordScore` and
+`recordStatEvent`'s fused direct stat writes, `voidScoreEventAction`'s coupled score/stat reversal,
+`correctScoreEventAction`'s fourth shape (mutable-gate supersession with stat reversal, no VOID
+mode), and `undoLastEvent`.
+
+**Next step:** Batch S's five-point sketch. Settle three things before writing it, per explicit
+brief: (1) the fate of `applyPlayerShotStatDeltas`/`applyTeamShotStatDeltas` - delete, keep, or
+retire-after-backfill, since everything else in the sketch follows from this decision; (2) whether
+`rebuildGameStatsFromEvents` produces identical results to the current incremental path for every
+case it would need to replace - void, supersession, correction, partial-state edges - proven by
+tests, not assumed; (3) the fourth shape's actual design (`correctScoreEvent` under `withGameWrite`,
+stat reversal likely becoming a callback-owned `rebuildGameStatsFromEvents` call - a sketch
+question, not decided here).
+
