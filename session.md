@@ -4792,3 +4792,85 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - Begin Phase A0 and B0 in parallel (project setup for both workstreams).
+
+### 2026-09-27 - LBCL: Ingest Games 11-16 (opening weekend 2 wraps up, Sep 25-26 2026)
+
+**Objective**
+
+- User supplied 6 new LBCL box-score scoresheets (Games 11-15, then a late-arriving
+  6th sheet for Game 16) and asked to update stats. Same rigor as the original 10-game
+  ingestion: crop/zoom transcription, checksum verification, identity reconciliation,
+  dry-run then apply on staging then production.
+
+**Completed**
+
+- `web/scripts/data/build-lbcl-batch.mjs`: added Games 11-16 (Square Team vs LXB
+  Surulere; Leo Kareem Foundation vs Campos Basketballers; Cantonment Braves vs Ogra
+  Hoop Kings; Seaside Hoopers vs Ultra Basketball; White Fire vs Lagos Raptors; LXB
+  Surulere vs Leo Kareem Foundation). `SEASON.endDate` extended to 2026-09-26.
+- Every player row reconciled against the *live database roster* (direct `prisma`
+  queries), not memory — this catches real bugs that re-reading prior transcription
+  notes misses. Three genuinely new/unmatched players had jersey collisions with an
+  existing different player and got `jerseyNumber: null` rather than a guessed number:
+  Ahmad Momoh, Sesimi Olorunsho (LXB Surulere, Game 16), Somadina Dike (Leo Kareem
+  Foundation, Game 16), plus earlier Joshua Anthony and Joseph Reginald (Games 12/15).
+- `web/scripts/update-lbcl-season-end-date.ts` (new, one-off): `ensureSeason()` only
+  finds-or-creates by name and never updates an existing row's dates, so extending the
+  season required a direct correction script. Run with `--apply` against both orgs.
+- Deployed to staging then production; `external-stats-ingest.ts --apply` run against
+  both. Games 1-10 (staging) and 1-10 (production) correctly report `BLOCKED` (already
+  `FINAL`, idempotent no-op). Games 11-16 imported cleanly on both environments with
+  zero constraint errors after reconciliation.
+
+**Bugs found and fixed**
+
+- Tuple column-shift errors (Games 12, 13, 14, 15): while hand-typing verified prose
+  transcriptions into the compact JS tuple format, repeatedly wrote a field-goals-made
+  count into the `points` slot instead of the real points value (Game 15's White Fire
+  roster had 8 of 9 rows shifted this way). Caught by `verify-batch.mjs`'s per-team
+  points/quarter checksum, not by re-reading my own notes.
+- Game 13 name-collision (found only via direct DB query, not checksummable): a row
+  used `"Irozuru Nathaniel"` — an already-existing different real player — instead of
+  the genuinely new `"Nathaniel Chibueze"`. This had *already been applied once* to
+  staging before the fix, and the fixture was then `FINAL`, so `--apply` alone
+  couldn't retroactively correct it (`ensurePlayer` still creates the correct new
+  player, but `importGameResult` no-ops on an already-FINAL fixture). Required finding
+  the real fixture ID (querying by `scheduledAt` directly, since the CLI's own printed
+  per-line game label did not reliably match the fixture ID printed on the same line —
+  still unexplained, worth watching for next time) and manually repointing the
+  existing `PlayerStat.playerId` from Irozuru Nathaniel to Nathaniel Chibueze. On
+  production this same game was a first-time import with the already-fixed source
+  data, so no manual correction was needed there.
+- Quarter-score misread (Game 13): used the wrong 5-minute-interval checkpoint instead
+  of the sheet's own quarter-breakdown parenthetical for Q1.
+
+**Infra note**
+
+- The `raivstream` host is shared with unrelated tenants (Docker, two Logflare/Elixir
+  instances, a Python service, an MT5 terminal). Mid-deploy it hit load average ~40 on
+  6 cores with swap exhausted, causing two consecutive `next build` failures (one a
+  self-inflicted race from retrying before the prior build's processes were reaped,
+  one a Turbopack internal panic) that were resource-starvation artifacts, not code
+  issues — same commit built clean on staging. Waited for load to settle (~20 min)
+  before the production build succeeded. `NODE_OPTIONS=--max-old-space-size=4096`
+  still needed proactively.
+- Verifying data on **production** requires wrapping ad-hoc scripts in
+  `withOrganizationContext(orgId, ...)` — a plain `prisma.fixture.findUnique(...)`
+  outside that context returns `null` due to RLS even when the row exists. Staging's
+  same query worked unscoped, so this env difference cost a false alarm; don't skip
+  the wrapper on production ad-hoc queries again.
+
+**Verification**
+
+- `verify-batch.mjs`: all 16 games' PTS/quarter checksums pass.
+- tsc/lint/build green on both the batch builder and the new one-off script.
+- Staging: Game 16 fixture confirmed `FINAL`, 50-40, 23 `PlayerStat` rows, points sum
+  matches exactly. Game 13's `PlayerStat` repoint confirmed applied.
+- Production: all 6 new fixtures (11-16) confirmed `FINAL` with points sums matching
+  each game's final score exactly (77, 77, 94, 73, 102, 90).
+- Live `/lbcl` and `/lbcl/fixtures` on production show all 16 games as `FINAL` with
+  correct scores/times and updated standings (LXB Surulere now 1st at 4-0).
+
+**Next step**
+
+- None outstanding for this batch.
