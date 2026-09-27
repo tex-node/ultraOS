@@ -1220,6 +1220,49 @@ Append new entries below using this structure:
 **Completed**
 
 - Added the schema foundation (`20260821080000_g21_ai_vision_foundation`, purely
+
+### 2026-09-27 - A3a Batch 6: Migrate recordWaveSubstitution to Service Layer
+
+**Objective**
+
+- Migrate the `recordWaveSubstitution` action from direct Prisma calls to the canonical write service layer, following the pattern established in Batches 0-5.
+
+**Completed**
+
+- Refactored `recordWaveSubstitution` in `web/src/app/games/stats-actions.ts` to use `withGameWrite` and `createGameEvent`
+- Removed direct `tx.gameEvent.create` calls and manual sequence management
+- Removed the now-unused `nextSequence` helper function
+- Updated baseline suppression count from 29 to 28 (one fewer violation)
+- Updated `canonical-write-audit.md` to mark recordWaveSubstitution as migrated
+- Verified typecheck, tests, lint, and build all pass
+
+**Decisions**
+
+- Kept the multi-event pattern: the callback loops through N substitutions and calls `createGameEvent` N times within the same transaction
+- Maintained the lineup evolution logic in the callback (derived state from `tx`, not `writeCtx.game`)
+- Preserved the audit log that summarizes all N events after the loop completes
+- No signature changes needed — the service stayed singular, the callback handled the loop
+
+**Verification**
+
+- `npm run typecheck`: Passed
+- `npm test`: 744 tests, 743 pass, 1 skip, 0 fail
+- `npm run lint`: 0 errors (7 pre-existing warnings)
+- `npm run lint -- --prune-suppressions`: Baseline pruned to 28
+- `npm run build`: Passed
+- `node scripts/check-canonical-write-baseline.mjs`: 28/28 (ceiling met)
+
+**Key findings**
+
+- Multi-event pattern confirmed: N sequential events in one tx, each with its own sequence number
+- Callback owns the loop and lineup evolution (derived state from tx, not writeCtx.game) — correct pattern for derived state
+- Sequence counter advances N times (once per event), not once for the batch
+- Cross-event validation (causedByEventId) stayed in callback, not service
+- Documented replay-semantics difference in audit doc (status: ACTIVE check is live-only, not replay-safe)
+
+**Next step**
+
+- A3a Batch 7: Migrate `correctStatisticianEventPostFinal` (supersession pattern) — the last statistician console site before moving to scorer console sites
   additive): 7 new enums, one new `MediaAssetPurpose` value (`GAME_VIDEO`), and 8 new
   tables — `GameVideo`, `VideoTimelineAnchor`, `CourtCalibration`, `VisionModel`,
   `VisionAnalysisRun`, `VisionTrack`, `VisionObservation`, `VisionEventMatch`,
@@ -5626,9 +5669,9 @@ production.
 **Key findings:**
 - recordWaveSubstitution is N sequential events + audit log, all in one tx
 - Sequence counter advances N times (once per event), not once for the batch
-- Lineup derivation reads from tx (locked), not writeCtx.game � correct pattern for derived state
+- Lineup derivation reads from tx (locked), not writeCtx.game � correct pattern for derived state
 - Cross-event validation (causedByEventId) stayed in callback, not service
 - Documented replay-semantics difference in audit doc (status: ACTIVE check is live-only, not replay-safe)
 
-**Next step:** A3a Batch 7 � migrate correctStatisticianEventPostFinal (supersession pattern). This is the last statistician console site before moving to scorer console sites.
+**Next step:** A3a Batch 7 � migrate correctStatisticianEventPostFinal (supersession pattern). This is the last statistician console site before moving to scorer console sites.
 
