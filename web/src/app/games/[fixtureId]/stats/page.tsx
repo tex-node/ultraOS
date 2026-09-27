@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
+import { SyncStatusBadge } from "@/app/components/sync-status-badge";
 import { SubmitButton } from "@/app/components/submit-button";
 import {
   confirmStartingFive,
@@ -133,7 +134,10 @@ export default async function StatisticianConsole({
               ⚡ ULTRA TIME — 2× POINTS
             </div>
           ) : null}
-          <h1 className="text-lg font-semibold">Statistician console</h1>
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="text-lg font-semibold">Statistician console</h1>
+            <SyncStatusBadge />
+          </div>
           <p className="mt-1 text-sm text-text-3">
             {fixture.homeSeasonClub!.club.shortName} vs {fixture.awaySeasonClub!.club.shortName} · {periodLabel(game.currentPeriod, game.status)} · {game.status}
           </p>

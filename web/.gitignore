@@ -40,4 +40,14 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Serwist (generated service worker)
+public/sw*
+public/swe-worker*
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
 /src/generated/prisma

@@ -5058,3 +5058,87 @@ STAGE_5_5C: NOT_STARTED
 
 - Phase A2 (Serwist + PWA manifest + SyncStatusBadge + Background Sync with visibilitychange
   fallback), with the five pitfalls tracked as sub-tasks; Phase B0 in parallel.
+
+### 2026-09-27 - Phase A2: Service Worker, PWA Shell, Sync Status Badge
+
+**Objective**
+
+- Phase A2 of P13: Serwist service worker, PWA manifest, cache strategies, a reactive sync-status
+  badge, and a sync-trigger abstraction. Every write still goes through the outbox (A1); the network
+  is only hit by the A3 sync replay.
+
+**Key decisions**
+
+- **Turbopack, not webpack.** This repo builds with `next build` on Turbopack (Next 16), so A2 uses
+  the `@serwist/turbopack` setup (`withSerwist` wrapper, a `src/app/serwist/[path]/route.ts` route
+  handler, `SerwistProvider`/manual registration). The webpack `@serwist/next` examples compile but
+  silently do not register — avoided entirely.
+- **Production-only registration.** `ServiceWorkerRegistrar` gates on `NODE_ENV === "production"`,
+  so `next dev` never caches HMR responses. Playwright therefore runs against a production build
+  (see `playwright.config.ts` `webServer`).
+- **Sync trigger is an abstraction, not inline branching.** `SyncTrigger` with
+  `BackgroundSyncAdapter` (Chromium Background Sync, tag `scoring-sync`) and `EventSyncAdapter`
+  (Safari fallback: `online` + `visibilitychange` + 60s poll). A manual "Sync now" trigger (A4)
+  plugs into the same interface.
+- **Reactive badge via `useLiveQuery`.** `SyncStatusBadge` reads the pending outbox count with
+  `dexie-react-hooks`; it re-renders on outbox mutation (no polling). Browser-only APIs
+  (`navigator.onLine`, Dexie) are read through `useSyncExternalStore` with a safe server snapshot,
+  so SSR never touches them. Badge is mounted on the statistician console header.
+
+**Completed**
+
+- `web/next.config.ts` — wrapped with `withSerwist` (Turbopack).
+- `web/src/app/serwist/[path]/route.ts` — Serwist route handler (`createSerwistRoute`,
+  `swSrc: "src/app/sw.ts"`, native esbuild).
+- `web/src/app/sw.ts` — service worker (`skipWaiting`, `clientsClaim`, `navigationPreload`,
+  `/~offline` document fallback) + a `sync` event listener for tag `scoring-sync` (drain is a
+  no-op placeholder until A3).
+- `web/src/lib/offline/service-worker-cache.ts` — `offlineScoringRuntimeCaching`: SWR for static
+  assets, NetworkFirst (3s) for `GET /api/*` reads, and no handling of writes (POST/PUT/PATCH/
+  DELETE fall through and are never cached, so the A3 sync endpoint always reaches the server).
+- `web/src/app/manifest.ts` — standalone PWA manifest (brand colors `#0b100e`, landscape, icons).
+- `web/public/icons/icon-192.png`, `icon-512.png` — generated brand icons.
+- `web/src/app/components/service-worker-registrar.tsx` — production-gated registration.
+- `web/src/app/components/sync-status-badge.tsx` — reactive online/offline + pending + last-sync
+  badge; click requests a sync.
+- `web/src/lib/offline/sync-trigger.ts` (+ `.test.ts`) — the trigger abstraction and adapters.
+- `web/src/app/~offline/page.tsx` — offline fallback document.
+- `web/src/app/layout.tsx` — manifest/viewport metadata + registrar mount.
+- `playwright.config.ts` + `e2e/offline-shell.spec.ts` — production-build E2E harness (chromium +
+  iPad WebKit); `npm run test:e2e`.
+- `tsconfig.json` excludes generated `public/sw.js`; `.gitignore` ignores `public/sw*`.
+
+**Pitfall checklist (from A2 brief)**
+
+1. Serwist + App Router — Turbopack path used throughout (not Pages Router/webpack). ✔
+2. SW off in dev — registration gated to production; Playwright uses a prod build. ✔
+3. Background Sync Chromium-only — `visibilitychange`/`online` fallback is the primary iPad path;
+   trigger is an abstraction. ✔
+4. `useLiveQuery` badge — used; `'use client'`; SSR-safe via `useSyncExternalStore`. ✔
+5. No direct scoring writes — grepped: the scoring UI uses server actions only; no stray
+   `POST /api/games/*/events` exists. `GET /api/v1/games/[publicId]/events` is a public read. ✔
+
+**Verification**
+
+- Endpoints on a production `next start`: `/serwist/sw.js` 200 (46KB, contains
+  `offline-api-reads`), `/manifest.webmanifest` 200 (valid JSON, standalone), `/~offline` 200,
+  `/icons/icon-192.png` + `icon-512.png` 200.
+- `npm run typecheck` clean; `npm run lint` 0 errors (7 pre-existing warnings elsewhere).
+- `npm test`: 734 tests, 733 pass, 1 skipped, 0 fail.
+- `npm run build`: exit 0; Serwist bundled (86 precache entries).
+
+**Gotcha found and fixed**
+
+- I first created `web/app/sw.ts` (repo root) instead of `web/src/app/sw.ts`. Having both `app/`
+  and `src/app/` made Next fall back to the **Pages Router** (build emitted only a `/404` page).
+  Moved the file under `src/app/` and added the route handler under `src/app/serwist/[path]/`.
+
+**Manual verification still owed (A2 checkpoint)**
+
+- Real devices: install the PWA on iPad Safari and Android Chrome, airplane mode, score a quarter,
+  reconnect, verify the outbox drains. Deferred until A3 provides the drain endpoint; tests can
+  only assert the shell today.
+
+**Next step**
+
+- Phase B0 (vision service skeleton) in parallel, then A3 (sync endpoint + conflict resolution).
