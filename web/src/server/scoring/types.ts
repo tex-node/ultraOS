@@ -55,6 +55,9 @@ export interface CreateGameEventInput {
   playerId?: string | null;
   fouledPlayerId?: string | null;
   foulType?: string | null;
+  technicalClass?: string | null; // NCAA-style: Class A vs Class B technicals
+  foulTarget?: string | null; // PLAYER, BENCH, or COACH
+  freeThrowsAwarded?: number | null; // Number of free throws awarded by a foul
   causedByEventId?: string | null;
   typeKey?: string | null;
   data?: Prisma.InputJsonValue | null;

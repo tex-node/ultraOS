@@ -28,6 +28,9 @@ export interface GameEventFields {
   playerId?: string | null;
   fouledPlayerId?: string | null;
   foulType?: string | null;
+  technicalClass?: string | null; // NCAA-style: Class A vs Class B technicals
+  foulTarget?: string | null; // PLAYER, BENCH, or COACH
+  freeThrowsAwarded?: number | null; // Number of free throws awarded by a foul
   causedByEventId?: string | null;
   typeKey?: string | null;
   data?: Prisma.InputJsonValue | null;
@@ -69,6 +72,9 @@ export function buildGameEventCreateData(
     playerId: input.playerId ?? null,
     fouledPlayerId: input.fouledPlayerId ?? null,
     foulType: (input.foulType as Prisma.GameEventUncheckedCreateInput["foulType"]) ?? null,
+    technicalClass: (input.technicalClass as Prisma.GameEventUncheckedCreateInput["technicalClass"]) ?? null,
+    foulTarget: (input.foulTarget as Prisma.GameEventUncheckedCreateInput["foulTarget"]) ?? null,
+    freeThrowsAwarded: input.freeThrowsAwarded ?? null,
     causedByEventId: input.causedByEventId ?? null,
     eventType: input.eventType as Prisma.GameEventUncheckedCreateInput["eventType"],
     typeKey: input.typeKey ?? null,

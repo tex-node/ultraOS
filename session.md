@@ -5441,3 +5441,26 @@ check as a standard step going forward, not just for this batch.
   "Insights" tab (coaching scouting reports for Ultra Basketball's
   opponents, gated to a single user) â€” see the next entry once that lands.
 
+
+### 2026-09-27 - A3a Batch 4: recordStatisticianStat migration
+
+**Batch size:** 1 site (recordStatisticianStat).
+
+**Key changes:**
+- Added technicalClass, foulTarget, freeThrowsAwarded fields to CreateGameEventInput and GameEventFields
+- Updated build-game-event.ts to handle these new fields
+- Migrated recordStatisticianStat to use withGameWrite + createGameEvent
+- Pruned suppressions: 32 ? 31
+- Lowered baseline ceiling to 31
+
+**Verification:**
+- Typecheck: clean
+- Tests: 744 total, 743 pass, 1 skip, 0 fail
+- Lint: 0 errors (7 pre-existing warnings)
+- Ratchet: 31/31
+- Build: exit 0
+
+**Signature stability:** Zero signature changes needed. The new fields (technicalClass, foulTarget, freeThrowsAwarded) were added to the input types, but the service signature itself remained stable.
+
+**Next step:** A3a Batch 5 — migrate recordStatisticianShot + recordSubstitution (single event + upstream validation).
+

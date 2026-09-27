@@ -233,77 +233,81 @@ export async function recordStatisticianStat(gameId: string, fixtureId: string, 
   const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
   const input = otherStatSchema.parse(Object.fromEntries(formData.entries()));
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    const homeId = requireSeasonClubId(game.fixture, "HOME");
-    const awayId = requireSeasonClubId(game.fixture, "AWAY");
-    if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
-      throw new Error("INVALID_TEAM");
-    }
-    const target = input.eventType === "FOUL" ? (input.foulTarget ?? "PLAYER") : "PLAYER";
-    const player = input.playerId
-      ? await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } })
-      : null;
-    if (!player && (input.eventType !== "FOUL" || target === "PLAYER")) {
-      throw new Error("INVALID_PLAYER");
-    }
+  await withGameWrite(
+    gameId,
+    fixtureId,
+    {
+      actor: { id: session.user.id, organizationId },
+      source: "LIVE_UI",
+      ledgerSourceHint: "STATISTICIAN",
+    },
+    async ({ game, tx, ...writeCtx }) => {
+      const homeId = requireSeasonClubId(game.fixture, "HOME");
+      const awayId = requireSeasonClubId(game.fixture, "AWAY");
+      if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
+        throw new Error("INVALID_TEAM");
+      }
+      const target = input.eventType === "FOUL" ? (input.foulTarget ?? "PLAYER") : "PLAYER";
+      const player = input.playerId
+        ? await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } })
+        : null;
+      if (!player && (input.eventType !== "FOUL" || target === "PLAYER")) {
+        throw new Error("INVALID_PLAYER");
+      }
 
-    let fouledPlayerId: string | undefined;
-    if (input.eventType === "FOUL" && input.fouledPlayerId) {
-      const fouledPlayer = await tx.player.findFirst({
-        where: { id: input.fouledPlayerId, seasonClubId: { in: [homeId, awayId] } },
-      });
-      if (!fouledPlayer) throw new Error("INVALID_FOULED_PLAYER");
-      fouledPlayerId = fouledPlayer.id;
-    }
+      let fouledPlayerId: string | undefined;
+      if (input.eventType === "FOUL" && input.fouledPlayerId) {
+        const fouledPlayer = await tx.player.findFirst({
+          where: { id: input.fouledPlayerId, seasonClubId: { in: [homeId, awayId] } },
+        });
+        if (!fouledPlayer) throw new Error("INVALID_FOULED_PLAYER");
+        fouledPlayerId = fouledPlayer.id;
+      }
 
-    // Class A/B only exists on technicals; bench/coach fouls carry no player.
-    const foulTarget = input.eventType === "FOUL" ? target : undefined;
-    if (input.technicalClass && (input.eventType !== "FOUL" || input.foulType !== "TECHNICAL")) {
-      throw new Error("INVALID_TECHNICAL_CLASS");
-    }
-    const technicalClass = input.eventType === "FOUL" && input.foulType === "TECHNICAL" ? input.technicalClass : undefined;
-    const freeThrowsAwarded = input.eventType === "FOUL" ? (input.freeThrowsAwarded ?? 0) : 0;
+      // Class A/B only exists on technicals; bench/coach fouls carry no player.
+      const foulTarget = input.eventType === "FOUL" ? target : undefined;
+      if (input.technicalClass && (input.eventType !== "FOUL" || input.foulType !== "TECHNICAL")) {
+        throw new Error("INVALID_TECHNICAL_CLASS");
+      }
+      const technicalClass = input.eventType === "FOUL" && input.foulType === "TECHNICAL" ? input.technicalClass : undefined;
+      const freeThrowsAwarded = input.eventType === "FOUL" ? (input.freeThrowsAwarded ?? 0) : 0;
 
-    const remaining = remainingClockSeconds(game);
-    const ultraTime = isUltraTimeUnderRules(effectiveRuleSnapshot(game.ruleSnapshot), game.status, game.currentPeriod, remaining);
-    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
+      const remaining = remainingClockSeconds(game);
+      const ultraTime = isUltraTimeUnderRules(effectiveRuleSnapshot(game.ruleSnapshot), game.status, game.currentPeriod, remaining);
 
-    const foulLabel =
-      input.eventType !== "FOUL"
-        ? null
-        : [
-            input.foulType === "TECHNICAL" && technicalClass ? `Technical foul (Class ${technicalClass === "CLASS_A" ? "A" : "B"})` : (input.foulType ?? "Foul"),
-            foulTarget === "BENCH" ? "bench" : foulTarget === "COACH" ? "coaching staff" : null,
-          ]
-            .filter(Boolean)
-            .join(" — ");
+      const foulLabel =
+        input.eventType !== "FOUL"
+          ? null
+          : [
+              input.foulType === "TECHNICAL" && technicalClass ? `Technical foul (Class ${technicalClass === "CLASS_A" ? "A" : "B"})` : (input.foulType ?? "Foul"),
+              foulTarget === "BENCH" ? "bench" : foulTarget === "COACH" ? "coaching staff" : null,
+            ]
+              .filter(Boolean)
+              .join(" — ");
 
-    await tx.gameEvent.create({
-      data: {
-        organizationId,
-        gameId,
-        seasonClubId: input.seasonClubId,
-        playerId: player?.id ?? null,
-        fouledPlayerId: input.eventType === "FOUL" ? fouledPlayerId : undefined,
-        foulType: input.eventType === "FOUL" ? input.foulType || undefined : undefined,
-        technicalClass,
-        foulTarget,
-        freeThrowsAwarded: input.eventType === "FOUL" && freeThrowsAwarded > 0 ? freeThrowsAwarded : null,
-        eventType: input.eventType,
-        period: game.currentPeriod,
-        clockSeconds: remaining,
-        description:
-          input.eventType === "FOUL"
-            ? `${foulLabel}${player ? ` — ${player.athlete.firstName} ${player.athlete.lastName}` : ""}${freeThrowsAwarded > 0 ? ` · ${freeThrowsAwarded} FT${freeThrowsAwarded === 1 ? "" : "s"}` : ""}`
-            : `${player!.athlete.firstName} ${player!.athlete.lastName} — ${input.eventType.replaceAll("_", " ")}`,
-        sequenceNumber,
-        isUltraTime: ultraTime,
-        source: STATISTICIAN_SOURCE,
-        createdById: session.user.id,
-      },
-    });
-  });
+      await createGameEvent(
+        {
+          fixtureId,
+          gameId,
+          seasonClubId: input.seasonClubId,
+          playerId: player?.id ?? null,
+          fouledPlayerId: input.eventType === "FOUL" ? fouledPlayerId : undefined,
+          foulType: input.eventType === "FOUL" ? input.foulType || undefined : undefined,
+          technicalClass,
+          foulTarget,
+          freeThrowsAwarded: input.eventType === "FOUL" && freeThrowsAwarded > 0 ? freeThrowsAwarded : null,
+          eventType: input.eventType,
+          clockSeconds: remaining,
+          description:
+            input.eventType === "FOUL"
+              ? `${foulLabel}${player ? ` — ${player.athlete.firstName} ${player.athlete.lastName}` : ""}${freeThrowsAwarded > 0 ? ` · ${freeThrowsAwarded} FT${freeThrowsAwarded === 1 ? "" : "s"}` : ""}`
+              : `${player!.athlete.firstName} ${player!.athlete.lastName} — ${input.eventType.replaceAll("_", " ")}`,
+          isUltraTime: ultraTime,
+        },
+        { ...writeCtx, tx },
+      );
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/stats`);
   revalidatePath(`/games/${fixtureId}/stats/live`);
