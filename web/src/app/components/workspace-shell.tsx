@@ -29,6 +29,7 @@ const sections: NavSection[] = [
     label: "Manage",
     links: [
       { href: "/dashboard", label: "Dashboard" },
+      { href: "/demo", label: "Demo Mode" },
       { href: "/competitions", label: "Tournaments", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
       { href: "/events", label: "Events & Tickets", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
       { href: "/launch-readiness", label: "Launch", adminOnly: true },
