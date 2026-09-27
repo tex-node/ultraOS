@@ -4,6 +4,8 @@ import { SubSiteTabs } from "@/app/t/[slug]/sub-site-tabs";
 import { TOURNAMENT_STATUS_STYLE, tournamentStatusFromSeasons } from "@/lib/tournament-subsite";
 import { resolveVanityCompetitionId } from "@/lib/vanity-tournament";
 import { withOrganizationContext } from "@/lib/tenant-context";
+import { hasInsightsAccess } from "@/lib/insights-access";
+import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -37,6 +39,20 @@ export default async function VanityTournamentLayout({
   );
   const basePath = `/${vanitySlug}`;
 
+  // Insights is a private coaching view for one account, not a public tab - see
+  // src/lib/insights-access.ts. Fetching the session per request is cheap and this layout
+  // already does several other awaits before render.
+  let session = null;
+  try {
+    session = await auth();
+  } catch {
+    session = null;
+  }
+  const extraTabs = [{ href: `${basePath}/highlights`, label: "Highlights" }];
+  if (hasInsightsAccess(session?.user?.email)) {
+    extraTabs.push({ href: `${basePath}/insights`, label: "Insights" });
+  }
+
   return (
     <PortalShell>
       <div className="border-b border-line bg-gradient-to-b from-brand-400/[.06] to-transparent">
@@ -53,11 +69,7 @@ export default async function VanityTournamentLayout({
           </div>
           <h1 className="mt-3 font-display text-4xl font-bold sm:text-5xl">{competition.name}</h1>
           {competition.description ? <p className="mt-2 max-w-3xl text-text-2">{competition.description}</p> : null}
-          <SubSiteTabs
-            basePath={basePath}
-            title={competition.name}
-            extraTabs={[{ href: `${basePath}/highlights`, label: "Highlights" }]}
-          />
+          <SubSiteTabs basePath={basePath} title={competition.name} extraTabs={extraTabs} />
         </div>
       </div>
       {children}
