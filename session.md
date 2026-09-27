@@ -5823,3 +5823,101 @@ direct PlayerStat/TeamStat writes, a model correction rather than a mechanical m
 here: check which of the three existing shapes each site maps to before assuming any need a
 fourth.
 
+### 2026-09-27 - A3a: Scorer console reading, fourth shape found, Batch 9a
+
+**Pre-batch reading (all 19 raw write call sites in `actions.ts` read before batching anything):**
+
+The statistician console was uniform (one gate, event-only, three shapes covered it). The scorer
+console is not - three different problems in one file:
+
+- **Genuinely event-only** (zero `PlayerStat`/`TeamStat` contact, direct or via helper):
+  `syncUltraTimeState`, `recordSportEvent`, `recordScoringEvent`, `recordShootoutKick`.
+- **Fused to direct incremental stat writes in the same function**: `recordScore` and
+  `recordStatEvent` both call `applyPlayerShotStatDeltas`/`applyTeamShotStatDeltas` (or do a
+  direct `playerStat.upsert`) immediately after their event write, in the same transaction.
+  Migrating the event-write mechanics now and leaving the stat logic for Batch S to rework later
+  would be two passes over the same function for no benefit - held out entirely.
+- **A fourth write shape**: `correctScoreEventAction` is a supersession (mark original
+  `CORRECTED`, insert replacement with `supersedesEventId`) like `correctStatisticianEvent`, but
+  under the *mutable* gate (not FINAL), with incremental stat-delta reversal fused in, and no
+  VOID mode at all (voiding a score event is the separate `voidScoreEventAction`, which is
+  likewise not a pure status-flip - it reverses `Fixture.score` and stat deltas too). Named in the
+  audit doc as deferred to Batch S's own sketch, not designed here.
+- **Also found and logged, not fixed**: `voidScoreEventAction`/`correctScoreEventAction` call
+  `assertGameIsMutable` but skip the `LIVE`/`PAUSED` check every sibling function has right after
+  it. Possibly a real gap. Logged as a known issue independent of any migration - fixing it would
+  bundle a behavior change into a shape migration, which breaks bisectability.
+
+Original lean was "event-only sites first, independent of Batch S" - the reading reversed that
+for the two fused sites specifically (not a rebuild call, direct stat *writes*, an even tighter
+coupling than the exception already anticipated). Batch S has to go first for those two.
+
+**Terminal event ordering - found before it could break the migration:** `recordScoringEvent`
+and `recordShootoutKick`'s finalize branches created their `GAME_ENDED` event *after* flipping
+`Fixture.status`/`Game.status` to `FINAL`, in the same transaction. Harmless as a raw write;
+fatal once routed through `createGameEvent`, whose mutable-gate check would see the already-
+committed-within-tx `FINAL` status (read-your-own-writes) and throw. Same root problem
+`correctStatisticianEventPostFinal` had, different solution: a terminal event doesn't need its
+own FINAL-gated service, it just needs to be created one step earlier, while the game is still
+mutable.
+
+Verified no-op before applying (four checks, not assumed): (1) nothing between the old and new
+position reads `game.status`/`fixture.status` - `advanceKnockoutBracket` only touches
+`division`/bracket structure, never the event ledger or status; (2) `recalculateStandings`'s
+position relative to the flip is unchanged, only the event create moved; (3) `assertGameIsMutable`
+fires exactly once, at the top of each function, never re-called in the finalize branch; (4) both
+status flips (`Fixture` and `Game`) land after the reordered event create. Every field in the
+`GAME_ENDED` payload is already computed earlier in the function, never re-derived from the
+game's post-flip status, so the two orderings are externally equivalent - no test can distinguish
+them, which is itself the honest confirmation, not a gap in coverage.
+
+**Two commits, one PR-equivalent (both pushed to `main` directly), per explicit instruction -** so
+a future bisect can separate a reorder regression from a migration regression:
+
+1. `dfb98ec` - pure reorder (`GAME_ENDED` before the `FINAL` flips), plus the audit-doc entries
+   (fourth shape, `assertGameIsMutable` gap, terminal-event-ordering invariant). No migration.
+2. `a6d174a` - Batch 9a itself: `recordSportEvent`, `recordScoringEvent`, `recordShootoutKick`
+   migrated to `createGameEvent`. Each site's own manual lock/load/assert stays in place (they
+   need richer includes - `fixture.division.competition.sport`, plus `periodScores`/`events` for
+   `recordScoringEvent` - than `loadMutableGame`'s `{fixture, ruleSnapshot}` provides); only the
+   raw `tx.gameEvent.create` calls became `createGameEvent(...)` calls. `createGameEvent`'s
+   internal `loadMutableGame` redundantly re-locks/re-loads the same row in the same transaction
+   - harmless, and the same pattern Batch 7 already established (caller does its own rich read,
+   service does its own focused read+lock+validate).
+
+Verified per site before migrating, not assumed: each site's local `assertGameIsMutable` +
+`LIVE`/`PAUSED` check is byte-for-byte identical to `loadMutableGame`'s (same conditions, same
+default error message strings); every event-create call already passes `period`/`clockSeconds`
+explicitly, so `createGameEvent`'s current-state defaults (computed from freshly-reloaded game
+state) were never relied on and can't silently diverge.
+
+**Held out - `syncUltraTimeState` (Batch 9b):** shared by 5 callers, including `recordScore` and
+`recordStatEvent` (the two Batch-S sites). Its current event has no `createdById` at all;
+`createGameEvent` requires a real actor (`GameEventWriteMeta.actorId` is non-optional). Decision:
+thread the actor through all 5 callers rather than add a nullable escape hatch to
+`createGameEvent` - a pause/resume/advance-period is a user action, and the ledger record of it
+should say who, not `null`. Confirmed before deciding: no caller ever fires without a session (all
+5 require `requireFixturePermission` -> `requireSession` first; no cron, script, or test file
+calls any of them directly). Invariant to hold going forward, named in the audit doc: every
+canonical event carries an actor; a genuine future system-generated event needs a `SystemActor`
+sentinel, not a nullable field - designed if/when that case actually appears, not preemptively.
+
+**Verification:**
+
+- Typecheck clean both commits. Tests: 744 total, 743 pass, 1 skip, 0 fail, unchanged by the
+  reorder (as expected - no test can distinguish two orderings that are externally equivalent).
+  Lint: 0 errors (7 pre-existing warnings). Build exit 0, both commits.
+- Ratchet: reorder commit left the count unchanged (no write removed yet). Migration commit:
+  `eslint --prune-suppressions` dropped `actions.ts`'s count from 19 to 14 (one per migrated call
+  site, 5 total); ceiling lowered 23 -> 18.
+
+**What this adds to the shape vocabulary:** no new service - the fourth shape stays named but
+undesigned, deferred to Batch S's own sketch. One new named invariant (terminal event ordering)
+that any future finalize path must follow. `syncUltraTimeState`'s actor-threading is scoped as a
+small, separate follow-up (Batch 9b), not folded into this batch.
+
+**Next step:** Batch 9b - thread `session.user.id` through `syncUltraTimeState`'s 5 callers and
+migrate its own `tx.gameEvent.create` to `createGameEvent`. Then Batch S's five-point sketch
+(the fourth shape, the stat-delta reversal semantics, and the fate of
+`applyPlayerShotStatDeltas`/`applyTeamShotStatDeltas`) - the load-bearing remaining work in A3a.
+
