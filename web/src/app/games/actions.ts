@@ -1548,13 +1548,12 @@ points: input.points,
           : result.finalizeWinner === "AWAY"
             ? game.fixture.awayEntrantId
             : null;
-      await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId, winnerEntrantId } });
-      await tx.game.update({
-        where: { id: gameId },
-        data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null, isUltraTimeActive: false },
-      });
-      // Knockout: when this completes the round, create the next round from the winners.
-      await advanceKnockoutBracket(tx, organizationId, game.fixture);
+      // GAME_ENDED must be created before the FINAL flips below, not after (terminal event
+      // ordering - see docs/canonical-write-audit.md): a canonical event write's mutable-game
+      // gate rejects a FINAL game, and read-your-own-writes within this transaction means the
+      // flip below would already be visible to it. Every field here is already computed above,
+      // so moving the create earlier changes nothing about what gets written - the two
+      // orderings are externally equivalent since everything commits atomically together.
       await tx.gameEvent.create({
         data: {
           organizationId,
@@ -1568,6 +1567,13 @@ points: input.points,
           createdById: session.user.id,
         },
       });
+      await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId, winnerEntrantId } });
+      await tx.game.update({
+        where: { id: gameId },
+        data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null, isUltraTimeActive: false },
+      });
+      // Knockout: when this completes the round, create the next round from the winners.
+      await advanceKnockoutBracket(tx, organizationId, game.fixture);
       await recalculateStandings(tx, organizationId, game.fixture.seasonId);
     }
 
@@ -1670,13 +1676,8 @@ export async function recordShootoutKick(gameId: string, fixtureId: string, form
     if (winner) {
       const winnerSeasonClubId = winner === "HOME" ? game.fixture.homeSeasonClubId : game.fixture.awaySeasonClubId;
       const winnerEntrantId = winner === "HOME" ? game.fixture.homeEntrantId : game.fixture.awayEntrantId;
-      await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId, winnerEntrantId } });
-      await tx.game.update({
-        where: { id: gameId },
-        data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null, isUltraTimeActive: false },
-      });
-      // Knockout: when this completes the round, create the next round from the winners.
-      await advanceKnockoutBracket(tx, organizationId, game.fixture);
+      // GAME_ENDED must be created before the FINAL flips below, not after - see the identical
+      // note in recordScoringEvent and docs/canonical-write-audit.md's "terminal event ordering".
       await tx.gameEvent.create({
         data: {
           organizationId,
@@ -1690,6 +1691,13 @@ export async function recordShootoutKick(gameId: string, fixtureId: string, form
           createdById: session.user.id,
         },
       });
+      await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId, winnerEntrantId } });
+      await tx.game.update({
+        where: { id: gameId },
+        data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null, isUltraTimeActive: false },
+      });
+      // Knockout: when this completes the round, create the next round from the winners.
+      await advanceKnockoutBracket(tx, organizationId, game.fixture);
       await recalculateStandings(tx, organizationId, game.fixture.seasonId);
     }
 
