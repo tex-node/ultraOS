@@ -5464,3 +5464,33 @@ check as a standard step going forward, not just for this batch.
 
 **Next step:** A3a Batch 5 — migrate recordStatisticianShot + recordSubstitution (single event + upstream validation).
 
+
+### 2026-09-27 - A3a Batch 5: recordStatisticianShot + recordSubstitution migration
+
+**Batch size:** 2 sites (recordStatisticianShot, recordSubstitution). Both are single-event, pure-compute sites with upstream validation.
+
+**recordStatisticianShot migration:**
+- Single event (the shot/FT itself), with causedByEventId linking to the foul that awarded it
+- Pre-write computation: team validation, player query, courtZone derivation, shot scoring, linked FT validation, clock computation
+- Refactored to use withGameWrite + createGameEvent
+
+**recordSubstitution migration:**
+- Single event (the substitution swap)
+- Validates against derived lineup (computed from starters + active substitution events)
+- Does NOT mutate any stored state (lineup is derived, not persisted)
+- Pre-write computation: team validation, player queries, lineup derivation, substitution validation, clock computation
+- Refactored to use withGameWrite + createGameEvent
+
+**Verification:**
+- Typecheck: clean
+- Tests: 744 total, 743 pass, 1 skip, 0 fail
+- Lint: 0 errors (7 pre-existing warnings)
+- Ratchet: baseline pruned 31 ? 29; ceiling lowered to 29
+- Build: exit 0
+
+**Signature stability:** Zero signature changes needed. Both sites fit the established callback pattern.
+
+**Key finding:** Both sites are single-event, pure-compute. No multi-event patterns, no state mutations. Batch 5 proceeded as planned.
+
+**Next step:** A3a Batch 6 — migrate recordWaveSubstitution (multi-event, design question first).
+

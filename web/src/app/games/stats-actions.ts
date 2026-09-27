@@ -133,80 +133,84 @@ export async function recordStatisticianShot(gameId: string, fixtureId: string, 
   const input = shotSchema.parse(Object.fromEntries(formData.entries()));
   const made = input.made === "true";
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    const homeId = requireSeasonClubId(game.fixture, "HOME");
-    const awayId = requireSeasonClubId(game.fixture, "AWAY");
-    if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
-      throw new Error("INVALID_TEAM");
-    }
-    const player = await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } });
-    if (!player) throw new Error("INVALID_PLAYER");
+  await withGameWrite(
+    gameId,
+    fixtureId,
+    {
+      actor: { id: session.user.id, organizationId },
+      source: "LIVE_UI",
+      ledgerSourceHint: "STATISTICIAN",
+    },
+    async ({ game, tx, ...writeCtx }) => {
+      const homeId = requireSeasonClubId(game.fixture, "HOME");
+      const awayId = requireSeasonClubId(game.fixture, "AWAY");
+      if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
+        throw new Error("INVALID_TEAM");
+      }
+      const player = await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } });
+      if (!player) throw new Error("INVALID_PLAYER");
 
-    // The zone is derived server-side from the coordinates, so the console preview and the ledger
-    // can never disagree. Free throws logged without a click come from the line.
-    if ((input.x === undefined) !== (input.y === undefined)) throw new Error("LOCATION_INCOMPLETE");
-    const courtZone =
-      input.x !== undefined && input.y !== undefined ? shotZone(input.x, input.y) : input.shotValue === 1 ? "FREE_THROW" : null;
+      // The zone is derived server-side from the coordinates, so the console preview and the ledger
+      // can never disagree. Free throws logged without a click come from the line.
+      if ((input.x === undefined) !== (input.y === undefined)) throw new Error("LOCATION_INCOMPLETE");
+      const courtZone =
+        input.x !== undefined && input.y !== undefined ? shotZone(input.x, input.y) : input.shotValue === 1 ? "FREE_THROW" : null;
 
-    const remaining = remainingClockSeconds(game);
-    const shot = scoreShot({
-      rules: effectiveRuleSnapshot(game.ruleSnapshot),
-      shotValue: input.shotValue,
-      gameStatus: game.status,
-      currentPeriod: game.currentPeriod,
-      remainingClockSeconds: remaining,
-    });
-    if (!shot.valid) throw new Error(shot.error);
-
-    // A linked free throw must point at a foul from this same game that actually awarded FTs.
-    let causedByEventId: string | undefined;
-    if (input.causedByEventId) {
-      if (input.shotValue !== 1) throw new Error("LINKED_SHOT_MUST_BE_FREE_THROW");
-      const foul = await tx.gameEvent.findFirst({
-        where: { id: input.causedByEventId, gameId, eventType: "FOUL", status: "ACTIVE" },
-        select: { id: true, freeThrowsAwarded: true },
+      const remaining = remainingClockSeconds(game);
+      const shot = scoreShot({
+        rules: effectiveRuleSnapshot(game.ruleSnapshot),
+        shotValue: input.shotValue,
+        gameStatus: game.status,
+        currentPeriod: game.currentPeriod,
+        remainingClockSeconds: remaining,
       });
-      if (!foul || !foul.freeThrowsAwarded) throw new Error("INVALID_FOUL_LINK");
-      causedByEventId = foul.id;
-    }
+      if (!shot.valid) throw new Error(shot.error);
 
-    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
-    const eventType =
-      input.shotValue === 1
-        ? made
-          ? "FREE_THROW_MADE"
-          : "FREE_THROW_MISSED"
-        : made
-          ? "SHOT_MADE"
-          : "SHOT_MISSED";
+      // A linked free throw must point at a foul from this same game that actually awarded FTs.
+      let causedByEventId: string | undefined;
+      if (input.causedByEventId) {
+        if (input.shotValue !== 1) throw new Error("LINKED_SHOT_MUST_BE_FREE_THROW");
+        const foul = await tx.gameEvent.findFirst({
+          where: { id: input.causedByEventId, gameId, eventType: "FOUL", status: "ACTIVE" },
+          select: { id: true, freeThrowsAwarded: true },
+        });
+        if (!foul || !foul.freeThrowsAwarded) throw new Error("INVALID_FOUL_LINK");
+        causedByEventId = foul.id;
+      }
 
-    await tx.gameEvent.create({
-      data: {
-        organizationId,
-        gameId,
-        seasonClubId: input.seasonClubId,
-        playerId: player.id,
-        eventType,
-        points: made ? shot.pointsAwarded : 0,
-        basePointValue: shot.basePointValue,
-        multiplier: shot.multiplier,
-        made,
-        isFourPointAttempt: input.shotValue === 4,
-        isUltraTime: shot.isUltraTime,
-        x: input.x ?? null,
-        y: input.y ?? null,
-        courtZone,
-        causedByEventId,
-        period: game.currentPeriod,
-        clockSeconds: remaining,
-        description: `${player.athlete.firstName} ${player.athlete.lastName} — ${input.shotValue}PT ${made ? "MADE" : "MISS"}${courtZone ? ` (${courtZone.replace(/_/g, " ")})` : ""}${shot.isUltraTime ? ` (Ultra Time ×${shot.multiplier})` : ""}`,
-        sequenceNumber,
-        source: STATISTICIAN_SOURCE,
-        createdById: session.user.id,
-      },
-    });
-  });
+      const eventType =
+        input.shotValue === 1
+          ? made
+            ? "FREE_THROW_MADE"
+            : "FREE_THROW_MISSED"
+          : made
+            ? "SHOT_MADE"
+            : "SHOT_MISSED";
+
+      await createGameEvent(
+        {
+          fixtureId,
+          gameId,
+          seasonClubId: input.seasonClubId,
+          playerId: player.id,
+          eventType,
+          points: made ? shot.pointsAwarded : 0,
+          basePointValue: shot.basePointValue,
+          multiplier: shot.multiplier,
+          made,
+          isFourPointAttempt: input.shotValue === 4,
+          isUltraTime: shot.isUltraTime,
+          x: input.x ?? null,
+          y: input.y ?? null,
+          courtZone,
+          causedByEventId,
+          clockSeconds: remaining,
+          description: `${player.athlete.firstName} ${player.athlete.lastName} — ${input.shotValue}PT ${made ? "MADE" : "MISS"}${courtZone ? ` (${courtZone.replace(/_/g, " ")})` : ""}${shot.isUltraTime ? ` (Ultra Time ×${shot.multiplier})` : ""}`,
+        },
+        { ...writeCtx, tx },
+      );
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/stats`);
   revalidatePath(`/games/${fixtureId}/live`);
@@ -328,56 +332,60 @@ export async function recordSubstitution(gameId: string, fixtureId: string, form
   const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
   const input = substitutionSchema.parse(Object.fromEntries(formData.entries()));
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    const homeId = requireSeasonClubId(game.fixture, "HOME");
-    const awayId = requireSeasonClubId(game.fixture, "AWAY");
-    if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
-      throw new Error("INVALID_TEAM");
-    }
-    const [playerIn, playerOut] = await Promise.all([
-      tx.player.findFirst({ where: { id: input.playerInId, seasonClubId: input.seasonClubId }, include: { athlete: true } }),
-      tx.player.findFirst({ where: { id: input.playerOutId, seasonClubId: input.seasonClubId }, include: { athlete: true } }),
-    ]);
-    if (!playerIn) throw new Error("INVALID_PLAYER_IN");
-    if (!playerOut) throw new Error("INVALID_PLAYER_OUT");
+  await withGameWrite(
+    gameId,
+    fixtureId,
+    {
+      actor: { id: session.user.id, organizationId },
+      source: "LIVE_UI",
+      ledgerSourceHint: "STATISTICIAN",
+    },
+    async ({ game, tx, ...writeCtx }) => {
+      const homeId = requireSeasonClubId(game.fixture, "HOME");
+      const awayId = requireSeasonClubId(game.fixture, "AWAY");
+      if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
+        throw new Error("INVALID_TEAM");
+      }
+      const [playerIn, playerOut] = await Promise.all([
+        tx.player.findFirst({ where: { id: input.playerInId, seasonClubId: input.seasonClubId }, include: { athlete: true } }),
+        tx.player.findFirst({ where: { id: input.playerOutId, seasonClubId: input.seasonClubId }, include: { athlete: true } }),
+      ]);
+      if (!playerIn) throw new Error("INVALID_PLAYER_IN");
+      if (!playerOut) throw new Error("INVALID_PLAYER_OUT");
 
-    const [starters, activeSubs] = await Promise.all([
-      tx.gameStarter.findMany({ where: { gameId }, select: { seasonClubId: true, playerId: true } }),
-      tx.gameEvent.findMany({
-        where: { gameId, eventType: "SUBSTITUTION", status: "ACTIVE" },
-        orderBy: { sequenceNumber: "asc" },
-        select: { seasonClubId: true, playerId: true, substitutedOutPlayerId: true, sequenceNumber: true },
-      }),
-    ]);
-    if (starters.length === 0) throw new Error("STARTING_FIVE_NOT_CONFIRMED");
-    const lineup = deriveLineup(
-      starters.map((s) => ({ seasonClubId: s.seasonClubId, playerId: s.playerId })),
-      activeSubs.map((s) => ({ seasonClubId: s.seasonClubId!, playerInId: s.playerId!, playerOutId: s.substitutedOutPlayerId!, sequenceNumber: s.sequenceNumber! })),
-    );
-    const validation = validateSubstitution(lineup, input.seasonClubId, playerIn.id, playerOut.id);
-    if (!validation.valid) throw new Error(`SUBSTITUTION_INVALID_${validation.error}`);
+      const [starters, activeSubs] = await Promise.all([
+        tx.gameStarter.findMany({ where: { gameId }, select: { seasonClubId: true, playerId: true } }),
+        tx.gameEvent.findMany({
+          where: { gameId, eventType: "SUBSTITUTION", status: "ACTIVE" },
+          orderBy: { sequenceNumber: "asc" },
+          select: { seasonClubId: true, playerId: true, substitutedOutPlayerId: true, sequenceNumber: true },
+        }),
+      ]);
+      if (starters.length === 0) throw new Error("STARTING_FIVE_NOT_CONFIRMED");
+      const lineup = deriveLineup(
+        starters.map((s) => ({ seasonClubId: s.seasonClubId, playerId: s.playerId })),
+        activeSubs.map((s) => ({ seasonClubId: s.seasonClubId!, playerInId: s.playerId!, playerOutId: s.substitutedOutPlayerId!, sequenceNumber: s.sequenceNumber! })),
+      );
+      const validation = validateSubstitution(lineup, input.seasonClubId, playerIn.id, playerOut.id);
+      if (!validation.valid) throw new Error(`SUBSTITUTION_INVALID_${validation.error}`);
 
-    const remaining = remainingClockSeconds(game);
-    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
+      const remaining = remainingClockSeconds(game);
 
-    await tx.gameEvent.create({
-      data: {
-        organizationId,
-        gameId,
-        seasonClubId: input.seasonClubId,
-        playerId: playerIn.id,
-        substitutedOutPlayerId: playerOut.id,
-        eventType: "SUBSTITUTION",
-        period: game.currentPeriod,
-        clockSeconds: remaining,
-        description: `Substitution: ${playerOut.athlete.firstName} ${playerOut.athlete.lastName} OUT, ${playerIn.athlete.firstName} ${playerIn.athlete.lastName} IN`,
-        sequenceNumber,
-        source: STATISTICIAN_SOURCE,
-        createdById: session.user.id,
-      },
-    });
-  });
+      await createGameEvent(
+        {
+          fixtureId,
+          gameId,
+          seasonClubId: input.seasonClubId,
+          playerId: playerIn.id,
+          substitutedOutPlayerId: playerOut.id,
+          eventType: "SUBSTITUTION",
+          clockSeconds: remaining,
+          description: `Substitution: ${playerOut.athlete.firstName} ${playerOut.athlete.lastName} OUT, ${playerIn.athlete.firstName} ${playerIn.athlete.lastName} IN`,
+        },
+        { ...writeCtx, tx },
+      );
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/stats`);
   revalidatePath(`/games/${fixtureId}/stats/live`);

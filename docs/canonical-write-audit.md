@@ -37,16 +37,16 @@ shrink, never grow.
 
 Unit of a batch = "sites that collapse to the same service-call shape," not file or count.
 
-**Actual bucket sizes (updated after Batches 0-3):**
+**Actual bucket sizes (updated after Batches 0-5):**
 
 | Bucket | Sites | Status |
 | --- | --- | --- |
-| **Statistician console - event-only** | 9 | Pending (recordStatisticianShot, recordStatisticianStat, recordSubstitution, recordWaveSubstitution, ...) |
+| **Statistician console - event-only** | 9 | 4 migrated (recordStatisticianStat, recordStatisticianShot, recordSubstitution, recordGameTimeout, recordJumpBall, flipPossession, verifyScoreboard); 3 pending (recordWaveSubstitution, correctStatisticianEventPostFinal, ...) |
 | **Statistician console - status flips** | 2 | Pending (voidStatisticianEvent, undoLastStatisticianEvent) |
 | **Scorer console - event-only** | 11 | Pending (Ultra Time helper, recordScore, correctScoreEventAction, ...) |
 | **Scorer console - status flips** | 2 | Pending (voidScoreEventAction, correctScoreEventAction) |
 | **Scorer console - direct stat writes (model correction)** | 5 | Pending - Batch S (applyPlayerShotStatDeltas, applyTeamShotStatDeltas, recordStatEvent, undoLastEvent) |
-| **Multi-entity writes** | 3+ | Pending (recordSubstitution, recordWaveSubstitution, ...) |
+| **Multi-entity writes** | 3+ | Pending (recordWaveSubstitution, ...) |
 
 **Batch progression:**
 - **Batch 0 (template PR):** extract `createGameEvent` + migrate ONE low-risk site; establishes the
@@ -55,8 +55,8 @@ Unit of a batch = "sites that collapse to the same service-call shape," not file
   clearing, sequence, clock, validation, insert); migrate flipPossession. ✅ Done
 - **Batch 2:** migrate recordJumpBall (plain create). ✅ Done
 - **Batch 3:** migrate recordGameTimeout + verifyScoreboard (audit log sites). ✅ Done
-- **Batch 4:** migrate recordStatisticianStat (statistician console, event-only, simple shape)
-- **Batch 5:** migrate recordStatisticianShot + recordSubstitution (single event + upstream validation)
+- **Batch 4:** migrate recordStatisticianStat (statistician console, event-only, simple shape). ✅ Done
+- **Batch 5:** migrate recordStatisticianShot + recordSubstitution (single event + upstream validation). ✅ Done
 - **Batch 6:** migrate recordWaveSubstitution (multi-event, design question first)
 - **Batch S (model correction):** refactor scorer console sites to use createGameEvent + rebuildGameStatsFromEvents, remove direct PlayerStat/TeamStat writes
 
@@ -150,9 +150,9 @@ migration complete."
 | Line | Function | Write | Bucket | Notes |
 | --- | --- | --- | --- | --- |
 | 71/85 | (helpers) | `game.update` | IN | verification-stamp clearing |
-| 183 | `recordStatisticianShot` | `gameEvent.create` | IN | **service target** |
+| 183 | `recordStatisticianShot` | `gameEvent.create` | IN | **migrated** (Batch 5) |
 | 281 | `recordStatisticianStat` | `gameEvent.create` | IN | **service target** |
-| 359 | `recordSubstitution` | `gameEvent.create` | IN | **service target** |
+| 359 | `recordSubstitution` | `gameEvent.create` | IN | **migrated** (Batch 5) |
 | 442 | `recordWaveSubstitution` | `gameEvent.create` | IN | **service target** |
 | 494 | `voidStatisticianEvent` | `gameEvent.update` | IN | status flip |
 | 543 | `recordGameTimeout` | `gameEvent.create` | IN | **migrated** (Batch 3) |
