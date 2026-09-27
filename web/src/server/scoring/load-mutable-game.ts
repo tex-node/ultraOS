@@ -4,6 +4,10 @@ import type { Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import type { EventSource, LedgerSourceHint } from "./types";
 
+export type MutableGame = Prisma.GameGetPayload<{
+  include: { fixture: true; ruleSnapshot: true };
+}>;
+
 export class GameNotMutableError extends Error {
   constructor(message = "GAME_NOT_MUTABLE") {
     super(message);

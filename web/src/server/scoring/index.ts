@@ -6,6 +6,7 @@ export {
   GameNotMutableError,
   GameNotActiveError,
   InvalidEventError,
+  type MutableGame,
 } from "./load-mutable-game";
 export { withGameWrite } from "./with-game-write";
 export type {

@@ -620,26 +620,22 @@ export async function flipPossession(gameId: string, fixtureId: string, formData
   const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
   const input = sideSchema.parse(Object.fromEntries(formData.entries()));
 
-  // Load the game (without the lock) to compute `side` for the description. The service will
-  // load it again (with the lock) for the canonical write.
-  const game = await prisma.game.findUniqueOrThrow({
-    where: { id: gameId },
-    include: { fixture: true },
-  });
-  const homeId = requireSeasonClubId(game.fixture, "HOME");
-  const awayId = requireSeasonClubId(game.fixture, "AWAY");
-  if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
-    throw new Error("INVALID_TEAM");
-  }
-  const side = input.seasonClubId === homeId ? "Home" : "Away";
-
   await withGameWrite(
+    gameId,
+    fixtureId,
     {
       actor: { id: session.user.id, organizationId },
       source: "LIVE_UI",
       ledgerSourceHint: "STATISTICIAN",
     },
-    async (writeCtx) => {
+    async ({ game, ...writeCtx }) => {
+      const homeId = requireSeasonClubId(game.fixture, "HOME");
+      const awayId = requireSeasonClubId(game.fixture, "AWAY");
+      if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
+        throw new Error("INVALID_TEAM");
+      }
+      const side = input.seasonClubId === homeId ? "Home" : "Away";
+
       await createGameEvent(
         {
           fixtureId,

@@ -62,6 +62,25 @@ fixture at sync time. Two options:
 
 Option 2 eliminates a whole class of sync complexity. Decide before extracting `createGame`.
 
+## Post-migration issue: `data` field null semantics
+
+**Status:** Logged, not fixed. Fix after all sites migrate.
+
+The original sites leave `data` as SQL NULL when absent. The service preserves this behavior
+(`data: input.data ?? undefined` → Prisma omits the field → SQL NULL). However, SQL NULL and
+JSONB-null (`Prisma.JsonNull`) are semantically different:
+
+- `WHERE data IS NULL` matches SQL NULL
+- `WHERE data = 'null'::jsonb` matches JSONB-null
+
+If downstream code treats them differently, the original sites may have a latent bug. After all
+sites migrate, audit whether any code queries the `data` field and whether it expects SQL NULL or
+JSONB-null. If a fix is needed, it happens once in the service (change `undefined` to `Prisma.JsonNull`),
+not per-site.
+
+**Action:** Add a follow-up issue or TODO in the service: "Audit `data` field null semantics after
+migration complete."
+
 
 ## Buckets
 
