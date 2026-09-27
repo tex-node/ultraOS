@@ -881,6 +881,50 @@ games.push(game({
   ]),
 }));
 
+// ---------------------------------------------------------------------------
+// Game 20: Campos Basketballers 48 - 40 Ogra Hoop Kings - Sun 27 Sep 2026
+// ---------------------------------------------------------------------------
+games.push(game({
+  sourceLabel: "LBCL Game 20 - Campos Basketball vs Ogra Hoop Kings - Sun 27 Sep 2026",
+  venue: VENUE_IKEJA,
+  scheduledAt: "2026-09-27T11:18:00.000Z",
+  homeScore: 48, awayScore: 40,
+  periods: [
+    { period: 1, label: "Q1", homeScore: 17, awayScore: 8 },
+    { period: 2, label: "Q2", homeScore: 8, awayScore: 15 },
+    { period: 3, label: "Q3", homeScore: 11, awayScore: 4 },
+    { period: 4, label: "Q4", homeScore: 12, awayScore: 13 },
+  ],
+  home: team("Campos Basketballers", "CBB", { points: 48, rebounds: 28, assists: 14, turnovers: 14, fouls: 13 }, [
+    ["Jamelo U", null, "DNP"],
+    ["Salawu Korede", 1, 40, 2, 0, 3, 0, 2, 0, 1, 2, 4, 0, 1, 3, 2, 2, 0, 1, 2, 8, 1],
+    ["Obinna Akinebu", 2, 40, 8, 2, 7, 2, 5, 0, 2, 4, 5, 1, 2, 4, 1, 1, 0, 3, 3, 8, 9],
+    ["Uzoma Donald", 3, 40, 15, 7, 11, 7, 11, 0, 0, 1, 2, 5, 3, 0, 3, 1, 0, 2, 3, 8, 16],
+    ["Stephen Q", 6, 40, 19, 7, 13, 7, 13, 0, 0, 5, 12, 1, 5, 3, 5, 2, 2, 4, 8, 8, 14],
+    ["Adesuyi Adekunle", 8, 40, 4, 1, 10, 0, 2, 1, 8, 1, 5, 0, 8, 4, 3, 4, 0, 2, 2, 8, 4],
+    ["Okpe Matthias", 9, "DNP"],
+    ["Muiz Salam", 11, "DNP"],
+    ["Somto Pascal", 23, "DNP"],
+    ["Joshua Anthony", 24, "DNP"],
+    ["Nasir Abdulmalik", 30, "DNP"],
+    ["Tawo Adedoyin", 45, "DNP"],
+  ]),
+  away: team("Ogra Hoop Kings", "OGK", { points: 40, rebounds: 37, assists: 4, turnovers: 21, fouls: 19 }, [
+    ["Soluade Simi", 2, 17, 0, 0, 2, 0, 2, 0, 0, 0, 0, 0, 1, 2, 3, 0, 0, 0, 0, -2, -2],
+    ["Wunmi Adebisi", 4, 37, 7, 3, 7, 3, 7, 0, 0, 1, 4, 0, 6, 1, 2, 1, 0, 2, 5, -9, 6],
+    ["Ubi Delight", 5, 16, 3, 1, 3, 1, 3, 0, 0, 1, 1, 2, 2, 1, 1, 1, 0, 5, 1, -9, 6],
+    ["Yunusa Paul", 6, 16, 8, 4, 8, 4, 7, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 7, 3],
+    ["Anthony Uche", 7, 4, 1, 0, 1, 0, 1, 0, 0, 1, 2, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+    ["Irozuru Nathaniel", 9, 4, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, -9, 0],
+    ["Nnerive Peter", 10, 11, 4, 1, 1, 1, 1, 0, 0, 0, 0, 0, 2, 0, 3, 1, 0, 1, 2, -1, 4],
+    ["David Nsitem", 11, 12, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 1, 0, 0, -8, -3],
+    ["Kelvin Dangiwa", 21, 35, 2, 0, 8, 0, 7, 0, 1, 2, 2, 1, 2, 0, 4, 3, 0, 2, 1, -16, -4],
+    ["Anas Usman", 40, 11, 5, 2, 5, 2, 3, 0, 2, 1, 1, 1, 1, 0, 3, 0, 0, 0, 0, 3, 1],
+    ["Chukwu Obi", null, 11, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0, -2, 0],
+    ["Nana Anu", null, 19, 10, 5, 6, 5, 6, 0, 0, 0, 0, 3, 8, 0, 2, 1, 0, 4, 1, 4, 19],
+  ]),
+}));
+
 const batch = {
   organization: {
     mode: "new",
