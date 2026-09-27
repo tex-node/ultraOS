@@ -224,6 +224,9 @@ enum StatDataSource {
   // (which tags the raw events themselves) so a reader can tell "this row is a derived,
   // verified snapshot" apart from "this row was written incrementally, event-by-event."
   EVENT_DERIVED
+  // Added for P13/A3: GameEvent rows replayed from a scorekeeper's offline outbox. Distinct from
+  // the live-console sources so provenance ("came in over sync") is queryable.
+  OFFLINE_SYNC
 }
 
 enum FoulType {
@@ -3440,6 +3443,16 @@ model GameEvent {
   sourceEventId String?
   createdById   String?
 
+  // P13/A3 sync provenance. All nullable: LIVE_UI writes leave them null. source above records how
+  // the row FIRST came into existence and is immutable; these columns make an offline-synced row
+  // auditable. The three timestamps stay distinct — domain time is period/clockSeconds (where in
+  // the game), clientUpdatedAt is when the scorekeeper logged it on-device, and createdAt is when
+  // the server received it (the sync lag is createdAt - clientUpdatedAt, expected to be hours).
+  deviceId        String?
+  idempotencyKey  String?
+  clientUpdatedAt DateTime?
+  syncBatchId     String?
+
   status            GameEventStatus @default(ACTIVE)
   correctedAt       DateTime?
   correctedById     String?
@@ -4703,8 +4716,59 @@ model Organization {
   entrantMembers            EntrantMember[]
   gameMetricValues          GameMetricValue[]
   standingMetrics           StandingMetric[]
+  syncIdempotencyRecords    SyncIdempotency[]
+  syncConflictLogs          SyncConflictLog[]
   createdAt                 DateTime                       @default(now())
   updatedAt                 DateTime                       @updatedAt
 
   @@index([status])
+}
+
+// P13/A3: dedup ledger for offline scoring sync. A unique idempotencyKey is the atomicity
+// guarantee — the sync endpoint inserts this row in the SAME transaction as the canonical write,
+// so a crash between the two cannot produce a duplicate on retry (the unique constraint rejects
+// the replay). Never referenced for anything except dedup and forensics.
+model SyncIdempotency {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // The outbox record's key, generated on-device at enqueue time (crypto.randomUUID).
+  idempotencyKey String       @unique
+  entityType     String
+  entityId       String
+  deviceId       String?
+  // The original outbox payload, retained once here (not duplicated onto every GameEvent) so a
+  // disputed/replayed record can be reconstructed exactly.
+  requestPayload Json?
+  responseStatus String // APPLIED | DUPLICATE | CONFLICT | FAILED
+  failureReason  String?
+  appliedAt      DateTime     @default(now())
+
+  @@index([organizationId, appliedAt])
+  @@index([entityType, entityId])
+}
+
+// P13/A3: one row per Last-Write-Wins overwrite or provenance anomaly. Cheap to write and the
+// mechanism that makes disputes reconstructable. deviceId is deliberately the same value carried
+// on GameEvent.deviceId so "device X has been causing conflicts all week" is one query.
+model SyncConflictLog {
+  id           String       @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entityType   String
+  entityId     String
+  field        String?
+  localValue   Json?
+  remoteValue  Json?
+  resolvedTo   Json?
+  // The clientUpdatedAt of the winning record and the losing record, so the ordering decision is
+  // auditable (trust-client-clock model; skew detection is a v2 concern).
+  localUpdatedAt  DateTime?
+  remoteUpdatedAt DateTime?
+  deviceId     String
+  resolvedAt   DateTime     @default(now())
+
+  @@index([organizationId, resolvedAt])
+  @@index([entityType, entityId])
+  @@index([deviceId])
 }

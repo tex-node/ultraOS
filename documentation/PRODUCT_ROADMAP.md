@@ -761,12 +761,13 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | F7.4 | IMPORT-origin standings/leaderboard/record-book eligibility | P12/F7 | `Done` | — |
 | F7.5 | Per-organization standings points-formula override | P12/F7 | `Done` | — |
 | F7.6 | Tournament Highlights tab for external tournaments | P12/F7 | `Done` | F7.2 |
-| A0 | Offline scoring: project setup (flag, deps, skeleton, runbook draft) | P13/A | `Not started` | — |
-| A1 | Local data layer: Dexie db, ScoringRepository (local+remote), outbox, types | P13/A | `Not started` | A0 |
-| A2 | Serwist SW, PWA manifest, SyncStatusBadge, Background Sync + fallback | P13/A | `Not started` | A1 |
-| A3 | `POST /api/sync/outbox`, LWW, SyncIdempotency + SyncConflictLog, sync dashboard | P13/A | `Not started` | A2 |
-| A4 | Retry/backoff/DLQ, `/admin/sync-health`, load test 50×500, runbook, rollout | P13/A | `Not started` | A3 |
-| B0 | Vision: project setup (flag, `/services/vision` FastAPI+Celery+Redis, Docker, storage adapter) | P14/B | `Not started` | — |
+| A0 | Offline scoring: project setup (flag, deps, skeleton, runbook draft) | P13/A | `Done` | — |
+| A1 | Local data layer: Dexie db, ScoringRepository (local+remote), outbox, types | P13/A | `Done` | A0 |
+| A2 | Serwist SW, PWA manifest, SyncStatusBadge, Background Sync + fallback | P13/A | `Done` | A1 |
+| A3a | Canonical-write consolidation: `src/server/scoring/` services + ESLint guard + ratchet baseline; migrate inline sites | P13/A | `In progress` | A2 |
+| A3b | `POST /api/sync/outbox`, LWW, SyncIdempotency + SyncConflictLog, sync dashboard | P13/A | `Not started` | A3a |
+| A4 | Retry/backoff/DLQ, `/admin/sync-health`, load test 50×500, runbook, rollout | P13/A | `Not started` | A3b |
+| B0 | Vision: project setup (flag, `/services/vision` FastAPI+Celery+Redis, Docker, storage adapter) | P14/B | `Done` | — |
 | B1 | FastAPI inference service with `/analyze` + `/health`, VisionAnalysisRun lifecycle | P14/B | `Not started` | B0 |
 | B2 | RF-DETR-Small/YOLOv11-M detector + ByteTrack, ONNX Runtime, jersey OCR, homography, VisionTrack rows | P14/B | `Not started` | B1 |
 | B3 | Derived metrics: speed, distance, passes, VisionSpatialSummary (all PENDING_REVIEW) | P14/B | `Not started` | B2 |
@@ -805,8 +806,19 @@ connection does not lose events; recovery is automatic and visible" (P4 usabilit
 | A0 | Project setup | Feature flag (`offline_scoring`), Dexie + fake-indexeddb deps, `src/lib/offline/` skeleton, offline scoring runbook draft | Compiles; flag defaults to off in production |
 | A1 | Local data layer | `db.ts` (Dexie schema v1: games, gameEvents, playerStats, outbox, meta), `repositories/scoringRepository.ts` (identical interface for local + remote), `outbox.ts` (enqueue/drain/markSynced/markFailed), `types.ts`, unit tests with fake-indexeddb | Scorekeeper can create a game and log events with network fully disabled; all writes land in IndexedDB and outbox |
 | A2 | Service worker & PWA shell | Serwist SW in Next.js App Router; SWR for static, NetworkFirst (3s) for API reads, no-cache for scoring writes; `app/manifest.ts` (standalone, icons, theme); SyncStatusBadge (online/offline, pending count, last sync); Background Sync registration with visibilitychange fallback | App loads and scores a full game in airplane mode; SW survives hard refresh; Lighthouse PWA installable |
-| A3 | Sync engine & conflict resolution | `POST /api/sync/outbox` (batch ≤ 100), validates via canonical write path with `source = OFFLINE_SYNC`; LWW per record by `clientUpdatedAt`, per-field LWW for PlayerStat counters; `SyncIdempotency` + `SyncConflictLog` tables (new migration); Background Sync API + periodic fallback; sync status dashboard (last sync, pending, failed with retry) | Two devices score offline, reconnect, reconcile without duplicates or lost events; integration test simulates 3 offline sessions + 1 reconnect |
-| A4 | Hardening & rollout | Exponential backoff retry (1s→4s→16s→64s, cap 5); dead-letter queue for permanently failed; `SyncConflictLog` for LWW overwrites; `/admin/sync-health` admin page (pending per device, conflicts, DLQ with retry); load test 50 devices × 500 events × 4h; runbook `docs/offline-scoring-runbook.md`; feature-flag rollout 1 league → 1 region → all | Zero data loss in load test; runbook signed off by ops |
+| A3a | Canonical-write consolidation | Extract `createGameEvent` (+ `createGame` if device-created) into `src/server/scoring/` with a `WriteContext` (`actor`, `source`, optional `tx`); ESLint guard (`no-restricted-syntax`) allowing canonical writes only there; `eslint-suppressions.json` baseline + `check-canonical-write-baseline.mjs` monotonic-shrink CI check; migrate inline sites one batch per PR | Guard active with a 36-entry baseline; new violations fail CI; baseline shrinks as sites migrate; no behavior change in live flows |
+| A3b | Sync engine & conflict resolution | `POST /api/sync/outbox` (batch ≤ 100) importing the A3a services; idempotency insert in the same transaction as the canonical write; per-record results; LWW on `clientUpdatedAt` logged to `SyncConflictLog`; PlayerStat **derived** (not synced); `SyncIdempotency` + `SyncConflictLog` tables; Background Sync + periodic fallback; sync status dashboard | Two devices score offline, reconnect, reconcile without duplicates or lost events; integration test simulates 3 offline sessions + 1 reconnect |
+| A4 | Hardening & rollout | Exponential backoff retry (1s→4s→16s→64s, cap 5); dead-letter queue for permanently failed; `/admin/sync-health` admin page (pending per device, conflicts, DLQ with retry); load test 50 devices × 500 events × 4h; runbook `docs/offline-scoring-runbook.md`; feature-flag rollout 1 league → 1 region → all | Zero data loss in load test; runbook signed off by ops |
+
+**A3 rescope note (2026-09-27).** The A3 brief assumed one HTTP route handler owning the canonical
+write. Discovery: there are **20 inline server-action write sites** across two files and **no
+service layer**, so rule #6 ("sync flows through the canonical write path") is unenforceable until
+the write path is consolidated. A3 therefore split into **A3a** (consolidation + invariant guard,
+no migration) and **A3b** (the sync endpoint). See `docs/canonical-write-audit.md`.
+
+**PlayerStat is derived, not synced** (decided). The outbox syncs `Game` + `GameEvent` only;
+`PlayerStat`/`TeamStat` are recomputed server-side from the canonical event ledger. This eliminates
+per-field LWW and additive-counter race conditions, and requires no `PlayerStat` schema change.
 
 **Cross-cutting concerns:**
 

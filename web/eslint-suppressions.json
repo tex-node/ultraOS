@@ -1,0 +1,17 @@
+{
+  "src/app/games/actions.ts": {
+    "no-restricted-syntax": {
+      "count": 19
+    }
+  },
+  "src/app/games/stats-actions.ts": {
+    "no-restricted-syntax": {
+      "count": 15
+    }
+  },
+  "src/lib/game-result-import.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  }
+}

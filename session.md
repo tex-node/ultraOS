@@ -5220,3 +5220,82 @@ STAGE_5_5C: NOT_STARTED
 
 - Phase B1 (FastAPI inference wiring + real lifecycle integration test against Postgres) and
   Phase A3 (sync endpoint + conflict resolution) — A3 owns the only new Prisma migration.
+
+### 2026-09-27 - A3 Rescope + A3a Batch 0: Canonical Write Service, Guard, Ratchet
+
+**Objective**
+
+- Start A3. A pre-A3 check revealed the brief's core assumption was wrong, so A3 was rescoped
+  before any endpoint code was written.
+
+**Pre-A3 discovery (the finding)**
+
+- **No service layer exists** (`src/lib/services/` absent) and **no `POST /api/games/:id/events`
+  route**. The live UI writes through **Next.js server actions**: 11 `tx.gameEvent.create` sites in
+  `games/actions.ts`, 9 in `stats-actions.ts`, plus 2 in `game-result-import.ts`.
+- Rule #6 ("sync flows through the canonical write path") is unenforceable while 20+ inline sites
+  exist. A3 therefore split:
+  - **A3a** — consolidate the write path into `src/server/scoring/` + add an invariant guard.
+  - **A3b** — the sync endpoint, importing the A3a services.
+
+**Decisions (settled with evidence)**
+
+- **PlayerStat is DERIVED, not synced.** The outbox syncs `Game` + `GameEvent` only; PlayerStat/
+  TeamStat are recomputed server-side from the canonical event ledger. Evidence: the statistician
+  path already derives deterministically (`stats-actions.ts:862` `rebuildGameStatsFromEvents`,
+  `statSource: EVENT_DERIVED`); only the scorer path mutates counters incrementally
+  (`actions.ts:110-116`). Direct-sync counters fail for this domain: LWW drops concurrent goals and
+  "increment" replays double-count — additive counters are a G-Counter CRDT problem, and events are
+  the better source. A3b avoids per-field LWW and any PlayerStat schema change.
+- **Service location: `src/server/scoring/`** (not `src/lib/services/`) — `services/` now means the
+  Python tree (`services/vision/`); avoids the collision, and `src/server/` + `import "server-only"`
+  gives an enforced server-only boundary. Pure helpers go in `src/lib/scoring/` (importable by
+  client and server).
+- **Tagging scheme:** `StatDataSource.OFFLINE_SYNC` on `GameEvent.source` (immutable); provenance
+  columns `deviceId`, `idempotencyKey`, `clientUpdatedAt`, `syncBatchId` (all nullable, LIVE_UI
+  leaves them null). Three timestamps stay distinct: domain time (`period`/`clockSeconds`),
+  `clientUpdatedAt` (on-device), `createdAt` (server receipt; lag = createdAt − clientUpdatedAt).
+- **createGame:** measured that the only Game-row creation is `startGame` (`actions.ts:215`,
+  `upsert` by `fixtureId`) and the importer — nothing pre-creates Games at schedule time. So an
+  offline scorekeeper creates the Game **on the device**, which forces ID reconciliation at sync
+  time. Two options recorded (device-creates+reconcile vs server-pre-creates) — decision deferred
+  to A3b.
+- **Guard landing: ratchet.** ESLint 9 native suppression baselines the 36 existing sites; new
+  violations fail; the baseline may shrink, never grow.
+
+**Completed (A3a Batch 0 — infrastructure)**
+
+- `docs/canonical-write-audit.md` — every inline write site, categorized (Bucket A exclude / B fix
+  in A3a / C deferred debt with owners), plus the batch plan.
+- `web/src/server/scoring/` — `types.ts` (`WriteContext` with `actor`/`source`/`ledgerSourceHint`/
+  optional `tx`/`provenance`), `createGameEvent.ts` (the single canonical write path; `tx`
+  required — the caller owns the transaction; maps source via the shared pure function),
+  `index.ts`. All `import "server-only"`.
+- `web/src/lib/scoring/provenance.ts` (+ test) — pure `ledgerSourceFor()` shared by client/server.
+- **Schema + 2 migrations**: `StatDataSource.OFFLINE_SYNC` (own migration — Postgres can't use a
+  new enum value in the same transaction, matching the `20260922100000` precedent), then
+  `GameEvent` provenance columns + `SyncIdempotency` + `SyncConflictLog`.
+- **ESLint guard** (`eslint.config.mjs`: `no-restricted-syntax` on `gameEvent|playerStat|teamStat`
+  writes, allowed only under `src/server/scoring/**`) + `eslint-suppressions.json` baseline
+  (36 entries, keyed by file+rule+count) + `scripts/check-canonical-write-baseline.mjs` +
+  `scripts/canonical-write-baseline.json` (ceiling 36) + `npm run lint:canonical-writes`.
+- `documentation/PRODUCT_ROADMAP.md` — A3 split into A3a/A3b; A0/A1/A2/B0 marked `Done`; rescope
+  note + PlayerStat-derived note added.
+
+**Verification**
+
+- **Ratchet proven:** a new violation in a non-baselined file errors
+  (`src/lib/_guard_probe.ts` probe → error), while baselined files are suppressed.
+- `npm run typecheck` clean; `npx eslint` 0 errors (7 pre-existing warnings); ratchet check passes
+  (36 ≤ 36); `npm test` 740 tests / 739 pass / 1 skipped / 0 fail; `npm run build` exit 0.
+- `npm run db:validate` clean; Prisma client regenerated with `StatDataSource.OFFLINE_SYNC`.
+
+**Blocker / next batch**
+
+- Batch 0 is the infrastructure. The per-site migrations follow, batched by collapse target:
+  `createGameEvent` plain creates (3–5/PR) → + audit → + stat recompute (1/PR), pruning the
+  baseline each PR. `createGame` depends on the device-create decision above.
+
+**Next step**
+
+- A3a Batch 1: migrate the first low-risk `createGameEvent` site group and prune the baseline.
