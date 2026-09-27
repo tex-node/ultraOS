@@ -5602,3 +5602,33 @@ production.
 
 - None outstanding.
 
+
+### 2026-09-27 - A3a Batch 6: recordWaveSubstitution migration
+
+**Batch size:** 1 site (recordWaveSubstitution).
+
+**Key changes:**
+- Migrated recordWaveSubstitution to use withGameWrite + createGameEvent
+- Multi-event pattern: N sequential events in one tx, each with its own sequence number
+- Callback owns the loop and lineup evolution (derived state from tx, not writeCtx.game)
+- Audit log written after the loop, summarizing all N events
+- Removed unused nextSequence helper (dead code after migration)
+
+**Verification:**
+- Typecheck: clean
+- Tests: 744 total, 743 pass, 1 skip, 0 fail
+- Lint: 0 errors (7 pre-existing warnings)
+- Ratchet: baseline pruned 29 ? 28; ceiling lowered to 28
+- Build: exit 0
+
+**Signature stability:** Zero signature changes needed. The service stayed singular; the callback called createGameEvent N times in one tx.
+
+**Key findings:**
+- recordWaveSubstitution is N sequential events + audit log, all in one tx
+- Sequence counter advances N times (once per event), not once for the batch
+- Lineup derivation reads from tx (locked), not writeCtx.game — correct pattern for derived state
+- Cross-event validation (causedByEventId) stayed in callback, not service
+- Documented replay-semantics difference in audit doc (status: ACTIVE check is live-only, not replay-safe)
+
+**Next step:** A3a Batch 7 — migrate correctStatisticianEventPostFinal (supersession pattern). This is the last statistician console site before moving to scorer console sites.
+

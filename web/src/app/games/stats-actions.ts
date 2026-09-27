@@ -82,11 +82,6 @@ async function loadMutableGame(tx: Prisma.TransactionClient, organizationId: str
   return game;
 }
 
-async function nextSequence(tx: Prisma.TransactionClient, gameId: string, current: number) {
-  await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
-  return current;
-}
-
 // Reads this game's current on-court lineup by combining its confirmed starting five with
 // every ACTIVE structured substitution since (Part XII). Pure derivation over persisted data -
 // no in-memory state, so it reconstructs identically after a restart.
@@ -411,78 +406,80 @@ export async function recordWaveSubstitution(gameId: string, fixtureId: string, 
   });
   if (input.playerInIds.length !== input.playerOutIds.length) throw new Error("WAVE_MISMATCHED_PAIRS");
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    const homeId = requireSeasonClubId(game.fixture, "HOME");
-    const awayId = requireSeasonClubId(game.fixture, "AWAY");
-    if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
-      throw new Error("INVALID_TEAM");
-    }
+  await withGameWrite(
+    gameId,
+    fixtureId,
+    {
+      actor: { id: session.user.id, organizationId },
+      source: "LIVE_UI",
+      ledgerSourceHint: "STATISTICIAN",
+    },
+    async ({ game, tx, ...writeCtx }) => {
+      const homeId = requireSeasonClubId(game.fixture, "HOME");
+      const awayId = requireSeasonClubId(game.fixture, "AWAY");
+      if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
+        throw new Error("INVALID_TEAM");
+      }
 
-    const allIds = [...input.playerInIds, ...input.playerOutIds];
-    if (new Set(allIds).size !== allIds.length) throw new Error("WAVE_DUPLICATE_PLAYER");
-    const rostered = await tx.player.findMany({
-      where: { id: { in: allIds }, seasonClubId: input.seasonClubId },
-      include: { athlete: true },
-    });
-    if (rostered.length !== allIds.length) throw new Error("WAVE_PLAYER_NOT_ROSTERED");
-    const byId = new Map(rostered.map((player) => [player.id, player]));
-
-    const starters = await tx.gameStarter.findMany({ where: { gameId }, select: { seasonClubId: true, playerId: true } });
-    if (starters.length === 0) throw new Error("STARTING_FIVE_NOT_CONFIRMED");
-    const activeSubs = await tx.gameEvent.findMany({
-      where: { gameId, eventType: "SUBSTITUTION", status: "ACTIVE" },
-      orderBy: { sequenceNumber: "asc" },
-      select: { seasonClubId: true, playerId: true, substitutedOutPlayerId: true, sequenceNumber: true },
-    });
-    const lineup = deriveLineup(
-      starters.map((starter) => ({ seasonClubId: starter.seasonClubId, playerId: starter.playerId })),
-      activeSubs.map((sub) => ({ seasonClubId: sub.seasonClubId!, playerInId: sub.playerId!, playerOutId: sub.substitutedOutPlayerId!, sequenceNumber: sub.sequenceNumber! })),
-    );
-
-    const remaining = remainingClockSeconds(game);
-    let sequence = game.nextEventSequence;
-    const createdIds: string[] = [];
-    for (let index = 0; index < input.playerInIds.length; index += 1) {
-      const playerInId = input.playerInIds[index];
-      const playerOutId = input.playerOutIds[index];
-      const validation = validateSubstitution(lineup, input.seasonClubId, playerInId, playerOutId);
-      if (!validation.valid) throw new Error(`SUBSTITUTION_INVALID_${validation.error}`);
-      const playerIn = byId.get(playerInId)!;
-      const playerOut = byId.get(playerOutId)!;
-      const sequenceNumber = await nextSequence(tx, gameId, sequence);
-      sequence += 1;
-      const created = await tx.gameEvent.create({
-        data: {
-          organizationId,
-          gameId,
-          seasonClubId: input.seasonClubId,
-          playerId: playerIn.id,
-          substitutedOutPlayerId: playerOut.id,
-          eventType: "SUBSTITUTION",
-          period: game.currentPeriod,
-          clockSeconds: remaining,
-          description: `Substitution: ${playerOut.athlete.firstName} ${playerOut.athlete.lastName} OUT, ${playerIn.athlete.firstName} ${playerIn.athlete.lastName} IN (wave ${index + 1}/${input.playerInIds.length})`,
-          sequenceNumber,
-          source: STATISTICIAN_SOURCE,
-          createdById: session.user.id,
-        },
-        select: { id: true },
+      const allIds = [...input.playerInIds, ...input.playerOutIds];
+      if (new Set(allIds).size !== allIds.length) throw new Error("WAVE_DUPLICATE_PLAYER");
+      const rostered = await tx.player.findMany({
+        where: { id: { in: allIds }, seasonClubId: input.seasonClubId },
+        include: { athlete: true },
       });
-      createdIds.push(created.id);
-      lineup.get(input.seasonClubId)!.delete(playerOutId);
-      lineup.get(input.seasonClubId)!.add(playerInId);
-    }
+      if (rostered.length !== allIds.length) throw new Error("WAVE_PLAYER_NOT_ROSTERED");
+      const byId = new Map(rostered.map((player) => [player.id, player]));
 
-    await writeAuditLog(tx, {
-      organizationId,
-      userId: session.user.id,
-      action: "WAVE_SUBSTITUTION_RECORDED",
-      entityType: "Game",
-      entityId: gameId,
-      details: { fixtureId, seasonClubId: input.seasonClubId, count: createdIds.length, eventIds: createdIds },
-    });
-  });
+      const starters = await tx.gameStarter.findMany({ where: { gameId }, select: { seasonClubId: true, playerId: true } });
+      if (starters.length === 0) throw new Error("STARTING_FIVE_NOT_CONFIRMED");
+      const activeSubs = await tx.gameEvent.findMany({
+        where: { gameId, eventType: "SUBSTITUTION", status: "ACTIVE" },
+        orderBy: { sequenceNumber: "asc" },
+        select: { seasonClubId: true, playerId: true, substitutedOutPlayerId: true, sequenceNumber: true },
+      });
+      const lineup = deriveLineup(
+        starters.map((starter) => ({ seasonClubId: starter.seasonClubId, playerId: starter.playerId })),
+        activeSubs.map((sub) => ({ seasonClubId: sub.seasonClubId!, playerInId: sub.playerId!, playerOutId: sub.substitutedOutPlayerId!, sequenceNumber: sub.sequenceNumber! })),
+      );
+
+      const remaining = remainingClockSeconds(game);
+      const createdIds: string[] = [];
+      for (let index = 0; index < input.playerInIds.length; index += 1) {
+        const playerInId = input.playerInIds[index];
+        const playerOutId = input.playerOutIds[index];
+        const validation = validateSubstitution(lineup, input.seasonClubId, playerInId, playerOutId);
+        if (!validation.valid) throw new Error(`SUBSTITUTION_INVALID_${validation.error}`);
+        const playerIn = byId.get(playerInId)!;
+        const playerOut = byId.get(playerOutId)!;
+
+        const created = await createGameEvent(
+          {
+            fixtureId,
+            gameId,
+            seasonClubId: input.seasonClubId,
+            playerId: playerIn.id,
+            substitutedOutPlayerId: playerOut.id,
+            eventType: "SUBSTITUTION",
+            clockSeconds: remaining,
+            description: `Substitution: ${playerOut.athlete.firstName} ${playerOut.athlete.lastName} OUT, ${playerIn.athlete.firstName} ${playerIn.athlete.lastName} IN (wave ${index + 1}/${input.playerInIds.length})`,
+          },
+          { ...writeCtx, tx },
+        );
+        createdIds.push(created.id);
+        lineup.get(input.seasonClubId)!.delete(playerOutId);
+        lineup.get(input.seasonClubId)!.add(playerInId);
+      }
+
+      await writeAuditLog(tx, {
+        organizationId,
+        userId: session.user.id,
+        action: "WAVE_SUBSTITUTION_RECORDED",
+        entityType: "Game",
+        entityId: gameId,
+        details: { fixtureId, seasonClubId: input.seasonClubId, count: createdIds.length, eventIds: createdIds },
+      });
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/stats`);
   revalidatePath(`/games/${fixtureId}/stats/live`);

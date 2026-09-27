@@ -37,16 +37,16 @@ shrink, never grow.
 
 Unit of a batch = "sites that collapse to the same service-call shape," not file or count.
 
-**Actual bucket sizes (updated after Batches 0-5):**
+**Actual bucket sizes (updated after Batches 0-6):**
 
 | Bucket | Sites | Status |
 | --- | --- | --- |
-| **Statistician console - event-only** | 9 | 4 migrated (recordStatisticianStat, recordStatisticianShot, recordSubstitution, recordGameTimeout, recordJumpBall, flipPossession, verifyScoreboard); 3 pending (recordWaveSubstitution, correctStatisticianEventPostFinal, ...) |
+| **Statistician console - event-only** | 9 | 8 migrated (flipPossession, recordJumpBall, recordGameTimeout, verifyScoreboard, recordStatisticianStat, recordStatisticianShot, recordSubstitution, recordWaveSubstitution); 1 pending (correctStatisticianEventPostFinal) |
 | **Statistician console - status flips** | 2 | Pending (voidStatisticianEvent, undoLastStatisticianEvent) |
 | **Scorer console - event-only** | 11 | Pending (Ultra Time helper, recordScore, correctScoreEventAction, ...) |
 | **Scorer console - status flips** | 2 | Pending (voidScoreEventAction, correctScoreEventAction) |
 | **Scorer console - direct stat writes (model correction)** | 5 | Pending - Batch S (applyPlayerShotStatDeltas, applyTeamShotStatDeltas, recordStatEvent, undoLastEvent) |
-| **Multi-entity writes** | 3+ | Pending (recordWaveSubstitution, ...) |
+| **Multi-entity writes** | 3+ | 1 migrated (recordWaveSubstitution); 2+ pending |
 
 **Batch progression:**
 - **Batch 0 (template PR):** extract `createGameEvent` + migrate ONE low-risk site; establishes the
@@ -57,7 +57,7 @@ Unit of a batch = "sites that collapse to the same service-call shape," not file
 - **Batch 3:** migrate recordGameTimeout + verifyScoreboard (audit log sites). ✅ Done
 - **Batch 4:** migrate recordStatisticianStat (statistician console, event-only, simple shape). ✅ Done
 - **Batch 5:** migrate recordStatisticianShot + recordSubstitution (single event + upstream validation). ✅ Done
-- **Batch 6:** migrate recordWaveSubstitution (multi-event, design question first)
+- **Batch 6:** migrate recordWaveSubstitution (multi-event, design question first). ✅ Done
 - **Batch S (model correction):** refactor scorer console sites to use createGameEvent + rebuildGameStatsFromEvents, remove direct PlayerStat/TeamStat writes
 
 Realistic total: **10-14 PRs** for Bucket B + Batch S. Bucket C is separate.
@@ -153,7 +153,7 @@ migration complete."
 | 183 | `recordStatisticianShot` | `gameEvent.create` | IN | **migrated** (Batch 5) |
 | 281 | `recordStatisticianStat` | `gameEvent.create` | IN | **service target** |
 | 359 | `recordSubstitution` | `gameEvent.create` | IN | **migrated** (Batch 5) |
-| 442 | `recordWaveSubstitution` | `gameEvent.create` | IN | **service target** |
+| 442 | `recordWaveSubstitution` | `gameEvent.create` | IN | **migrated** (Batch 6) |
 | 494 | `voidStatisticianEvent` | `gameEvent.update` | IN | status flip |
 | 543 | `recordGameTimeout` | `gameEvent.create` | IN | **migrated** (Batch 3) |
 | 596 | `recordJumpBall` | `gameEvent.create` | IN | **migrated** (Batch 2) |
@@ -219,6 +219,46 @@ All derivation uses the same functions from `src/lib/event-derived-stats.ts`:
 **Alignment:** All readers and the writer use the SAME derivation functions. No divergence risk.
 Sync's replay path will call `rebuildGameStatsFromEvents(gameId, tx)` post-batch, same shape as
 the live path.
+
+## Replay vs. live differences
+
+Live callbacks may validate against current state; replay must not. This is the highest-value
+finding from Batch 5.
+
+**Example: causedByEventId validation**
+
+recordStatisticianShot validates that the referenced foul exists and has status: "ACTIVE" (line 167).
+This is correct for live writes, where "was this foul undone?" is a real-time question. But it means
+replay semantics differ from live semantics.
+
+**Scenario:** scorekeeper logs foul at 12:30, logs linked FT at 12:31, device goes offline. Admin
+on the server voids the foul at 13:00. Device syncs at 14:00. The FT's link validation fails — not
+because the data is wrong, but because server state moved between write time and replay time.
+
+**Three semantic choices for A3b:**
+
+1. **Strict** — replay validates against current server state. Offline writes can fail for reasons
+   the scorekeeper couldn't have known. Correct but harsh.
+
+2. **Historical** — replay validates only that the referenced event exists, ignoring status. Lets
+   the FT link, and the derivation handles the voided foul downstream (if rebuildGameStatsFromEvents
+   skips FT events with voided parents, which it must).
+
+3. **Timestamp-scoped** — replay validates against state as of clientUpdatedAt. Complex, probably
+   not worth it.
+
+**Decision:** Historical is almost certainly right. The canonical write is the FT; whether the foul
+is later undone is a derivation concern, not a write-time concern. The strict check exists because
+in the live path the callback was protecting against the scorekeeper linking to a foul they'd just
+undone — a UI-level correctness guard, not a data-integrity one.
+
+**Implementation:** The callback needs to know which mode it's in (live vs. replay), or the
+validation moves to the caller and the service stays pure. For A3b, the sync endpoint should skip
+status checks on cross-event FKs and let the derivation handle voided parents.
+
+**Pattern established:** Callback cross-event validation (validate against sibling events) is now
+a pattern. Batch 5 established it. If more sites need it, watch for the extract-vs-reimplement
+decision. Reimplemented is fine for two sites. At five, extract.
 
 ## Out of A3a scope (documented debt)
 
