@@ -15,6 +15,16 @@ export interface OutboxRecord {
   failureReason?: string | null;
 }
 
+export interface OutboxEnqueueInput {
+  entityType: OutboxEntityType;
+  entityId: string;
+  operation: OutboxOperation;
+  payload: unknown;
+  clientUpdatedAt?: string;
+  deviceId: string;
+  idempotencyKey?: string;
+}
+
 export type SyncResultStatus = "APPLIED" | "DUPLICATE" | "CONFLICT" | "FAILED";
 
 export interface SyncResult {

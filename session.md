@@ -4959,3 +4959,54 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - Phase B0 (vision service skeleton) and/or Phase A1 (Dexie local data layer + outbox + unit tests).
+
+### 2026-09-27 - Phase A1: Offline Local Data Layer & Outbox
+
+**Objective**
+
+- Phase A1 of P13: IndexedDB (Dexie) local store mirroring Game/GameEvent/PlayerStat, an outbox
+  with idempotency keys, and a repository abstraction with identical local/remote method
+  signatures so the UI never knows which is active.
+
+**Completed**
+
+- `web/src/lib/offline/entities.ts` — `LocalGame`, `LocalGameEvent`, `LocalPlayerStat` shapes
+  mirroring the Prisma models, each with `clientUpdatedAt: string`.
+- `web/src/lib/offline/db.ts` — `OfflineScoringDatabase` (Dexie schema v1) with tables
+  `games`, `gameEvents`, `playerStats`, `outbox` (`++localId` auto-increment), `meta`; indexes
+  for gameId, `[gameId+sequenceNumber]`, `[gameId+playerId]`, idempotencyKey, syncedAt,
+  clientUpdatedAt.
+- `web/src/lib/offline/outbox.ts` — `enqueue` (generates `crypto.randomUUID()` idempotency key
+  when absent), `drain(batchSize)` (pending records ordered by `clientUpdatedAt`), `markSynced`,
+  `markFailed`, `pendingCount`. All functions accept an injectable db for testing.
+- `web/src/lib/offline/repositories/scoringRepository.ts` — `ScoringRepository` interface with
+  `createGame`, `getGame`, `logEvent`, `listEvents`, `updatePlayerStat`, `listStats`; implemented
+  by `LocalScoringRepository` (IndexedDB + outbox) and `RemoteScoringRepository` (fetch `/api`).
+  Every local write enqueues to the outbox in the same Dexie transaction; `logEvent` assigns a
+  monotonic `sequenceNumber` from `game.nextEventSequence`.
+- Tests (18 total, all pass): `repositories/outbox.test.ts` (enqueue, unique keys, drain ordering
+  + batchSize, exclusion of synced/failed, markSynced, markFailed) and
+  `repositories/scoringRepository.test.ts` (createGame, logEvent sequence, ordering, clientUpdatedAt
+  propagation, updatePlayerStat merge, unknown-game/stat errors, every-write-enqueued).
+- `web/src/lib/offline/types.ts` — added `OutboxEnqueueInput`.
+
+**Notes / gotchas**
+
+- The test runner (`tsx --test`) resolves `../x` parent imports within a nested directory but
+  NOT relative imports in the flat `src/lib/offline/` directory. Tests that need parent imports
+  live in `repositories/` (a nested dir) and import `../db` / `../outbox` — those resolve fine.
+- `web/src/lib/offline/repositories/scoringRepository.ts` must import `../db`, not `./db`
+  (the first draft had a wrong relative path; caught by the failing test).
+- No Prisma migration this phase. Dexie is client-side only.
+
+**Verification**
+
+- Focused: 18/18 offline tests pass.
+- `npm run typecheck` clean; `npm run lint` 0 errors (7 pre-existing warnings elsewhere).
+- `npm test`: 729 tests, 728 pass, 1 skipped, 0 fail.
+- `npm run build`: compiles successfully (exit 0).
+
+**Next step**
+
+- Phase B0 (vision service skeleton) and/or Phase A2 (Serwist service worker + PWA shell +
+  SyncStatusBadge).
