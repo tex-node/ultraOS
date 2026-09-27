@@ -5372,5 +5372,72 @@ STAGE_5_5C: NOT_STARTED
 - Status flips: 4 (pending)
 - Multi-entity writes: 3+ (pending)
 
-**Next step:** A3a Batch 4 � migrate stat-recompute sites (recordStatisticianShot, recordStatisticianStat).
+**Next step:** A3a Batch 4 - migrate stat-recompute sites (recordStatisticianShot, recordStatisticianStat).
+
+### 2026-09-27 - LBCL: Ingest Games 17-19 + fix broken lockfile
+
+**Objective**
+
+- User supplied 3 more LBCL scoresheets (opening weekend 3, Sun 27 Sep 2026):
+  White Fire vs Seaside Hoopers, Cantonment Braves vs Ultra Basketball, Square
+  Team vs Lagos Raptors. Same rigor as before.
+
+**Completed**
+
+- `web/scripts/data/build-lbcl-batch.mjs`: added Games 17-19. All player rows
+  reconciled against live DB rosters (direct `prisma` queries across all 6
+  clubs involved) rather than memory. Only 3 genuinely new/unmatched players
+  across all three games, each with a real jersey collision requiring
+  `jerseyNumber: null`: Amir Kabiru and Lanre Shittu (Ultra Basketball),
+  Worship Adele (Lagos Raptors). Everything else — including several
+  significantly-reworded name variants — matched an existing canonical
+  player via jersey-number anchoring (e.g. "Ikay Oparaugo" -> "Oparaugo Ikay",
+  "Lucky Ayaorah" -> "Lucky Kisiso", "Damilare Sowere" appearing as "Salau
+  Damilare").
+- Game 19's source sheet labels the away team "Lagos Raptors Basketball
+  Academy," but its roster matches the existing "Lagos Raptors" club almost
+  entirely by name/jersey anchor (only 1 of 12 rows unmatched) — ingested
+  under the existing club name, not as a new club.
+- Deployed to staging then production; all 16 prior games correctly report
+  `BLOCKED` (idempotent), Games 17-19 imported cleanly on both with matching
+  new-player counts (0, 2, 2).
+
+**Bug found: caught two manual transcription-tuple-length errors before they
+could reach checksums** — while hand-typing prose notes into the compact JS
+tuple format, two rows (Reginald Kelechi, Chike Emmanuel) ended up with the
+wrong element count (21 or 23 instead of 22), which would have silently
+shifted every field after the mistake. Wrote a small length-validator script
+inline before running `verify-batch.mjs`, rather than relying on the
+points/quarter checksum alone to catch it (a wrong-length tuple can still
+sum to the right point total by coincidence). Worth keeping this length
+check as a standard step going forward, not just for this batch.
+
+**Also fixed: broken `package-lock.json` blocking all deploys**
+
+- Deploy started failing with `npm ci` EUSAGE ("package.json and
+  package-lock.json ... not in sync") on a commit that had nothing to do
+  with this ingestion — a parallel workstream (`A3a` scoring migration) had
+  added a `server-only` dependency without committing an updated lockfile.
+  This blocked every deploy for everyone, not just this batch.
+- Regenerated the lockfile **on the deploy host itself** (npm 10.8.2/node
+  20.20.2), not locally (npm 11.8.0) — a local `npm install` did not
+  reproduce the missing `@swc/helpers@0.5.23` transitive dep at all, which
+  points to real behavioral differences between npm major versions when
+  resolving/writing lockfiles. Verified with a clean `npm ci` on the host
+  before copying the file back and committing. Lesson: always regenerate a
+  lockfile using the same npm version that will actually run `npm ci`
+  against it, not whatever's installed locally.
+
+**Verification**
+
+- `verify-batch.mjs`: all 19 games' PTS/quarter checksums pass.
+- tsc/lint clean on the batch builder.
+- Both environments: all 3 new fixtures confirmed `FINAL` with points sums
+  matching each game's final score exactly (115, 78, 107).
+
+**Next step**
+
+- None outstanding for this batch. Separately starting an admin-only
+  "Insights" tab (coaching scouting reports for Ultra Basketball's
+  opponents, gated to a single user) — see the next entry once that lands.
 
