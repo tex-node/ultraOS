@@ -5759,3 +5759,67 @@ Batch S's `undoLastEvent`, once the scorer-console stat-write model correction l
 **Next step:** Batch 8 - the remaining statistician-console status flips (voidStatisticianEvent,
 undoLastStatisticianEvent), then move to scorer-console sites.
 
+### 2026-09-27 - A3a Batch 8: voidGameEvent, statistician console complete
+
+**Pre-migration reading (checked before assuming either site mapped to Batch 7's service):**
+
+- Read both `voidStatisticianEvent` and `undoLastStatisticianEvent`. Neither maps to
+  `correctStatisticianEvent`: both gate through `loadMutableGame` (LIVE/PAUSED), the opposite of
+  `correctStatisticianEvent`'s FINAL-only gate. Forcing them through it would have meant a
+  which-gate parameter on the correction service - the shape-mixing this whole split exists to
+  avoid.
+- They don't fit `createGameEvent` either (pure status-flip, no insert) - but they match *each
+  other*: same write (`gameEvent.update` -> `status: "VOIDED"`, `correctedAt`, `correctedById`,
+  `correctionReason`), same gate, same excluded-from-replay contract. They differ only in target
+  selection (`voidStatisticianEvent` takes an explicit `eventId`; `undoLastStatisticianEvent`
+  finds the most recent `ACTIVE` one by `createdAt desc`) and audit action/reason literal - a
+  caller-policy difference, not a write-mechanic one. One new shape, shared by two sites, not two
+  sibling services.
+- Read `loadMutableGame`'s `isStatisticianWrite` condition before building, per explicit
+  instruction: it requires `ledgerSourceHint === "STATISTICIAN"` specifically (not just
+  `source === "LIVE_UI"`). Both migrated callbacks pass `ledgerSourceHint: "STATISTICIAN"`
+  explicitly in their `withGameWrite` ctx - omitting it would have silently left
+  `statisticsVerifiedAt` uncleared after a void, since a void counts as a statistician write that
+  invalidates any existing verification.
+
+**Design decision — source check stays in the callback, not the service:** "only statisticians
+can void statistician events" is an authorization/selection question, not a write mechanic.
+`voidGameEvent` trusts the `eventId` it's given rather than re-validating it, since the caller
+resolves it inside the same transaction under the same Fixture `FOR UPDATE` lock `withGameWrite`
+already took - nothing can change between resolution and write, so a redundant scoped re-lookup
+would add a query without adding safety. Kept the service source-agnostic and generically named
+(`voidGameEvent`, not `voidStatisticianEvent`) so a future scorer-console void can reuse it
+without inheriting a statistician-only restriction.
+
+**Completed:**
+
+- `src/server/scoring/voidGameEvent.ts` (new) - the third canonical-write shape: mutate-only,
+  under the mutable gate (vs. `createGameEvent`'s insert/mutable and `correctStatisticianEvent`'s
+  insert-or-mutate/FINAL-only).
+- `stats-actions.ts`: both sites migrated to `withGameWrite` + `voidGameEvent`; target-selection
+  (including the source check) and the audit log stay callback-owned, unchanged from pre-A3a
+  behavior.
+- `docs/canonical-write-audit.md` - "Sites that don't fit `createGameEvent`" section restructured
+  to cover all three shapes; batch-plan table and site tables updated; a line stating the
+  statistician console is now fully migrated (all 11 sites, 3 shapes, 0 raw writes outside
+  `src/server/scoring/**`).
+
+**Verification:**
+
+- Typecheck clean. Tests: 744 total, 743 pass, 1 skip, 0 fail. Lint: 0 errors (7 pre-existing
+  warnings). Build exit 0.
+- Ratchet arithmetic (drop of 2, explained): each site had exactly one `tx.gameEvent.update` call
+  site (the target-selection `findFirst` is a read, not counted). Two sites migrated -> 2 fewer
+  entries. `eslint --prune-suppressions` dropped `stats-actions.ts`'s count from 4 to 2; total
+  19+2+2 = 23; ceiling lowered 25 -> 23.
+
+**What this establishes:** the statistician console is fully consolidated behind three canonical
+shapes - `createGameEvent`, `correctStatisticianEvent`, `voidGameEvent`. Any future site should
+be checked against these three before assuming it needs a fourth. Remaining A3a work is the
+scorer console (11 event-only sites, 2 status flips, both pending) and Batch S (the scorer's
+direct PlayerStat/TeamStat writes, a model correction rather than a mechanical migration).
+
+**Next step:** Read the scorer-console sites (`actions.ts`) before batching - same discipline as
+here: check which of the three existing shapes each site maps to before assuming any need a
+fourth.
+
