@@ -136,6 +136,26 @@ the scorer path specifically. Sketch and decide before A3b starts, with the same
 `createGame` question above - this is now the load-bearing open question for that phase, not
 Batch S's.
 
+**A3b scope item: sync test infrastructure.** The whole test suite today (749 tests as of Batch S)
+is pure-function unit tests with zero Prisma dependency - no testcontainers, no per-test Postgres
+schema, no shared dev DB the suite hits. A3b's sync endpoint is the first genuinely
+DB-transactional feature in this codebase's test surface: it has to prove a multi-record atomic
+batch replay (per the rule-#6 brief, up to ~100 records in one transaction) behaves correctly,
+including idempotency (`SyncIdempotency`) and conflict handling (`SyncConflictLog`) - properties
+that are meaningless to assert against a mocked `$transaction`. Decide the test-infrastructure
+approach (testcontainers, per-test schema, in-memory Postgres, or something else) as part of the
+A3b sketch, before implementation, not discovered mid-batch. This is a new category of decision
+for this project, not a continuation of anything A3a needed.
+
+**Also blocked on the stat-model decision, correctly held rather than migrated:** `recordScore`,
+`recordStatEvent`, `voidScoreEventAction`, `correctScoreEventAction`, and `undoLastEvent`. Each
+migrates differently depending on which of the three options above A3b picks (incremental stays
+mechanical; rebuild-only deletes the incremental writes and `voidScoreEventAction`'s reversal
+logic entirely, since there's nothing to reverse when stats are rebuilt; dual-authority-preserved
+keeps both paths and adds post-sync reconciliation). Migrating any of the five before that
+decision risks doing the work twice - the same double-touch reasoning that sequenced Batch 9b
+before Batch S.
+
 ## Post-migration issue: `data` field null semantics
 
 **Status:** Logged, not fixed. Fix after all sites migrate.
