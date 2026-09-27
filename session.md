@@ -6058,3 +6058,37 @@ they're just not what this round of work was scoped to.
 or move to the A3b sync-replay design question this round surfaced - whichever the next session
 prioritizes.
 
+### 2026-09-28 - A3b prep: outbox invariant found and enforced before the sketch
+
+Started grounding the A3b sketch by reading what A1/A2 actually built (not just the write-ups) -
+`ScoringRepository`, the Dexie outbox schema, `OutboxEntityType`. Found a real discrepancy before
+writing a single line of sketch: `LocalScoringRepository.updatePlayerStat` enqueued a third
+outbox entity type, `PlayerStat`, with the full merged absolute row as payload -
+`OutboxEntityType`'s union already included `"PlayerStat"` alongside `"Game"`/`"GameEvent"`. This
+directly contradicts Batch 0's decision ("the outbox syncs Game + GameEvent only"). Checked for
+live impact first: zero callers of `updatePlayerStat`/`ScoringRepository` anywhere in the app -
+pure API-surface drift, not a live bug, same "latent not actualized" category as the org-id
+finding.
+
+**Decided explicitly, not silently:** this is a boundary the sync model gets decided at, not a
+cleanup. If the outbox can carry `PlayerStat` records, the client sends the model; if it can't,
+the server computes it. Fixed and enforced at the type level rather than by comment -
+`OutboxEntityType` narrowed to `"Game" | "GameEvent"` only, so a future `"PlayerStat"` outbox
+entry is a compile error. `updatePlayerStat`'s local IndexedDB write stays (offline UI
+responsiveness only, discarded once the server's post-sync stats arrive); its outbox enqueue is
+removed. Two existing tests that exercised the old behavior were corrected to assert its absence,
+not deleted - the invariant now has regression coverage, not just a type constraint.
+
+**Verification:** Typecheck clean (one error surfaced immediately - `outbox.test.ts` constructing
+`entityType: "PlayerStat"` - fixed by swapping to an unrelated valid type, since that test wasn't
+PlayerStat-specific). Tests: 749 total, 748 pass, 1 skip, 0 fail (same count - two tests modified,
+none added/removed). Lint 0 errors (7 pre-existing warnings, unrelated to this change). Build exit
+0.
+
+Named as an explicit invariant in the audit doc alongside the stat-model open question it was
+found while grounding: **PlayerStat and TeamStat are projections; they are never wire entities.**
+
+**Next step:** Continue grounding the A3b sketch (SyncIdempotency/SyncConflictLog schema, the
+five A2 pitfalls, the sync test-infrastructure question already named), then write the full
+five-point sketch - stat-model decision as item one, same rigor as Batch 7.
+
