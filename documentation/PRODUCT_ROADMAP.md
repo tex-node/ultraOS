@@ -1,8 +1,8 @@
 ---
 title: Product Roadmap
 status: Active
-version: product-0.5
-last_updated: 2026-09-22
+version: product-0.6
+last_updated: 2026-09-27
 ---
 
 # Product Roadmap
@@ -73,6 +73,8 @@ These apply to every phase and every screen.
 | P10 | Capture depth (soccer, tennis, volleyball) | Live depth stats per sport, all traceable to events | `Not started` |
 | P11 | Tournament engine extensions | Swiss/double-elim/ladder formats, H2H + discipline tiebreaks, cross-sport leaders | `Not started` |
 | P12 | Fan & organizer dual experience | Public portal + organizer workspace + tournament sub-sites (F1–F6 below) | `Done` |
+| P13 | Offline scoring & sync (Workstream A) | Scorekeeper can score a full game with network disabled; all writes sync cleanly on reconnect | `Not started` |
+| P14 | AI vision player profiling (Workstream B) | Upload game video → AI-derived player metrics → human review → canonical stats | `Not started` |
 
 P0-P5 are partly delivered for basketball Season Zero; the roadmap makes them complete and sport-agnostic.
 
@@ -759,6 +761,102 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | F7.4 | IMPORT-origin standings/leaderboard/record-book eligibility | P12/F7 | `Done` | — |
 | F7.5 | Per-organization standings points-formula override | P12/F7 | `Done` | — |
 | F7.6 | Tournament Highlights tab for external tournaments | P12/F7 | `Done` | F7.2 |
+| A0 | Offline scoring: project setup (flag, deps, skeleton, runbook draft) | P13/A | `Not started` | — |
+| A1 | Local data layer: Dexie db, ScoringRepository (local+remote), outbox, types | P13/A | `Not started` | A0 |
+| A2 | Serwist SW, PWA manifest, SyncStatusBadge, Background Sync + fallback | P13/A | `Not started` | A1 |
+| A3 | `POST /api/sync/outbox`, LWW, SyncIdempotency + SyncConflictLog, sync dashboard | P13/A | `Not started` | A2 |
+| A4 | Retry/backoff/DLQ, `/admin/sync-health`, load test 50×500, runbook, rollout | P13/A | `Not started` | A3 |
+| B0 | Vision: project setup (flag, `/services/vision`, Docker, job queue, storage adapter) | P14/B | `Not started` | — |
+| B1 | FastAPI inference service with `/analyze` + `/health`, VisionAnalysisRun lifecycle | P14/B | `Not started` | B0 |
+| B2 | YOLOv8 + ByteTrack detection/tracking, jersey OCR, homography, VisionTrack rows | P14/B | `Not started` | B1 |
+| B3 | Derived metrics: speed, distance, passes, VisionSpatialSummary (all PENDING_REVIEW) | P14/B | `Not started` | B2 |
+| B4 | Canonical alignment, review queue UI, VISION_PROMOTED GameEvent writes | P14/B | `Not started` | B3 |
+| B5 | Coach player profile, team insights, vision-evaluation nightly, model versioning | P14/B | `Not started` | B4 |
+| B6 | Rust acceleration & edge deployment (conditional — triggers only if cost/latency/on-prem demands) | P14/B | `Not started` | B5 + trigger |
+
+### P13 — Offline Scoring & Sync (Workstream A)
+
+**Goal:** a scorekeeper at a venue with no network can open the scoring console, log a
+full game's events, and have every write sync cleanly (no duplicates, no lost events)
+when connectivity returns.
+
+**Architecture:** IndexedDB (Dexie) local store mirroring Game/GameEvent/PlayerStat,
+an outbox with idempotency keys, a Serwist service worker (PWA shell), and a server-side
+sync endpoint that replays through the canonical write path with Last-Write-Wins conflict
+resolution. Feature-flagged per league; zero data loss is the non-negotiable gate.
+
+**Non-negotiable architectural rules:**
+- Canonical scoring data (GameEvent, PlayerStat, TeamStat) is written only through the
+  server-side canonical write path. No client, sync replay, or vision job writes directly
+  to these tables.
+- Every synced write carries `source = OFFLINE_SYNC` alongside the existing
+  `LIVE_UI | MANUAL_ADMIN` values.
+- Never modify an existing migration; new migrations only.
+
+| Phase | Name | Deliverables | Exit criteria |
+| --- | --- | --- | --- |
+| A0 | Project setup | Feature flag (`offline_scoring`), Dexie + fake-indexeddb deps, `src/lib/offline/` skeleton, offline scoring runbook draft | Compiles; flag defaults to off in production |
+| A1 | Local data layer | `db.ts` (Dexie schema v1: games, gameEvents, playerStats, outbox, meta), `repositories/scoringRepository.ts` (identical interface for local + remote), `outbox.ts` (enqueue/drain/markSynced/markFailed), `types.ts`, unit tests with fake-indexeddb | Scorekeeper can create a game and log events with network fully disabled; all writes land in IndexedDB and outbox |
+| A2 | Service worker & PWA shell | Serwist SW in Next.js App Router; SWR for static, NetworkFirst (3s) for API reads, no-cache for scoring writes; `app/manifest.ts` (standalone, icons, theme); SyncStatusBadge (online/offline, pending count, last sync); Background Sync registration with visibilitychange fallback | App loads and scores a full game in airplane mode; SW survives hard refresh; Lighthouse PWA installable |
+| A3 | Sync engine & conflict resolution | `POST /api/sync/outbox` (batch ≤ 100), validates via canonical write path with `source = OFFLINE_SYNC`; LWW per record by `clientUpdatedAt`, per-field LWW for PlayerStat counters; `SyncIdempotency` + `SyncConflictLog` tables (new migration); Background Sync API + periodic fallback; sync status dashboard (last sync, pending, failed with retry) | Two devices score offline, reconnect, reconcile without duplicates or lost events; integration test simulates 3 offline sessions + 1 reconnect |
+| A4 | Hardening & rollout | Exponential backoff retry (1s→4s→16s→64s, cap 5); dead-letter queue for permanently failed; `SyncConflictLog` for LWW overwrites; `/admin/sync-health` admin page (pending per device, conflicts, DLQ with retry); load test 50 devices × 500 events × 4h; runbook `docs/offline-scoring-runbook.md`; feature-flag rollout 1 league → 1 region → all | Zero data loss in load test; runbook signed off by ops |
+
+**Cross-cutting concerns:**
+
+| Concern | Approach |
+| --- | --- |
+| Auth | Scorekeeper offline token 7-day TTL; vision service uses service account scoped to Vision* tables |
+| Observability | OpenTelemetry on sync endpoint; sync lag as SLI |
+| Testing | Playwright offline flows (browser context offline mode); pytest for CV |
+| Data retention | Raw video 90 days; VisionTrack rows indefinite (small); pruned by game age |
+| Rollback | Feature flags for both workstreams; vision observations bulk-rejectable without touching canonical data |
+| iOS Safari Background Sync | Fallback: visibilitychange + online event + manual "Sync now" button |
+
+### P14 — AI Vision Player Profiling (Workstream B)
+
+**Goal:** upload game video → AI detects players, ball, jersey numbers → derived metrics
+(speed, distance, passes) → human review queue → promoted to canonical events with
+`source = VISION_PROMOTED`. Never writes directly to PlayerStat/TeamStat.
+
+**Architecture:** standalone Python inference service (FastAPI + YOLOv8 + ByteTrack) in
+`/services/vision`, job queue reading GameVideo rows, canonical-event-alignment for
+human review, coach-facing player profile dashboard. Existing schema (G.21:
+VisionAnalysisRun, VisionModel, VisionObservation, VisionTrack, GameVideo,
+VideoTimelineAnchor) is the foundation.
+
+| Phase | Name | Deliverables | Exit criteria |
+| --- | --- | --- | --- |
+| B0 | Project setup | Feature flag (`ai_vision`), `/services/vision` skeleton, Docker Compose entry, BullMQ/Celery job queue reading GameVideo with status UPLOADED, stub VisionAnalysisRun lifecycle (QUEUED→RUNNING→COMPLETED/FAILED), S3/storage adapter | Upload a video, see VisionAnalysisRun lifecycle with dummy analyzer |
+| B1 | Inference service | FastAPI `/analyze` + `/health` endpoints, Docker alongside Next.js in dev, VisionAnalysisRun status transitions, storage adapter for video segments | Upload a video, see a VisionAnalysisRun row go through its lifecycle |
+| B2 | Detection & tracking | YOLOv8/RF-DETR player + ball detector fine-tuned on footage; ByteTrack tracker; jersey OCR (Tesseract → CNN if < 90%); homography from 4-point court rule; VisionTrack rows (frameIndex, courtX, courtY, bbox, confidence) | Track continuity ≥ 95% on-court, jersey ID ≥ 90%, ball recall ≥ 85% on 10-min holdout |
+| B3 | Derived metrics | Speed (Savitzky-Golay smoothed), distance covered, pass detection (possession change + travel + teammate check), VisionSpatialSummary heatmap rows per player per game; all PENDING_REVIEW with sourceRunId | Pass detection F1 ≥ 0.80; speed MAE ≤ 0.5 km/h on annotated clips |
+| B4 | Canonical alignment & review | `canonical-event-alignment.ts` matches VisionObservation → GameEvent candidates; review queue UI ("confirm/correct/reject"); approval writes GameEvent with `source = VISION_PROMOTED`; rejection marks REJECTED with reason; never writes PlayerStat/TeamStat directly | Full game's observations reviewable in < 10 minutes; promoted to canonical events |
+| B5 | Coach dashboard & evaluation | Player profile (top speed, distance, pass accuracy, heatmap, trend vs previous); team passing network + pace; `vision-evaluation.ts` nightly against gold-standard set; internal metrics dashboard; model versioning (each VisionObservation references VisionModel row) | Coach opens player profile, sees AI metrics with confidence + source clip link |
+| B6 | Rust acceleration & edge (conditional) | Trigger only if: inference cost > $X/month, on-prem camera deployment requested, P95 latency > 10-min SLA, or browser-side inference needed. Port decode + homography + tracker to Rust (napi-rs + PyO3); keep Python inference unchanged | Not started — conditional |
+
+**Risk register:**
+
+| Risk | Impact | Mitigation |
+| --- | --- | --- |
+| iOS Safari lacks Background Sync | Offline users on iPads may not sync automatically | Fallback to visibilitychange + online event; manual "Sync now" button |
+| Jersey OCR fails on blurry footage | Player identity mapping breaks | Fallback to lineup + position + track continuity heuristic; flag low-confidence for review |
+| Pass detection false positives | Coach trust erodes | Conservative thresholds + mandatory human review before canonical promotion |
+| Video storage costs balloon | Budget overrun | Tier to cold storage after 30 days; downsample inference frames to 15 fps |
+| Concurrent multi-scorekeeper edits | Data loss | LWW for MVP; evaluate CRDT (Yjs + PowerSync) if simultaneous scoring is requested |
+
+**Definition of Done per phase:**
+
+1. Code compiles, lint passes, unit tests pass, new integration tests pass.
+2. Prisma migration applied in dev and staging (never modifying existing migrations).
+3. Manual verification steps documented and executed.
+4. Feature flag defaults to off in production.
+5. PR description includes rollback plan.
+6. No changes to the canonical write path's contract.
+
+**How to work:** Start with A0 and B0 in parallel. After each phase, produce a report
+(summary, files changed, test output, manual verification, blockers, proposed next phase).
+If a requirement conflicts with existing repo conventions, stop and ask. Prefer small,
+reviewable PRs; split if a phase exceeds ~800 LOC of net new code.
 
 ## 8. Relationship to the engine roadmap
 
@@ -771,6 +869,14 @@ Product phases depend on engine stages but are not blocked by the full engine pr
 - P6 needs engine Stages 1-9.
 - P12 needs only additive engine touchpoints (new `UserRole` values, pass-tier and
   order-status fields); no new tenant layer, tables, or ledgers.
+- P13 (offline scoring) needs no new engine tables — it replays through the existing
+  canonical write path with `source = OFFLINE_SYNC`; it adds `SyncIdempotency`,
+  `SyncConflictLog`, and a Dexie IndexedDB layer client-side only.
+- P14 (AI vision) builds on the existing G.21 vision schema (VisionAnalysisRun,
+  VisionModel, VisionObservation, VisionTrack, GameVideo, VideoTimelineAnchor) and adds
+  no new Prisma models for detection/tracking; derived metrics use `GameMetricValue`.
+- P13 and P14 are feature-flagged independently and never write to canonical scoring
+  tables outside the canonical write path.
 
 The engine roadmap is in `documentation/MULTI_SPORT_ROADMAP.md`. When a product phase and an engine stage conflict on sequencing, the architecture document wins.
 
@@ -788,4 +894,8 @@ A phase is `Done` only when:
 - Add or reprioritise deliverables freely; keep them mapped to a phase and a status.
 - Do not weaken a usability standard or a phase's acceptance criteria; if a criterion cannot be met, mark the item `Blocked` with a reason and owner.
 - Changes to sport behaviour require the architecture document to be updated first (it remains the single agreed reference).
+- P13 and P14 phases require a feature flag defaulting to off in production; the flag is
+  enabled per league/region only after the phase's exit criteria are verified.
+- Every P13/P14 PR must include a rollback plan; vision observations are bulk-rejectable
+  without touching canonical data.
 - Every update refreshes `last_updated` and is committed with the work it describes.

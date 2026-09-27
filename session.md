@@ -4760,3 +4760,35 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - None outstanding.
+
+### 2026-09-27 - Product Roadmap: P13 Offline Scoring + P14 AI Vision Added
+
+**Objective**
+
+- Add two new workstreams to the product roadmap: offline scoring & sync (P13) and
+  AI vision player profiling (P14), broken into phases A0-A4 and B0-B6 respectively.
+
+**Completed**
+
+- `documentation/PRODUCT_ROADMAP.md` updated to product-0.6:
+  - Phase overview table gained P13 and P14 rows.
+  - New Section 6 phase detail blocks for P13 (A0-A4) and P14 (B0-B6 + conditional B6)
+    with deliverables, exit criteria, cross-cutting concerns, and risk register.
+  - Progress tracker gained 12 new rows (A0-A4, B0-B6) all `Not started`.
+  - Engine relationship section updated: P13 replays through the canonical write path
+    (no new engine tables beyond SyncIdempotency/SyncConflictLog); P14 builds on the
+    existing G.21 vision schema.
+  - Change control updated: P13/P14 require feature flags defaulting to off in
+    production, rollback plans in every PR, and bulk-rejectable vision observations.
+
+**Decisions**
+
+- P13 uses Dexie (IndexedDB) + Serwist service worker + outbox with idempotency keys;
+  canonical write path is never bypassed (source = OFFLINE_SYNC).
+- P14 uses a standalone Python inference service (FastAPI + YOLOv8 + ByteTrack);
+  vision outputs are observations requiring human promotion, never canonical truth.
+- B6 (Rust acceleration) is conditional — only triggered by cost/latency/on-prem demands.
+
+**Next step**
+
+- Begin Phase A0 and B0 in parallel (project setup for both workstreams).
