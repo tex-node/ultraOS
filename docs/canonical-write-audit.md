@@ -172,6 +172,27 @@ migration complete."
 the sole source of truth. `actions.ts` 112/135/1092/1097/1120 are the incremental scorer writes
 that A3a moves behind `projectPlayerStats.ts`.
 
+**Derivation call graph (verified Batch 3):**
+
+All derivation uses the same functions from `src/lib/event-derived-stats.ts`:
+- `derivePlayerStats(events)` → `Map<string, DerivedPlayerStats>`
+- `deriveTeamStats(playerStats)` → `Map<string, DerivedTeamStats>`
+- `deriveTeamScore(teamStats, seasonClubId)` → `number`
+
+**Writers** (only one):
+- `rebuildGameStatsFromEvents` (stats-actions.ts:868) — called by `verifyStatistics` (line 963)
+  - This is the ONLY function that writes PlayerStat/TeamStat rows
+  - Uses `derivePlayerStats` (line 879) and `deriveTeamStats` (line 911)
+
+**Readers** (comparison/display only, no writes):
+- `verifyScoreboard` (stats-actions.ts:688-690) — derives for comparison, doesn't write
+- `verifyStatistics` (stats-actions.ts:829-831, 954-956) — derives for comparison, doesn't write
+- `live-game-snapshot-v2.ts` (lines 150-160) — read-only snapshot generation
+
+**Alignment:** All readers and the writer use the SAME derivation functions. No divergence risk.
+Sync's replay path will call `rebuildGameStatsFromEvents(gameId, tx)` post-batch, same shape as
+the live path.
+
 ## Out of A3a scope (documented debt)
 
 - **ADJACENT:** `recordIncident` game-status writes; all Fixture/Team/Athlete writes elsewhere
