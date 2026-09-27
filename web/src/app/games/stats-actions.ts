@@ -12,6 +12,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireFixturePermission, requireSession, MissingOrganizationContextError } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
+import { createGameEvent, withGameWrite } from "@/server/scoring";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { prisma } from "@/lib/prisma";
 import { withOrganizationContext } from "@/lib/tenant-context";
@@ -619,34 +620,39 @@ export async function flipPossession(gameId: string, fixtureId: string, formData
   const { session, organizationId } = await requireFixturePermission("game:record-stats", fixtureId);
   const input = sideSchema.parse(Object.fromEntries(formData.entries()));
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    const game = await loadMutableGame(tx, organizationId, gameId, fixtureId, session.user.id);
-    const homeId = requireSeasonClubId(game.fixture, "HOME");
-    const awayId = requireSeasonClubId(game.fixture, "AWAY");
-    if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
-      throw new Error("INVALID_TEAM");
-    }
-
-    const remaining = remainingClockSeconds(game);
-    const sequenceNumber = await nextSequence(tx, gameId, game.nextEventSequence);
-    const side = input.seasonClubId === homeId ? "Home" : "Away";
-
-    await tx.gameEvent.create({
-      data: {
-        organizationId,
-        gameId,
-        seasonClubId: input.seasonClubId,
-        eventType: "NOTE",
-        typeKey: "POSSESSION",
-        period: game.currentPeriod,
-        clockSeconds: remaining,
-        description: `Possession arrow to ${side}`,
-        sequenceNumber,
-        source: STATISTICIAN_SOURCE,
-        createdById: session.user.id,
-      },
-    });
+  // Load the game (without the lock) to compute `side` for the description. The service will
+  // load it again (with the lock) for the canonical write.
+  const game = await prisma.game.findUniqueOrThrow({
+    where: { id: gameId },
+    include: { fixture: true },
   });
+  const homeId = requireSeasonClubId(game.fixture, "HOME");
+  const awayId = requireSeasonClubId(game.fixture, "AWAY");
+  if (input.seasonClubId !== homeId && input.seasonClubId !== awayId) {
+    throw new Error("INVALID_TEAM");
+  }
+  const side = input.seasonClubId === homeId ? "Home" : "Away";
+
+  await withGameWrite(
+    {
+      actor: { id: session.user.id, organizationId },
+      source: "LIVE_UI",
+      ledgerSourceHint: "STATISTICIAN",
+    },
+    async (writeCtx) => {
+      await createGameEvent(
+        {
+          fixtureId,
+          gameId,
+          seasonClubId: input.seasonClubId,
+          eventType: "NOTE",
+          typeKey: "POSSESSION",
+          description: `Possession arrow to ${side}`,
+        },
+        writeCtx,
+      );
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/stats`);
   revalidatePath(`/games/${fixtureId}/stats/live`);

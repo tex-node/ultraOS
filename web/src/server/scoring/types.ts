@@ -35,20 +35,20 @@ export interface WriteContext {
   // outbox payload for forensics.
   ledgerSourceHint?: LedgerSourceHint;
   provenance?: EventProvenance;
-  // Optional Prisma transaction client. When provided, the service participates in the caller's
-  // transaction and never commits on its own. This is what lets the sync endpoint make a
-  // 100-record batch atomic without the service knowing whether it was called once (live UI) or a
-  // hundred times (replay). See the rule-#6 brief.
-  tx?: Prisma.TransactionClient;
+  // REQUIRED Prisma transaction client. The service never opens its own transaction. The caller
+  // owns the boundary — a single statement for the live UI (via withGameWrite), or a 100-record
+  // atomic batch for sync. See the rule-#6 brief.
+  tx: Prisma.TransactionClient;
 }
 
 // A canonical GameEvent write, expressed in domain terms rather than as a raw Prisma input, so the
-// service — not the caller — owns sequence assignment and organization scoping.
+// service — not the caller — owns sequence assignment, clock computation, and organization scoping.
 export interface CreateGameEventInput {
+  fixtureId: string; // Required for the FOR UPDATE lock
   gameId: string;
   eventType: string;
-  period: number;
-  clockSeconds: number;
+  period?: number; // Optional — service computes from game state if not provided
+  clockSeconds?: number; // Optional — service computes from game state if not provided (for sync replay, pass the captured value)
   description: string;
   seasonClubId?: string | null;
   entrantId?: string | null;
@@ -75,10 +75,4 @@ export interface CreateGameEventInput {
   awayScoreAfter?: number | null;
   // Supersession: a correcting event points back at the event it replaces.
   supersedesEventId?: string | null;
-  // Explicit sequence override. Normally omitted — the service assigns the next monotonic value
-  // from Game.nextEventSequence. Callers that already reserved a sequence (e.g. the Ultra Time
-  // transition, which bumps the counter in the same step) pass it here.
-  sequenceNumber?: number | null;
-  // When set, the service advances Game.nextEventSequence by 1 as part of the write.
-  advanceSequence?: boolean;
 }

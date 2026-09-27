@@ -5299,3 +5299,17 @@ STAGE_5_5C: NOT_STARTED
 **Next step**
 
 - A3a Batch 1: migrate the first low-risk `createGameEvent` site group and prune the baseline.
+
+### 2026-09-27 - A3a Batch 1: Service Reshape + flipPossession Migration
+
+**Checks before migration:** CI workflow added + ratchet proven to fail on growth + prune no-op verified (baseline stays at 36 when nothing migrated).
+
+**Service reshape:** createGameEvent now owns the entire canonical write (lock, mutable check, verification-stamp clearing, sequence, clock, validation, insert). WriteContext.tx is required. CreateGameEventInput gained ixtureId, made period/clockSeconds optional, removed sequenceNumber/dvanceSequence. Extracted loadMutableGame to service layer. Added withGameWrite helper.
+
+**Pure builder:** Extracted uildGameEventCreateData to src/lib/scoring/ (testable without DB or server-only). Characterization test captures exact field shape. Caught and fixed correctness bug: data: input.data ?? Prisma.JsonNull → data: input.data ?? undefined (SQL NULL, not JSONB-null).
+
+**flipPossession migration:** Refactored to use withGameWrite + createGameEvent. Caller loads game (without lock) for description; service loads it again (with lock) for write.
+
+**Verification:** Typecheck clean, 744 tests (743 pass, 1 skip, 0 fail), lint 0 errors, ratchet 35/35, build exit 0. Baseline pruned from 36 → 35; ceiling lowered to 35.
+
+**Next step:** A3a Batch 2 — migrate next low-risk createGameEvent site group (plain creates, 3-5 sites).

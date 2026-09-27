@@ -1,6 +1,13 @@
 import "server-only";
 
-export { createGameEvent, GameNotMutableError, GameNotFoundError } from "./createGameEvent";
+export { createGameEvent } from "./createGameEvent";
+export {
+  loadMutableGame,
+  GameNotMutableError,
+  GameNotActiveError,
+  InvalidEventError,
+} from "./load-mutable-game";
+export { withGameWrite } from "./with-game-write";
 export type {
   AuthActor,
   CreateGameEventInput,
