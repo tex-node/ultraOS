@@ -5985,3 +5985,76 @@ tests, not assumed; (3) the fourth shape's actual design (`correctScoreEvent` un
 stat reversal likely becoming a callback-owned `rebuildGameStatsFromEvents` call - a sketch
 question, not decided here).
 
+### 2026-09-27 - A3a: org-id audit, dual-authority finding, Batch S narrowed and shipped
+
+Four items worked in parallel, per explicit instruction, before the Batch S sketch: a production
+audit, a tracked issue, the delta-helper fate decision, and an equivalence proof - the last two
+turned out to be the same piece of work once the fate decision changed what needed proving.
+
+**1. Production org-id audit.** Ran the mismatch query (`child.organizationId != parent's`)
+against `GameEvent`/`Fixture`, plus spot-checks on `PlayerStat`/`Game`, `TeamStat`/`Game`,
+`Fixture`/`Season`, `Player`/`Athlete`: **zero mismatches everywhere checked.** Notable finding
+along the way: LBCL (the only other live tenant) has zero `GameEvent` rows at all - it was
+ingested entirely through the external batch-import pipeline, never the live scorer console, so
+it was never exposed to the bug regardless. `AuditLog` correctly has rows under both
+organizations, confirming other write paths already pass `organizationId` explicitly. Conclusion:
+**latent, not actualized** - not an incident, a scheduled cleanup.
+
+**2. Tracked issue opened:** [tex-node/ultraOS#1](https://github.com/tex-node/ultraOS/issues/1) -
+"Remove hardcoded org default from schema; make `organizationId` required on all writes." The
+same `@default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))` (Neon Ultra's own id) appears on
+`organizationId` across roughly 120 models - a schema-wide pattern, not a `GameEvent`-specific
+one. Deliberately its own phase, not folded into A3a or Batch S - scope and blast radius are
+unrelated, and mixing them would make a regression unbisectable.
+
+**3. Delta-helper fate - git history was a dead end, the code's own documentation wasn't.**
+`git log -S` for both `applyPlayerShotStatDeltas` and `rebuildGameStatsFromEvents` returned the
+same single commit (`fbccbcb`, the large founding commit) - no incremental history to read intent
+from. But `stats-actions.ts`'s and `reconciliation.ts`'s own header comments settled it directly:
+*"The scorer's console remains the sole write path for the official score and the canonical box
+score; the statistician's ledger exists purely as an independently-derived cross-check... the
+safest way to add a second, genuinely independent set of eyes without risking a
+duplicate/competing scoring truth."* Both models were introduced together, deliberately, as
+N-version programming for data-integrity cross-checking - not a historical wart with one "real"
+canonical model waiting to absorb the other. This directly contradicted the framing Batch 0 had
+baked in (`rebuildGameStatsFromEvents` "stays the sole legitimate writer") without anyone having
+stated the contradiction. Logged as its own architectural open question in the audit doc (not
+resolved, not Batch S's to resolve) - it's now the load-bearing decision for A3b's sync-replay
+design: which model does the server apply when reconstructing stats from a synced event ledger?
+Three options sketched, none decided.
+
+**This reframed what "prove equivalence" even meant.** The original ask was proving
+`rebuildGameStatsFromEvents` produces identical results to the incremental path, as the input to
+a migration that converges on one model. Once convergence was off the table, that proof isn't the
+right one. What Batch S actually needed became: (a) prove the *relocation itself* changed
+nothing, and (b) confirm the safety net (`reconciliation.ts`'s mismatch detection) still works,
+unrelated to anything Batch S touched.
+
+**4. Batch S, narrowed, shipped:** `applyPlayerShotStatDeltas`/`applyTeamShotStatDeltas` moved to
+`src/server/scoring/applyShotStatDeltas.ts` - verified byte-for-byte identical to the pre-move
+version by diff, not reimplemented. `mergeShotStatDeltas` moved one level further, to
+`src/lib/scoring/shot-stat-deltas.ts`, since it's genuinely pure (no Prisma, no `server-only`) -
+same split this codebase already uses for `buildGameEventCreateData` vs `createGameEvent`. Added
+5 new test cases for `mergeShotStatDeltas` (it had none before - wasn't independently importable
+pre-move): null-existing-row, null-fields-as-zero, additive accumulation, negated-delta reversal,
+full-field-shape presence. Confirmed (not re-tested, since neither file changed)
+`reconciliation.ts`'s existing suite already exercises deliberately-introduced `MISMATCH`
+detection end to end (signed differences, negative differences, 0-0 edges) - that's the "safety
+net still works" proof, already sitting in the test suite.
+
+**Verification:** Typecheck clean. Tests: 744 -> 749 (5 new), 748 pass, 1 skip, 0 fail. Lint 0
+errors (7 pre-existing warnings). Build exit 0. Ratchet: `eslint --prune-suppressions` dropped
+`actions.ts` from 13 to 11 (the two relocated write sites); ceiling lowered 17 -> 15.
+
+**What's still open, correctly untouched:** `undoLastEvent`'s own raw `playerStat.update`/
+`teamStat.upsert` sites (distinct from the shot-delta helpers - its own logic), `recordScore`'s
+and `recordStatEvent`'s `tx.gameEvent.create` calls (event-write mechanics, separate from the
+stat-delta question just resolved), `voidScoreEventAction`'s coupled score/stat reversal, and the
+fourth shape (`correctScoreEventAction`). None of these needed the fate decision to be blocked -
+they're just not what this round of work was scoped to.
+
+**Next step:** Either continue A3a's remaining scorer-console event-write migrations
+(`recordScore`/`recordStatEvent`'s `createGameEvent` calls, now unblocked from the stat question),
+or move to the A3b sync-replay design question this round surfaced - whichever the next session
+prioritizes.
+
