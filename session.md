@@ -5462,7 +5462,7 @@ check as a standard step going forward, not just for this batch.
 
 **Signature stability:** Zero signature changes needed. The new fields (technicalClass, foulTarget, freeThrowsAwarded) were added to the input types, but the service signature itself remained stable.
 
-**Next step:** A3a Batch 5 � migrate recordStatisticianShot + recordSubstitution (single event + upstream validation).
+**Next step:** A3a Batch 5 � migrate recordStatisticianShot + recordSubstitution (single event + upstream validation).
 
 
 ### 2026-09-27 - A3a Batch 5: recordStatisticianShot + recordSubstitution migration
@@ -5492,5 +5492,73 @@ check as a standard step going forward, not just for this batch.
 
 **Key finding:** Both sites are single-event, pure-compute. No multi-event patterns, no state mutations. Batch 5 proceeded as planned.
 
-**Next step:** A3a Batch 6 � migrate recordWaveSubstitution (multi-event, design question first).
+**Next step:** A3a Batch 6 - migrate recordWaveSubstitution (multi-event, design question first).
+
+### 2026-09-27 - LBCL: Private "Insights" tab (opponent scouting for Ultra Basketball)
+
+**Objective**
+
+- User asked for a coaching-insight view: for every team Ultra Basketball has
+  played or will play, a scouting report (players to watch, threats,
+  exploitable weaknesses) derived from real game data. Must be invisible on
+  the public tournament page, visible only to `texdevices@gmail.com`. Asked
+  whether any MCP could help derive gameplay strategy — none available in
+  this environment is sports-analytics-specific, so the numbers are computed
+  directly from ingested box scores instead (this is the correct approach
+  regardless — no external tool has better ground truth than the actual
+  PlayerStat rows already in the DB).
+
+**Completed**
+
+- `web/src/lib/analytics/opponent-scouting.ts` (new): `buildOpponentScoutingReports(games, focusSeasonClubId)`,
+  a pure function over the existing `GameCore`/`PlayerLine` shapes (same
+  inputs every other analytics view already uses — `game-analytics.ts`,
+  `team-dna.ts`, `records.ts`). For every OTHER team in the season it
+  computes: record, PPG for/against, top 3 scorers with PPG/FG%/3P%/FT%,
+  head-to-head vs the focus team, and threat/weakness notes gated behind
+  explicit numeric thresholds (usage share ≥28%, 3PA rate ≥30% split by
+  whether the 3P% backs it up, turnovers ≥14/game, FT% <60% on ≥5 FTA/game)
+  plus the existing Team DNA tags (`computeLeagueTeamDna`) reused verbatim so
+  the language stays consistent with the rest of the site. No free-form
+  narrative — matches this codebase's stated analytics philosophy ("no
+  AI-generated personality labels... nothing here manufactures flattering
+  prose").
+- `web/src/lib/insights-access.ts` (new): `hasInsightsAccess(email)` —
+  hardcoded to a single email, deliberately not a role, per explicit request.
+- `web/src/app/[vanitySlug]/insights/page.tsx` (new): gated with
+  `notFound()` (not a visible "unauthorized" message) so the page doesn't
+  reveal its own existence to anyone else. Reuses `resolveVanityCompetitionId`
+  + `loadSeasonGameCores` exactly like `/[vanitySlug]/highlights` does.
+  `FOCUS_TEAM_NAME = "Ultra Basketball"` is hardcoded for this request's
+  scope, not configurable.
+- `web/src/app/[vanitySlug]/layout.tsx`: the "Insights" tab is only pushed
+  into `SubSiteTabs`' `extraTabs` when the session's email passes the gate,
+  so it's absent from the DOM entirely for everyone else (not just styled
+  hidden).
+
+**Bug caught before shipping:** the generated game-plan sentence lowercased
+threat/weakness *labels* for readability, which mangled proper nouns —
+"Peter Okeke is the focal point" rendered as "peter okeke is the focal
+point." Fixed by keeping the labels' natural casing; caught by eyeballing a
+real script run against staging data before deploying the first version to
+production.
+
+**Verification**
+
+- tsc/lint/build clean on both the analytics module and the new pages.
+- Anonymous `curl` to `/lbcl/insights` returns 404 on both staging (via
+  localhost) and production; the string "insights" does not appear anywhere
+  in the public `/lbcl` page's HTML (tab correctly absent, not just hidden).
+- Ran `buildOpponentScoutingReports` directly against both staging's and
+  production's real 2026 Season data (19 games each) — 9 opponent reports
+  each, numbers cross-checked against known results (e.g. Ultra Basketball's
+  actual 1-3 head-to-head record against LXB Surulere, Lagos Raptors,
+  Seaside Hoopers, and Cantonment Braves matches exactly).
+
+**Next step**
+
+- None outstanding. The report will read as "not played yet this season" for
+  the 5 teams Ultra hasn't faced yet (Ogra Hoop Kings, Campos Basketballers,
+  White Fire, Square Team, Leo Kareem Foundation) — head-to-head fills in
+  automatically once those games are ingested, no code change needed.
 
