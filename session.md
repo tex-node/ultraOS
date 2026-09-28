@@ -6703,3 +6703,75 @@ unchanged, since `test:db`'s glob (`src/test-support/**`) doesn't overlap `test`
 batch-size limit, `entityType` rejection, empty-batch handling, placeholder per-record results, no
 DB writes yet), with `RemoteScoringRepository`'s deletion folded in per the sketch's Point 4.
 
+### 2026-09-28 - Follow-up: audited DATABASE_URL's other query params for the same silent-ignore pattern
+
+5-minute check, per explicit request, before Commit 2. Read `pg-connection-string`'s parser and
+`pg.Client`'s config reader directly (not assumed): the parser copies every query-string key into
+a generic config object regardless of whether anything downstream reads it, so nothing throws
+either way - the only way to know which matter is to check what `pg.Client` itself looks up.
+`connection_limit`/`pool_timeout` are the same story as `schema` - Prisma query-engine-only
+conventions, meaningless to `pg`, never read. `sslmode` (and `sslcert`/`sslkey`/`sslrootcert`),
+`application_name`, `statement_timeout`, and `idle_in_transaction_session_timeout` are real libpq
+parameters `pg.Client` actively reads and forwards. `?schema=public` is the only one of the ignored
+group present anywhere in this codebase's `DATABASE_URL`s today - no other silent gap exists right
+now. Documented in the audit doc's Point 5.
+
+### 2026-09-28 - A3b Commit 2: sync outbox endpoint skeleton, four decisions settled
+
+Four decisions stated as facts before writing code, per explicit instruction:
+1. **Request schema** - Zod, `entityType: "Game"|"GameEvent"` (matching the already-narrowed
+   `OutboxEntityType`), `operation: "CREATE"|"UPDATE"|"DELETE"`, `idempotencyKey` UUID,
+   `clientUpdatedAt` ISO 8601, `records` capped at 100 with no `.min()` (empty must parse).
+2. **Status semantics** - `200` for any accepted request (results carry per-record detail,
+   including the empty case); `400` malformed/oversized/invalid-entityType; `401` unauthenticated;
+   `403` unauthorized for any game in the batch. Client rule: non-200 is always whole-batch;
+   per-record results exist only inside a `200`.
+3. **Empty batch** - `200` with `{ results: [] }`.
+4. **Ordering** - `clientUpdatedAt` ascending, `idempotencyKey` alphabetical tiebreaker, enforced
+   server-side regardless of input array order; results returned in that same processed order.
+
+**Split pure contract from I/O**, same discipline as every prior batch: `src/lib/sync/outbox-schema.ts`
+(pure - the Zod schema, `sortRecordsForProcessing`, no Prisma/auth/server-only) vs.
+`src/app/api/sync/outbox/route.ts` (auth, DB reads for the authorization pre-check, response
+construction). Necessary here specifically because `requireSession()` gates the route before body
+parsing even happens - the full route can't be unit-tested without heavy auth mocking, but the
+actual CONTRACT (shape, size limit, ordering) can be, and is, directly.
+
+**Authorization pre-check, resolved precisely for the ordering-dependency case the brief
+flagged:** a `Game` record's payload carries `fixtureId` directly; a `GameEvent` record only
+carries `gameId` (checked `src/lib/offline/entities.ts`'s `LocalGameEvent` shape directly, not
+assumed) - so its `fixtureId` is resolved first from an in-batch `Game` `CREATE` record for that
+same `gameId` (the game may not exist in the DB yet, if this very batch creates it), falling back
+to a DB lookup only for a game that already exists from an earlier, already-synced batch. Checked
+before assuming `requireFixturePermission` could be called from inside the authorization-resolving
+transaction: it opens its own transaction internally, and Prisma's interactive transactions aren't
+meant to nest - resolved by doing the DB-read resolution in one `withOrganizationContext` call,
+then the permission checks sequentially afterward, not nested.
+
+**`RemoteScoringRepository` deleted** (confirmed zero references, one final grep before deleting),
+per the sketch's Point 4, folded into this commit as instructed.
+
+**11 new unit tests** (`outbox-schema.test.ts`): contract shape (valid request, `entityType`
+rejection, `operation` rejection, UUID format, ISO-8601 format), empty batch, batch-size limit
+(exactly 100 valid, 101 rejected), and three ordering tests (out-of-order input sorted correctly,
+tiebreak by `idempotencyKey`, and a numeric-vs-lexicographic comparison case - differing
+fractional-second precision between two timestamps, which a naive string comparison would get
+wrong but numeric `Date` comparison doesn't).
+
+**Verification:** Typecheck clean. Full suite 763 -> 774 (+11, unaffected globs - `test`'s pattern
+is `src/lib/**`, `outbox-schema.test.ts` lands there naturally). Fixed one pre-existing lint error
+found while running a full `eslint .` for the first time since the smoke-test commit
+(`scripts/g-batch10-12-rehearsal.ts`: `let ts` never reassigned, four unused `sN` result
+captures) - unrelated to Commit 2's own work, cleaned up in passing. Lint 0 errors. Ratchet
+unaffected (4/4 - the new route/schema files do no raw canonical writes). Build exit 0 (route
+table not visible in the captured tail - a logging-capture limitation, not a build issue; `tsc
+--noEmit` was already clean and a genuine compile error in the route would have failed the build
+outright).
+
+**Deferred to Commit 3** (per the reviewer's own scope line): the actual per-record idempotency
+check against `SyncIdempotency`, and the real canonical-write replay
+(`createGame`/`createGameEvent`) - Commit 2's `results` are a labeled placeholder
+(`status: "APPLIED"` for every accepted record, unconditionally), not real outcomes.
+
+**Next:** Commit 3 - idempotency + canonical-write replay, the core of A3b.
+

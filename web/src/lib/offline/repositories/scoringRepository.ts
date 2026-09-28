@@ -124,52 +124,8 @@ export class LocalScoringRepository implements ScoringRepository {
   }
 }
 
-export class RemoteScoringRepository implements ScoringRepository {
-  constructor(
-    private readonly baseUrl: string = "/api",
-    private readonly fetcher: typeof fetch = fetch,
-  ) {}
-
-  private async request(path: string, init?: RequestInit): Promise<unknown> {
-    const response = await this.fetcher(`${this.baseUrl}${path}`, {
-      headers: { "content-type": "application/json" },
-      ...init,
-    });
-    if (!response.ok) throw new Error(`REMOTE_${response.status}`);
-    return response.json();
-  }
-
-  async createGame(input: CreateGameInput): Promise<LocalGame> {
-    return (await this.request("/games", {
-      method: "POST",
-      body: JSON.stringify(input),
-    })) as LocalGame;
-  }
-
-  async getGame(id: string): Promise<LocalGame | undefined> {
-    try {
-      return (await this.request(`/games/${id}`)) as LocalGame;
-    } catch {
-      return undefined;
-    }
-  }
-
-  async logEvent(input: CreateGameEventInput): Promise<LocalGameEvent> {
-    return (await this.request(`/games/${input.gameId}/events`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    })) as LocalGameEvent;
-  }
-
-  async listEvents(gameId: string): Promise<LocalGameEvent[]> {
-    const result = (await this.request(`/games/${gameId}/events`)) as { events: LocalGameEvent[] };
-    return result.events;
-  }
-
-  async listStats(gameId: string): Promise<LocalPlayerStat[]> {
-    const result = (await this.request(`/games/${gameId}/player-stats`)) as {
-      stats: LocalPlayerStat[];
-    };
-    return result.stats;
-  }
-}
+// No RemoteScoringRepository here (removed - see docs/canonical-write-audit.md, A3b sketch
+// Point 4). It targeted /games, /games/{id}/events, /games/{id}/player-stats - endpoints that
+// never existed and never matched Batch 0's single-batch-endpoint sync design (POST
+// /api/sync/outbox, see src/app/api/sync/outbox/route.ts). Zero callers referenced it; dead,
+// mismatched scaffolding, not a stub of the real plan.

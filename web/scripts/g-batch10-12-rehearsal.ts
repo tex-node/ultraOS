@@ -193,12 +193,12 @@ async function main() {
   // ================= Scenario 1: score a 2PT, then immediately undo it =================
   // undoLastEvent only ever targets the single most recent event - undoing the 2PT specifically
   // means calling it right after scoring it, before anything else exists.
-  const s1 = await score(home.id, homePlayers[0].id, 2);
+  await score(home.id, homePlayers[0].id, 2);
   let fx = await prisma.fixture.findUniqueOrThrow({ where: { id: fixture.id } });
   ok("Step 2: 2PT shot - Fixture.homeScore is 2", fx.homeScore === 2, fx.homeScore);
   let ps = await prisma.playerStat.findUniqueOrThrow({ where: { gameId_playerId: { gameId: game.id, playerId: homePlayers[0].id } } });
   ok("Step 2: PlayerStat.points/fieldGoalsMade/twoPointsMade all reflect the 2PT make", ps.points === 2 && ps.fieldGoalsMade === 1 && ps.twoPointsMade === 1, ps);
-  let ts = await prisma.teamStat.findUniqueOrThrow({ where: { gameId_seasonClubId: { gameId: game.id, seasonClubId: home.id } } });
+  const ts = await prisma.teamStat.findUniqueOrThrow({ where: { gameId_seasonClubId: { gameId: game.id, seasonClubId: home.id } } });
   ok("Step 2: TeamStat.points reflects the 2PT make", ts.points === 2, ts.points);
 
   await undoLast();
@@ -212,7 +212,7 @@ async function main() {
 
   // ================= Scenario 1b: re-score the 2PT and a fresh 3PT for later scenarios =================
   await score(home.id, homePlayers[0].id, 2);
-  const s2 = await score(home.id, homePlayers[1].id, 3);
+  await score(home.id, homePlayers[1].id, 3);
   fx = await prisma.fixture.findUniqueOrThrow({ where: { id: fixture.id } });
   ok("Step 3: 3PT shot - Fixture.homeScore is 5 (2+3)", fx.homeScore === 5, fx.homeScore);
   let ps2 = await prisma.playerStat.findUniqueOrThrow({ where: { gameId_playerId: { gameId: game.id, playerId: homePlayers[1].id } } });
@@ -231,7 +231,7 @@ async function main() {
   // Uses the away team / a not-yet-scoring player, kept isolated from the home-team scenarios
   // above so the "reverts to zero" assertion doesn't have to account for accumulation from an
   // earlier make by the same player.
-  const s3 = await score(away.id, awayPlayers[1].id, 3);
+  await score(away.id, awayPlayers[1].id, 3);
   const eventToVoid = await prisma.gameEvent.findFirstOrThrow({ where: { gameId: game.id, eventType: "SCORE", status: "ACTIVE", playerId: awayPlayers[1].id }, orderBy: { createdAt: "desc" } });
   await withGameWrite(game.id, fixture.id, ctx, (writeCtx) => voidScoreEvent(eventToVoid.id, "Rehearsal void test", writeCtx));
   fx = await prisma.fixture.findUniqueOrThrow({ where: { id: fixture.id } });
@@ -244,7 +244,7 @@ async function main() {
   );
 
   // ================= Scenario 5: correct a score event (wrong-player correction) =================
-  const s4 = await score(away.id, awayPlayers[0].id, 2); // a 2PT to correct
+  await score(away.id, awayPlayers[0].id, 2); // a 2PT to correct
   const eventToCorrect = await prisma.gameEvent.findFirstOrThrow({ where: { gameId: game.id, eventType: "SCORE", status: "ACTIVE", playerId: awayPlayers[0].id }, orderBy: { createdAt: "desc" } });
   const correctionShot = scoreShot({ rules: effectiveRuleSnapshot(null), shotValue: 3, gameStatus: "LIVE", currentPeriod: eventToCorrect.period, remainingClockSeconds: eventToCorrect.clockSeconds ?? 0 });
   ok("Correction shot (3PT) is valid under current rules", correctionShot.valid);

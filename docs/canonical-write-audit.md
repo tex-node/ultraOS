@@ -262,6 +262,18 @@ specifically because it was wrong once already. This does not affect `src/lib/pr
 production only ever targets one schema (`public`), so the no-op `?schema=` param there was
 never a bug, just misleading if read as "this is what scopes the connection."
 
+**Checked whether `?schema=` has silently-ignored siblings** (read `pg-connection-string`'s parser
+and `pg.Client`'s config reader directly, not assumed): `pg-connection-string` copies *every*
+query-string key into a generic config object regardless of whether anything downstream reads it,
+so nothing throws either way - the only way to know which ones matter is to check what `pg.Client`
+itself looks up. `connection_limit` and `pool_timeout` are the same story as `schema` - Prisma
+query-engine-only conventions, meaningless to `pg`, never read (`pg.Pool`'s own pool size is a
+`PoolConfig.max` field, not a connection-string param at all). `sslmode` (and `sslcert`/`sslkey`/
+`sslrootcert`), `application_name`, `statement_timeout`, and
+`idle_in_transaction_session_timeout` are real libpq parameters `pg.Client` actively reads and
+forwards. `?schema=public` is the only one of the ignored group present anywhere in this
+codebase's `DATABASE_URL`s today - no other silent gap exists right now.
+
 No new package required - `pg` and `@prisma/adapter-pg` were already present. `npm run test:db`
 runs this suite; requires `DATABASE_URL` pointing at a real, reachable Postgres the role can
 `CREATE SCHEMA`/`DROP SCHEMA` on, and `NODE_OPTIONS=--conditions=react-server` so the `server-only`
