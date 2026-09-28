@@ -932,9 +932,17 @@ export async function undoLastEvent(gameId: string, fixtureId: string) {
       });
       const existing = await tx.playerStat.findUnique({ where: { gameId_playerId: { gameId, playerId: last.playerId } } });
       if (existing && existing[field] > 0) {
+        // Reverse the Ultra-Time mirror too, not just the primary field - recordStatEvent sets
+        // both when the original event was logged during Ultra Time, so undoing it should
+        // decrement both the same way, instead of leaving the mirror inflated relative to the
+        // primary field (the same class of gap the SCORE branch's shot-category fix addressed).
+        const ultraField = ULTRA_TIME_STAT_FIELD[field];
         await tx.playerStat.update({
           where: { gameId_playerId: { gameId, playerId: last.playerId } },
-          data: { [field]: { decrement: 1 } },
+          data: {
+            [field]: { decrement: 1 },
+            ...(last.isUltraTime && (existing[ultraField] ?? 0) > 0 ? { [ultraField]: { decrement: 1 } } : {}),
+          },
         });
       }
     } else {

@@ -6480,3 +6480,27 @@ specific count 6 -> 3 (the three raw sites migrated: one `gameEvent.update` in v
 **Next:** Batch 12 (`undoLastEvent`'s own migration - the compensation shape), then the pre-A3b
 scorer-console smoke test (score/void/undo/verify, still not this batch's job), then A3b.
 
+### 2026-09-28 - undoLastEvent: fixed the generic branch's Ultra-Time mirror gap, before Batch 12
+
+Second gap in this function, same class as the SCORE-branch fix, flagged (not fixed) back in
+Batch 10b's session note and confirmed now before Batch 12 touches the function. The generic
+(non-SCORE) branch's decrement (`tx.playerStat.update({ [field]: { decrement: 1 } })`) never
+touched the field's Ultra-Time mirror at all - `recordStatEvent` sets both when an event is
+logged during Ultra Time, so undoing it left the mirror inflated relative to the primary field,
+the same shape of bug the SCORE branch had for shot-category fields.
+
+**Fixed:** reads the mirror's existing value alongside the primary field's, decrements it too when
+the undone event was itself an Ultra-Time event and the mirror's own value is still positive - an
+additional guard, not just the primary field's, so a corrupted/negative mirror can't be produced
+by one undo racing ahead of what actually happened. The primary field's existing `> 0` guard is
+unchanged; this only adds a conditional field to the same update call, so ratchet count is
+unaffected (still one `playerStat.update` call site).
+
+**Verification:** Typecheck clean. Lint 0 errors. Full suite unchanged at 763 (no test file exists
+for this function, same Prisma-transactional gap as the SCORE-branch fix - the wiring mirrors
+`recordStatEvent`'s already-established for/mirror pairing). Ratchet unaffected (7/7, unchanged).
+Build exit 0.
+
+**Next:** Batch 12 - `undoLastEvent`'s actual migration to the canonical write services, now that
+both its reversal paths are correct.
+
