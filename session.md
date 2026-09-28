@@ -6092,3 +6092,48 @@ found while grounding: **PlayerStat and TeamStat are projections; they are never
 five A2 pitfalls, the sync test-infrastructure question already named), then write the full
 five-point sketch - stat-model decision as item one, same rigor as Batch 7.
 
+### 2026-09-28 - A3b prep, corrected: delete updatePlayerStat, not strip it
+
+The prior commit's fix (narrow `OutboxEntityType`, strip `updatePlayerStat`'s enqueue, keep the
+method as a materialized local write) was the wrong resolution, caught before it could ship
+further. Zero callers exist for `updatePlayerStat` - there's no evidence for materialized vs.
+computed local stat projection, and keeping the method silently committed to "materialized"
+before the A3b sketch has picked a direction. The API surface itself was the deeper problem: a
+future developer reading `ScoringRepository` would reasonably assume `updatePlayerStat` is a
+legitimate, intentional method, not leftover drift.
+
+Considered "computed" (derive stats on read from local events, no local write method at all) as
+the alternative default, since it removes an entire class of "when do I update the materialized
+row" bugs. Checked before assuming it was free: no existing pure reducer covers it.
+`derivePlayerStats` (`event-derived-stats.ts`) is statistician-only - a different
+`DerivableEventType` union (`SHOT_MADE`, `FREE_THROW_MADE`, etc.) than the scorer's `SCORE`-type
+events the offline client actually logs. Writing a scorer-specific reducer now would be real new
+work, and it would commit to "computed" before the sketch decides - the same double-touch risk
+already avoided for `recordScore`/`recordStatEvent`.
+
+**Resolution: delete, don't choose.** Removed `updatePlayerStat` entirely from
+`ScoringRepository`, `LocalScoringRepository`, `RemoteScoringRepository`, and the now-unused
+`UpdatePlayerStatInput` type. Deleted (not corrected) the two tests that exercised it - they
+asserted behavior that shouldn't exist, so deleting the method deletes that test surface with it,
+rather than leaving a regression test for a workaround. `listStats` and the local `playerStats`
+Dexie table are untouched - only the write path that produced the original drift is gone. The
+method returns, with correct semantics for whichever model A3b picks, once there's an actual
+caller.
+
+**Verification:** Typecheck clean. Tests: 749 -> 747 (2 deleted), 746 pass, 1 skip, 0 fail. Lint 0
+errors (7 pre-existing warnings). Build exit 0. Ratchet unaffected (offline layer, outside the
+canonical-write zone).
+
+Audit doc entry simplified to one paragraph, matching the three-shapes section's format, per
+explicit request - the verbose version from the prior commit was replaced, not left alongside.
+
+**A3b's sketch now starts genuinely clean**: no unresolved contradiction between a written
+decision and shipped code, no drift-driven distraction in the outbox vocabulary. The only real
+question left is the one that was always the point - which stat model does the server apply
+during sync replay (scorer-incremental, statistician-rebuild, or dual-authority preserved) - and
+everything downstream (whether a reducer gets written, whether a local-projection method returns,
+how A3b's replay endpoint processes a batch) follows from that answer.
+
+**Next step:** Continue grounding (SyncIdempotency/SyncConflictLog schema, A2's five sync
+pitfalls, sync test-infrastructure), then write the five-point sketch.
+
