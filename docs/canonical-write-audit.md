@@ -238,15 +238,18 @@ derivation for the same missing-reducer reason, so a local projection has nothin
 yet either.
 
 **`recordScore`, `recordStatEvent`, `voidScoreEventAction`, `correctScoreEventAction`,
-`undoLastEvent` - the stat-model uncertainty that held these back is resolved, but not yet acted
-on.** These five were held because migrating them risked doing the work twice if A3b picked a
-different stat model. Point 3 above resolves that: dual-authority-via-verification-gate is already
-the model, in production, today - A3b's replay design doesn't change it, it only decides what
-happens to *synced* events under it (Point 1). That means the uncertainty that justified holding
-these five live-console sites is gone; they could migrate into the canonical-write shapes now,
-independent of A3b's implementation. Not done here - raised as a newly-available option, not
-assumed. If taken, each keeps its existing incremental-delta behavior unchanged; nothing about
-Point 1-5 above requires changing what these functions do today, only where the write calls live.
+`undoLastEvent` - migrated, Batches 10a/10b/11/12.** The stat-model uncertainty that originally
+held these back resolved via Point 3 above (dual-authority-via-verification-gate is already the
+model, in production, today - A3b's replay design doesn't change it). Each kept its existing
+incremental-delta behavior unchanged; only where the write calls live changed. Two genuinely new
+canonical-write shapes came out of this (`voidScoreEvent`, `correctScoreEvent` - see "Coupled
+writes... are not a side effect" below), one new primitive (`applyCountingStatDelta`, Batch 10b),
+and `undoLastEvent` needed neither - its compensation shape (append an offsetting event, never
+flip the original's status) is fully served by `createGameEvent` plus the same primitive. Two
+latent gaps surfaced and were fixed ahead of their sites' migrations, each its own commit: a
+missing shot-category-delta reversal in `undoLastEvent`'s SCORE branch, and a missing Ultra-Time-
+mirror reversal in its generic branch. `actions.ts` has zero raw `gameEvent`/`playerStat`/`teamStat`
+write sites remaining - it dropped out of `eslint-suppressions.json` entirely.
 
 ## Post-migration issue: `data` field null semantics
 

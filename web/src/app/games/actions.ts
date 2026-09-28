@@ -840,124 +840,123 @@ export async function finalizeGame(gameId: string, fixtureId: string) {
 export async function undoLastEvent(gameId: string, fixtureId: string) {
   const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    // Same row lock as recordScore - the reversal below also reads-then-writes an absolute score.
-    await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
-    const game = await tx.game.findUniqueOrThrow({
-      where: { id: gameId },
-      include: { fixture: true },
-    });
-    assertGameIsMutable(game.status, game.fixture.status);
-
-    const last = await tx.gameEvent.findFirst({
-      // Ultra Time transitions are system-generated (see syncUltraTimeState), not something
-      // an operator entered - undo should skip past them to the real last manual action.
-      where: { gameId, eventType: { notIn: ["ULTRA_TIME_STARTED", "ULTRA_TIME_ENDED"] } },
-      orderBy: { createdAt: "desc" },
-    });
-    if (!last) throw new Error("NO_EVENTS_TO_UNDO");
-    if (!last.seasonClubId) throw new Error("EVENT_NOT_UNDOABLE");
-
-    const clockSeconds = remainingClockSeconds(game);
-
-    if (last.eventType === "SCORE") {
-      const isHome = last.seasonClubId === game.fixture.homeSeasonClubId!;
-      const currentScore = isHome ? game.fixture.homeScore : game.fixture.awayScore;
-      const reversal = -(last.points ?? 0);
-      const nextScore = Math.max(0, currentScore + reversal);
-      const actualReversal = nextScore - currentScore;
-
-      await tx.fixture.update({
-        where: { id: fixtureId },
-        data: isHome ? { homeScore: nextScore } : { awayScore: nextScore },
+  await withGameWrite(
+    gameId,
+    fixtureId,
+    { actor: { id: session.user.id, organizationId }, source: "LIVE_UI" },
+    async ({ game, tx, ...writeCtx }) => {
+      const last = await tx.gameEvent.findFirst({
+        // Ultra Time transitions are system-generated (see syncUltraTimeState), not something
+        // an operator entered - undo should skip past them to the real last manual action.
+        where: { gameId, eventType: { notIn: ["ULTRA_TIME_STARTED", "ULTRA_TIME_ENDED"] } },
+        orderBy: { createdAt: "desc" },
       });
-      await tx.gameEvent.create({
-        data: {
-          organizationId,
-          gameId,
-          seasonClubId: last.seasonClubId,
-          playerId: last.playerId,
-          eventType: "SCORE",
-          points: actualReversal,
-          period: game.currentPeriod,
-          clockSeconds,
-          description: `Undo: reversed previous ${last.points! > 0 ? "+" : ""}${last.points} score entry`,
-        },
-      });
-      // Reverse the shot-category deltas too, not just the raw point total - the same helper
-      // voidScoreEventAction uses, so undoing a made 3-pointer decrements 3PM/3PA the same way
-      // voiding it would, instead of leaving those fields inflated relative to `points`.
-      const reversedDeltas = negateShotStatDeltas(shotStatDeltas({ basePointValue: last.basePointValue, isUltraTime: last.isUltraTime }));
-      if (last.playerId && actualReversal !== 0) {
-        await applyPlayerShotStatDeltas(tx, organizationId, gameId, last.playerId, last.seasonClubId, reversedDeltas, actualReversal);
-      }
-      await applyTeamShotStatDeltas(
-        tx,
-        organizationId,
-        gameId,
-        last.seasonClubId,
-        reversedDeltas,
-        last.isUltraTime ? actualReversal : 0,
-        0,
-        nextScore,
-      );
-      if (last.isUltraTime && actualReversal !== 0) {
-        const opposingSeasonClubId = isHome ? game.fixture.awaySeasonClubId! : game.fixture.homeSeasonClubId!;
+      if (!last) throw new Error("NO_EVENTS_TO_UNDO");
+      if (!last.seasonClubId) throw new Error("EVENT_NOT_UNDOABLE");
+
+      const clockSeconds = remainingClockSeconds(game);
+
+      if (last.eventType === "SCORE") {
+        const isHome = last.seasonClubId === game.fixture.homeSeasonClubId!;
+        const currentScore = isHome ? game.fixture.homeScore : game.fixture.awayScore;
+        const reversal = -(last.points ?? 0);
+        const nextScore = Math.max(0, currentScore + reversal);
+        const actualReversal = nextScore - currentScore;
+
+        await tx.fixture.update({
+          where: { id: fixtureId },
+          data: isHome ? { homeScore: nextScore } : { awayScore: nextScore },
+        });
+        await createGameEvent(
+          {
+            gameId,
+            fixtureId,
+            seasonClubId: last.seasonClubId,
+            playerId: last.playerId,
+            eventType: "SCORE",
+            points: actualReversal,
+            period: game.currentPeriod,
+            clockSeconds,
+            description: `Undo: reversed previous ${last.points! > 0 ? "+" : ""}${last.points} score entry`,
+          },
+          { ...writeCtx, tx },
+        );
+        // Reverse the shot-category deltas too, not just the raw point total - the same helper
+        // voidScoreEventAction uses, so undoing a made 3-pointer decrements 3PM/3PA the same way
+        // voiding it would, instead of leaving those fields inflated relative to `points`.
+        const reversedDeltas = negateShotStatDeltas(shotStatDeltas({ basePointValue: last.basePointValue, isUltraTime: last.isUltraTime }));
+        if (last.playerId && actualReversal !== 0) {
+          await applyPlayerShotStatDeltas(tx, organizationId, gameId, last.playerId, last.seasonClubId, reversedDeltas, actualReversal);
+        }
         await applyTeamShotStatDeltas(
           tx,
           organizationId,
           gameId,
-          opposingSeasonClubId,
-          { fourPointsMade: 0, fourPointsAttempted: 0, ultraTimeFieldGoalsMade: 0, ultraTimeFieldGoalsAttempted: 0 },
+          last.seasonClubId,
+          reversedDeltas,
+          last.isUltraTime ? actualReversal : 0,
           0,
-          actualReversal,
-          isHome ? game.fixture.awayScore : game.fixture.homeScore,
+          nextScore,
         );
-      }
-    } else if (last.playerId && STAT_FIELD[last.eventType]) {
-      const field = STAT_FIELD[last.eventType];
-      await tx.gameEvent.create({
-        data: {
-          organizationId,
-          gameId,
-          seasonClubId: last.seasonClubId,
-          playerId: last.playerId,
-          fouledPlayerId: last.fouledPlayerId,
-          foulType: last.foulType,
-          eventType: last.eventType,
-          period: game.currentPeriod,
-          clockSeconds,
-          description: `Undo: reversed previous ${last.eventType.toLowerCase()}`,
-        },
-      });
-      const existing = await tx.playerStat.findUnique({ where: { gameId_playerId: { gameId, playerId: last.playerId } } });
-      if (existing && existing[field] > 0) {
-        // Reverse the Ultra-Time mirror too, not just the primary field - recordStatEvent sets
-        // both when the original event was logged during Ultra Time, so undoing it should
-        // decrement both the same way, instead of leaving the mirror inflated relative to the
-        // primary field (the same class of gap the SCORE branch's shot-category fix addressed).
-        const ultraField = ULTRA_TIME_STAT_FIELD[field];
-        await tx.playerStat.update({
-          where: { gameId_playerId: { gameId, playerId: last.playerId } },
-          data: {
-            [field]: { decrement: 1 },
-            ...(last.isUltraTime && (existing[ultraField] ?? 0) > 0 ? { [ultraField]: { decrement: 1 } } : {}),
+        if (last.isUltraTime && actualReversal !== 0) {
+          const opposingSeasonClubId = isHome ? game.fixture.awaySeasonClubId! : game.fixture.homeSeasonClubId!;
+          await applyTeamShotStatDeltas(
+            tx,
+            organizationId,
+            gameId,
+            opposingSeasonClubId,
+            { fourPointsMade: 0, fourPointsAttempted: 0, ultraTimeFieldGoalsMade: 0, ultraTimeFieldGoalsAttempted: 0 },
+            0,
+            actualReversal,
+            isHome ? game.fixture.awayScore : game.fixture.homeScore,
+          );
+        }
+      } else if (last.playerId && STAT_FIELD[last.eventType]) {
+        const field = STAT_FIELD[last.eventType];
+        await createGameEvent(
+          {
+            gameId,
+            fixtureId,
+            seasonClubId: last.seasonClubId,
+            playerId: last.playerId,
+            fouledPlayerId: last.fouledPlayerId,
+            foulType: last.foulType,
+            eventType: last.eventType,
+            period: game.currentPeriod,
+            clockSeconds,
+            description: `Undo: reversed previous ${last.eventType.toLowerCase()}`,
           },
-        });
+          { ...writeCtx, tx },
+        );
+        const existing = await tx.playerStat.findUnique({ where: { gameId_playerId: { gameId, playerId: last.playerId } } });
+        if (existing && existing[field] > 0) {
+          const ultraField = ULTRA_TIME_STAT_FIELD[field];
+          const reverseUltraTime = last.isUltraTime && (existing[ultraField] ?? 0) > 0;
+          await applyCountingStatDelta(
+            tx,
+            organizationId,
+            gameId,
+            last.playerId,
+            last.seasonClubId,
+            field,
+            -1,
+            reverseUltraTime ? { field: ultraField, delta: -1 } : null,
+          );
+        }
+      } else {
+        throw new Error("EVENT_NOT_UNDOABLE");
       }
-    } else {
-      throw new Error("EVENT_NOT_UNDOABLE");
-    }
 
-    await writeAuditLog(tx, {
-      organizationId,
-      userId: session.user.id,
-      action: "GAME_EVENT_UNDONE",
-      entityType: "Game",
-      entityId: gameId,
-      details: { fixtureId, undoneEventId: last.id, undoneEventType: last.eventType, undoneDescription: last.description },
-    });
-  });
+      await writeAuditLog(tx, {
+        organizationId,
+        userId: session.user.id,
+        action: "GAME_EVENT_UNDONE",
+        entityType: "Game",
+        entityId: gameId,
+        details: { fixtureId, undoneEventId: last.id, undoneEventType: last.eventType, undoneDescription: last.description },
+      });
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/live`);
   revalidatePath(`/scoreboard/${gameId}`);

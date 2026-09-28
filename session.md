@@ -6504,3 +6504,52 @@ Build exit 0.
 **Next:** Batch 12 - `undoLastEvent`'s actual migration to the canonical write services, now that
 both its reversal paths are correct.
 
+### 2026-09-28 - A3a Batch 12: undoLastEvent migrated - actions.ts's canonical-write vocabulary is closed
+
+The sixth shape named this session (compensation: append an offsetting event, never flip the
+original's status) didn't need a new service - `createGameEvent` (for both branches' inserts) and
+`applyCountingStatDelta` (Batch 10b's primitive, built with exactly this future caller in mind -
+"a future reversal, Batch 12's generic branch" - in its own header comment) already cover it.
+
+**Migrated:** `withOrganizationContext` + manual gate -> `withGameWrite` (same reasoning as every
+prior batch - `undoLastEvent` needs only `fixture`, no richer include). SCORE branch's raw
+`tx.gameEvent.create` -> `createGameEvent`; generic branch's raw `tx.gameEvent.create` ->
+`createGameEvent`; generic branch's raw `tx.playerStat.findUnique`+conditional `update` ->
+the same guard logic (read `existing`, check `existing[field] > 0`), then
+`applyCountingStatDelta(..., field, -1, reverseUltraTime ? {field: ultraField, delta: -1} : null)`
+- byte-for-byte the same resulting write, routed through the primitive instead of a raw call.
+
+**Latent gap closed as an incidental consequence, not fixed directly:** neither of `undoLastEvent`'s
+two raw creates ever set `source` or `createdById` - both undo-generated events were persisted with
+`source: null` and no recorded actor, unlike every other event-creating site in this file.
+`createGameEvent` makes both mandatory (`source` via `ledgerSourceFor(ctx.source, ...)`,
+`createdById` via `ctx.actor.id`) - there's no way to opt out and keep the old null behavior even if
+that were wanted. Same pattern as the `organizationId` DB-default fix (`syncUltraTimeState`, Batch
+9b) and the `assertGameIsMutable` LIVE/PAUSED gap (Batch 11): named here rather than left for a
+future reader to notice the ledger quietly improved.
+
+**`actions.ts`'s canonical-write vocabulary is now fully closed.** Every site that used to write
+`gameEvent`/`playerStat`/`teamStat` directly now routes through `src/server/scoring/**`.
+`eslint-suppressions.json` no longer has an entry for `actions.ts` at all - it dropped out of the
+file rather than shrinking to a smaller count, the first time that's happened to any file this
+session. Every canonical write in the app now routes through one of: `createGameEvent`,
+`correctStatisticianEvent`, `voidGameEvent`, `correctScoreEvent`, `voidScoreEvent`,
+`applyPlayerShotStatDeltas`/`applyTeamShotStatDeltas`, or `applyCountingStatDelta`.
+
+**Verification:** Typecheck clean. Lint 0 errors. Full suite unchanged at 763 (no test file exists
+for this function - same Prisma-transactional gap as Batches 10a/10b/11's migrated sites; the
+underlying math this now routes through - shot-stat deltas, counting-stat deltas - already has its
+own unit coverage from earlier batches). Ratchet: `actions.ts` file-specific count 3 -> 0 (dropped
+out of `eslint-suppressions.json` entirely). Total baseline across the two remaining suppressed
+files (`stats-actions.ts` 2, `game-result-import.ts` 2): 7 -> 4. Ceiling lowered 7 -> 4 to match,
+1:1, zero headroom. Build exit 0.
+
+**Not this batch's job, still open:** the pre-A3b scorer-console smoke test (score/void/undo/
+verify end-to-end) flagged after Batch 10a - `actions.ts` still has zero direct test coverage of
+any of its exported functions, only of the pure math they now call into. `game-result-import.ts`
+and `stats-actions.ts`'s remaining 2+2 suppressions are outside A3a's scope (statistician console
+already closed in Batch 8; `game-result-import.ts` was never in scope for this project).
+
+**Next:** the pre-A3b scorer-console smoke test, then A3b's actual sync-replay endpoint
+implementation, against the sketch already written to `docs/canonical-write-audit.md`.
+

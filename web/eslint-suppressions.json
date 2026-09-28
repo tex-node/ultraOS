@@ -1,9 +1,4 @@
 {
-  "src/app/games/actions.ts": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
   "src/app/games/stats-actions.ts": {
     "no-restricted-syntax": {
       "count": 2
