@@ -184,6 +184,15 @@ Verified before shipping: no production query filtered on the literal `"OFFLINE_
 files did), and a direct production query confirmed the enum value and the provenance columns
 aren't deployed yet - zero rows, nothing to backfill.
 
+**Escalated by the Batch 10-12 smoke test (2026-09-28):** "aren't deployed yet" turned out to be a
+live blocker, not just a fact about sync's own future rollout - `createGameEvent`'s generated
+Prisma Client already writes to these columns unconditionally on every insert (`buildGameEventCreateData`
+always sets `deviceId`/`idempotencyKey`/`clientUpdatedAt`/`syncBatchId`), so **any** `createGameEvent`
+call fails with `P2022` against a database that hasn't applied
+`20260927120001_p13_sync_idempotency_conflictlog` yet - which is every environment right now.
+Applying this migration is therefore a prerequisite for Batches 10-12 reaching production, not
+solely an A3b-time decision. See `docs/runbooks/a3a-batch10-12-smoke-test.md` for the full finding.
+
 **Scope implication for A3b, stated as a decision rather than left for the implementer to
 discover:** `ledgerSourceHint` is now load-bearing on the wire, not forensic metadata. The sync
 outbox's `GameEvent` wire record must carry a hint for every entry, and A3b's outbox type should

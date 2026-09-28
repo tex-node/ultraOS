@@ -6553,3 +6553,58 @@ already closed in Batch 8; `game-result-import.ts` was never in scope for this p
 **Next:** the pre-A3b scorer-console smoke test, then A3b's actual sync-replay endpoint
 implementation, against the sketch already written to `docs/canonical-write-audit.md`.
 
+### 2026-09-28 - Pre-A3b smoke test: all 10 scenarios pass, but surfaced a live production defect
+
+Full write-up: `docs/runbooks/a3a-batch10-12-smoke-test.md`. Summary here.
+
+**Could not follow the plan literally.** "Login as scorer" via the browser is prohibited
+regardless of authorization - `scripts/g15-rehearsal.ts`'s own header already names this exact
+constraint from prior project planning, and staging (`app.neonultra.ng/staging`) is not a
+`localhost`/`.test` host this session's own operating rules would exempt anyway. Wrote
+`scripts/g-batch10-12-rehearsal.ts` instead: calls the real canonical services
+(`withGameWrite`, `createGameEvent`, `applyPlayerShotStatDeltas`/`applyTeamShotStatDeltas`,
+`applyCountingStatDelta`, `voidScoreEvent`, `correctScoreEvent`) directly against a real
+transaction, substituting an explicit actor for the session-derived one - not a shortcut around
+the logic, only around the login form. Needed `NODE_OPTIONS=--conditions=react-server` to resolve
+the `server-only` guard to its build-time stub instead of the throwing default a plain `tsx` run
+gets otherwise.
+
+**Deployed `e8e75b5` (current `main`) to staging first** - 10 local commits were unpushed. Pushed,
+then deployed via the established `deploy/deploy.sh` pattern, no `--migrate` (none of Batches
+10-12 touch `schema.prisma`).
+
+**Critical finding, found immediately on first run, before any actual test logic ran:** every
+`createGameEvent` call failed with `P2022: deviceId of relation GameEvent does not exist`.
+`schema.prisma` has declared the P13/A3 sync-provenance columns
+(`deviceId`/`idempotencyKey`/`clientUpdatedAt`/`syncBatchId`) since this session's Batch 0 - the
+generated Prisma Client expects them - but the migration adding them
+(`20260927120001_p13_sync_idempotency_conflictlog`) had never been *applied* to staging or
+production (confirmed via direct `psql` on both, earlier this session for production, now for
+staging too). **This means `createGameEvent` - the shared insert path every migrated site since
+Batch 7 uses - has been broken in both environments this whole time**, independent of anything in
+Batches 10-12. Checked production's logs for 60 days: zero `P2022`/`deviceId` matches - latent,
+not actualized, because production hasn't deployed Batches 10-12 yet (still runs the pre-migration
+`recordScore` that writes `GameEvent` raw) and the handful of already-shipped `createGameEvent`
+sites (statistician corrections, non-basketball events, Ultra Time transitions) apparently haven't
+hit it yet. **Once Batches 10-12 reach production, this becomes a total, first-touch outage on the
+primary scoring console**, not an edge case.
+
+Applied both pending migrations to staging (`npx prisma migrate deploy` - purely additive, no data
+risk) to unblock the smoke test. **Not applied to production** - flagged for the user's decision on
+timing relative to a production deploy of Batches 10-12, not made unilaterally.
+
+**All 10 scenarios passed** after the schema fix, including two rehearsal-script bugs (not code
+bugs) found and fixed along the way: an undo-target ordering mistake (undo always targets the
+single most recent event - scoring two things before undoing hit the wrong one), and a wrong
+expectation about `correctScoreEvent`'s `actualPoints` return value (it's the replacement event's
+own point value, not "new minus old" - matches the pre-existing, unmigrated function's own
+definition exactly, once traced through). Both previously-buggy paths this session fixed ahead of
+migration (`undoLastEvent`'s shot-category reversal, its Ultra-Time-mirror reversal) were
+specifically exercised and confirmed correct. Cleanup verified: all rehearsal rows deleted, staging
+DB returned to clean state after each of the three run attempts (two of which needed manual
+cleanup of rows created before the crashed transaction, since Postgres only rolled back what was
+inside it).
+
+**Not yet done:** apply the migration to production (user's call on timing); commit the rehearsal
+script + runbook; then A3b.
+
