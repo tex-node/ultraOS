@@ -6294,6 +6294,12 @@ stating this plainly rather than presenting typecheck/lint as if they were behav
 this file). Ratchet: `actions.ts` suppressions 11 -> 9 (the two raw calls this fix replaced with
 already-canonical helper calls), ceiling lowered 15 -> 13 to match. Lint 0 errors. Build exit 0.
 
+**Arithmetic, unambiguous:** "11 -> 9" is `actions.ts`'s own file-specific count (its two other
+suppressed files, `stats-actions.ts` and `game-result-import.ts`, are unchanged at 2 each). Total
+baseline across all three files: 11+2+2=15 before, 9+2+2=13 after. The ceiling (`maxEntries`) was
+lowered 15 -> 13 in the same commit - 1:1 with the total, zero headroom created. `check-canonical-
+write-baseline.mjs` confirms: "13 suppressions (ceiling 13)".
+
 **Next:** Batch 10a (`recordScore`), Batch 10b (`recordStatEvent` + a new single-field-increment
 primitive, its own design question - field whitelist? signed delta or direction?), Batch 11
 (`voidScoreEventAction` + `correctScoreEventAction`, the mutable-gate amendment pair), Batch 12
