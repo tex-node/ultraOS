@@ -6137,3 +6137,76 @@ how A3b's replay endpoint processes a batch) follows from that answer.
 **Next step:** Continue grounding (SyncIdempotency/SyncConflictLog schema, A2's five sync
 pitfalls, sync test-infrastructure), then write the five-point sketch.
 
+### 2026-09-28 - A3b prep: ledgerSourceFor no longer collapses synced statistician events
+
+Grounding the sketch's three open points (Point 1's deferral reasoning, Point 2's source/transport
+tension, and the unstated Point 3 - does `rebuildGameStatsFromEvents` write the same `PlayerStat`
+row the scorer writes incrementally) surfaced a latent bug in already-shipped code, ahead of the
+sync endpoint that would have triggered it.
+
+**Point 3, resolved:** `PlayerStat.@@unique([gameId, playerId])` confirms one physical row per
+player per game - `statSource` is a label, not part of the key. Read `verifyStatistics`
+(`stats-actions.ts:962`) in full: it's a human-gated, audited action (`result:confirm` permission)
+whose own comment states verification "is the gate that promotes the statistician's ledger into
+the canonical box score." `getGameLiveBoxScore` never writes `PlayerStat` - it's a pure read model
+over the statistician ledger. `rebuildGameStatsFromEvents` does a full-snapshot upsert (every
+player who ever appeared, zeroed if voided), not an incremental patch. Dual-authority holds by
+design: the scorer's incremental writes are what live pre-verification, and the statistician's
+independently-derived numbers deliberately supersede them only at an explicit, audited promotion.
+Not a violation - the earlier framing just hadn't named the seam.
+
+**Point 2, escalated from a tension to a confirmed bug.** `loadActiveStatisticianEvents` and
+`rebuildGameStatsFromEvents` both filter on the literal `source: "ULTRA_NATIVE_LIVE_STATISTICIAN"`
+(`stats-actions.ts:48,868,891`); `correctStatisticianEvent` gates on the same literal. But
+`ledgerSourceFor`'s `OFFLINE_SYNC` branch collapsed to a flat `"OFFLINE_SYNC"` regardless of hint -
+a documented Batch 0/1 tradeoff (`types.ts`: "the hint is retained on the outbox payload for
+forensics") that predates both consumers. Consequence: a statistician event replayed from offline
+sync would have been invisible to the live box score, excluded from `verifyStatistics`'s
+materialization, and uncorrectable via `correctStatisticianEvent` - silent data loss, not an edge
+case, and it would only have surfaced once A3b's sync endpoint existed to trigger it.
+
+Checked before fixing: no production query filters on the literal `"OFFLINE_SYNC"` (only test
+files referenced it), so removing the collapse doesn't break an existing reader. Checked
+production directly for rows that could need backfilling - `psql` against
+`ultraleagueos`'s live database - and found the `OFFLINE_SYNC` enum label and the
+`deviceId`/`idempotencyKey`/`clientUpdatedAt`/`syncBatchId` columns don't exist on the deployed
+schema at all yet (P13/A3's migration hasn't shipped to production). Zero rows, nothing to
+backfill. Confirmed `syncBatchId` (not `deviceId`) is the correct transport predicate - the
+schema's own comment states all four provenance columns are null for LIVE_UI writes, and
+`syncBatchId` specifically means "arrived in this sync batch," while `deviceId` could in principle
+be populated by a future live-browser-session use without meaning "synced."
+
+**Resolution:** `ledgerSourceFor("OFFLINE_SYNC", hint)` now returns the same ledger value as
+`ledgerSourceFor("LIVE_UI", hint)` when a hint is supplied - `source` records who logged the
+event (transport-stable), and whether it arrived via sync is answered separately by
+`GameEvent.syncBatchId` being non-null. The bare `OFFLINE_SYNC` enum value is kept, not removed,
+but is now documented (in `provenance.ts` and the schema) as reserved for a sync entity with no
+semantic origin hint - no scoring caller emits it today, and any future use needs a design note
+first. `load-mutable-game.ts`'s `isStatisticianWrite` check already read the hint directly at the
+`WriteContext` level rather than the persisted ledger value, so it needed no change - it was
+already correct; this fix brings the persisted `GameEvent.source` column into agreement with it.
+
+**Verification:** Rewrote the two tests that asserted the old collapse (`provenance.test.ts`'s
+"OFFLINE_SYNC always maps to OFFLINE_SYNC" and "no two transport sources collapse", and
+`build-game-event.test.ts`'s sync-replay characterization test) to assert the corrected invariant
+- same hint, same value, regardless of transport; only the hintless fallback is distinct.
+Typecheck clean. Lint 0 errors (7 pre-existing warnings, unrelated). Ratchet unaffected (15,
+unchanged - this fix touches no raw write site). Full suite: 747 -> 749 (net +2: the collapsed
+OFFLINE_SYNC test and the "no two transport sources collapse" test were each split into two to
+state the corrected invariant precisely; build-game-event.test.ts's sync test was modified in
+place, no count change there). 748 pass, 1 skip, 0 fail.
+
+**Scope note for the sketch:** this makes `ledgerSourceHint` load-bearing on the wire for A3b's
+eventual sync outbox, not merely forensic metadata - every synced `GameEvent` record needs to
+carry it. That's a real change from Batch 0's original design and belongs in the sketch's Point 2
+as a stated decision, not something the implementer discovers.
+
+Shipped as its own commit ahead of the sketch, per explicit request - if offline statistician
+stats misbehave later, bisect can tell whether to look at this source-model fix or at the sync
+endpoint itself.
+
+**Next step:** `RemoteScoringRepository` deletion (unwired, targets `/games`/`/games/{id}/events`
+endpoints that don't exist, contradicts the already-decided single-batch `/api/sync/outbox`
+design) and a short spike on Prisma per-schema test-isolation mechanics, then write the corrected
+five-point sketch to `docs/canonical-write-audit.md`.
+

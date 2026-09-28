@@ -10,10 +10,13 @@ test("LIVE_UI maps to the statistician ledger value when the hint says so", () =
   assert.equal(ledgerSourceFor("LIVE_UI", "STATISTICIAN"), "ULTRA_NATIVE_LIVE_STATISTICIAN");
 });
 
-test("OFFLINE_SYNC always maps to OFFLINE_SYNC regardless of console hint", () => {
+test("OFFLINE_SYNC with a hint resolves to the same ledger value as the matching LIVE_UI write", () => {
+  assert.equal(ledgerSourceFor("OFFLINE_SYNC", "SCORER"), "ULTRA_NATIVE_LIVE_SCORER");
+  assert.equal(ledgerSourceFor("OFFLINE_SYNC", "STATISTICIAN"), "ULTRA_NATIVE_LIVE_STATISTICIAN");
+});
+
+test("OFFLINE_SYNC with no hint falls back to the reserved OFFLINE_SYNC value", () => {
   assert.equal(ledgerSourceFor("OFFLINE_SYNC"), "OFFLINE_SYNC");
-  assert.equal(ledgerSourceFor("OFFLINE_SYNC", "SCORER"), "OFFLINE_SYNC");
-  assert.equal(ledgerSourceFor("OFFLINE_SYNC", "STATISTICIAN"), "OFFLINE_SYNC");
 });
 
 test("VISION_PROMOTED maps to a distinct ledger value from any live source", () => {
@@ -24,7 +27,12 @@ test("MANUAL_ADMIN maps to the manual-entry ledger value", () => {
   assert.equal(ledgerSourceFor("MANUAL_ADMIN"), "MANUAL_ADMIN_ENTRY");
 });
 
-test("no two transport sources collapse to the same ledger value", () => {
+test("source is transport-stable: the same hint yields the same ledger value whether live or synced", () => {
+  assert.equal(ledgerSourceFor("LIVE_UI", "SCORER"), ledgerSourceFor("OFFLINE_SYNC", "SCORER"));
+  assert.equal(ledgerSourceFor("LIVE_UI", "STATISTICIAN"), ledgerSourceFor("OFFLINE_SYNC", "STATISTICIAN"));
+});
+
+test("distinct sources with no shared hint never collapse to the same ledger value", () => {
   const values = [
     ledgerSourceFor("LIVE_UI", "SCORER"),
     ledgerSourceFor("LIVE_UI", "STATISTICIAN"),

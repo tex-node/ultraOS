@@ -30,9 +30,11 @@ export interface WriteContext {
   actor: AuthActor;
   source: EventSource;
   // Which live console is writing, so the ledger StatDataSource value stays precise
-  // (ULTRA_NATIVE_LIVE_SCORER vs ULTRA_NATIVE_LIVE_STATISTICIAN). Offline/sync writes are always
-  // OFFLINE_SYNC regardless of the console they originated on, but the hint is retained on the
-  // outbox payload for forensics.
+  // (ULTRA_NATIVE_LIVE_SCORER vs ULTRA_NATIVE_LIVE_STATISTICIAN). Load-bearing for OFFLINE_SYNC
+  // too, not just LIVE_UI: ledgerSourceFor() resolves a synced statistician event to
+  // ULTRA_NATIVE_LIVE_STATISTICIAN, the same value a live write would get, so it stays visible to
+  // loadActiveStatisticianEvents/rebuildGameStatsFromEvents/correctStatisticianEvent. Whether the
+  // write arrived via sync is recorded separately, on GameEvent.syncBatchId - not on this value.
   ledgerSourceHint?: LedgerSourceHint;
   provenance?: EventProvenance;
   // REQUIRED Prisma transaction client. The service never opens its own transaction. The caller

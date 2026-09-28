@@ -61,11 +61,14 @@ test("flipPossession: provenance columns are null when the caller supplies none"
   assert.equal(data.syncBatchId, null);
 });
 
-test("sync-replayed events carry provenance and OFFLINE_SYNC source", () => {
+test("sync-replayed statistician events keep the statistician ledger value; syncBatchId is the transport signal", () => {
+  const source = ledgerSourceFor("OFFLINE_SYNC", "STATISTICIAN");
+  assert.equal(source, "ULTRA_NATIVE_LIVE_STATISTICIAN");
+
   const data = buildGameEventCreateData({ ...flipPossessionFields, sequenceNumber: 42 }, {
     organizationId: "org-1",
     actorId: "user-1",
-    source: "OFFLINE_SYNC",
+    source,
     provenance: {
       deviceId: "tablet-1",
       idempotencyKey: "key-1",
@@ -73,7 +76,10 @@ test("sync-replayed events carry provenance and OFFLINE_SYNC source", () => {
       syncBatchId: "batch-1",
     },
   });
-  assert.equal(data.source, "OFFLINE_SYNC");
+  // source stays the statistician ledger value - identical to a live write - so this row is still
+  // visible to loadActiveStatisticianEvents/rebuildGameStatsFromEvents/correctStatisticianEvent.
+  // syncBatchId, not source, is what marks it as having arrived via sync.
+  assert.equal(data.source, "ULTRA_NATIVE_LIVE_STATISTICIAN");
   assert.equal(data.deviceId, "tablet-1");
   assert.equal(data.idempotencyKey, "key-1");
   assert.equal((data.clientUpdatedAt as Date).toISOString(), "2026-09-27T10:00:00.000Z");

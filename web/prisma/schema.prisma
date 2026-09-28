@@ -224,8 +224,12 @@ enum StatDataSource {
   // (which tags the raw events themselves) so a reader can tell "this row is a derived,
   // verified snapshot" apart from "this row was written incrementally, event-by-event."
   EVENT_DERIVED
-  // Added for P13/A3: GameEvent rows replayed from a scorekeeper's offline outbox. Distinct from
-  // the live-console sources so provenance ("came in over sync") is queryable.
+  // Added for P13/A3, then narrowed: a synced GameEvent resolves to ULTRA_NATIVE_LIVE_SCORER or
+  // ULTRA_NATIVE_LIVE_STATISTICIAN (see ledgerSourceFor in src/lib/scoring/provenance.ts) so it
+  // stays visible to the queries that filter on those literals. "Came in over sync" is answered
+  // by GameEvent.syncBatchId being non-null, not by this value. This literal is reserved for a
+  // sync entity with no semantic origin hint - no scoring caller emits it today. Any future use
+  // needs a design note first, not a silent fallback.
   OFFLINE_SYNC
 }
 
