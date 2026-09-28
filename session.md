@@ -6647,3 +6647,59 @@ a future reader doesn't read "smoke test passed" as "verified end-to-end includi
 **Next:** A3b's actual sync-replay endpoint implementation. Schema now exists to test against;
 sketch is already in `docs/canonical-write-audit.md`; pre-A3b fixes and the smoke test are done.
 
+### 2026-09-28 - A3b Commit 1: test-infrastructure spike, proven against a real database
+
+Per explicit instruction: A3b doesn't wait for Batches 10-12's production deploy or bake period -
+independent code, its own deploy path, no coupling. Started with the test-infrastructure spike
+(the load-bearing unknown for the rest of A3b), before writing any endpoint code.
+
+**Built `src/test-support/db-test-context.ts`**: `createTestDbContext()` provisions a dedicated
+Postgres schema (`CREATE SCHEMA`), runs `prisma db push` against it (schema-diff based - faster
+than replaying 80+ historical migrations into an empty schema), builds a scoped
+`PrismaClient`/`PrismaPg` pair, returns `{ prisma, schemaName, teardown }`.
+
+**The spike surfaced a real mechanism correction, not just a confirmation.** First attempt used
+`new PrismaPg({ connectionString: scopedUrl })` with `?schema=<name>` embedded in the connection
+string - the same pattern `src/lib/prisma.ts` uses, and what every `?schema=public` in every
+deployed `DATABASE_URL` implies works. Ran the harness's own proof test (a real `createGameEvent`
+round-trip) against staging: it failed immediately with a unique-constraint collision against
+staging's actual, real `public.Organization` row (`idPrefixAthlete='UBA'`, Neon Ultra's own org).
+Traced it precisely: `@prisma/adapter-pg`'s runtime client does not honor `?schema=` as a
+connection-string parameter at all - that convention belonged to the legacy query-engine binary
+this project no longer uses. The client had silently fallen back to the connecting role's default
+`search_path` (`public`) and was reading/writing real production-mirrored data, not the isolated
+schema. Confirmed via direct psql: `db push` itself DID correctly create 126 tables in the isolated
+schema (empty) - only the *runtime client* was pointed at the wrong place. Fix: `PrismaPg` takes
+the schema as an explicit second constructor argument, `{ schema: schemaName }`, not something the
+connection string carries. Added a self-check inside `createTestDbContext()` itself
+(`prisma.organization.count()` must be `0`) so this exact failure mode surfaces immediately and
+clearly on any future regression, not confusingly deep in a business-logic test's own assertion.
+First self-check attempt used `SELECT current_schema()` via `$queryRaw` and still reported
+`"public"` even after the fix - a second false lead, resolved by realizing raw SQL bypasses
+Prisma's own schema-qualification entirely; only a model-layer query (`.count()`) actually proves
+what a model-layer query will see.
+
+**Proven correct**, run against staging via SSH (same constraint as the smoke test - `server-only`
+needs `NODE_OPTIONS=--conditions=react-server`, and a role with `CREATE SCHEMA` rights, here
+`migrate.env`'s role): a real `createGameEvent` round-trip through an isolated schema, plus a
+second, independently-provisioned context proving cross-schema isolation (zero rows visible across
+schemas). All cleanup verified - schemas dropped after both the pass and every earlier failed
+attempt (manually, where the harness's own teardown didn't run because the failure was inside
+provisioning itself, before teardown existed to call).
+
+**Added `npm run test:db`** (`web/package.json`) - `tsx --test "src/test-support/**/*.test.ts"`,
+deliberately not baking in `NODE_OPTIONS`/`DATABASE_URL` (matches the existing `"build"` script's
+convention of leaving environment to the caller, not the script).
+
+**Updated the audit doc's Point 5** from "the mechanism, named" (a design) to "proven, not just
+sketched" (a fact) - includes the `?schema=`-doesn't-work-on-the-adapter finding in full, since
+it's non-obvious and would otherwise resurface for whoever writes the next DB-integration test.
+
+**Verification:** Typecheck clean. Existing pure-unit suite (763 tests) unaffected - confirmed
+unchanged, since `test:db`'s glob (`src/test-support/**`) doesn't overlap `test`'s
+(`src/lib/**`). No production/staging app code touched - this is test infrastructure only.
+
+**Next:** Commit 2 - the `POST /api/sync/outbox` endpoint skeleton (request-shape validation,
+batch-size limit, `entityType` rejection, empty-batch handling, placeholder per-record results, no
+DB writes yet), with `RemoteScoringRepository`'s deletion folded in per the sketch's Point 4.
+

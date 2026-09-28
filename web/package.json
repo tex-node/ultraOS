@@ -10,6 +10,7 @@
     "lint:canonical-writes": "node scripts/check-canonical-write-baseline.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"src/lib/*.test.ts\" \"src/lib/**/*.test.ts\"",
+    "test:db": "tsx --test \"src/test-support/**/*.test.ts\"",
     "test:e2e": "playwright test",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",

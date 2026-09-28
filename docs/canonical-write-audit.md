@@ -231,25 +231,44 @@ mismatched scaffolding, not a stub of the real plan. Delete it as part of A3b, i
 that introduces the real sync endpoint - its removal is meaningful in contrast to what replaces it,
 not a cleanup to do in isolation beforehand.
 
-### Point 5 — sync test infrastructure: the mechanism, named
+### Point 5 — sync test infrastructure: proven, not just sketched (A3b Commit 1)
 
-The whole suite today (749 tests as of the pre-A3b fix above) is pure-function unit tests with zero
-Prisma dependency. A3b's endpoint is the first genuinely DB-transactional feature in this
-codebase's test surface, and needs to prove atomic multi-record replay, idempotency
-(`SyncIdempotency`), and conflict handling (`SyncConflictLog`) against a real Postgres - none of
-that is meaningful against a mocked `$transaction`.
+The whole suite before this was pure-function unit tests with zero Prisma dependency. A3b's
+endpoint is the first genuinely DB-transactional feature in this codebase's test surface, and needs
+to prove atomic multi-record replay, idempotency (`SyncIdempotency`), and conflict handling
+(`SyncConflictLog`) against a real Postgres - none of that is meaningful against a mocked
+`$transaction`.
 
-Spiked the mechanics rather than hand-waving them: Prisma's `PrismaPg` adapter (`@prisma/adapter-pg`,
-already a dependency, already used by this project's ad-hoc production scripts) binds to a
-connection string at construction and cannot be rebound afterward. Per-suite isolation therefore
-means: provision a dedicated Postgres schema per test suite (`CREATE SCHEMA`, then `prisma db push`
-or `migrate deploy` against it once), construct a fresh `PrismaClient`/`PrismaPg` pair whose
-connection string's `?schema=` query param points at that schema (the same query param already
-used in every deployed `DATABASE_URL`), run the suite, then `DROP SCHEMA ... CASCADE` at teardown.
-No new package is required - `pg` and `@prisma/adapter-pg` are already present; `testcontainers`
-would be new tooling this project doesn't currently have, and is a fallback only if schema-per-
-suite proves too slow or too coupled to a shared dev database in practice. Decide which of the two
-before A3b's implementation starts, not mid-batch.
+**Built and proven against a real database** (`src/test-support/db-test-context.ts` +
+`db-test-context.test.ts`), not just designed: `createTestDbContext()` provisions a dedicated
+Postgres schema per test suite (`CREATE SCHEMA`, then `prisma db push` against it - schema-diff
+based, faster than replaying 80+ historical migrations into an empty schema), builds a
+`PrismaClient`/`PrismaPg` pair scoped to it, and returns a `teardown()` that drops the schema.
+Proven with a real `createGameEvent` round-trip (not a mock) plus a genuine cross-schema isolation
+check (a second, independently-provisioned context sees zero of the first's rows).
+
+**The spike found a real, non-obvious mechanism correction, not just confirmed the plan:**
+`@prisma/adapter-pg`'s runtime client does **not** honor a `?schema=` query-string parameter -
+that convention belonged to the legacy query-engine binary this project no longer uses. A client
+built the way `src/lib/prisma.ts` builds one (`new PrismaPg({ connectionString })`, and every
+`?schema=public` in every deployed `DATABASE_URL` implies this works) silently falls back to the
+connecting role's default `search_path` - in the first attempt at this harness, that meant the
+"isolated" schema's client actually queried staging's real `public` schema and collided with real
+Neon Ultra data. The fix: `PrismaPg` takes the schema as an **explicit second constructor
+argument** (`new PrismaPg({ connectionString }, { schema: schemaName })`) - a config option, not a
+connection-string convention. `db-test-context.ts` verifies this on every context it creates
+(`prisma.organization.count()` must be `0` in a fresh schema) rather than trusting it silently,
+specifically because it was wrong once already. This does not affect `src/lib/prisma.ts` itself -
+production only ever targets one schema (`public`), so the no-op `?schema=` param there was
+never a bug, just misleading if read as "this is what scopes the connection."
+
+No new package required - `pg` and `@prisma/adapter-pg` were already present. `npm run test:db`
+runs this suite; requires `DATABASE_URL` pointing at a real, reachable Postgres the role can
+`CREATE SCHEMA`/`DROP SCHEMA` on, and `NODE_OPTIONS=--conditions=react-server` so the `server-only`
+package guard resolves to its build-time stub instead of the throwing default a plain `tsx` run
+otherwise gets (needed because the canonical services under test are all `server-only`-marked).
+`testcontainers` remains a fallback only, not needed - schema-per-suite proved fast enough (~15-17s
+including two full `db push` provisions) in this spike.
 
 **Outbox entity vocabulary.** The outbox carries `Game` and `GameEvent` only.
 `PlayerStat`/`TeamStat` are projections, never wire entities - enforced at the type level,
