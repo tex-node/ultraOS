@@ -6608,3 +6608,42 @@ inside it).
 **Not yet done:** apply the migration to production (user's call on timing); commit the rehearsal
 script + runbook; then A3b.
 
+### 2026-09-28 - Migration applied to production, isolated from any code deploy (expand/contract)
+
+Per explicit instruction: apply now, as its own change, decoupled from deploying Batches 10-12's
+code. Reasoning - coupling makes rollback ambiguous (two independent changes should be two
+independent deploys), the migration is the safer of the two (nullable `ADD COLUMN` is O(1)
+metadata-only in Postgres 11+, no table rewrite), and A3b itself is blocked on this schema
+existing to test against.
+
+**Pre-checks:** `prisma migrate status` against production confirmed these were the *only* two
+pending migrations - no wider, older gap. Read both migration files in full, end to end: `ALTER
+TYPE ... ADD VALUE`, `ALTER TABLE ... ADD COLUMN` (all nullable), `CREATE TABLE`/`CREATE INDEX`/
+`ADD CONSTRAINT` (new tables only) - nothing drops, renames, or retypes an existing column.
+`pg_dump --schema-only` taken as a pre-migration reference before touching anything
+(`/root/schema-backups/` on the host, 394KB / 12,123 lines).
+
+**Applied:** `prisma migrate deploy` against production's `migrate.env`. Verified: all 4
+`GameEvent` provenance columns, both new tables (`SyncIdempotency`, `SyncConflictLog`), and the
+`OFFLINE_SYNC` enum value all present. Service stayed `active` throughout - no restart needed for
+a metadata-only nullable-column add - checked logs for 5 minutes post-migration, zero new errors.
+
+**Batches 10-12's code deliberately NOT deployed to production in this window.** Old code (still
+running the pre-migration `recordScore` that writes `GameEvent` raw) is compatible with the new
+schema by construction - it simply never references the new columns. Let it bake before deploying
+the code that starts using them, as its own separate, later, independently-verified change.
+
+**Process gap, flagged for after A3b, not investigated now:** these two migrations were written in
+this session's Batch 0 and never applied to either staging or production until today - the deploy
+process either doesn't run `prisma migrate deploy` automatically, or does and this branch's deploy
+skipped it, or it's a manual step that was missed. A3b will write its own migrations and hit the
+same silent-gap risk if this isn't fixed - investigate after A3b lands, not as part of it.
+
+**Also documented, per explicit request:** the smoke test's coverage gap - calling the canonical
+services directly (required, since browser login is prohibited) verifies the service layer but not
+the UI rendering path, the auth/permission layer, or the HTTP/route layer. Noted in the runbook so
+a future reader doesn't read "smoke test passed" as "verified end-to-end including the UI."
+
+**Next:** A3b's actual sync-replay endpoint implementation. Schema now exists to test against;
+sketch is already in `docs/canonical-write-audit.md`; pre-A3b fixes and the smoke test are done.
+

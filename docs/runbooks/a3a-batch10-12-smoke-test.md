@@ -54,9 +54,22 @@ outage on the main scoring path.
 
 **Fixed on staging** (for this smoke test): `npx prisma migrate deploy` applied both pending
 migrations (`20260927120000_p13_offline_sync_source`, `20260927120001_p13_sync_idempotency_conflictlog`).
-Purely additive (new nullable columns, new empty tables) - no data risk. **Not yet applied to
-production** - that decision and its timing relative to a production deploy of Batches 10-12 is
-the user's call, not made unilaterally here.
+Purely additive (new nullable columns, new empty tables) - no data risk.
+
+**Applied to production separately, as its own isolated change (2026-09-28, same day)** -
+expand/contract: the schema change ships alone, verified independently, before any code that uses
+it. Pre-checks: `prisma migrate status` confirmed these were the *only* two pending migrations (no
+wider gap); both migration files read in full end-to-end, confirmed `ALTER TYPE ADD VALUE`/
+`ALTER TABLE ADD COLUMN` (all nullable)/`CREATE TABLE` only - nothing drops, renames, or retypes an
+existing column; `pg_dump --schema-only` taken as a pre-migration reference
+(`/root/schema-backups/` on the host). Applied via `prisma migrate deploy` against production's
+`migrate.env`. Verified: all 4 columns, both tables, and the `OFFLINE_SYNC` enum value present.
+Service remained `active` throughout (nullable `ADD COLUMN` is metadata-only in Postgres, no table
+rewrite, no restart needed) - checked logs for 5 minutes post-migration, no new errors.
+
+**Batches 10-12's code is deliberately NOT deployed to production in this same window** - let the
+schema bake (old code still runs fine against it, since old code never references the new
+columns) before deploying the code that starts using it. That's a separate, later change.
 
 ## Test setup
 
@@ -95,11 +108,39 @@ the code under test - both caught by the assertions failing as designed:
   "new minus old" - matches the pre-existing, unmigrated `correctScoreEventAction`'s own
   definition exactly. Fixed the test's expectation, not the code.
 
+## Coverage gap: what this smoke test did NOT verify
+
+Because browser login was prohibited, calling the canonical services directly proves the
+service-level write paths (all ten scenarios) but does not exercise:
+
+- **The UI rendering path** - whether the box score panel, scoreboard, or live game view actually
+  reflects these writes correctly.
+- **The auth/permission layer** - `requireFixturePermission`, `result:confirm`,
+  `game:operate`, organization-context resolution from a real session.
+- **The HTTP/route layer** - the actual Next.js Server Action boundary (form parsing, zod
+  validation in `actions.ts`, `revalidatePath` cache invalidation).
+
+For A3b's purposes this is very likely sufficient - A3b is a server-side sync endpoint, and
+service-level verification is the right layer for it. But a future reader should not read "smoke
+test passed" as "verified end-to-end including the UI." If a real logged-in smoke test becomes
+possible (a dedicated QA account with a properly scoped, low-privilege permission set - not an
+admin credential), it's worth running once before Batches 10-12's code reaches production.
+
+## Process gap, flagged not fixed here
+
+Production schema was behind by these same two migrations, written in this session's Batch 0 and
+never applied. Either the deploy process doesn't run `prisma migrate deploy` automatically, or it
+does and this branch's deploy skipped it, or it's a manual step that got missed. Investigate after
+A3b lands - it's a deployment-infrastructure fix, not part of A3a or A3b's own scope, and A3b's own
+migrations will hit the same silent-gap risk if the process itself isn't fixed.
+
 ## Conclusion
 
-Batches 10a-12's canonical-write migration is verified correct end-to-end, including both
-previously-latent bugs this session found and fixed ahead of migration (`undoLastEvent`'s
-shot-category and Ultra-Time-mirror reversal gaps). The pre-existing migration gap this smoke test
-surfaced is unrelated to those batches' own correctness, but is now the most urgent open item -
-see the note above. Environment used: staging (`app.neonultra.ng/staging`), per explicit
-direction - not production, not local dev.
+Batches 10a-12's canonical-write migration is verified correct end-to-end at the service layer,
+including both previously-latent bugs this session found and fixed ahead of migration
+(`undoLastEvent`'s shot-category and Ultra-Time-mirror reversal gaps). The pre-existing migration
+gap this smoke test surfaced has been closed on both staging and production, isolated from any
+code deploy (expand/contract - schema now, code later). Environment used for the rehearsal script:
+staging (`app.neonultra.ng/staging`), per explicit direction - not production, not local dev. The
+migration application itself was done directly against both staging and production databases, per
+separate explicit instruction, following the sequence in "Applied to production separately" above.
