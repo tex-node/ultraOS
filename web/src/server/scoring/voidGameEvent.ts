@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { GameEvent } from "@/generated/prisma/client";
+import { buildVoidData } from "@/lib/scoring/void-data";
 import type { WriteContext } from "./types";
 import type { MutableGame } from "./load-mutable-game";
 
@@ -17,11 +18,6 @@ export async function voidGameEvent(
 ): Promise<GameEvent> {
   return ctx.tx.gameEvent.update({
     where: { id: eventId },
-    data: {
-      status: "VOIDED",
-      correctedAt: new Date(),
-      correctedById: ctx.actor.id,
-      correctionReason: reason,
-    },
+    data: buildVoidData(reason, ctx.actor.id),
   });
 }

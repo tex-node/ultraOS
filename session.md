@@ -6407,3 +6407,76 @@ match, 1:1. Build exit 0.
 mechanical, per the flagged test-coverage concern these need more than typecheck to trust), Batch
 12 (`undoLastEvent`), then the pre-A3b scorer-console smoke test, then A3b.
 
+### 2026-09-28 - A3a Batch 11: voidScoreEvent + correctScoreEvent, the fourth and fifth shapes
+
+Sketched before building, per the reviewer's three refinements to the proposed shape, plus a
+read-first decision on the pure function's structure.
+
+**Read `voidScoreEventAction`/`correctScoreEventAction` in full before committing to one pure
+function vs. two.** The naive shape - carry `isUltraTime: boolean` alongside a raw points number
+and combine two of these after the fact - breaks under correction: when the old and new events
+disagree on `isUltraTime` (a correction can turn a plain shot into an Ultra-Time one), a single
+combined boolean can't represent "0% from one side, 100% from the other." Fixed by resolving each
+Ultra-Time-gated number (the scoring team's "for," the opposing team's "against") to a plain
+number *at construction time*, before any negate/add happens - after that, void and correction are
+both just arithmetic over four independent numeric fields. Verified this reproduces
+`correctScoreEventAction`'s existing `netTeamUltraPointsFor`/`netOpponentUltraPointsAgainst`
+formulas exactly, field-for-field, before writing either service. One function
+(`computeScoreEventContribution`), not two - the reviewer's preferred shape, not the fallback.
+
+**New files:**
+- `src/lib/scoring/score-event-contribution.ts` (pure) - `computeScoreEventContribution`,
+  `negateScoreEventContribution`, `addScoreEventContributions`. **9 unit tests**, matching the
+  reviewer's required branch coverage: void negation, same-player/same-value, same-player/
+  different-value, different-player/same-value, different-player/different-value, Ultra-Time-
+  against in isolation, and a correction crossing the Ultra-Time boundary in each direction.
+  Fixed one bug the tests caught immediately: naive negation produced `-0` for untouched fields
+  (numerically identical to `0`, but fails `assert.strictEqual`/`Object.is` and would print as
+  "-0" if ever logged) - normalized with `+ 0` after negation, a hygiene fix not a behavior change.
+- `src/lib/scoring/void-data.ts` (pure) - `buildVoidData(reason, actorId, now?)`, the four-field
+  VOIDED shape shared by `voidGameEvent` and the new `voidScoreEvent`. **Not** used via delegation
+  to `voidGameEvent` (per explicit instruction) - `voidGameEvent` loads under its own looser
+  preconditions, `voidScoreEvent` needs the event's full details for delta computation plus an
+  extra `eventType` check, so delegating would mean a double-load or a `preloaded?` escape hatch.
+  2 unit tests.
+- `src/server/scoring/voidScoreEvent.ts` - loads+validates the event itself (gameId match,
+  eventType SCORE/SCORE_CORRECTION, status ACTIVE - `voidGameEvent` doesn't do this, it trusts a
+  caller-resolved id), flips status via `buildVoidData`, reverses the Fixture score and the
+  player/team shot-category deltas including the opposing-team Ultra-Time-against branch.
+- `src/server/scoring/correctScoreEvent.ts` - mutable-gate supersession, REPLACE-only. Reuses
+  `createGameEvent` for the replacement insert (period/clockSeconds passed explicitly to preserve
+  the original's frozen values) - unlike `correctStatisticianEvent`, which can't do this because it
+  runs under `withFinalGameWrite`'s FINAL-only gate, incompatible with `createGameEvent`'s internal
+  mutable-only check. Returns `actualPoints` explicitly in its result - a first draft had the
+  caller back-solve it as `newScore - previousScore`, which silently breaks if the score-floor
+  clamp (never below 0) ever applies; caught before committing, fixed by returning it directly.
+- `voidGameEvent.ts` updated to call `buildVoidData` instead of its own inline literal.
+
+**Migrated `voidScoreEventAction`/`correctScoreEventAction`** to `withGameWrite` +
+`voidScoreEvent`/`correctScoreEvent`. Renamed the two local zod schemas (`voidScoreEvent` ->
+`voidScoreEventSchema`, `correctScoreEvent` -> `correctScoreEventSchema`) to clear the naming
+collision with the newly-imported service functions - a pure rename, no behavior change. The
+caller still loads the event once for its own validation (wrong-player lookup needs
+`event.seasonClubId`, `scoreShot` needs the frozen `period`/`clockSeconds`) before the service
+loads it again for the write - the same double-load-is-safe pattern every prior batch relies on.
+Removed the now-unused `addShotStatDeltas` import.
+
+**Named in the audit doc** ("Coupled writes in voidScoreEvent/correctScoreEvent are not a side
+effect"): these are the first two services to touch `Fixture`/`PlayerStat`/`TeamStat` at all, a
+deliberate departure from every prior service's "callback owns side effects" pattern - the delta
+reversal is intrinsic to what void/correct *means*, not an optional effect a caller could omit.
+Also noted: the previously-logged `assertGameIsMutable` gap (both actions skipped the LIVE/PAUSED
+check every sibling scorer function had) closes as an incidental consequence of routing through
+`withGameWrite` - same pattern as the `organizationId` DB-default fix from `syncUltraTimeState`.
+
+**Verification:** Typecheck clean. Lint 0 errors. Full suite 754 -> 763 (+9: 7 contribution tests,
+2 void-data tests) - the two migrated actions themselves still have no test, same Prisma-
+transactional gap, but the actual risk (delta-reversal math) now has real coverage, addressing the
+flagged concern directly rather than relying on typecheck alone. Ratchet: `actions.ts` file-
+specific count 6 -> 3 (the three raw sites migrated: one `gameEvent.update` in void, one
+`gameEvent.update` + one `gameEvent.create` in correct). Total baseline 10 -> 7; ceiling lowered
+10 -> 7 to match, 1:1. Build exit 0.
+
+**Next:** Batch 12 (`undoLastEvent`'s own migration - the compensation shape), then the pre-A3b
+scorer-console smoke test (score/void/undo/verify, still not this batch's job), then A3b.
+

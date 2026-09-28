@@ -11,12 +11,13 @@ import {
   applyPlayerShotStatDeltas,
   applyTeamShotStatDeltas,
   applyCountingStatDelta,
+  voidScoreEvent,
+  correctScoreEvent,
 } from "@/server/scoring";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { remainingShotClockSeconds } from "@/lib/game-rules";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import {
-  addShotStatDeltas,
   detectUltraTimeTransition,
   effectiveRuleSnapshot,
   isUltraTimeUnderRules,
@@ -509,7 +510,7 @@ export async function recordScore(
   revalidatePath(`/scoreboard/${gameId}`);
 }
 
-const voidScoreEvent = z.object({
+const voidScoreEventSchema = z.object({
   eventId: z.string(),
   reason: z.string().min(1),
 });
@@ -524,78 +525,39 @@ export async function voidScoreEventAction(
   formData: FormData,
 ) {
   const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
-  const input = voidScoreEvent.parse(Object.fromEntries(formData.entries()));
+  const input = voidScoreEventSchema.parse(Object.fromEntries(formData.entries()));
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
-    const game = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true } });
-    assertGameIsMutable(game.status, game.fixture.status);
-
-    const event = await tx.gameEvent.findUniqueOrThrow({ where: { id: input.eventId } });
-    if (event.gameId !== gameId) throw new Error("INVALID_EVENT");
-    if (event.eventType !== "SCORE" && event.eventType !== "SCORE_CORRECTION") throw new Error("NOT_A_SCORE_EVENT");
-    if (event.status !== "ACTIVE") throw new Error("EVENT_NOT_ACTIVE");
-    const eventPoints = event.points ?? 0;
-
-    const isHome = event.seasonClubId === game.fixture.homeSeasonClubId!;
-    const currentScore = isHome ? game.fixture.homeScore : game.fixture.awayScore;
-    const newScore = Math.max(0, currentScore - eventPoints);
-
-    await tx.fixture.update({
-      where: { id: game.fixtureId },
-      data: isHome ? { homeScore: newScore } : { awayScore: newScore },
-    });
-    await tx.gameEvent.update({
-      where: { id: event.id },
-      data: {
-        status: "VOIDED",
-        correctedAt: new Date(),
-        correctedById: session.user.id,
-        correctionReason: input.reason,
-      },
-    });
-    const reversedDeltas = negateShotStatDeltas(shotStatDeltas({ basePointValue: event.basePointValue, isUltraTime: event.isUltraTime }));
-    if (event.playerId) {
-      await applyPlayerShotStatDeltas(tx, organizationId, gameId, event.playerId, event.seasonClubId!, reversedDeltas, -eventPoints);
-    }
-    await applyTeamShotStatDeltas(
-      tx,
-      organizationId,
-      gameId,
-      event.seasonClubId!,
-      reversedDeltas,
-      event.isUltraTime ? -eventPoints : 0,
-      0,
-      newScore,
-    );
-    if (event.isUltraTime && eventPoints !== 0) {
-      const opposingSeasonClubId = isHome ? game.fixture.awaySeasonClubId! : game.fixture.homeSeasonClubId!;
-      await applyTeamShotStatDeltas(
-        tx,
+  await withGameWrite(
+    gameId,
+    fixtureId,
+    { actor: { id: session.user.id, organizationId }, source: "LIVE_UI" },
+    async (writeCtx) => {
+      const { voided, previousScore, newScore } = await voidScoreEvent(input.eventId, input.reason, writeCtx);
+      await writeAuditLog(writeCtx.tx, {
         organizationId,
-        gameId,
-        opposingSeasonClubId,
-        { fourPointsMade: 0, fourPointsAttempted: 0, ultraTimeFieldGoalsMade: 0, ultraTimeFieldGoalsAttempted: 0 },
-        0,
-        -eventPoints,
-        isHome ? game.fixture.awayScore : game.fixture.homeScore,
-      );
-    }
-    await writeAuditLog(tx, {
-      organizationId,
-      userId: session.user.id,
-      action: "GAME_EVENT_VOIDED",
-      entityType: "GameEvent",
-      entityId: event.id,
-      details: { fixtureId, gameId, seasonClubId: event.seasonClubId, playerId: event.playerId, voidedPoints: eventPoints, previousScore: currentScore, newScore, reason: input.reason },
-    });
-  });
+        userId: session.user.id,
+        action: "GAME_EVENT_VOIDED",
+        entityType: "GameEvent",
+        entityId: voided.id,
+        details: {
+          fixtureId,
+          gameId,
+          seasonClubId: voided.seasonClubId,
+          playerId: voided.playerId,
+          voidedPoints: voided.points ?? 0,
+          previousScore,
+          newScore,
+          reason: input.reason,
+        },
+      });
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/live`);
   revalidatePath(`/scoreboard/${gameId}`);
 }
 
-const correctScoreEvent = z.object({
+const correctScoreEventSchema = z.object({
   eventId: z.string(),
   // The corrected shot value (1-4), replacing whatever the original event recorded - e.g.
   // 2PT -> 3PT, 3PT -> 4PT, or a made shot being corrected to a miss (points omitted/0 is
@@ -618,141 +580,73 @@ export async function correctScoreEventAction(
   formData: FormData,
 ) {
   const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
-  const input = correctScoreEvent.parse(Object.fromEntries(formData.entries()));
+  const input = correctScoreEventSchema.parse(Object.fromEntries(formData.entries()));
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
-    const game = await tx.game.findUniqueOrThrow({ where: { id: gameId }, include: { fixture: true, ruleSnapshot: true } });
-    assertGameIsMutable(game.status, game.fixture.status);
+  await withGameWrite(
+    gameId,
+    fixtureId,
+    { actor: { id: session.user.id, organizationId }, source: "LIVE_UI" },
+    async ({ game, tx, ...writeCtx }) => {
+      // Validation (shot legality, wrong-player lookup) needs the original event's own fields
+      // (seasonClubId, frozen period/clockSeconds) - loaded here for that; correctScoreEvent loads
+      // it again itself for the write, the same double-load-is-safe pattern every prior batch uses.
+      const event = await tx.gameEvent.findUniqueOrThrow({ where: { id: input.eventId } });
+      if (event.gameId !== gameId) throw new Error("INVALID_EVENT");
+      if (event.eventType !== "SCORE" && event.eventType !== "SCORE_CORRECTION") throw new Error("NOT_A_SCORE_EVENT");
+      if (event.status !== "ACTIVE") throw new Error("EVENT_NOT_ACTIVE");
+      if (event.seasonClubId === null) throw new Error("INVALID_EVENT");
 
-    const event = await tx.gameEvent.findUniqueOrThrow({ where: { id: input.eventId } });
-    if (event.gameId !== gameId) throw new Error("INVALID_EVENT");
-    if (event.eventType !== "SCORE" && event.eventType !== "SCORE_CORRECTION") throw new Error("NOT_A_SCORE_EVENT");
-    if (event.status !== "ACTIVE") throw new Error("EVENT_NOT_ACTIVE");
-    if (event.seasonClubId === null) throw new Error("INVALID_EVENT");
+      let newPlayer = null;
+      if (input.playerId) {
+        newPlayer = await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: event.seasonClubId } });
+        if (!newPlayer) throw new Error("INVALID_PLAYER");
+      }
 
-    let newPlayer = null;
-    if (input.playerId) {
-      newPlayer = await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: event.seasonClubId } });
-      if (!newPlayer) throw new Error("INVALID_PLAYER");
-    }
+      const shot = scoreShot({
+        rules: effectiveRuleSnapshot(game.ruleSnapshot),
+        shotValue: input.points,
+        gameStatus: "LIVE",
+        currentPeriod: event.period,
+        remainingClockSeconds: event.clockSeconds ?? 0,
+      });
+      if (!shot.valid) throw new Error(shot.error);
 
-    const shot = scoreShot({
-      rules: effectiveRuleSnapshot(game.ruleSnapshot),
-      shotValue: input.points,
-      gameStatus: "LIVE",
-      currentPeriod: event.period,
-      remainingClockSeconds: event.clockSeconds ?? 0,
-    });
-    if (!shot.valid) throw new Error(shot.error);
-
-    const eventPoints = event.points ?? 0;
-    const isHome = event.seasonClubId === game.fixture.homeSeasonClubId!;
-    const currentScore = isHome ? game.fixture.homeScore : game.fixture.awayScore;
-    const baseScore = Math.max(0, currentScore - eventPoints);
-    const newScore = Math.max(0, baseScore + shot.pointsAwarded);
-    const actualPoints = newScore - baseScore;
-    const finalPlayerId = newPlayer?.id ?? event.playerId ?? undefined;
-
-    await tx.fixture.update({
-      where: { id: game.fixtureId },
-      data: isHome ? { homeScore: newScore } : { awayScore: newScore },
-    });
-    await tx.gameEvent.update({
-      where: { id: event.id },
-      data: {
-        status: "CORRECTED",
-        correctedAt: new Date(),
-        correctedById: session.user.id,
-        correctionReason: input.reason,
-      },
-    });
-    const sequenceNumber = game.nextEventSequence;
-    await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
-    await tx.gameEvent.create({
-      data: {
-        organizationId,
-        gameId,
-        seasonClubId: event.seasonClubId,
-        playerId: finalPlayerId,
-        eventType: "SCORE_CORRECTION",
-        points: actualPoints,
-        basePointValue: shot.basePointValue,
-        multiplier: shot.multiplier,
-        period: event.period,
-        clockSeconds: event.clockSeconds,
-        description: `Correction: ${input.reason}`,
-        sequenceNumber,
-        made: shot.basePointValue !== null,
-        isFourPointAttempt: shot.basePointValue === 4,
-        isUltraTime: shot.isUltraTime,
-        homeScoreBefore: isHome ? baseScore : game.fixture.homeScore,
-        awayScoreBefore: isHome ? game.fixture.awayScore : baseScore,
-        homeScoreAfter: isHome ? newScore : game.fixture.homeScore,
-        awayScoreAfter: isHome ? game.fixture.awayScore : newScore,
-        source: "ULTRA_NATIVE_LIVE_SCORER",
-        createdById: session.user.id,
-        supersedesEventId: event.id,
-      },
-    });
-
-    // Reverse the original event's per-category deltas, then apply the corrected shot's
-    // deltas to whichever player it now belongs to (same player, unless this was a
-    // wrong-player correction).
-    const oldDeltas = shotStatDeltas({ basePointValue: event.basePointValue, isUltraTime: event.isUltraTime });
-    const newDeltas = shotStatDeltas({ basePointValue: shot.basePointValue, isUltraTime: shot.isUltraTime });
-    if (event.playerId) {
-      await applyPlayerShotStatDeltas(tx, organizationId, gameId, event.playerId, event.seasonClubId, negateShotStatDeltas(oldDeltas), -eventPoints);
-    }
-    if (finalPlayerId && (actualPoints !== 0 || finalPlayerId !== event.playerId)) {
-      await applyPlayerShotStatDeltas(tx, organizationId, gameId, finalPlayerId, event.seasonClubId, newDeltas, actualPoints);
-    }
-
-    const netTeamUltraPointsFor = (event.isUltraTime ? -eventPoints : 0) + (shot.isUltraTime ? actualPoints : 0);
-    await applyTeamShotStatDeltas(
-      tx,
-      organizationId,
-      gameId,
-      event.seasonClubId,
-      addShotStatDeltas(negateShotStatDeltas(oldDeltas), newDeltas),
-      netTeamUltraPointsFor,
-      0,
-      newScore,
-    );
-    const netOpponentUltraPointsAgainst = (event.isUltraTime ? -eventPoints : 0) + (shot.isUltraTime ? actualPoints : 0);
-    if (netOpponentUltraPointsAgainst !== 0) {
-      const opposingSeasonClubId = isHome ? game.fixture.awaySeasonClubId! : game.fixture.homeSeasonClubId!;
-      await applyTeamShotStatDeltas(
-        tx,
-        organizationId,
-        gameId,
-        opposingSeasonClubId,
-        { fourPointsMade: 0, fourPointsAttempted: 0, ultraTimeFieldGoalsMade: 0, ultraTimeFieldGoalsAttempted: 0 },
-        0,
-        netOpponentUltraPointsAgainst,
-        isHome ? game.fixture.awayScore : game.fixture.homeScore,
+      const { original, previousScore, newScore, actualPoints } = await correctScoreEvent(
+        {
+          eventId: input.eventId,
+          reason: input.reason,
+          replacement: {
+            playerId: newPlayer?.id ?? null,
+            basePointValue: shot.basePointValue,
+            multiplier: shot.multiplier,
+            isUltraTime: shot.isUltraTime,
+            pointsAwarded: shot.pointsAwarded,
+          },
+        },
+        { game, tx, ...writeCtx },
       );
-    }
-    await writeAuditLog(tx, {
-      organizationId,
-      userId: session.user.id,
-      action: "GAME_EVENT_CORRECTED",
-      entityType: "GameEvent",
-      entityId: event.id,
-      details: {
-        fixtureId,
-        gameId,
-        seasonClubId: event.seasonClubId,
-        previousPlayerId: event.playerId,
-        newPlayerId: finalPlayerId ?? null,
-        previousPoints: event.points,
-        newPoints: actualPoints,
-        previousScore: currentScore,
-        newScore,
-        reason: input.reason,
-      },
-    });
-  });
+
+      await writeAuditLog(tx, {
+        organizationId,
+        userId: session.user.id,
+        action: "GAME_EVENT_CORRECTED",
+        entityType: "GameEvent",
+        entityId: original.id,
+        details: {
+          fixtureId,
+          gameId,
+          seasonClubId: original.seasonClubId,
+          previousPlayerId: event.playerId,
+          newPlayerId: newPlayer?.id ?? event.playerId ?? null,
+          previousPoints: event.points,
+          newPoints: actualPoints,
+          previousScore,
+          newScore,
+          reason: input.reason,
+        },
+      });
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/live`);
   revalidatePath(`/scoreboard/${gameId}`);

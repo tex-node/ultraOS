@@ -17,6 +17,12 @@ export {
   type CorrectionResult,
 } from "./correctStatisticianEvent";
 export { voidGameEvent } from "./voidGameEvent";
+export { voidScoreEvent, type VoidScoreEventResult } from "./voidScoreEvent";
+export {
+  correctScoreEvent,
+  type CorrectScoreEventInput,
+  type CorrectScoreEventResult,
+} from "./correctScoreEvent";
 export { applyPlayerShotStatDeltas, applyTeamShotStatDeltas } from "./applyShotStatDeltas";
 export { applyCountingStatDelta } from "./applyCountingStatDelta";
 export {
