@@ -6775,3 +6775,54 @@ check against `SyncIdempotency`, and the real canonical-write replay
 
 **Next:** Commit 3 - idempotency + canonical-write replay, the core of A3b.
 
+### 2026-09-28 - Pre-Commit-3 checklist: route verified live, mechanism named, transaction strategy settled
+
+Three items resolved before starting Commit 3's replay logic, per explicit instruction not to
+start it without these settled first.
+
+**1. Route registration verified directly - and it caught a real gap in my own confidence.**
+Deployed Commit 2 to staging, then curled `https://app.neonultra.ng/staging/api/sync/outbox` -
+got a `404`. Before concluding the route wasn't registered, checked whether a known-good,
+already-existing route (`/api/v1/live`) 404s the same way through that same URL - it did, and so
+did the bare `/staging/` root path (a `308`). This isolated the problem to the external reverse
+proxy's `/staging` path-prefix handling, not my route. Confirmed definitively by curling
+`http://127.0.0.1:4120/api/sync/outbox` directly on the staging host, bypassing the proxy entirely:
+`401` (auth checked before body validation, exactly as designed), not `404` - the route is
+registered and behaving correctly. `/api/v1/live`'s separate `500` on the same host is a
+pre-existing, unrelated null-reference bug (confirmed via `journalctl`), not something this session
+touched. The reviewer's caution was correct: `tsc --noEmit` and a green build exit code do not
+prove App Router registered a route; only asking the running server does.
+
+**2. Named and tested the in-batch authorization mechanism: SYNTHESIZED REFERENCE**, not deferred
+or two-pass. Refactored the pre-check out of `route.ts` into two testable pieces:
+`src/server/sync/resolve-batch-authorization.ts` (the DB-touching resolver - a `GameEvent`
+carrying only `gameId` resolves its `fixtureId` from an in-batch `Game` `CREATE` record's payload
+when one exists, falling back to a DB lookup only for an already-synced game) and
+`src/lib/sync/authorize-batch.ts` (the pure reject-on-first-unauthorized-fixture loop, taking an
+injected permission-check callback and type-guard so it needs zero real auth/NextAuth dependency
+to test). **5 new tests** total: 2 DB-integration tests (`test:db`, run against staging - proves a
+Game and its in-batch-referenced GameEvent resolve to exactly one `fixtureId`, and that an
+already-existing game correctly falls back to a DB lookup) and 3 pure tests (proves the loop stops
+at the first unauthorized fixture without checking anything after it - the specific failure mode
+asked for: a bad-organization Game and its dependent GameEvent, both resolving to the same
+fixtureId, reject the whole batch as one unit).
+
+**3. Transaction isolation for Commit 3: per-record, not batch-wide.** The original brief's "per-
+record, in one transaction" phrasing was aspirational about isolation, not literal about atomicity
+- the two readings conflict, and only per-record transactions match what offline sync actually
+needs (partial progress - 90 good events land, 10 bad ones get flagged - not all-or-nothing).
+Documented as the settled decision in the audit doc's new Point 6, including why batch-wide
+atomicity or savepoints would be the wrong tradeoff and how per-record transactions make crash
+recovery trivial (already-committed records return `DUPLICATE` on retry via their recorded
+idempotency key; unreached records are just retried as new).
+
+**Verification:** Typecheck clean. Full pure suite 774 -> 777 (+3, `authorize-batch.test.ts`).
+2 new DB-integration tests passed against staging, cleanup verified (no orphaned test schemas).
+Lint 0 errors. Ratchet unaffected (4/4 - no raw canonical writes in any of these files).
+`test:db`'s glob widened to include `src/server/**/*.test.ts` (was `src/test-support/**` only).
+
+**Next:** Commit 3 itself - the idempotency check against `SyncIdempotency` and the canonical-write
+replay (`createGame`/`createGameEvent`), per-record transactions, serial iteration. Report back
+when a single-record replay works end-to-end, a mixed-outcome batch (some `APPLIED`, some
+`FAILED`) works, and a crash-simulation test passes.
+

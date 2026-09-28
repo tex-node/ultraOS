@@ -1,63 +1,20 @@
 import { NextResponse } from "next/server";
-import type { Prisma } from "@/generated/prisma/client";
 import { AuthenticationError, AuthorizationError, requireFixturePermission, requireSession } from "@/lib/authorization";
 import { withOrganizationContext } from "@/lib/tenant-context";
-import {
-  type OutboxRecord,
-  type SyncOutboxRecordResult,
-  sortRecordsForProcessing,
-  syncOutboxRequestSchema,
-} from "@/lib/sync/outbox-schema";
+import { checkAllFixturesAuthorized } from "@/lib/sync/authorize-batch";
+import { type SyncOutboxRecordResult, sortRecordsForProcessing, syncOutboxRequestSchema } from "@/lib/sync/outbox-schema";
+import { resolveFixtureIdsToAuthorize } from "@/server/sync/resolve-batch-authorization";
 
 // A3b Commit 2: the sync-replay endpoint's skeleton. Validates the request, enforces the batch
 // size limit, resolves and checks authorization for every game the batch touches, and returns a
 // correctly-shaped response - but does not write anything yet. Commit 3 replaces the placeholder
 // per-record results with the real idempotency-checked canonical-write replay.
-
-// Authorization pre-check scope: every game the batch touches, checked before any record is
-// processed - not resolved lazily per-record as processing reaches it. A Game record's payload
-// carries fixtureId directly; a GameEvent record only carries gameId, so its fixtureId is resolved
-// first from an in-batch Game.CREATE record for that same gameId (the game may not exist in the
-// DB yet, if this very batch is the one creating it), falling back to a DB lookup only for a game
-// that already exists from an earlier, already-synced batch.
-async function resolveFixtureIdsToAuthorize(tx: Prisma.TransactionClient, records: OutboxRecord[]): Promise<Set<string>> {
-  const fixtureIds = new Set<string>();
-  const fixtureIdByGameId = new Map<string, string>();
-
-  for (const record of records) {
-    if (record.entityType !== "Game") continue;
-    const payload = record.payload as { fixtureId?: unknown } | null;
-    const fixtureId = typeof payload?.fixtureId === "string" ? payload.fixtureId : undefined;
-    if (fixtureId) {
-      fixtureIds.add(fixtureId);
-      fixtureIdByGameId.set(record.entityId, fixtureId);
-    }
-  }
-
-  const unresolvedGameIds = new Set<string>();
-  for (const record of records) {
-    if (record.entityType !== "GameEvent") continue;
-    const payload = record.payload as { gameId?: unknown } | null;
-    const gameId = typeof payload?.gameId === "string" ? payload.gameId : undefined;
-    if (!gameId) continue;
-    const knownFixtureId = fixtureIdByGameId.get(gameId);
-    if (knownFixtureId) {
-      fixtureIds.add(knownFixtureId);
-    } else {
-      unresolvedGameIds.add(gameId);
-    }
-  }
-
-  if (unresolvedGameIds.size > 0) {
-    const games = await tx.game.findMany({
-      where: { id: { in: [...unresolvedGameIds] } },
-      select: { fixtureId: true },
-    });
-    for (const game of games) fixtureIds.add(game.fixtureId);
-  }
-
-  return fixtureIds;
-}
+//
+// Route registration verified directly (2026-09-28): curled http://127.0.0.1:4120/api/sync/outbox
+// on the staging host itself, bypassing the external reverse proxy - a compile-clean route file
+// and a green `next build` don't prove App Router actually registered it. Got 401 (auth checked
+// before body validation, as designed), not 404 - confirmed against a known-good existing route
+// returning something other than 404 too, from the same host, same way.
 
 export async function POST(request: Request) {
   // Authentication is checked first, unconditionally - before body parsing, before the
@@ -101,16 +58,17 @@ export async function POST(request: Request) {
   const fixtureIds = await withOrganizationContext(organizationId, (tx) => resolveFixtureIdsToAuthorize(tx, orderedRecords));
 
   // Sequential, not nested inside the transaction above: requireFixturePermission opens its own
-  // transaction internally, and Prisma's interactive transactions aren't meant to nest.
-  for (const fixtureId of fixtureIds) {
-    try {
-      await requireFixturePermission("game:operate", fixtureId);
-    } catch (error) {
-      if (error instanceof AuthorizationError) {
-        return NextResponse.json({ error: error.message }, { status: 403 });
-      }
-      throw error;
-    }
+  // transaction internally, and Prisma's interactive transactions aren't meant to nest. The whole
+  // batch rejects on the first unauthorized fixture - see checkAllFixturesAuthorized's own tests
+  // for the specific failure mode (a bad-organization Game plus a dependent GameEvent referencing
+  // it via client id both resolve to the same fixtureId, so this one check covers both).
+  const authError = await checkAllFixturesAuthorized(
+    fixtureIds,
+    (fixtureId) => requireFixturePermission("game:operate", fixtureId).then(() => undefined),
+    (error): error is AuthorizationError => error instanceof AuthorizationError,
+  );
+  if (authError) {
+    return NextResponse.json({ error: authError.message }, { status: 403 });
   }
 
   // Commit 2 stops here: the request is validated, sized, ordered, and authorized, but nothing is

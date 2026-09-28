@@ -282,6 +282,50 @@ otherwise gets (needed because the canonical services under test are all `server
 `testcontainers` remains a fallback only, not needed - schema-per-suite proved fast enough (~15-17s
 including two full `db push` provisions) in this spike.
 
+### Point 6 — pre-Commit-3 checklist: three things settled before writing the replay
+
+**Route registration verified directly, not inferred from `tsc`/build exit code.** A compile-clean
+route file and a green `next build` don't prove App Router actually registered the route - that's
+a runtime step neither checks. Curled `http://127.0.0.1:4120/api/sync/outbox` directly on the
+staging host, bypassing the external reverse proxy entirely (the public `app.neonultra.ng/staging`
+URL turned out to 404 on *every* API route, including known-good pre-existing ones - a proxy/
+path-prefix issue unrelated to this endpoint, confirmed by testing a known-good route the same
+way). Got `401` (auth is checked before body validation, by design), not `404` - proof the route
+is registered. `/api/v1/live`'s separate `500` on the same host, same request, is a pre-existing
+null-reference bug in unrelated code, confirmed via logs, not touched here.
+
+**The in-batch dependency authorization mechanism is named: SYNTHESIZED REFERENCE**, not deferred
+or two-pass. A `GameEvent` record that only carries `gameId` (checked `LocalGameEvent`'s actual
+shape, not assumed - it has no `fixtureId` field) resolves its `fixtureId` from the in-batch `Game`
+`CREATE` record's own payload when one exists for that `gameId`, falling back to a DB lookup only
+when the referenced game already exists from an earlier, already-synced batch. This preserves the
+"reject the whole batch before touching the DB" contract (the alternative, deferred-checking,
+would mean enforcing auth mid-batch instead). Extracted into
+`src/server/sync/resolve-batch-authorization.ts` (the DB-touching resolver, tested via `test:db`
+against a real database - proves a Game and its in-batch-referenced GameEvent resolve to exactly
+one `fixtureId`, and that an already-existing game correctly falls back to a DB lookup) and
+`src/lib/sync/authorize-batch.ts` (the pure reject-on-first-unauthorized-fixture loop, tested with
+an injected mock permission-checker - proves the specific failure mode: one unauthorized fixture
+in the set stops the loop before checking any fixture after it, so a bad-organization `Game` and
+its dependent `GameEvent` - both resolved to the same `fixtureId` - reject the whole batch as one
+unit, not the `Game` alone). **Contract this establishes for Commit 3's replay loop:** by the time
+authorization has passed, every fixture any record in the batch touches has already been checked -
+the replay loop can trust this, and does not need to defensively re-check authorization per record.
+
+**Transaction isolation strategy for Commit 3: per-record, not one transaction for the whole
+batch.** The original brief's "per-record, in one transaction" phrasing was aspirational about
+per-record isolation, not literal about batch-wide atomicity - the two readings are in tension,
+and only one matches what an offline scorekeeper actually needs. Batch-wide atomicity (one
+transaction, or savepoints) means a single bad record blocks every good one behind it, forcing
+manual repair before any progress lands - the wrong tradeoff for offline sync, where partial
+progress (90 good events land, 10 bad ones get flagged) is the goal, not a compromise. Per-record
+transactions (`prisma.$transaction(async tx => { check idempotency; call the canonical service;
+record the idempotency key })`, serial iteration) make partial success the natural outcome, and
+make crash recovery trivial: if the process dies mid-batch, records already committed return
+`DUPLICATE` on retry (the idempotency key is already recorded), records not yet reached are simply
+retried as new. Decided before Commit 3 starts, per explicit instruction, precisely because the
+wrong choice here would mean rework across Commit 4 and A3b's production rollout.
+
 **Outbox entity vocabulary.** The outbox carries `Game` and `GameEvent` only.
 `PlayerStat`/`TeamStat` are projections, never wire entities - enforced at the type level,
 `OutboxEntityType = "Game" | "GameEvent"`. `LocalScoringRepository.updatePlayerStat` was removed
