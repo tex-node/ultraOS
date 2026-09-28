@@ -18,6 +18,11 @@ export {
 } from "./correctStatisticianEvent";
 export { voidGameEvent } from "./voidGameEvent";
 export { applyPlayerShotStatDeltas, applyTeamShotStatDeltas } from "./applyShotStatDeltas";
+export { applyCountingStatDelta } from "./applyCountingStatDelta";
+export {
+  type CountingStatField,
+  type UltraTimeCountingStatField,
+} from "@/lib/scoring/counting-stat-delta";
 export { mergeShotStatDeltas } from "@/lib/scoring/shot-stat-deltas";
 export { assignNextSequence } from "./sequence";
 export type {

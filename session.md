@@ -6362,3 +6362,48 @@ safety net it currently lacks.
 **Next:** Batch 10b (`recordStatEvent` + a new single-field-increment primitive), Batch 11
 (`voidScoreEventAction`/`correctScoreEventAction`), Batch 12 (`undoLastEvent`), then A3b.
 
+### 2026-09-28 - A3a Batch 10b: recordStatEvent migrated, new applyCountingStatDelta primitive
+
+`recordStatEvent`'s counting-stat write (rebounds/assists/steals/blocks/turnovers/fouls) is not a
+shot-delta merge - it increments exactly one field, plus its Ultra-Time mirror. It doesn't fit
+`applyShotStatDeltas`, so it needed a new primitive, named as such rather than folded in as
+mechanical drift (per explicit instruction).
+
+**Design, both questions the plan raised, answered:**
+- **Field whitelist:** `field`/`ultraTime.field` are typed unions (`CountingStatField`,
+  `UltraTimeCountingStatField`), not a raw string - the same closed six-value set
+  `STAT_FIELD`/`ULTRA_TIME_STAT_FIELD` in `actions.ts` already define, now enforced at compile
+  time rather than trusted at the call site.
+- **Signed delta, not a direction flag:** takes `delta: number` so the same shape serves both an
+  increment (`recordStatEvent`, always +1) and a future reversal (`undoLastEvent`'s generic
+  branch, Batch 12) without a separate code path. No floor-at-zero clamping inside the primitive -
+  `undoLastEvent` already guards `existing[field] > 0` before it decrements, outside the write;
+  that stays a caller decision, not something to bake in here.
+
+**Split pure builder from I/O**, matching `buildGameEventCreateData`/`createGameEvent`'s existing
+split: `buildCountingStatDeltaData` (`src/lib/scoring/counting-stat-delta.ts`, pure, no Prisma) computes
+the create/update payload shape; `applyCountingStatDelta` (`src/server/scoring/`) does the
+`findUnique` (only when an Ultra-Time mirror is requested - skipped entirely otherwise, since
+there's nothing to read) and the upsert. Unlike the two previous migrations this session
+(`undoLastEvent`'s fix, Batch 10a), this is a *new* primitive, not a fix to existing untestable
+code - designing it with this split from the start means it isn't stuck with the "no DB harness,
+no test" gap those two had. **5 new unit tests** for `buildCountingStatDeltaData` (no-mirror case,
+mirror create, mirror update - absolute value not `increment`, negative-delta reversal shape,
+confirms no clamping happens).
+
+**Migrated `recordStatEvent`:** `withOrganizationContext` + manual gate -> `withGameWrite`
+(same reasoning as Batch 10a - needs only `fixture`/`ruleSnapshot`, no richer include); raw
+`tx.gameEvent.create` -> `createGameEvent`; raw `tx.playerStat.findUnique`+`upsert` ->
+`applyCountingStatDelta`. Removed the same now-dead gate check and the manual sequence-counter
+bump, for the same reasons as 10a.
+
+**Verification:** Typecheck clean. Lint 0 errors. Full suite 749 -> 754 (+5, the new pure-builder
+tests - `recordStatEvent` itself still has no test, same Prisma-transactional gap named in Point 5
+and flagged after Batch 10a). Ratchet: `actions.ts` file count 8 -> 6 (the two raw sites migrated:
+`gameEvent.create`, `playerStat.upsert`). Total baseline 12 -> 10; ceiling lowered 12 -> 10 to
+match, 1:1. Build exit 0.
+
+**Next:** Batch 11 (`voidScoreEventAction`/`correctScoreEventAction` - genuine new shapes, not
+mechanical, per the flagged test-coverage concern these need more than typecheck to trust), Batch
+12 (`undoLastEvent`), then the pre-A3b scorer-console smoke test, then A3b.
+

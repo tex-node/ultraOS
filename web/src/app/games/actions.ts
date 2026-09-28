@@ -5,7 +5,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { MissingOrganizationContextError, requireFixturePermission, requireSession } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
-import { createGameEvent, withGameWrite, applyPlayerShotStatDeltas, applyTeamShotStatDeltas } from "@/server/scoring";
+import {
+  createGameEvent,
+  withGameWrite,
+  applyPlayerShotStatDeltas,
+  applyTeamShotStatDeltas,
+  applyCountingStatDelta,
+} from "@/server/scoring";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { remainingShotClockSeconds } from "@/lib/game-rules";
 import { withOrganizationContext } from "@/lib/tenant-context";
@@ -778,85 +784,71 @@ export async function recordStatEvent(
   const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const input = statEvent.parse(Object.fromEntries(formData.entries()));
 
-  await withOrganizationContext(organizationId, async (tx) => {
-    const game = await tx.game.findUniqueOrThrow({
-      where: { id: gameId },
-      include: { fixture: true, ruleSnapshot: true },
-    });
-    assertGameIsMutable(game.status, game.fixture.status);
-    if (game.status !== "LIVE" && game.status !== "PAUSED") {
-      throw new Error("GAME_NOT_ACTIVE");
-    }
-    if (
-      ![
-        game.fixture.homeSeasonClubId!,
-        game.fixture.awaySeasonClubId!,
-      ].includes(input.seasonClubId)
-    ) {
-      throw new Error("INVALID_TEAM");
-    }
+  await withGameWrite(
+    gameId,
+    fixtureId,
+    { actor: { id: session.user.id, organizationId }, source: "LIVE_UI" },
+    async ({ game, tx, ...writeCtx }) => {
+      if (
+        ![
+          game.fixture.homeSeasonClubId!,
+          game.fixture.awaySeasonClubId!,
+        ].includes(input.seasonClubId)
+      ) {
+        throw new Error("INVALID_TEAM");
+      }
 
-    const player = await tx.player.findFirst({
-      where: {
-        id: input.playerId,
-        seasonClubId: input.seasonClubId,
-      },
-    });
-    if (!player) throw new Error("INVALID_PLAYER");
-
-    let fouledPlayerId: string | undefined;
-    if (input.eventType === "FOUL" && input.fouledPlayerId) {
-      const fouledPlayer = await tx.player.findFirst({
-        where: { id: input.fouledPlayerId, seasonClubId: { in: [game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!] } },
+      const player = await tx.player.findFirst({
+        where: {
+          id: input.playerId,
+          seasonClubId: input.seasonClubId,
+        },
       });
-      if (!fouledPlayer) throw new Error("INVALID_FOULED_PLAYER");
-      fouledPlayerId = fouledPlayer.id;
-    }
+      if (!player) throw new Error("INVALID_PLAYER");
 
-    const field = STAT_FIELD[input.eventType];
-    const remaining = remainingClockSeconds(game);
-    const sync = await syncUltraTimeState(tx, game, organizationId, session.user.id, remaining);
-    const ultraTime = isUltraTimeUnderRules(effectiveRuleSnapshot(game.ruleSnapshot), game.status, game.currentPeriod, remaining);
-    const sequenceNumber = sync.nextEventSequence;
-    await tx.game.update({ where: { id: gameId }, data: { nextEventSequence: { increment: 1 } } });
+      let fouledPlayerId: string | undefined;
+      if (input.eventType === "FOUL" && input.fouledPlayerId) {
+        const fouledPlayer = await tx.player.findFirst({
+          where: { id: input.fouledPlayerId, seasonClubId: { in: [game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!] } },
+        });
+        if (!fouledPlayer) throw new Error("INVALID_FOULED_PLAYER");
+        fouledPlayerId = fouledPlayer.id;
+      }
 
-    await tx.gameEvent.create({
-      data: {
+      const field = STAT_FIELD[input.eventType];
+      const remaining = remainingClockSeconds(game);
+      await syncUltraTimeState(tx, game, organizationId, session.user.id, remaining);
+      const ultraTime = isUltraTimeUnderRules(effectiveRuleSnapshot(game.ruleSnapshot), game.status, game.currentPeriod, remaining);
+
+      await createGameEvent(
+        {
+          gameId,
+          fixtureId,
+          seasonClubId: input.seasonClubId,
+          playerId: player.id,
+          fouledPlayerId: input.eventType === "FOUL" ? fouledPlayerId : undefined,
+          foulType: input.eventType === "FOUL" ? input.foulType || undefined : undefined,
+          eventType: input.eventType,
+          period: game.currentPeriod,
+          clockSeconds: remaining,
+          description: input.description || input.eventType,
+          isUltraTime: ultraTime,
+        },
+        { ...writeCtx, tx },
+      );
+      const ultraField = ULTRA_TIME_STAT_FIELD[field];
+      await applyCountingStatDelta(
+        tx,
         organizationId,
         gameId,
-        seasonClubId: input.seasonClubId,
-        playerId: player.id,
-        fouledPlayerId: input.eventType === "FOUL" ? fouledPlayerId : undefined,
-        foulType: input.eventType === "FOUL" ? input.foulType || undefined : undefined,
-        eventType: input.eventType,
-        period: game.currentPeriod,
-        clockSeconds: remaining,
-        description: input.description || input.eventType,
-        sequenceNumber,
-        isUltraTime: ultraTime,
-        source: "ULTRA_NATIVE_LIVE_SCORER",
-      },
-    });
-    const ultraField = ULTRA_TIME_STAT_FIELD[field];
-    const existing = await tx.playerStat.findUnique({ where: { gameId_playerId: { gameId, playerId: player.id } } });
-    await tx.playerStat.upsert({
-      where: { gameId_playerId: { gameId, playerId: player.id } },
-      create: {
-        organizationId,
-        gameId,
-        playerId: player.id,
-        seasonClubId: input.seasonClubId,
-        [field]: 1,
-        ...(ultraTime ? { [ultraField]: 1 } : {}),
-        statSource: "ULTRA_NATIVE_LIVE_SCORER",
-      },
-      update: {
-        [field]: { increment: 1 },
-        ...(ultraTime ? { [ultraField]: (existing?.[ultraField] ?? 0) + 1 } : {}),
-        statSource: "ULTRA_NATIVE_LIVE_SCORER",
-      },
-    });
-  });
+        player.id,
+        input.seasonClubId,
+        field,
+        1,
+        ultraTime ? { field: ultraField, delta: 1 } : null,
+      );
+    },
+  );
 
   revalidatePath(`/games/${fixtureId}/live`);
 }
