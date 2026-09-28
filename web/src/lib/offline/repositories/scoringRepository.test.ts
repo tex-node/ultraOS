@@ -107,45 +107,13 @@ test("logEvent clientUpdatedAt is carried into the outbox ordering key", async (
   assert.equal(record?.clientUpdatedAt, "2026-02-01T00:00:00.000Z");
 });
 
-test("updatePlayerStat merges the patch and stamps clientUpdatedAt, but never enqueues to the outbox", async () => {
-  const { db, repo } = setup();
-  await repo.createGame({ id: "g1", organizationId: "org", fixtureId: "f1" });
-  await db.playerStats.put({
-    id: "ps1",
-    organizationId: "org",
-    gameId: "g1",
-    playerId: "p-1",
-    seasonClubId: "sc-1",
-    points: 2,
-    rebounds: 1,
-    assists: 0,
-    steals: 0,
-    blocks: 0,
-    turnovers: 0,
-    fouls: 0,
-    minutesPlayed: 5,
-    statSource: null,
-    updatedAt: "2026-01-01T00:00:00.000Z",
-    clientUpdatedAt: "2026-01-01T00:00:00.000Z",
-  });
-
-  await repo.updatePlayerStat("ps1", { points: 4, rebounds: 2 });
-
-  const stats = await repo.listStats("g1");
-  assert.equal(stats[0].points, 4);
-  assert.equal(stats[0].rebounds, 2);
-  assert.notEqual(stats[0].clientUpdatedAt, "2026-01-01T00:00:00.000Z");
-
-  // PlayerStat is a local-only projection, never a wire entity (OutboxEntityType) - this write
-  // must not leave a trace in the outbox for any sync endpoint to ever pick up.
-  const record = await db.outbox.where("entityId").equals("ps1").first();
-  assert.equal(record, undefined);
-});
-
-test("updatePlayerStat rejects an unknown stat row", async () => {
-  const { repo } = setup();
-  await assert.rejects(() => repo.updatePlayerStat("missing", { points: 1 }), /PLAYER_STAT_NOT_FOUND/);
-});
+// No updatePlayerStat tests here - the method was removed (see docs/canonical-write-audit.md
+// "Outbox entity vocabulary"). It enqueued PlayerStat snapshots to the outbox, contradicting the
+// derived-stats decision; deleting the method deletes the test surface that codified the drift,
+// rather than asserting a workaround. listStats/the local playerStats table are untouched - only
+// the write path that produced this repository's own drift is gone. The local stat projection
+// (materialized write vs. computed-on-read) is a sub-task of the A3b stat-model decision, not
+// decided here.
 
 test("every local write lands in the outbox with pending status", async () => {
   const { db, repo } = setup();

@@ -20,19 +20,17 @@ export type CreateGameEventInput = Omit<
   clientUpdatedAt?: string;
 };
 
-export type UpdatePlayerStatInput = Partial<
-  Pick<
-    LocalPlayerStat,
-    "points" | "rebounds" | "assists" | "steals" | "blocks" | "turnovers" | "fouls" | "minutesPlayed"
-  >
->;
-
+// No updatePlayerStat here (removed - see docs/canonical-write-audit.md "Outbox entity
+// vocabulary"). PlayerStat is a projection, not something this repository mutates directly; the
+// local playerStats table stays in the Dexie schema for whichever shape (materialized write or
+// computed-on-read projection) the A3b stat-model decision calls for, but no method should exist
+// that can enqueue a PlayerStat write until that decision is made - that's exactly the drift this
+// removal closes.
 export interface ScoringRepository {
   createGame(input: CreateGameInput): Promise<LocalGame>;
   getGame(id: string): Promise<LocalGame | undefined>;
   logEvent(input: CreateGameEventInput): Promise<LocalGameEvent>;
   listEvents(gameId: string): Promise<LocalGameEvent[]>;
-  updatePlayerStat(statsId: string, patch: UpdatePlayerStatInput): Promise<void>;
   listStats(gameId: string): Promise<LocalPlayerStat[]>;
 }
 
@@ -121,26 +119,6 @@ export class LocalScoringRepository implements ScoringRepository {
     return this.db.gameEvents.where("gameId").equals(gameId).sortBy("sequenceNumber");
   }
 
-  // Local-only write, deliberately never enqueued: PlayerStat is a projection, not a wire
-  // entity (see OutboxEntityType). This exists purely for offline UI responsiveness - showing a
-  // live-updating stat line without waiting for a network round trip - not as a sync source of
-  // truth. The server reconstructs the real PlayerStat from the synced GameEvent ledger; this
-  // local row is discarded/overwritten once that authoritative version comes back post-sync.
-  async updatePlayerStat(statsId: string, patch: UpdatePlayerStatInput): Promise<void> {
-    const timestamp = now();
-    await this.db.transaction("rw", this.db.playerStats, async () => {
-      const existing = await this.db.playerStats.get(statsId);
-      if (!existing) throw new Error("PLAYER_STAT_NOT_FOUND");
-      const merged: LocalPlayerStat = {
-        ...existing,
-        ...patch,
-        updatedAt: timestamp,
-        clientUpdatedAt: timestamp,
-      };
-      await this.db.playerStats.put(merged);
-    });
-  }
-
   async listStats(gameId: string): Promise<LocalPlayerStat[]> {
     return this.db.playerStats.where("gameId").equals(gameId).toArray();
   }
@@ -186,13 +164,6 @@ export class RemoteScoringRepository implements ScoringRepository {
   async listEvents(gameId: string): Promise<LocalGameEvent[]> {
     const result = (await this.request(`/games/${gameId}/events`)) as { events: LocalGameEvent[] };
     return result.events;
-  }
-
-  async updatePlayerStat(statsId: string, patch: UpdatePlayerStatInput): Promise<void> {
-    await this.request(`/player-stats/${statsId}`, {
-      method: "PATCH",
-      body: JSON.stringify(patch),
-    });
   }
 
   async listStats(gameId: string): Promise<LocalPlayerStat[]> {

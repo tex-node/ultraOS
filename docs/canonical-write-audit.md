@@ -136,28 +136,16 @@ the scorer path specifically. Sketch and decide before A3b starts, with the same
 `createGame` question above - this is now the load-bearing open question for that phase, not
 Batch S's.
 
-**Invariant enforced while grounding this question: the outbox carries `Game` and `GameEvent`
-only.** Checking A1's actual implementation (not just Batch 0's write-up) against this question
-found a live discrepancy: `LocalScoringRepository.updatePlayerStat`
-(`web/src/lib/offline/repositories/scoringRepository.ts`) was enqueueing a third outbox entity
-type, `PlayerStat`, with the full merged (absolute, not delta) local row as payload -
-`OutboxEntityType` included `"PlayerStat"` in its union. Unexercised in practice (zero callers
-anywhere in the app - pure API-surface drift, not a live bug), but a real contradiction between
-what the type system allowed and what Batch 0 decided, sitting right where the sync model gets
-decided.
-
-This is a boundary, not a cleanup: if the outbox can carry `PlayerStat` records, the client is
-sending the model; if it can't, the server computes it. Those are the two positions this open
-question is choosing between, and the outbox's entity vocabulary is where that choice becomes
-concrete rather than aspirational. Fixed and enforced at the type level (not just by convention):
-`OutboxEntityType` is now `"Game" | "GameEvent"` only, `updatePlayerStat`'s outbox enqueue was
-removed (the local IndexedDB write stays, for offline UI responsiveness only - it's discarded
-once the server's post-sync authoritative stats come back), and the two tests exercising the old
-behavior were corrected to assert its absence. **PlayerStat and TeamStat are projections; they
-are never wire entities.** A future feature that needs the server to know something about stats
-sends the events it derives from, not the stats themselves - the same "derived" decision Batch 0
-made, restated as an enforced sync-layer boundary rather than a write-up that drifted from the
-code.
+**Outbox entity vocabulary.** The outbox carries `Game` and `GameEvent` only.
+`PlayerStat`/`TeamStat` are projections, never wire entities - enforced at the type level,
+`OutboxEntityType = "Game" | "GameEvent"`. `LocalScoringRepository.updatePlayerStat` was removed
+(`fix(offline): enforce Game+GameEvent-only outbox`, then fully deleted rather than stripped) - it
+enqueued `PlayerStat` snapshots, contradicting this decision. Zero callers existed, so this was
+latent drift, not a live bug. Whether a local stat projection returns at all, and whether it's
+materialized (a repository write method) or computed (derived on read from local events, which
+would need a new pure reducer - no existing one covers the scorer's event vocabulary,
+`derivePlayerStats` is statistician-only), is resolved as part of the A3b stat-model decision
+below, not decided here.
 
 **A3b scope item: sync test infrastructure.** The whole test suite today (749 tests as of Batch S)
 is pure-function unit tests with zero Prisma dependency - no testcontainers, no per-test Postgres
