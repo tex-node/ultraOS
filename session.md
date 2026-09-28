@@ -6826,3 +6826,15 @@ replay (`createGame`/`createGameEvent`), per-record transactions, serial iterati
 when a single-record replay works end-to-end, a mixed-outcome batch (some `APPLIED`, some
 `FAILED`) works, and a crash-simulation test passes.
 
+### 2026-09-28 - Confirmed the staging proxy 404 doesn't affect production
+
+2-minute check, per explicit request, before starting Commit 3. `curl
+https://app.neonultra.ng/` and `https://app.neonultra.ng/api/v1/live` (production, no `/staging`
+prefix) both return `200` - production's reverse proxy routes API paths correctly. The 404 found
+while verifying Commit 2's route registration is isolated to staging's `/staging` path-prefix
+proxy handling specifically, not a systemic issue. Documented in the audit doc's Point 6 as an open
+item for future A3b verification (Commit 4's `drain()` test, any future browser/E2E smoke, will
+hit this same proxy 404 against the public staging URL until it's fixed - verification must go
+direct to the host in the meantime, as this session did) and flagged alongside the other
+deploy-process gap for investigation after A3b, not before.
+

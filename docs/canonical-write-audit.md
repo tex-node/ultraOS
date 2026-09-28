@@ -294,6 +294,20 @@ way). Got `401` (auth is checked before body validation, by design), not `404` -
 is registered. `/api/v1/live`'s separate `500` on the same host, same request, is a pre-existing
 null-reference bug in unrelated code, confirmed via logs, not touched here.
 
+**Confirmed this is a staging-only proxy issue, not a production one.** `curl
+https://app.neonultra.ng/` and `https://app.neonultra.ng/api/v1/live` (production, no `/staging`
+prefix) both return `200` - production's reverse proxy routes API paths correctly. The bug is
+isolated to staging's `/staging` path-prefix handling specifically, not a systemic pattern.
+
+**Open item, not A3b's to fix, but a real blocker for future end-to-end verification:** any
+future browser-driven or external-client A3b verification (Commit 4's `drain()` test, a future E2E
+smoke) will hit this same proxy 404 if run against the public staging URL. Until the proxy is
+fixed, verification must either curl/connect directly to the staging host
+(`http://127.0.0.1:4120`, as this session did) or run from a context that bypasses the `/staging`
+prefix entirely. Track the proxy fix itself alongside the other deploy-process gap already flagged
+for after A3b (the migration-not-applied issue) - both are staging infrastructure, not application
+code, and neither blocks A3b's own implementation.
+
 **The in-batch dependency authorization mechanism is named: SYNTHESIZED REFERENCE**, not deferred
 or two-pass. A `GameEvent` record that only carries `gameId` (checked `LocalGameEvent`'s actual
 shape, not assumed - it has no `fixtureId` field) resolves its `fixtureId` from the in-batch `Game`
