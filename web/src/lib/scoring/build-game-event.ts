@@ -17,6 +17,13 @@ export type LedgerSourceValue =
   | "ULTRA_NATIVE_LIVE_STATISTICIAN";
 
 export interface GameEventFields {
+  // Optional, caller-supplied. Absent for every live-UI site (Prisma's @default(cuid()) applies).
+  // Sync replay supplies it explicitly: the offline client already generated this id locally, and
+  // a later record in the same or a future batch may reference it (causedByEventId,
+  // supersedesEventId) using that client-generated value - the server must create the row under
+  // the SAME id, not a new server-generated one, or that reference would silently point nowhere
+  // once synced.
+  id?: string;
   gameId: string;
   sequenceNumber: number; // Assigned by the service (from Game.nextEventSequence)
   eventType: string;
@@ -64,6 +71,9 @@ export function buildGameEventCreateData(
   meta: GameEventWriteMeta,
 ): Prisma.GameEventUncheckedCreateInput {
   return {
+    // Absent `id` omits the field, so Prisma's @default(cuid()) generates one - identical to
+    // every existing call site's behavior before this field existed.
+    id: input.id ?? undefined,
     organizationId: meta.organizationId,
     gameId: input.gameId,
     sequenceNumber: input.sequenceNumber,

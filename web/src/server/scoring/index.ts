@@ -1,6 +1,7 @@
 import "server-only";
 
 export { createGameEvent } from "./createGameEvent";
+export { createGame, type CreateGameInput as CreateGameServiceInput } from "./createGame";
 export {
   loadMutableGame,
   GameNotMutableError,

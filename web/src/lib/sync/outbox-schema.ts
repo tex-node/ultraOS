@@ -8,14 +8,39 @@ export const MAX_BATCH_SIZE = 100;
 
 // Mirrors src/lib/offline/types.ts's OutboxEntityType exactly - the client and server must agree
 // on this constraint from one place, not two independently-maintained lists.
-export const outboxRecordSchema = z.object({
-  idempotencyKey: z.string().uuid(),
-  entityType: z.enum(["Game", "GameEvent"]),
-  operation: z.enum(["CREATE", "UPDATE", "DELETE"]),
-  entityId: z.string().min(1),
-  payload: z.unknown(),
-  clientUpdatedAt: z.string().datetime(),
-});
+//
+// ledgerSourceHint: added in Commit 3, correcting a Commit 2 gap - the A3b sketch's Point 2
+// (docs/canonical-write-audit.md) already decided this field is required on the wire for every
+// GameEvent record before Commit 2 was written, and Commit 2's schema omitted it. Required only
+// for GameEvent (a Game record has no scorer/statistician distinction) - enforced below via
+// superRefine rather than a discriminated union, since every other field is shared between both
+// entity types and a union would duplicate the whole shape for one conditional field.
+export const outboxRecordSchema = z
+  .object({
+    idempotencyKey: z.string().uuid(),
+    entityType: z.enum(["Game", "GameEvent"]),
+    operation: z.enum(["CREATE", "UPDATE", "DELETE"]),
+    // UUID, not the server's own cuid format: there is no existing caller to match today (zero
+    // current UI creates a Game/GameEvent offline), so this is a forward-looking decision, not a
+    // confirmed existing convention - chosen to match crypto.randomUUID(), the same generator
+    // src/lib/offline/outbox.ts already uses for idempotencyKey. A client-generated id never
+    // collides with a server-generated one regardless of format (different generation schemes,
+    // both globally unique by construction) - this constraint is about giving future client code
+    // one clear answer, not about avoiding a collision risk that doesn't otherwise exist.
+    entityId: z.string().uuid(),
+    payload: z.unknown(),
+    clientUpdatedAt: z.string().datetime(),
+    ledgerSourceHint: z.enum(["SCORER", "STATISTICIAN"]).optional(),
+  })
+  .superRefine((record, ctx) => {
+    if (record.entityType === "GameEvent" && !record.ledgerSourceHint) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "ledgerSourceHint is required for GameEvent records - it determines which console's ledger the replayed event belongs to.",
+        path: ["ledgerSourceHint"],
+      });
+    }
+  });
 
 // No `.min()` on records: an empty batch is a valid request (200, { results: [] }), not a
 // validation error - the client's retry logic never needs a special case for "nothing pending".

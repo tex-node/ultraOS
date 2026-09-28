@@ -340,6 +340,74 @@ make crash recovery trivial: if the process dies mid-batch, records already comm
 retried as new. Decided before Commit 3 starts, per explicit instruction, precisely because the
 wrong choice here would mean rework across Commit 4 and A3b's production rollout.
 
+### Point 7 — Commit 3: idempotency + canonical-write replay, and two gaps a test suite found
+
+`replayOutboxRecord` (`src/server/sync/replay-outbox-record.ts`) is the core: per-record idempotency
+check against `SyncIdempotency`, dispatch to `createGame` (new - the sync-replay counterpart to
+`startGame`, deliberately not sharing its rule-resolution logic, which the offline client's payload
+carries no data for) or `createGameEvent`, one Postgres transaction per record (Point 6's settled
+decision). Only `CREATE` is implemented - the only operation the current offline client ever
+enqueues.
+
+**Two real design gaps surfaced by running the test suite against a real database, not by reading
+first** - the discipline held for the invention, the verification method just changed for this
+commit, because the thing under test (transaction behavior, id continuity across a sync boundary)
+only manifests under real execution:
+
+1. **The replay function initially imported the global `prisma` singleton and opened its own
+   transaction on it**, instead of taking its transaction client from the caller - the one rule
+   every other canonical service in this codebase follows. All 5 new tests failed identically
+   against staging with "no record found" for rows that definitely existed, just in an isolated
+   test schema the function wasn't actually querying. Fixed by adding `prisma` to `ReplayContext`
+   as an injected field; `route.ts` passes the real client, tests pass the schema-scoped one.
+2. **`createGameEvent` had no way to accept a caller-supplied `id`.** Every live-UI site creates
+   events server-side with no pre-existing client id, so this was never needed before Commit 3.
+   Sync replay needs it: the offline client generates an id locally before ever syncing, and a
+   later event may reference it via `causedByEventId`/`supersedesEventId` using that value - a
+   server-generated id would silently break that reference once synced. Extended
+   `GameEventFields`/`CreateGameEventInput` with an optional `id` (absent by default, so every
+   existing call site's behavior - Prisma's `@default(cuid())` - is unchanged).
+
+Also added the `ledgerSourceHint` field to the outbox schema itself, correcting a Commit 2
+oversight: Point 2 above decided this field is required on the wire for every `GameEvent` record
+before Commit 2 was written, and Commit 2's schema didn't include it.
+
+**Caller-supplied ids opened three validation gaps, closed in this commit, not deferred:**
+
+1. **ID collision.** Both `createGame` and `createGameEvent` were already plain `create`, never
+   `upsert` - confirmed, not assumed - so a colliding id was never at risk of silently overwriting
+   an existing row, but the failure surfaced as a raw, unlabeled Prisma error. `errorDetail()` now
+   returns a structured `{code, message}`: Postgres's unique-constraint violation (`P2002`) maps to
+   `ID_COLLISION` specifically, so a client can branch on `detail.code` rather than string-match.
+2. **Idempotency-vs-id mismatch** (two records, different `idempotencyKey`s, same `entityId`) -
+   confirmed this is already covered by #1, not a separate gap: `SyncIdempotency` alone wouldn't
+   catch it (neither key exists yet), but the second record's plain `create` hits the identical
+   unique-constraint protection. Added a dedicated test proving the end-to-end behavior rather than
+   just asserting the mechanism in isolation.
+3. **Format validation.** `entityId` had no format constraint. Checked first: there's no existing
+   offline-client convention for it to match (zero current callers of `createGame`/`logEvent`), but
+   `crypto.randomUUID()` is already the generator `idempotencyKey` uses
+   (`src/lib/offline/outbox.ts`) - tightened `entityId` to the same UUID format now, while nothing
+   existing could break from the change, stating it as a forward-looking decision, not a confirmed
+   existing behavior.
+
+**Auth-rejection zero-rows, closed rather than left as a documented gap.** Extracted the route's
+authorize-then-replay orchestration into `processOutboxBatch` (`src/lib/sync/process-outbox-batch.ts`)
+- pure, every dependency (fixture resolution, permission check, per-record replay) injected. Its
+contract - "if authorization fails, `replay` is called zero times, for any record" - is provable
+with a mock `replay` function and a call-count assertion, no database needed: `replay` is the only
+dependency that ever writes anything, so a call count of zero is equivalent proof to zero
+`GameEvent`/`SyncIdempotency` rows. `route.ts` is now a thin wrapper supplying the real
+dependencies (`withOrganizationContext`-scoped fixture resolution, `requireFixturePermission`,
+`replayOutboxRecord` against the real client).
+
+**Test coverage, final:** 7 DB-integration tests (single record, mixed-batch partial success,
+idempotent replay, crash simulation - a real FK violation after real prior work in the same
+transaction, not a mocked throw, asserting the prior work rolled back too - cross-record
+dependency, ID collision, and ordering at the replay level) plus 3 pure orchestration tests
+(including the exact auth-rejection failure mode: a 3-record batch, the middle fixture
+unauthorized, `replay` called for none of the three).
+
 **Outbox entity vocabulary.** The outbox carries `Game` and `GameEvent` only.
 `PlayerStat`/`TeamStat` are projections, never wire entities - enforced at the type level,
 `OutboxEntityType = "Game" | "GameEvent"`. `LocalScoringRepository.updatePlayerStat` was removed

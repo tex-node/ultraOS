@@ -6838,3 +6838,127 @@ hit this same proxy 404 against the public staging URL until it's fixed - verifi
 direct to the host in the meantime, as this session did) and flagged alongside the other
 deploy-process gap for investigation after A3b, not before.
 
+### 2026-09-28 - A3b Commit 3: idempotency + canonical-write replay, the core of A3b
+
+The load-bearing commit. Two new services, one new replay function, two real design gaps found
+and fixed via the test suite catching them (not found by reading first this time - found by
+running real tests against a real database and tracing each failure to its actual cause).
+
+**New: `createGame`** (`src/server/scoring/createGame.ts`) - the sync-replay counterpart to
+`startGame` (`actions.ts`), deliberately not reused: `startGame` resolves rule-derived clock/period
+structure from the season's rule set before creating the Game; the offline client's own
+`CreateGameInput` carries no rule data at all, so replaying it 1:1 against
+`LocalScoringRepository.createGame`'s own defaults is the correct match, not an approximation of
+`startGame`'s richer behavior. Takes a caller-supplied `id` (the offline client's own
+client-generated id, needed before the game has ever synced) - `Game.fixtureId` is `@unique`, so a
+game that already exists for that fixture throws a unique-constraint violation, converted to
+`FAILED`; resolving that intelligently is Commit 4's LWW/`SyncConflictLog` scope, not this one's.
+
+**New: `replayOutboxRecord`** (`src/server/sync/replay-outbox-record.ts`) - per-record idempotency
+check + canonical-write dispatch, one Postgres transaction per record (the Point 6 decision).
+Only `CREATE` is implemented for both entity types - the only operation the current offline client
+ever enqueues; `UPDATE`/`DELETE` fail explicitly as unimplemented, honest about current scope
+rather than silently accepted.
+
+**Gap found #1, via a failing test, not via reading first:** the function initially imported the
+*global* `prisma` singleton directly and opened its own transaction on it - every other canonical
+service in this codebase takes its transaction client from the caller, this one didn't. All 5 new
+tests failed identically against staging with "no record found" for rows that definitely existed,
+just in the isolated test schema, not the global one the function was actually querying. Fixed by
+injecting the Prisma client as part of `ReplayContext` instead of importing it - `route.ts` passes
+the real global client, tests pass the schema-scoped one. Named in the code comment as the reason
+this field exists, not left as an unexplained parameter.
+
+**Gap found #2, also via a failing test:** `createGameEvent` had no way to accept a caller-supplied
+`id` - every live-UI site creates events server-side with no pre-existing client id, so this was
+never needed before. Sync replay needs it: the offline client already generated an id locally
+before ever syncing, and a later event (in this batch or a future one) may reference it via
+`causedByEventId`/`supersedesEventId` using that client-generated value - if the server generated a
+different id, that reference would silently point nowhere once synced. Extended
+`GameEventFields`/`CreateGameEventInput` with an optional `id` (absent by default, preserving every
+existing call site's behavior exactly - Prisma's `@default(cuid())` still applies when omitted).
+2 new characterization tests in `build-game-event.test.ts` (absent-by-default, honored-when-supplied).
+
+**Also found and fixed while designing test 5 (cross-record dependency):** the test itself
+initially created its `Game` with `createGame`'s default `status: "NOT_STARTED"`, then tried to log
+an event against it - correctly rejected by `createGameEvent`'s own mutable gate (LIVE/PAUSED
+only). Not a bug - the test's setup wasn't realistic. Fixed by sending `status: "LIVE"` in the
+`Game` `CREATE` payload, matching what a real offline "start game" flow would actually send.
+
+**Schema correction, also overdue:** added the required `ledgerSourceHint` field to
+`outbox-schema.ts` - the A3b sketch's Point 2 decided this before Commit 2 was written, and Commit
+2's schema omitted it. Required only for `GameEvent` (enforced via `superRefine`, since a `Game`
+record has no scorer/statistician distinction), added 2 new contract tests.
+
+**Caller-supplied ids opened three validation gaps, closed before this commit was reported done**
+(flagged in review, addressed the same session rather than deferred):
+1. **ID collision.** `createGame`/`createGameEvent` were already plain `create` calls, never
+   `upsert` (confirmed, not assumed) - so a caller-supplied id colliding with an existing row was
+   never at risk of silently overwriting it, but the failure surfaced as a raw, unlabeled Prisma
+   error. `errorDetail()` now returns a structured `{code, message}` (not a bare string): Prisma's
+   `P2002` (unique-constraint violation) maps to `ID_COLLISION` specifically, `P2003`/`P2025`
+   (foreign-key/not-found) map to `REFERENCED_ENTITY_NOT_FOUND`, everything else to `UNKNOWN` - a
+   client parsing a `FAILED` result can now branch on `detail.code`, not string-match English text.
+2. **Idempotency-vs-id mismatch.** Two records with *different* `idempotencyKey`s but the *same*
+   `entityId` - the `SyncIdempotency` check alone wouldn't catch this (neither key exists yet, so
+   both pass it). Confirmed this is already covered, not a new gap: the second record's plain
+   `create` hits the same `ID_COLLISION` path as #1, since both are the identical unique-constraint
+   protection, not two separate code paths. Added a dedicated test proving it end-to-end (first
+   record `APPLIED`, second `FAILED` with `ID_COLLISION`, original row's data untouched).
+3. **Format validation.** `entityId` had no format constraint (`z.string().min(1)`). Checked first:
+   there's no existing offline-client convention to match - `crypto.randomUUID()` is already used
+   for `idempotencyKey` generation (`src/lib/offline/outbox.ts`), but nothing currently generates
+   `LocalGame.id`/`LocalGameEvent.id` (zero current callers of `createGame`/`logEvent`, confirmed
+   again). Since nothing existing could break, tightened `entityId` to `z.string().uuid()` now,
+   matching the same generator `idempotencyKey` already uses - a forward-looking decision stated as
+   such, not a confirmed existing behavior.
+
+**Auth-rejection zero-rows, closed properly instead of left as a documented gap.** Extracted the
+route's authorize-then-replay orchestration into `processOutboxBatch`
+(`src/lib/sync/process-outbox-batch.ts`) - pure, every dependency (fixture resolution, permission
+check, per-record replay) injected. Its contract - "if authorization fails, `replay` is called zero
+times, for any record" - is provable with a mock `replay` function and a call-count assertion, no
+database needed: `replay` is the only dependency that ever writes anything (in production, it's
+`replayOutboxRecord`, doing the real DB writes), so a call count of zero is equivalent proof to zero
+`GameEvent`/`SyncIdempotency` rows. 3 new pure tests, including the exact failure mode asked for (a
+3-record batch, the middle fixture unauthorized, `replay` called for none of the three - not the
+bad one, not either good one). `route.ts` is now a thin wrapper providing the real dependencies.
+
+**Test coverage, matching the reviewer's list, now closing the gap flagged in review:**
+1. Single record end-to-end - PASS (`APPLIED`, correct `source`, one `SyncIdempotency` row, zero
+   `SyncConflictLog` rows).
+2. Mixed batch partial success - PASS (4 `APPLIED`, 1 `FAILED`, the good ones land).
+3. Idempotent replay - PASS (`DUPLICATE`, zero new rows, `appliedAt` unchanged).
+4. Crash simulation - PASS, and it's the real thing: a genuine Postgres transaction abort, not a
+   mocked throw. A bad `playerId` foreign key causes `tx.gameEvent.create` to fail *after*
+   `assignNextSequence`'s real `tx.game.update` has already run and committed its statement inside
+   the same transaction - asserted `nextEventSequence` reverted to its pre-attempt value (not just
+   "no GameEvent row"), proving the whole transaction rolled back via Postgres's own mechanism, not
+   just that the final statement failed. Retried the same idempotencyKey with a corrected payload -
+   applied cleanly, sequence advanced exactly once, no lingering partial state.
+5. Cross-record dependency - PASS (`Game` `CREATE` then a dependent `GameEvent` `CREATE`
+   referencing it by client id, both `APPLIED`, `gameId` matches exactly - the id-preservation fix
+   is what makes this meaningful, not just "it didn't crash").
+6. Auth rejection aborts whole batch, verified by zero rows (via zero `replay` calls) - PASS, per
+   `processOutboxBatch`'s tests above. Closes the gap this same report originally left open.
+7. Ordering preserved under out-of-array-order input - PASS, at two levels: a new
+   `replayOutboxRecord`-level test (out-of-order input, `sequenceNumber` assignment proves
+   processing order) and a `processOutboxBatch`-level test (mock `replay` call order).
+8. LWW conflict log - out of scope per the brief; Commit 4's job.
+
+**Verification:** Typecheck clean. Full pure suite 774 (pre-Commit-3) -> 785 (+11: 2 outbox-schema
+format/ledgerSourceHint tests were already counted, +2 build-game-event id tests, +3
+process-outbox-batch tests, +1 outbox-schema entityId-format test, plus the earlier ledgerSourceHint
+pair). 10 DB-integration tests total (2 `resolve-batch-authorization` + 1 `db-test-context` + 7
+`replay-outbox-record`), all passing against staging, cleanup verified after every run including
+the failed debugging attempts along the way. Lint 0 errors. Ratchet unaffected (4/4 - `game`/
+`syncIdempotency` writes aren't in the restricted `gameEvent|playerStat|teamStat` selector).
+Production's own public URL (no `/staging` prefix) confirmed serving API routes correctly - the
+earlier 404 was staging's reverse-proxy path-prefix handling specifically, not systemic. Build exit
+0.
+
+**Next:** Commit 4 - client-side `drain()` update (per-record result handling: mark synced only on
+`APPLIED`/`DUPLICATE`, leave `FAILED`/`CONFLICT` in the outbox) and the LWW conflict log
+(`SyncConflictLog` writes on overwrite). `RemoteScoringRepository`'s deletion is already done
+(Commit 2).
+

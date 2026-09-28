@@ -46,6 +46,10 @@ export interface WriteContext {
 // A canonical GameEvent write, expressed in domain terms rather than as a raw Prisma input, so the
 // service — not the caller — owns sequence assignment, clock computation, and organization scoping.
 export interface CreateGameEventInput {
+  // Optional, caller-supplied. Absent for every live-UI site; sync replay supplies the offline
+  // client's own client-generated id, so the server creates the row under the same id rather than
+  // a new one - see GameEventFields's comment in src/lib/scoring/build-game-event.ts.
+  id?: string;
   fixtureId: string; // Required for the FOR UPDATE lock
   gameId: string;
   eventType: string;

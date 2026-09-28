@@ -7,12 +7,29 @@ function record(overrides: Partial<Record<string, unknown>> = {}) {
     idempotencyKey: "550e8400-e29b-41d4-a716-446655440000",
     entityType: "GameEvent",
     operation: "CREATE",
-    entityId: "event-1",
+    entityId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
     payload: { gameId: "game-1" },
     clientUpdatedAt: "2026-09-28T10:00:00.000Z",
+    ledgerSourceHint: "SCORER",
     ...overrides,
   };
 }
+
+test("contract shape: ledgerSourceHint is required for GameEvent records", () => {
+  const result = syncOutboxRequestSchema.safeParse({
+    deviceId: "device-1",
+    records: [record({ ledgerSourceHint: undefined })],
+  });
+  assert.equal(result.success, false);
+});
+
+test("contract shape: ledgerSourceHint is NOT required for Game records (no scorer/statistician distinction)", () => {
+  const result = syncOutboxRequestSchema.safeParse({
+    deviceId: "device-1",
+    records: [record({ entityType: "Game", ledgerSourceHint: undefined, payload: { fixtureId: "fixture-1" } })],
+  });
+  assert.equal(result.success, true);
+});
 
 test("contract shape: a well-formed request with one record parses successfully", () => {
   const result = syncOutboxRequestSchema.safeParse({ deviceId: "device-1", records: [record()] });
@@ -57,14 +74,22 @@ test("empty batch: zero records is a valid request, not a validation error", () 
 });
 
 test("batch size limit: exactly MAX_BATCH_SIZE records is valid", () => {
-  const records = Array.from({ length: MAX_BATCH_SIZE }, (_, i) => record({ idempotencyKey: `550e8400-e29b-41d4-a716-4466554400${String(i).padStart(2, "0")}`, entityId: `event-${i}` }));
+  const records = Array.from({ length: MAX_BATCH_SIZE }, (_, i) => record({ idempotencyKey: `550e8400-e29b-41d4-a716-4466554400${String(i).padStart(2, "0")}` }));
   const result = syncOutboxRequestSchema.safeParse({ deviceId: "device-1", records });
   assert.equal(result.success, true);
 });
 
 test("batch size limit: MAX_BATCH_SIZE + 1 records is rejected", () => {
-  const records = Array.from({ length: MAX_BATCH_SIZE + 1 }, (_, i) => record({ idempotencyKey: `550e8400-e29b-41d4-a716-44665544${String(i).padStart(4, "0")}`, entityId: `event-${i}` }));
+  const records = Array.from({ length: MAX_BATCH_SIZE + 1 }, (_, i) => record({ idempotencyKey: `550e8400-e29b-41d4-a716-44665544${String(i).padStart(4, "0")}` }));
   const result = syncOutboxRequestSchema.safeParse({ deviceId: "device-1", records });
+  assert.equal(result.success, false);
+});
+
+test("contract shape: entityId must be a valid UUID, matching crypto.randomUUID() - the same generator idempotencyKey already uses", () => {
+  const result = syncOutboxRequestSchema.safeParse({
+    deviceId: "device-1",
+    records: [record({ entityId: "not-a-uuid" })],
+  });
   assert.equal(result.success, false);
 });
 

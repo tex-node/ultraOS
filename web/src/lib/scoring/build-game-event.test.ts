@@ -61,6 +61,23 @@ test("flipPossession: provenance columns are null when the caller supplies none"
   assert.equal(data.syncBatchId, null);
 });
 
+test("id: absent by default, so Prisma's @default(cuid()) generates one - every live-UI site's existing behavior", () => {
+  const data = buildGameEventCreateData(flipPossessionFields, {
+    organizationId: "org-1",
+    actorId: "user-1",
+    source: "ULTRA_NATIVE_LIVE_STATISTICIAN",
+  });
+  assert.equal(data.id, undefined);
+});
+
+test("id: a caller-supplied value (sync replay preserving the offline client's own id) is honored, not overridden", () => {
+  const data = buildGameEventCreateData(
+    { ...flipPossessionFields, id: "client-generated-event-id-1" },
+    { organizationId: "org-1", actorId: "user-1", source: "OFFLINE_SYNC" },
+  );
+  assert.equal(data.id, "client-generated-event-id-1");
+});
+
 test("sync-replayed statistician events keep the statistician ledger value; syncBatchId is the transport signal", () => {
   const source = ledgerSourceFor("OFFLINE_SYNC", "STATISTICIAN");
   assert.equal(source, "ULTRA_NATIVE_LIVE_STATISTICIAN");

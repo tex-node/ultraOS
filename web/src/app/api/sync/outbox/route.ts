@@ -1,20 +1,29 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { AuthenticationError, AuthorizationError, requireFixturePermission, requireSession } from "@/lib/authorization";
 import { withOrganizationContext } from "@/lib/tenant-context";
-import { checkAllFixturesAuthorized } from "@/lib/sync/authorize-batch";
-import { type SyncOutboxRecordResult, sortRecordsForProcessing, syncOutboxRequestSchema } from "@/lib/sync/outbox-schema";
+import { processOutboxBatch } from "@/lib/sync/process-outbox-batch";
+import { syncOutboxRequestSchema } from "@/lib/sync/outbox-schema";
 import { resolveFixtureIdsToAuthorize } from "@/server/sync/resolve-batch-authorization";
+import { replayOutboxRecord } from "@/server/sync/replay-outbox-record";
 
-// A3b Commit 2: the sync-replay endpoint's skeleton. Validates the request, enforces the batch
-// size limit, resolves and checks authorization for every game the batch touches, and returns a
-// correctly-shaped response - but does not write anything yet. Commit 3 replaces the placeholder
-// per-record results with the real idempotency-checked canonical-write replay.
+// A3b: the sync-replay endpoint. Validates the request, enforces the batch size limit, resolves
+// and checks authorization for every game the batch touches (before any record is processed),
+// then replays each record serially against a real per-record idempotency check and canonical
+// write (Commit 3). The authorize-then-replay orchestration itself lives in
+// processOutboxBatch (src/lib/sync/) - this route wires in the real dependencies
+// (withOrganizationContext-scoped fixture resolution, requireFixturePermission, replayOutboxRecord
+// against the real prisma client); process-outbox-batch.test.ts proves the orchestration's own
+// contract (auth rejection calls replay zero times) with injected mocks, no database needed.
 //
 // Route registration verified directly (2026-09-28): curled http://127.0.0.1:4120/api/sync/outbox
 // on the staging host itself, bypassing the external reverse proxy - a compile-clean route file
 // and a green `next build` don't prove App Router actually registered it. Got 401 (auth checked
 // before body validation, as designed), not 404 - confirmed against a known-good existing route
-// returning something other than 404 too, from the same host, same way.
+// returning something other than 404 too, from the same host, same way. Confirmed separately that
+// production's own public URL (no /staging prefix) serves API routes correctly - the 404 was
+// staging's reverse-proxy path-prefix handling, not a systemic issue.
 
 export async function POST(request: Request) {
   // Authentication is checked first, unconditionally - before body parsing, before the
@@ -45,41 +54,23 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request body.", issues: parsed.error.issues }, { status: 400 });
   }
-  const { records } = parsed.data;
 
-  // Empty batch: a valid request with no work to do, not an error.
-  if (records.length === 0) {
-    const results: SyncOutboxRecordResult[] = [];
-    return NextResponse.json({ results });
+  const syncBatchId = randomUUID();
+  const outcome = await processOutboxBatch(parsed.data.records, {
+    resolveFixtureIds: (records) => withOrganizationContext(organizationId, (tx) => resolveFixtureIdsToAuthorize(tx, records)),
+    checkFixturePermission: (fixtureId) => requireFixturePermission("game:operate", fixtureId).then(() => undefined),
+    isAuthorizationError: (error): error is AuthorizationError => error instanceof AuthorizationError,
+    replay: (record) =>
+      replayOutboxRecord(record, {
+        actor: { id: session.user.id, organizationId },
+        deviceId: parsed.data.deviceId,
+        syncBatchId,
+        prisma,
+      }),
+  });
+
+  if (!outcome.authorized) {
+    return NextResponse.json({ error: outcome.message }, { status: 403 });
   }
-
-  const orderedRecords = sortRecordsForProcessing(records);
-
-  const fixtureIds = await withOrganizationContext(organizationId, (tx) => resolveFixtureIdsToAuthorize(tx, orderedRecords));
-
-  // Sequential, not nested inside the transaction above: requireFixturePermission opens its own
-  // transaction internally, and Prisma's interactive transactions aren't meant to nest. The whole
-  // batch rejects on the first unauthorized fixture - see checkAllFixturesAuthorized's own tests
-  // for the specific failure mode (a bad-organization Game plus a dependent GameEvent referencing
-  // it via client id both resolve to the same fixtureId, so this one check covers both).
-  const authError = await checkAllFixturesAuthorized(
-    fixtureIds,
-    (fixtureId) => requireFixturePermission("game:operate", fixtureId).then(() => undefined),
-    (error): error is AuthorizationError => error instanceof AuthorizationError,
-  );
-  if (authError) {
-    return NextResponse.json({ error: authError.message }, { status: 403 });
-  }
-
-  // Commit 2 stops here: the request is validated, sized, ordered, and authorized, but nothing is
-  // written yet. Commit 3 replaces this placeholder with the real per-record idempotency check
-  // (SyncIdempotency) and canonical-write replay (createGame/createGameEvent). Results are
-  // returned in the server-processed order established above, not necessarily the request's
-  // original array order - the client correlates by idempotencyKey, not by array position.
-  const results: SyncOutboxRecordResult[] = orderedRecords.map((record) => ({
-    idempotencyKey: record.idempotencyKey,
-    status: "APPLIED",
-  }));
-
-  return NextResponse.json({ results });
+  return NextResponse.json({ results: outcome.results });
 }
