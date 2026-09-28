@@ -6306,3 +6306,59 @@ primitive, its own design question - field whitelist? signed delta or direction?
 (`undoLastEvent`'s own migration, now that its reversal math is correct - the compensation shape),
 then A3b with the canonical-write vocabulary fully closed.
 
+### 2026-09-28 - A3a Batch 10a: recordScore migrated to withGameWrite + createGameEvent
+
+Pre-diff checks first, per standing discipline. `recordScore`'s manual gate (FOR UPDATE lock +
+`game.findUniqueOrThrow({ fixture: true, ruleSnapshot: true })` + `assertGameIsMutable` +
+LIVE/PAUSED check) is an exact match for what `loadMutableGame`/`withGameWrite` already do, and
+`recordScore` needs no includes beyond `fixture`/`ruleSnapshot` - unlike `recordSportEvent`
+(Batch 9a), which kept its own manual load because it needs a `player`+`athlete` include
+`loadMutableGame` doesn't provide. Confirmed `applyPlayerShotStatDeltas`/`applyTeamShotStatDeltas`
+are barrel-exported and take only `tx` + primitives - callable from any callback with no special
+context. Checked precedent in `stats-actions.ts` (`voidStatisticianEvent`, `recordGameTimeout`):
+already-migrated sites drop their manual gate entirely rather than keep it as dead code after
+switching to `withGameWrite` - same call here.
+
+**Migrated:** `withOrganizationContext` + manual lock/load/gate -> `withGameWrite`; the raw
+`tx.gameEvent.create` -> `createGameEvent`. Removed the now-dead `assertGameIsMutable`/LIVE-PAUSED
+check (unreachable after migration - `withGameWrite`'s gate throws before the callback runs) and
+the manual `sequenceNumber`/`nextEventSequence` increment (now redundant - `createGameEvent`
+assigns the sequence itself, reading the fresh in-transaction value, which already accounts for
+whatever `syncUltraTimeState`'s own internal `createGameEvent` call did earlier in the same
+transaction - the same double-load-is-safe pattern every prior batch already relies on). **Kept**
+the `INVALID_TEAM` check as its own explicit throw, even though `createGameEvent` re-validates the
+same condition internally - it's reachable before the `player` lookup and its ordering relative to
+`INVALID_PLAYER` is observable behavior, unlike the gate check, so removing it would not be purely
+mechanical.
+
+**On testing:** no characterization test added. `actions.ts` has zero test coverage today, for the
+same reason named in the A3b sketch's Point 5 and in the `undoLastEvent` fix - everything here is
+Prisma-transactional and this codebase has no DB-integration harness yet. What backs this
+migration instead: every field passed to `createGameEvent` is a line-for-line carry-over from the
+old raw `data: {...}` object (diffed by hand, not assumed), `buildGameEventCreateData`'s existing
+characterization test already covers the canonical write path's field-shape behavior in general,
+and the removed gate/sequence logic is provably the same logic `loadMutableGame`/`assignNextSequence`
+already run (read, not assumed, above). Stating this plainly rather than presenting typecheck/lint
+as behavioral proof - the same honesty applied to the `undoLastEvent` fix's test gap.
+
+**Verification:** Typecheck clean. Lint 0 errors (7 pre-existing warnings, unrelated). Full suite
+unchanged at 749 (no test file exists for this function). Ratchet: `actions.ts` 9 -> 8 (exactly the
+one raw `gameEvent.create` migrated - the two delta-helper calls were already canonical, never
+counted). Arithmetic, stated explicitly: `actions.ts`'s own file-specific count is 9 -> 8; the
+total baseline (sum across `actions.ts` + `stats-actions.ts`'s 2 + `game-result-import.ts`'s 2) is
+13 -> 12; the ceiling (`maxEntries`) was lowered 13 -> 12 in the same commit, 1:1 with the total,
+zero headroom. Build exit 0.
+
+**Flagged, not this batch's job:** this is the second consecutive migration
+(`undoLastEvent`'s gap fix, now this one) verified by typecheck + build + ratchet with no
+behavior test, because `actions.ts` has zero test coverage today. That's honest for a mechanical
+"same call, different function" change, but it's now the default for this file, and Batch 11
+(supersession + delta-reversal logic, not a mechanical rename) is exactly the kind of change a
+compiler can't catch a semantic regression in. Before A3b, not before Batch 11: add one smoke test
+exercising the scorer console end-to-end (score, void, undo, verify) - not per-site
+characterization tests, just the one path that touches all five sites and gives this file the
+safety net it currently lacks.
+
+**Next:** Batch 10b (`recordStatEvent` + a new single-field-increment primitive), Batch 11
+(`voidScoreEventAction`/`correctScoreEventAction`), Batch 12 (`undoLastEvent`), then A3b.
+
