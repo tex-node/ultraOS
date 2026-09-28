@@ -33,6 +33,23 @@ The ESLint canonical-write guard flags **36** existing sites. Triaged into bucke
 sets a ceiling the CI check (`scripts/check-canonical-write-baseline.mjs`) enforces: the count may
 shrink, never grow.
 
+## Current state (as of Batch 12): 4 raw sites remain, all outside A3a's scope
+
+`actions.ts` (the scorer console, A3a's actual target) reached **0** — it dropped out of
+`eslint-suppressions.json` entirely. Total baseline **4**, all in two files A3a was never scoped
+to touch:
+
+| Site | What it is | Why it's out of scope |
+| --- | --- | --- |
+| `stats-actions.ts:902` (`tx.playerStat.upsert`) | `rebuildGameStatsFromEvents`'s per-player materialization | The statistician console's own verify-gated recompute entry point (see "DERIVED" section below) — this *is* the canonical writer for that path, not debt |
+| `stats-actions.ts:933` (`tx.teamStat.upsert`) | same function, team-level | same |
+| `game-result-import.ts:265` (`tx.teamStat.upsert`) | bulk score-sheet import (CSV/manual box-score entry), team-level | A separate, pre-existing feature (LBCL-style score-sheet ingestion) — never in A3a's scope, not scoring-console-related |
+| `game-result-import.ts:294` (`tx.playerStat.upsert`) | same import path, per-player | same |
+
+"Canonical-write vocabulary closed" means: every scorer-console write that used to bypass the
+service layer now goes through it. It does not mean zero raw writes exist anywhere in the codebase
+— these four are deliberately-scoped exceptions, not overlooked debt.
+
 ## Batch plan (Bucket B)
 
 Unit of a batch = "sites that collapse to the same service-call shape," not file or count.
@@ -408,7 +425,7 @@ These sites write PlayerStat/TeamStat directly, contradicting the "stats are der
 
 ### DERIVED (PlayerStat/TeamStat) — sole legitimate writer
 
-`stats-actions.ts` `rebuildGameStatsFromEvents` (877/908) is the sole source of truth. Called by `verifyStatistics` (line 963). All other PlayerStat/TeamStat writes are legacy and will be removed in Batch S.
+`stats-actions.ts` `rebuildGameStatsFromEvents` (902/933 as of Batch 12) is the sole source of truth for the *statistician's verified* box score. Called by `verifyStatistics` (line 962). Superseded claim: "all other PlayerStat/TeamStat writes are legacy and will be removed in Batch S" - resolved by the A3b sketch's Point 3 instead. The scorer console's incremental writes are a deliberately independent, coexisting authority (dual-authority-via-verification-gate), not legacy debt to be deleted.
 
 **Derivation call graph (verified Batch 3):**
 
