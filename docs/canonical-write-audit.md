@@ -90,11 +90,13 @@ fixture at sync time. Two options:
 
 Option 2 eliminates a whole class of sync complexity. Decide before extracting `createGame`.
 
-## Open question before A3b: which stat model does sync replay apply?
+## A3b sketch: sync replay, the stat-model question resolved
 
 **Surfaced while sketching Batch S** (deciding the fate of `applyPlayerShotStatDeltas`/
 `applyTeamShotStatDeltas`), not a Batch S question itself - an A3a/A3b boundary question this
-project has been quietly assuming an answer to without stating it.
+project had been quietly assuming an answer to without stating it. Grounded by reading
+`verifyStatistics`, `rebuildGameStatsFromEvents`, `getGameLiveBoxScore`, and `ledgerSourceFor` in
+full before writing anything below, per the same discipline the rest of A3a used.
 
 **The premise A3a inherited, stated in Batch 0's decisions:** *"PlayerStat is DERIVED, not
 synced... PlayerStat/TeamStat are recomputed server-side from the canonical event ledger."* This
@@ -112,29 +114,116 @@ independently-operated live consoles... deliberately does not auto-resolve a mis
 direction."* Both models were introduced together, in the same founding commit - this is an
 N-version-programming safety property, not a historical wart to migrate away from.
 
-**The tension this creates for A3b's replay design:** the outbox syncs `Game` + `GameEvent` only
-(Batch 0's decision); the server has to reconstruct `PlayerStat`/`TeamStat` from that ledger during
-replay. Which model does it apply?
+### Point 1 — what does replay need to reconstruct?
 
-1. **Replay rebuilds via `rebuildGameStatsFromEvents`** — applies the statistician's model
-   server-side. The scorer's incremental authority becomes a client-side-only fiction; the server
-   never actually maintains it as its own thing.
-2. **Replay reapplies the scorer's incremental deltas in event order** — applies the scorer's
-   model. But then server-side `PlayerStat` is not "derived from events" in the sense Batch 0
-   meant - it's derived from an *ordered application of deltas*, a different operation with
-   different failure modes (replay order now matters for a sum that should be order-independent).
-   Batch 0's "stats are derived" framing was written assuming one model; it needs re-reading
-   against this path specifically.
-3. **Replay maintains both and reconciles server-side** — preserves the dual-authority
-   architecture faithfully, but is a materially bigger sync design than A3a has assumed anywhere
-   so far (two recomputations per replay, a reconciliation check, a decision about what happens
-   on a genuine mismatch mid-sync).
+**Statistician-sourced replayed events: nothing new.** `verifyStatistics` (`stats-actions.ts:962`)
+already re-derives `PlayerStat`/`TeamStat` from the ACTIVE statistician ledger from scratch on
+every call - a full-snapshot upsert (every player who ever appeared, zeroed if voided), not an
+incremental patch, and idempotent (two calls against the same event set produce byte-identical
+rows). Once a statistician `GameEvent` lands in the ledger with the correct `source`, it is
+indistinguishable to that query from one written live. The fix shipped ahead of this sketch
+(`ledgerSourceFor` no longer collapsing the hint under `OFFLINE_SYNC` - see below) is what makes
+this true; before that fix, a synced statistician event would have been silently excluded.
+**A3b's replay endpoint therefore does not need to write `PlayerStat`/`TeamStat` for statistician
+events at all** - inserting the `GameEvent` rows correctly is sufficient, and the next
+`verifyStatistics` call picks them up for free.
 
-**Not resolved here.** This decision shapes A3b's replay design, the sync payload shape, and
-whether Batch 0's "derived" framing stands as originally written or needs a qualifying note for
-the scorer path specifically. Sketch and decide before A3b starts, with the same rigor as the
-`createGame` question above - this is now the load-bearing open question for that phase, not
-Batch S's.
+**Scorer-sourced replayed events: still deferred, and correctly so.** Earlier framing called this
+"order-dependent, unlike a sum" - that's wrong; addition is commutative, so summing deltas in a
+different order produces the same total. The real reason is structural: no reusable pure function
+derives `PlayerStat` deltas from a raw `GameEvent` row today. `recordScore`/`recordStatEvent`
+compute deltas inline, caller-local, never extracted. `applyPlayerShotStatDeltas`/
+`applyTeamShotStatDeltas` (relocated in Batch S) take already-computed deltas as input - they merge
+them, they don't derive them from an event. Writing that extraction now would be new work sized to
+guess at a shape A3b hasn't needed yet (no offline scorer UI exists). **A3b's replay endpoint
+inserts scorer-sourced `GameEvent` rows into the ledger, and stops there** - `PlayerStat` for those
+events stays whatever the live incremental writes last left it at, same as it does today for any
+game that hasn't been re-verified. This is an inherited A3a gap, not something A3b creates or is
+responsible for closing.
+
+### Point 2 — source vs. transport, fixed ahead of this sketch
+
+`ledgerSourceFor`'s `OFFLINE_SYNC` branch collapsed to a flat `"OFFLINE_SYNC"` regardless of the
+`SCORER`/`STATISTICIAN` hint - a documented Batch 0/1 tradeoff ("the hint is retained on the
+outbox payload for forensics") that predated two consumers built since:
+`loadActiveStatisticianEvents`/`rebuildGameStatsFromEvents` and `correctStatisticianEvent` both
+filter/gate on the literal `ULTRA_NATIVE_LIVE_STATISTICIAN`. A synced statistician event would have
+been invisible to the live box score, excluded from verification's materialization, and
+uncorrectable - silent data loss, not an edge case, caught before A3b's endpoint existed to trigger
+it.
+
+**Fixed** (`fix(scoring): stop collapsing synced statistician events into a flat OFFLINE_SYNC
+source`, shipped as its own commit ahead of this sketch, per the two-commit discipline the rest of
+A3a used): `source` now records who logged the event and is transport-stable -
+`ledgerSourceFor("OFFLINE_SYNC", hint)` returns the same value as `ledgerSourceFor("LIVE_UI",
+hint)`. Whether an event arrived via sync is answered separately, by `GameEvent.syncBatchId` being
+non-null (confirmed as the correct predicate: the schema's own comment states all four provenance
+columns are null for LIVE_UI writes; `syncBatchId` specifically means "arrived in this batch",
+where `deviceId` could in principle be populated by a future live-browser-session use without
+meaning "synced"). The bare `OFFLINE_SYNC` ledger value is kept, not removed, but is now documented
+as reserved for a sync entity with no semantic origin hint - no scoring caller emits it today.
+
+Verified before shipping: no production query filtered on the literal `"OFFLINE_SYNC"` (only test
+files did), and a direct production query confirmed the enum value and the provenance columns
+aren't deployed yet - zero rows, nothing to backfill.
+
+**Scope implication for A3b, stated as a decision rather than left for the implementer to
+discover:** `ledgerSourceHint` is now load-bearing on the wire, not forensic metadata. The sync
+outbox's `GameEvent` wire record must carry a hint for every entry, and A3b's outbox type should
+make it required (not optional) for that entity type - the fallback-to-bare-`OFFLINE_SYNC` path
+exists for a hypothetical future non-scoring sync entity, not for anything scoring sync emits.
+
+### Point 3 — does `rebuildGameStatsFromEvents` write the same `PlayerStat` row the scorer writes?
+
+**Yes - same table, same row, `@@unique([gameId, playerId])`, `statSource` is a label not a key.**
+Dual-authority is preserved architecturally, not violated, and the seam is exact:
+
+- **Live, pre-verification:** `getGameLiveBoxScore` (`stats-actions.ts:863`) is a pure read model
+  over the statistician ledger - it never writes `PlayerStat`. The scorer's incremental writes
+  (`recordScore`/`recordStatEvent`) are the only thing touching the row during live play.
+- **At verification:** `verifyStatistics` is a deliberate, human-gated, audited action
+  (`result:confirm` permission, not the everyday `game:record-stats`) whose own comment states
+  verification "is the gate that promotes the statistician's ledger into the canonical box score."
+  It overwrites `PlayerStat`/`TeamStat` with the statistician-derived full snapshot
+  (`statSource: "EVENT_DERIVED"`). That's a named, audited promotion, not a silent last-writer-wins
+  race.
+
+This resolves Point 1's shape (above) and means the three-option framing this section originally
+posed collapses: option 1 (replay rebuilds via `rebuildGameStatsFromEvents`) isn't something A3b
+has to choose or implement - it's what the existing, unchanged `verifyStatistics` workflow already
+does, for free, once Point 2's fix lands. Options 2 and 3 don't apply; there's no new
+reconciliation logic for A3b to build here.
+
+### Point 4 — `RemoteScoringRepository`: delete as part of A3b's scope
+
+`RemoteScoringRepository` (`src/lib/offline/repositories/scoringRepository.ts`) targets `POST
+/games`, `GET/POST /games/{id}`, `GET/POST /games/{id}/events`, and `GET /games/{id}/player-stats`
+- none of which exist under `src/app/api/`, and none of which match Batch 0's already-decided
+single-batch-endpoint sync design (`POST /api/sync/outbox`, up to ~100 records atomically). Zero
+references to it exist anywhere outside its own definition (confirmed by direct grep). It is dead,
+mismatched scaffolding, not a stub of the real plan. Delete it as part of A3b, in the same change
+that introduces the real sync endpoint - its removal is meaningful in contrast to what replaces it,
+not a cleanup to do in isolation beforehand.
+
+### Point 5 — sync test infrastructure: the mechanism, named
+
+The whole suite today (749 tests as of the pre-A3b fix above) is pure-function unit tests with zero
+Prisma dependency. A3b's endpoint is the first genuinely DB-transactional feature in this
+codebase's test surface, and needs to prove atomic multi-record replay, idempotency
+(`SyncIdempotency`), and conflict handling (`SyncConflictLog`) against a real Postgres - none of
+that is meaningful against a mocked `$transaction`.
+
+Spiked the mechanics rather than hand-waving them: Prisma's `PrismaPg` adapter (`@prisma/adapter-pg`,
+already a dependency, already used by this project's ad-hoc production scripts) binds to a
+connection string at construction and cannot be rebound afterward. Per-suite isolation therefore
+means: provision a dedicated Postgres schema per test suite (`CREATE SCHEMA`, then `prisma db push`
+or `migrate deploy` against it once), construct a fresh `PrismaClient`/`PrismaPg` pair whose
+connection string's `?schema=` query param points at that schema (the same query param already
+used in every deployed `DATABASE_URL`), run the suite, then `DROP SCHEMA ... CASCADE` at teardown.
+No new package is required - `pg` and `@prisma/adapter-pg` are already present; `testcontainers`
+would be new tooling this project doesn't currently have, and is a fallback only if schema-per-
+suite proves too slow or too coupled to a shared dev database in practice. Decide which of the two
+before A3b's implementation starts, not mid-batch.
 
 **Outbox entity vocabulary.** The outbox carries `Game` and `GameEvent` only.
 `PlayerStat`/`TeamStat` are projections, never wire entities - enforced at the type level,
@@ -144,28 +233,20 @@ enqueued `PlayerStat` snapshots, contradicting this decision. Zero callers exist
 latent drift, not a live bug. Whether a local stat projection returns at all, and whether it's
 materialized (a repository write method) or computed (derived on read from local events, which
 would need a new pure reducer - no existing one covers the scorer's event vocabulary,
-`derivePlayerStats` is statistician-only), is resolved as part of the A3b stat-model decision
-below, not decided here.
+`derivePlayerStats` is statistician-only), stays open: Point 1 above defers the scorer-side
+derivation for the same missing-reducer reason, so a local projection has nothing to build against
+yet either.
 
-**A3b scope item: sync test infrastructure.** The whole test suite today (749 tests as of Batch S)
-is pure-function unit tests with zero Prisma dependency - no testcontainers, no per-test Postgres
-schema, no shared dev DB the suite hits. A3b's sync endpoint is the first genuinely
-DB-transactional feature in this codebase's test surface: it has to prove a multi-record atomic
-batch replay (per the rule-#6 brief, up to ~100 records in one transaction) behaves correctly,
-including idempotency (`SyncIdempotency`) and conflict handling (`SyncConflictLog`) - properties
-that are meaningless to assert against a mocked `$transaction`. Decide the test-infrastructure
-approach (testcontainers, per-test schema, in-memory Postgres, or something else) as part of the
-A3b sketch, before implementation, not discovered mid-batch. This is a new category of decision
-for this project, not a continuation of anything A3a needed.
-
-**Also blocked on the stat-model decision, correctly held rather than migrated:** `recordScore`,
-`recordStatEvent`, `voidScoreEventAction`, `correctScoreEventAction`, and `undoLastEvent`. Each
-migrates differently depending on which of the three options above A3b picks (incremental stays
-mechanical; rebuild-only deletes the incremental writes and `voidScoreEventAction`'s reversal
-logic entirely, since there's nothing to reverse when stats are rebuilt; dual-authority-preserved
-keeps both paths and adds post-sync reconciliation). Migrating any of the five before that
-decision risks doing the work twice - the same double-touch reasoning that sequenced Batch 9b
-before Batch S.
+**`recordScore`, `recordStatEvent`, `voidScoreEventAction`, `correctScoreEventAction`,
+`undoLastEvent` - the stat-model uncertainty that held these back is resolved, but not yet acted
+on.** These five were held because migrating them risked doing the work twice if A3b picked a
+different stat model. Point 3 above resolves that: dual-authority-via-verification-gate is already
+the model, in production, today - A3b's replay design doesn't change it, it only decides what
+happens to *synced* events under it (Point 1). That means the uncertainty that justified holding
+these five live-console sites is gone; they could migrate into the canonical-write shapes now,
+independent of A3b's implementation. Not done here - raised as a newly-available option, not
+assumed. If taken, each keeps its existing incremental-delta behavior unchanged; nothing about
+Point 1-5 above requires changing what these functions do today, only where the write calls live.
 
 ## Post-migration issue: `data` field null semantics
 

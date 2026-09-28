@@ -6210,3 +6210,45 @@ endpoints that don't exist, contradicts the already-decided single-batch `/api/s
 design) and a short spike on Prisma per-schema test-isolation mechanics, then write the corrected
 five-point sketch to `docs/canonical-write-audit.md`.
 
+### 2026-09-28 - A3b sketch written: five points, stat-model question resolved
+
+Ran the two remaining grounding items, then wrote the sketch.
+
+**`RemoteScoringRepository`:** confirmed zero references anywhere outside its own definition
+(direct grep, `src/lib/offline/repositories/scoringRepository.ts`). Targets endpoints
+(`/games`, `/games/{id}/events`, `/games/{id}/player-stats`) that don't exist under
+`src/app/api/` and don't match Batch 0's single-batch `/api/sync/outbox` design. Confirmed dead,
+not a stub - added as an explicit A3b scope item (delete alongside the real endpoint, not before).
+
+**Prisma test-isolation spike:** `PrismaPg` (`@prisma/adapter-pg`, already a dependency) binds to
+a connection string at construction, can't be rebound. Mechanism named: per-suite Postgres schema
+(`CREATE SCHEMA` + `prisma db push` once), a fresh `PrismaClient`/`PrismaPg` pair per suite whose
+connection string's `?schema=` param points at it (the same param every deployed `DATABASE_URL`
+already uses), drop the schema at teardown. No new package needed; `testcontainers` isn't in the
+dependency tree and is a fallback only if this proves too slow.
+
+**Wrote the five-point sketch** to `docs/canonical-write-audit.md`, replacing the old "Open
+question before A3b" section (which posed three now-moot options) with "A3b sketch: sync replay,
+the stat-model question resolved":
+- **Point 1** (what replay reconstructs): statistician-sourced events need no new logic -
+  `verifyStatistics` already re-derives from scratch once Point 2 lands; scorer-sourced events stay
+  deferred, reframed correctly as an unextracted-reducer gap (not "order-dependent," which was
+  wrong - addition commutes).
+- **Point 2** (source vs. transport): documents the fix already shipped this session, plus the
+  scope implication for A3b's outbox wire format (`ledgerSourceHint` becomes required, not
+  optional, for `GameEvent` entities).
+- **Point 3** (PlayerStat ownership): states the resolved finding - same row, dual-authority
+  preserved via `verifyStatistics`'s audited promotion, not violated. Collapses the old
+  three-option framing: option 1 is what already happens for free, options 2/3 don't apply.
+- **Point 4**: `RemoteScoringRepository` deletion, added as an explicit scope item.
+- **Point 5**: the Prisma per-schema mechanism, named instead of hand-waved.
+
+Also updated the now-stale cross-reference in the outbox-vocabulary paragraph (pointed at a
+"decision below" that was actually above after the restructure) and rewrote the "also blocked"
+paragraph for the five held-back scorer sites: the uncertainty that justified holding them is
+gone (Point 3 resolves the model, and it isn't changing under them), so they're newly eligible to
+migrate independent of A3b - raised as an option, not acted on.
+
+**Not yet done:** decide and implement A3b's actual sync-replay endpoint; decide whether to act on
+the newly-unblocked five scorer sites; decide schema-per-suite vs. testcontainers for Point 5.
+
