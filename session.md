@@ -6252,3 +6252,51 @@ migrate independent of A3b - raised as an option, not acted on.
 **Not yet done:** decide and implement A3b's actual sync-replay endpoint; decide whether to act on
 the newly-unblocked five scorer sites; decide schema-per-suite vs. testcontainers for Point 5.
 
+### 2026-09-28 - undoLastEvent: fixed a shot-category stat reversal gap, found by the Batch 10 pre-check
+
+Reading the five newly-unblocked scorer sites before batching them (per the standing discipline -
+read the export surface, read the actual shape, don't assume) split them into three buckets
+instead of two: `recordScore` mechanical, `recordStatEvent` mechanical-plus-a-new-primitive, and
+`voidScoreEventAction`/`correctScoreEventAction` genuine new shapes (status-flip-with-reversal,
+mutable-gate supersession). `undoLastEvent` fit none of the three - it appends an offsetting event
+rather than flipping the original event's status, a third ledger operation (compensation) distinct
+from both createGameEvent's insert-only shape and the amendment shapes voidScoreEventAction/
+correctScoreEventAction use.
+
+That closer read found a real bug, not just a shape question. `undoLastEvent`'s `SCORE` branch
+reversed only the raw `points` field via a bare `playerStat.update({ points: { increment } })`,
+and the team-side write set an absolute `points` value with no reversal of the shot-category
+fields at all. `voidScoreEventAction` reverses the full `ShotStatDeltas` set
+(`negateShotStatDeltas(shotStatDeltas(...))`) for the same kind of event. Consequence: undoing a
+made 3-pointer via "undo last event" corrected `points` but left `threePointsMade`/
+`threePointsAttempted` (and the equivalent team/Ultra-Time fields) inflated - a real, live
+discrepancy between the two ways an operator can reverse the same kind of event.
+
+**Fixed before any migration touches the function**, per the two-commit/bisectability discipline
+this project uses for behavior changes bundled near a shape change: replaced the bare `points`
+increment and the absolute-`points` team upsert with calls to the same relocated helpers
+`voidScoreEventAction` already uses - `applyPlayerShotStatDeltas`/`applyTeamShotStatDeltas` with
+`negateShotStatDeltas(shotStatDeltas({ basePointValue: last.basePointValue, isUltraTime:
+last.isUltraTime }))` - including the opposing-team Ultra-Time-against reversal branch void
+already has and undo was missing entirely. The generic (non-SCORE) branch's single-field
+decrement was left untouched - it isn't part of this bug, and folding its migration in here would
+mix the fix with Batch 10b's new-primitive work.
+
+**On testing:** no existing test exercises `undoLastEvent` or any other function in `actions.ts` -
+this file has zero test coverage today, for the same reason Point 5 named: everything here is
+Prisma-transactional, and this codebase has no DB-integration test harness yet. The pure functions
+this fix now routes through (`shotStatDeltas`, `negateShotStatDeltas`) are already unit-tested
+(`ultra-scoring-engine.test.ts`), and the wiring mirrors `voidScoreEventAction`'s already-shipped,
+working call shape line-for-line. That is the actual basis for confidence here, not a new test -
+stating this plainly rather than presenting typecheck/lint as if they were behavioral proof.
+
+**Verification:** Typecheck clean. Full suite still 749 (no test file touched - none exists for
+this file). Ratchet: `actions.ts` suppressions 11 -> 9 (the two raw calls this fix replaced with
+already-canonical helper calls), ceiling lowered 15 -> 13 to match. Lint 0 errors. Build exit 0.
+
+**Next:** Batch 10a (`recordScore`), Batch 10b (`recordStatEvent` + a new single-field-increment
+primitive, its own design question - field whitelist? signed delta or direction?), Batch 11
+(`voidScoreEventAction` + `correctScoreEventAction`, the mutable-gate amendment pair), Batch 12
+(`undoLastEvent`'s own migration, now that its reversal math is correct - the compensation shape),
+then A3b with the canonical-write vocabulary fully closed.
+

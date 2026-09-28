@@ -1013,17 +1013,36 @@ export async function undoLastEvent(gameId: string, fixtureId: string) {
           description: `Undo: reversed previous ${last.points! > 0 ? "+" : ""}${last.points} score entry`,
         },
       });
+      // Reverse the shot-category deltas too, not just the raw point total - the same helper
+      // voidScoreEventAction uses, so undoing a made 3-pointer decrements 3PM/3PA the same way
+      // voiding it would, instead of leaving those fields inflated relative to `points`.
+      const reversedDeltas = negateShotStatDeltas(shotStatDeltas({ basePointValue: last.basePointValue, isUltraTime: last.isUltraTime }));
       if (last.playerId && actualReversal !== 0) {
-        await tx.playerStat.update({
-          where: { gameId_playerId: { gameId, playerId: last.playerId } },
-          data: { points: { increment: actualReversal } },
-        });
+        await applyPlayerShotStatDeltas(tx, organizationId, gameId, last.playerId, last.seasonClubId, reversedDeltas, actualReversal);
       }
-      await tx.teamStat.upsert({
-        where: { gameId_seasonClubId: { gameId, seasonClubId: last.seasonClubId } },
-        create: { organizationId, gameId, seasonClubId: last.seasonClubId, points: nextScore },
-        update: { points: nextScore },
-      });
+      await applyTeamShotStatDeltas(
+        tx,
+        organizationId,
+        gameId,
+        last.seasonClubId,
+        reversedDeltas,
+        last.isUltraTime ? actualReversal : 0,
+        0,
+        nextScore,
+      );
+      if (last.isUltraTime && actualReversal !== 0) {
+        const opposingSeasonClubId = isHome ? game.fixture.awaySeasonClubId! : game.fixture.homeSeasonClubId!;
+        await applyTeamShotStatDeltas(
+          tx,
+          organizationId,
+          gameId,
+          opposingSeasonClubId,
+          { fourPointsMade: 0, fourPointsAttempted: 0, ultraTimeFieldGoalsMade: 0, ultraTimeFieldGoalsAttempted: 0 },
+          0,
+          actualReversal,
+          isHome ? game.fixture.awayScore : game.fixture.homeScore,
+        );
+      }
     } else if (last.playerId && STAT_FIELD[last.eventType]) {
       const field = STAT_FIELD[last.eventType];
       await tx.gameEvent.create({
