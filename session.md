@@ -6962,3 +6962,1191 @@ earlier 404 was staging's reverse-proxy path-prefix handling specifically, not s
 (`SyncConflictLog` writes on overwrite). `RemoteScoringRepository`'s deletion is already done
 (Commit 2).
 
+## 2026-09-28 - Pre-Commit-4: P2002 disambiguation fix + attemptCount
+
+Flagged in review: `replayOutboxRecord`'s P2002 handling collapsed two distinct unique-constraint
+violations (`SyncIdempotency.idempotencyKey` -> should be `DUPLICATE`; the entity table's own id ->
+`ID_COLLISION`) into one mapping. Traced the exact mechanism: the original write order (idempotency
+`findUnique` check, then the canonical write, then `SyncIdempotency.create` last) meant a genuine
+concurrent race - two simultaneous submissions of the identical record - would race into the
+*entity* table's id constraint before either transaction ever reached the `SyncIdempotency` insert,
+so the race's loser would have come back `ID_COLLISION` instead of `DUPLICATE`. That's the exact
+failure mode that strands a record in an offline client's outbox forever, since `drain()` only
+retires records on `APPLIED`/`DUPLICATE`, never `FAILED`.
+
+**Fix:** claim the `SyncIdempotency` row first, via `createMany({ skipDuplicates: true })`
+(`INSERT ... ON CONFLICT DO NOTHING`) rather than a separate check-then-create. This makes the claim
+step structurally incapable of throwing - a collision there resolves to a row count of zero, not an
+exception - so by the time this function can see a genuine `P2002`, it can only be the entity
+table's own id constraint. Avoids relying on Postgres's aborted-transaction-then-COMMIT-degrades-to-
+ROLLBACK behavior, which a catch-and-continue approach inside the same interactive transaction would
+have needed.
+
+Added a new test: concurrent resubmission of the identical record via `Promise.all`, asserting the
+pair resolves to exactly one `APPLIED` and one `DUPLICATE` - never `ID_COLLISION`. Confirmed the
+existing ID-collision test (distinct `idempotencyKey`s, same `entityId`) still correctly returns
+`ID_COLLISION` - the reordering doesn't blur that case. All 8 DB-integration tests (7 existing + 1
+new) run green against real staging Postgres; no regressions.
+
+**attemptCount added to the local outbox schema** (`src/lib/offline/types.ts`'s `OutboxRecord`,
+mirrored in `db.ts`'s `OutboxRow`) - confirmed it didn't already exist, per the pre-Commit-4
+checklist item asking to add it now rather than in Commit 4/A4, since a field addition is cheap now
+and an IndexedDB schema migration on a table already holding real offline data is not. `enqueue`
+initializes it to 0; `markFailed` increments it. New test proving increment-not-reset across
+repeated failures on the same record. 7/7 pure `outbox.test.ts` tests pass (fake-indexeddb, no real
+DB needed).
+
+**Verification:** typecheck clean, lint clean, canonical-write ratchet unaffected (4/4 - this touches
+no `gameEvent|playerStat|teamStat` write sites), full DB-integration suite green on staging (11/11:
+8 replay + 2 resolve-batch-authorization + 1 db-test-context), pure `outbox.test.ts` suite green
+locally (7/7).
+
+**Status against the pre-Commit-4 checklist**, reported to the user as of this entry:
+1. P2002 disambiguation - fixed and verified (above).
+2. `drain()` concurrency guard - not yet built; the current `outbox.ts` `drain()` is a pure local
+   read only (no network call yet) - Commit 4 adds the actual sync-triggering wrapper with an
+   in-flight flag.
+3. Matching `results[]` to outbox records by `idempotencyKey`, never array index - design decided,
+   not yet implemented; Commit 4's `drain()` will do this.
+4. `attemptCount` - now exists (above).
+5. End-to-end `drain()` test against staging - not yet; Commit 4's own deliverable.
+6. `SyncConflictLog` scope - confirmed narrow by design: only `Game` `UPDATE` can conflict.
+   `GameEvent` `CREATE` cannot - idempotency handles exact replays, `ID_COLLISION` handles id
+   clashes, and no `UPDATE`/`DELETE` replay path exists yet for either entity. Commit 4 will not
+   widen this without a stated reason.
+
+## 2026-09-28 - Correction: the "transiently failing" pure suite was a false alarm
+
+Flagged in review, correctly: `outbox.ts`/`types.ts`/`db.ts` are under `src/lib/`, so claiming the
+full pure suite (`npm test`, which covers `src/lib/**`) "doesn't touch the files I changed" was
+wrong on its face - and "transiently failing" should never be grounds to skip a commit gate that
+every prior commit this session treated as mandatory. Ran it for real: 785/786 passing, 1
+pre-existing skip (`Ultra League OS adapter: full team-registration contract`, unrelated to sync
+work). The actual "transient failure" was this session's own tool-permission classifier erroring on
+the Bash calls, not the test suite - a distinction that matters and that the earlier phrasing
+blurred. Noted so the same mistake isn't repeated: an infra hiccup on the *tool* is not evidence
+about the *suite*, and "seems unrelated" is not a substitute for actually running it.
+
+## 2026-09-28 - Commit 4: drain(), replay-vocabulary narrowing, SyncConflictLog deferred
+
+Full writeup in `docs/canonical-write-audit.md`'s Point 8. Summary:
+
+- **Naming decided and implemented:** `drain()` (old pure local read, zero callers outside its own
+  test) renamed `readPendingBatch()`; `drain()` now names the new network-syncing orchestrator.
+- **`drain()` built** (`src/lib/offline/outbox.ts`): in-flight guard (module-level flag), POST to
+  `/api/sync/outbox`, results matched by `idempotencyKey` (never array index), `APPLIED`/`DUPLICATE`
+  -> `markSynced`, `FAILED`/`CONFLICT` -> `markFailed` (`attemptCount` incremented). Non-2xx response
+  touches nothing in the outbox.
+- **Two real gaps found and closed while building this:** (1) no client producer of `Game` `UPDATE`
+  exists at all - the only reachable Game-level conflict today is CREATE-CREATE on `fixtureId`'s
+  unique constraint; (2) the wire contract already requires `ledgerSourceHint` for every `GameEvent`
+  record but nothing on the client set it - `drain()` would have 400'd on every real GameEvent.
+  Fixed by making it required on `CreateGameEventInput`, threaded through `logEvent()`.
+- **Filter bug found while wiring `drain()`, not by reading first:** `readPendingBatch`/
+  `pendingCount` excluded any record with `failureReason` set, making the just-added `attemptCount`
+  pointless (nothing would ever reach a second attempt). Fixed: only `syncedAt` excludes a record
+  now; dead-lettering after N attempts is a real cutoff for A4, not this filter's job.
+- **SyncConflictLog/LWW deferred, not built speculatively** - per explicit review decision, given no
+  real `Game` `UPDATE` producer exists to define the correct conflict shape (full-snapshot vs.
+  partial, whole-record vs. per-field LWW). Instead, `replayOutboxRecord`'s accepted vocabulary is
+  now explicit (`outbox-schema.ts`'s `supportedReplayOperationSchema`): only `Game:CREATE` and
+  `GameEvent:CREATE` are supported; everything else fails per-record with `UNSUPPORTED_OPERATION`
+  before a transaction even opens, never a whole-batch rejection. `SyncConflictLog` stays in the
+  schema, unused, until a real `Game` `UPDATE` producer exists to scope it against.
+- **Verification:** typecheck clean, lint clean, ratchet unaffected (4/4). Full local pure suite
+  795/796 (1 pre-existing unrelated skip), 0 failures - genuinely re-run this time, not assumed. 13
+  DB-integration tests green against real staging Postgres (9 replay including the new
+  unsupported-operation isolation test + 2 resolve-batch-authorization + 1 db-test-context + 1 new
+  end-to-end `drain()` rehearsal test using `fake-indexeddb` + real `processOutboxBatch`/
+  `replayOutboxRecord` against a real isolated schema, HTTP/session stubbed only).
+
+## 2026-09-28 - Two flags from review, closed before A4
+
+1. **`ledgerSourceHint` had no defense at the replay layer.** The wire schema already rejects a
+   hint-less `GameEvent`, but that's route.ts, one hop upstream - and this test suite calls
+   `replayOutboxRecord` directly, bypassing it. Traced the real consequence:
+   `ledgerSourceFor`'s `OFFLINE_SYNC` branch silently returns bare `"OFFLINE_SYNC"` on an undefined
+   hint rather than throwing - a statistician event that lost its hint this way would be invisible
+   to the live box score and uncorrectable (per that function's own comment). Added an explicit
+   guard in `replayOutboxRecord`: missing hint on a GameEvent now fails `MISSING_LEDGER_SOURCE_HINT`
+   before the transaction opens. New test: zero rows created, not a degraded one.
+2. **CREATE-CREATE `fixtureId` collision - real, and the old code mislabeled it.** Confirmed
+   `Game.fixtureId` is `@unique`. Two devices both offline-starting the same fixture's game
+   collide there, not on `id` - the blanket `P2002 -> ID_COLLISION` mapping was actively false in
+   this case (the ids never collided). Added `FIXTURE_ALREADY_HAS_GAME`. Detection required an
+   empirical detour: `error.meta.target` isn't populated by this project's `@prisma/adapter-pg`
+   build at all - wrote a throwaway debug script, triggered a real collision against staging
+   Postgres, found the real shape nests under `meta.driverAdapterError.cause.constraint.fields`
+   (adapter-internal, no stability guarantee) - matched on `error.message` instead, which reliably
+   names the field. Script deleted after use. New test proves the failure is diagnosable and
+   non-destructive (one `Game` row survives, first device wins) - does NOT attempt reconciliation
+   (rehoming the losing device's queued GameEvents onto the winning gameId), which is a real
+   product-shaped feature flagged for later, not guessed at here.
+
+**Verification:** typecheck clean, lint clean, ratchet unaffected (4/4). Full local pure suite
+795/796 (1 pre-existing unrelated skip). 15/15 DB-integration tests green against real staging
+Postgres (13 replay + 2 resolve-batch-authorization/db-test-context, including both new tests).
+
+## 2026-09-28 - Third flag: unknown P2002 must never silently default to ID_COLLISION
+
+`error.message` string-matching (the `fixtureId` fix above) is inherently fragile to a Prisma major
+version or driver-adapter change altering the message template. The dangerous failure mode isn't
+the match breaking loudly - it's breaking silently back into the exact bug `FIXTURE_ALREADY_HAS_GAME`
+was added to fix (every unrecognized P2002 quietly relabeled `ID_COLLISION`). Fixed two ways:
+(1) a version-pinned `FIXME` comment in `replay-outbox-record.ts` naming the exact verified
+versions (`@prisma/client`/`@prisma/adapter-pg` 7.8.0) and telling a future upgrader to re-verify;
+(2) the real fix - `classifyUniqueConstraintViolation` now checks both known constraints
+(`fixtureid` substring for the quoted mixed-case field; exact `` `id` `` bracket match for the
+unquoted PK, checked precisely because "fixtureid" itself contains "id" as a substring) and falls
+through to a new `UNKNOWN_CONSTRAINT_VIOLATION` code - loud and diagnosable - rather than
+defaulting to `ID_COLLISION` when neither matches. This is also now production's own tripwire: an
+`UNKNOWN_CONSTRAINT_VIOLATION` showing up is the signal that the message-format assumption broke.
+
+Also named the reconciliation deferral more precisely in the audit doc, per review: it's not just a
+product decision (silent merge vs. prompt) sitting on ready plumbing - it needs a response-shape
+addition (the winning `gameId` isn't returned today) and a `drain()` state-machine change
+(rewrite queued GameEvents' `gameId`, drop the losing `Game:CREATE`, re-drain) before the product
+question is even answerable.
+
+**Verification:** typecheck/lint clean, ratchet unaffected, full local pure suite 795/796 (1
+pre-existing unrelated skip), 15/15 DB-integration tests still green on staging after the change
+(no regression from tightening the fallback).
+
+**Next:** A4 hardening, sequenced per review:
+1. PR 1 - wiring: `online`/`visibilitychange` listeners call `drain()`. In-flight guard (already
+   built) covers concurrency; no debounce, no timer. Small enough to review in 15 minutes.
+2. PR 2 - dead-letter: `attemptCount` cutoff, attempt-based (5 or 10), not time-based - time-based
+   would need its own timer, the exact mechanism PR 1 deliberately avoids. Moves exceeded records
+   to a dead-letter state, surfaces the count in the UI.
+3. PR 3 - admin page for sync health (diagnostics, ships after the user-facing wiring, not before).
+4. PR 4 (separable, can slip past A4) - load test.
+
+No timer-based exponential backoff planned for v1: the trigger events themselves are the retry
+cadence (every `online`/`visibilitychange` fires `drain()` again). Add a timer only if production
+logs show a real device coming back online without either trigger firing.
+
+## 2026-09-28 - A4 PR 1: wiring drain() to the trigger (and a live bug found along the way)
+
+Found while starting this: `src/app/components/sync-status-badge.tsx` already exists (rendered
+from `src/app/games/[fixtureId]/stats/page.tsx`) and already builds on `sync-trigger.ts`'s
+`SyncTrigger` abstraction from A2 - but its `onSync` callback was a literal no-op
+(`instance.register(() => {})`). That means the existing "Sync now" button, and the
+online/visibilitychange/Background-Sync triggers it was built to receive, currently do nothing at
+all. It also had its own inline copy of the same `!r.syncedAt && !r.failureReason` pending-count
+filter bug already fixed in `outbox.ts` - duplicated, not shared, so fixing the shared function
+alone would not have fixed this component.
+
+**Built, small and separately testable (no React/DOM testing infrastructure added - this project
+has none, and adding jsdom/RTL for one component would have been a bigger change than the wiring
+itself):**
+- `src/lib/offline/device-id.ts` - `getOrCreateDeviceId()`, a stable per-browser id (generated once
+  via `crypto.randomUUID()`, persisted in `localStorage`). Needed because every offline write site
+  so far defaulted to a hardcoded `"local-device"` placeholder - harmless until something actually
+  called `drain()` for real, which this PR is the first to do. 3 tests (generate-once, stable
+  across calls, respects a pre-existing value), injected storage, no real `localStorage` needed.
+- `src/lib/offline/auto-sync.ts` - `startAutoSync(deviceId, {trigger?, drainFn?})`: registers
+  `() => drainFn(deviceId)` with the (injectable) `SyncTrigger`, returns a plain cleanup function.
+  No debounce, no timer - `drain()`'s own in-flight guard (built in Commit 4) already makes an
+  overlapping call a no-op, and the trigger events are the retry cadence. 2 tests using a fake
+  `SyncTrigger` (captures the registered callback, a `fire()` helper simulates a trigger firing):
+  registering calls `drainFn` with the right deviceId every time the trigger fires, and calling the
+  returned cleanup stops further calls.
+- `sync-status-badge.tsx` updated: `useAutoSync` now calls `startAutoSync` instead of the no-op
+  register; the pending/lastSync filter bug fixed to match `outbox.ts`'s corrected semantics; the
+  manual "Sync now" button now calls `drain(deviceId)` directly rather than
+  `trigger.requestSync()` - on Chromium, `requestSync()` only registers a Background Sync tag for
+  the service worker to handle later (right for "wake me up if the tab closes," wrong for a button
+  the scorekeeper just clicked expecting an immediate sync in the current tab).
+
+**Verification:** typecheck clean, lint clean, ratchet unaffected. Full local pure suite 800/801 (1
+pre-existing unrelated skip) - the 5 new tests all pass. **Not verified in a live browser** - this
+component's core logic (`startAutoSync`, `getOrCreateDeviceId`) is unit-tested directly; exercising
+the actual rendered badge would need a real authenticated session against seeded fixture data,
+which this whole session has consistently avoided via service-layer/staging verification instead of
+browser login (the standing prohibition on entering real session credentials). Flagged honestly,
+not claimed as done.
+
+## 2026-09-28 - Systemic observation: "shipped but not wired," third occurrence this session
+
+Named explicitly per review, not just fixed and moved past. Three findings this session share the
+same shape - a component with a real, wired-*looking* interface whose actual callback/target was
+never connected, shipped and sitting untouched because nothing exercised it:
+
+1. `RemoteScoringRepository` - a full HTTP client implementation, zero callers, targeting endpoints
+   (`/games`, `/games/{id}/events`, ...) that never existed.
+2. `LocalScoringRepository.updatePlayerStat` - a real outbox-enqueue method, zero callers,
+   enqueueing `PlayerStat` snapshots that contradicted the outbox's own decided vocabulary.
+3. `SyncStatusBadge`'s `onSync` callback - real trigger infrastructure (`SyncTrigger`,
+   `EventSyncAdapter`'s online/visibilitychange/interval listeners, a "Sync now" button), registered
+   with a literal no-op (`() => {}`). It has been rendering on the live game stats page this entire
+   time, showing scorekeepers a button that does nothing.
+
+All three were latent, not live bugs - nothing in production depended on any of them actually
+firing. All three were found by reading the real call sites before assuming a component worked,
+not by a test failing. That's the pattern worth naming: **"interface exists, callback is stubbed,
+nobody notices because no test exercises the trigger"** is exactly the class of bug this session's
+own verification method (service-layer tests, real DB, no browser) cannot catch by construction -
+a service-layer test proves a callback does the right thing *when called*; it cannot prove anything
+ever calls it. A2 shipped `SyncStatusBadge` with its entire purpose (syncing) stubbed out, and nine
+batches of downstream work never noticed because nothing downstream rendered or exercised that
+button.
+
+Not a request to audit the rest of the UI for more instances right now. A standing question to ask
+by default on any future user-facing work, including A4's admin page: **does anything actually
+exercise this in a browser (or an equivalent-fidelity test), or only in the service layer?**
+
+## 2026-09-28 - Closing the browser-verification gap: first jsdom component test
+
+The previous entry flagged "not verified in a live browser" as an honest limitation for A4 PR 1.
+Review correctly pushed back: that constraint was reasonable through Batches 0-12 and A3b because
+everything under verification was service-layer, but PR 1's entire point is that a browser event
+reaches `drain()` - service-layer tests can't reach that class of bug (see the entry above), so the
+gap was material, not deferrable, for this specific change.
+
+Added the first component-level test in this project (`sync-status-badge.test.tsx`), rendering the
+real component into a real DOM via `jsdom` + `global-jsdom` (new devDependencies - `jsdom`,
+`global-jsdom`, `@types/jsdom`), with a new `test:component` npm script
+(`tsx --test --test-force-exit "src/app/**/*.test.tsx"`). `--test-force-exit` is needed because
+`EventSyncAdapter` runs a real (un-`unref`'d) `setInterval` for its periodic-poll fallback - correct
+for a real browser tab, but it can otherwise hold the test process's event loop open.
+
+**Real friction along the way, each one a genuine finding about jsdom/Node interaction, not busywork:**
+- Hand-rolling "copy `window`'s own properties onto `globalThis`" is a real trap: overwriting
+  Node's native `setTimeout`/`setInterval` with jsdom's window-scoped versions (which don't pump the
+  same way outside jsdom's own resource loop) silently hung the entire test process instead of
+  failing loudly - the most dangerous kind of bug in test infrastructure, since a hang gives no
+  stack trace to start from. Switched to `global-jsdom` (a maintained package solving exactly this
+  problem) rather than continuing to hand-derive the same fixes (console, `navigator`'s getter-only
+  global, `Event`/`EventTarget` identity) one at a time.
+- Even with `global-jsdom`, `new Event("online")` used Node's own built-in `Event` class (present
+  since Node 18, so `global-jsdom`'s "copy only if missing" logic correctly left it alone) - jsdom's
+  `dispatchEvent` only accepts instances of *its own* `Event` class. Fixed by constructing via
+  `window.Event` explicitly.
+
+**Three tests, all green, all exercising the real component + real DOM events:**
+1. Mounting the badge and dispatching a real `window` `online` event reaches a real `drain()` call
+   (observed via a stubbed `global.fetch` - the actual external boundary, not a mocked module).
+2. Clicking the "Sync now" button calls `drain()` immediately (proving the earlier fix away from
+   `trigger.requestSync()`).
+3. After unmount, a subsequent `online` event no longer reaches `drain()` - the listener was
+   actually removed, not just replaced.
+
+**Residual gap, now much smaller and worth stating precisely rather than leaving implicit:** this
+covers the wiring (does a DOM event reach the callback) in jsdom, not real-browser fidelity - actual
+Chromium `visibilitychange` timing quirks, Safari's lack of Background Sync, or the real
+`BackgroundSyncAdapter` path (jsdom has no `serviceWorker`/`SyncManager`, so only the
+`EventSyncAdapter` fallback is exercised here) are still unverified outside a real device. Per
+review's option C: if a QA account scoped to a single test game becomes available before A4 closes,
+run the full path once on a real tablet browser; until then, this gap is documented, not silently
+assumed closed.
+
+**Verification:** typecheck/lint clean (one unused-import warning caught and fixed), full local
+pure suite 800/801 unaffected (1 pre-existing unrelated skip), new `test:component` suite 3/3.
+
+## 2026-09-28 - A4 PR 2: dead-letter with an attempt-based cutoff
+
+Scoped per review: `DEAD_LETTER_ATTEMPT_THRESHOLD = 5` (attempt-based, not time-based - evaluated
+whenever `drain()` actually runs, the same reasoning that kept `drain()` itself trigger-driven
+rather than timer-driven). `markFailed` now sets `deadLetteredAt` once `attemptCount` crosses the
+threshold; `readPendingBatch`/`pendingCount` exclude a dead-lettered record from further automatic
+retry (only `syncedAt` excluded a record before this). New `deadLetterCount()` and
+`retryDeadLetteredRecords()` (bulk reset - `attemptCount` to 0, `deadLetteredAt`/`failureReason`
+cleared - this project's only UI surface today is a compact status pill, not a record list;
+per-record retry is the admin page's job, A4 PR 3).
+
+`SyncStatusBadge` now shows a distinct red "N failed · Retry" state when anything is dead-lettered,
+separate from the existing amber "pending" state. Clicking in that state calls
+`retryDeadLetteredRecords()` then `drain()` in sequence - the only way a dead-lettered record is
+ever attempted again, since the automatic trigger path deliberately skips it.
+
+**Test coverage:** `outbox.test.ts` gained 3 new tests (a record that always fails is dead-lettered
+exactly at the 5th attempt and a 6th `drain()` doesn't even try it again; `retryDeadLetteredRecords`
+resets and makes a record retryable, with a follow-up `drain()` proving the reset had a real
+effect, not just a DB-field change; a no-op case). 15/15 `outbox.test.ts` tests pass.
+
+**A real, expensive debugging detour building the dead-letter component test - worth recording in
+full, since the lessons apply to any future component test in this project, not just this one:**
+
+1. First hang: hand-rolling jsdom global installation (copying `window`'s own properties onto
+   `globalThis`) overwrote Node's native `setTimeout`/`setInterval` with jsdom's window-scoped
+   versions, which don't pump the same way outside jsdom's own resource loop - this silently hung
+   the whole test process with no stack trace, the most dangerous kind of test-infra bug. Switched
+   to `global-jsdom` (a maintained package solving exactly this) instead of continuing to
+   hand-derive the same fixes (console, `navigator`'s getter-only global, `Event`/`EventTarget`
+   identity) one at a time.
+2. Second hang, after that fix: `global-jsdom`'s setup call, made as a plain statement at the top
+   of the test file, still ran AFTER the file's own `offlineDb` singleton had already been
+   constructed - because ES module `import` declarations are hoisted above all other top-level
+   code in the same file, regardless of source order. `useLiveQuery` subscriptions never resolved
+   as a result (Dexie had initialized itself in a windowless environment). Fixed by moving every
+   module that needs jsdom already installed to a dynamic `await import(...)`, which is NOT
+   hoisted - confirmed this was the actual mechanism, not guessed, by bisecting with a series of
+   minimal standalone repros.
+3. A third, narrower bug, found only after 1-2 were fixed and three of four tests passed: the
+   fourth test (dead-letter state) kept timing out waiting for `button.textContent` to reflect a
+   `useLiveQuery`-driven update, even though a direct query against the same database returned the
+   correct value immediately. Root cause, confirmed by bisecting against a working minimal repro:
+   wrapping an entire multi-tick polling loop in ONE `act()` call never sees an intermediate React
+   commit while that `act()` is still running - React defers committing a state update triggered
+   from outside its own event handlers (exactly what a Dexie liveQuery observable firing does)
+   until the current `act()` scope closes. Fixed by wrapping each poll tick in its OWN `act()` call
+   (a new `waitForRender` helper, distinct from the plain `waitFor` used for non-DOM-reading
+   conditions like a fetch-call counter, which doesn't need this).
+4. A real bug in the test itself, not the environment: the dead-letter test's retry-click wait
+   condition initially checked `attemptCount > 0`, but the seeded record already started at
+   `attemptCount: 5` (past the threshold) - so that condition was already true before the click's
+   retry-then-drain logic ever ran. Fixed by waiting for the actual `fetch` call instead.
+
+**Verification:** typecheck clean, lint clean, ratchet unaffected. Full local pure suite 803/804 (1
+pre-existing unrelated skip). `test:component` suite 4/4 (all in one file - an earlier detour split
+the dead-letter test into its own file suspecting cross-test-file contamination; once the real
+`act()`-per-tick bug was found, that split turned out to be unnecessary and was reverted).
+
+**Next:** PR 3 - the admin page (per-record dead-letter visibility, manual per-record retry). PR 4
+(load test) is separable and can slip past A4 if needed.
+
+## 2026-09-28 - Three flags on PR 2, closed before PR 3
+
+1. **Retry-loop guard.** `retryDeadLetteredRecords()`'s bulk reset was a real retry loop waiting to
+   happen: a permanently-failing record (bad FK, deleted game) would fail its next 5 attempts again
+   after every reset, re-dead-letter, and invite another click - each cycle costing 5 round trips
+   per record on a tablet that may be on flaky gym wifi. Added `lastManualRetryAt` (one timestamp
+   field, not a second counter, per review's stated preference) and `MANUAL_RETRY_COOLDOWN_MS` (1
+   hour) - a reset within the cooldown window is skipped entirely (the record stays dead-lettered,
+   `attemptCount` untouched), not partially applied. 2 new tests: a record retried twice in a row is
+   only actually reset once; a retry from before the cooldown window is eligible again.
+2. **`markSynced` now fully clears failure state**, not just `syncedAt` - `attemptCount`,
+   `failureReason`, and `deadLetteredAt` all reset to their clean values. Structurally this can never
+   fire on a still-dead-lettered record (`readPendingBatch`'s filter means one is never offered to
+   `drain()` in the first place), but a record that failed a couple of times before eventually
+   succeeding would otherwise keep showing a stale attempt count and error message forever after.
+   2 new tests: a record that fails twice then succeeds has no leftover failure history; a
+   dead-lettered record that's manually retried and then succeeds is fully clean, not visible as
+   both synced and dead-lettered in the same query pass.
+3. **The component-test debugging chain wasn't one-off - written up as a standing pattern doc**,
+   `docs/patterns/component-testing.md`: never hand-roll jsdom global installation (use
+   `global-jsdom`), import hoisting constructs singletons before `window` exists (dynamic imports
+   for anything jsdom-dependent), `act()` must wrap each poll tick not the whole loop (React defers
+   commits from outside its own event handlers until the current `act()` scope closes), plus a
+   fourth lesson that isn't jsdom-specific (a wait condition checked against a record's current
+   field value can already be true from the seed data, resolving before the action under test ever
+   ran - wait for the actual observable effect instead). Written now, before PR 3's admin page (a
+   record list plus per-record action controls) has a chance to rediscover all four from scratch.
+
+**Verification:** typecheck/lint clean, ratchet unaffected. Full local pure suite 807/808 (1
+pre-existing unrelated skip - `outbox.test.ts` alone: 19/19). `test:component` 4/4 unaffected.
+
+**Browser-verification gap, now spanning two PRs - stated plainly, not left implicit.** A4 PR 1 and
+PR 2 both changed user-visible sync behavior and both ship with component-level (jsdom) coverage
+only, not a real browser session - jsdom proves the wiring (a DOM event reaches a callback), not
+real-device fidelity (actual Chromium/Safari timing, the real Background Sync path, how any of this
+actually looks and feels on a scorekeeper's tablet). See
+`docs/runbooks/a4-pr1-browser-verification-gap.md` for the specifics already on file for PR 1; PR 2
+carries the identical constraint for the same reason (entering a real login password into a browser
+session is prohibited regardless of authorization). A QA account scoped to a single test game would
+close this - **raised to the user in this session; answer: not available right now.** Proceeding
+with PR 3 on the same jsdom-only basis. By PR 3 there will be three PRs of unverified UI stacked
+up; the first real browser session available should triage all three together rather than each
+being investigated cold. This gap will keep being documented per PR until a QA session becomes
+available - flag it again if a fourth PR ships the same way.
+
+
+## 2026-09-28 - MAJOR FINDING: the offline-sync feature has no producers anywhere in the app
+
+**Stop-and-assess moment, not a bug to quietly fix.** While scoping PR 3 (deferred - see above),
+checking why `SyncStatusBadge` renders on `/stats` but not `/live` led to a much larger discovery,
+confirmed by direct code reading (an Explore agent traced every real, non-test import):
+
+- `live/page.tsx` (the scorer console `documentation/runbooks/SEASON_ZERO_SCORER_QUICK_GUIDE.md`
+  describes) - every button (`+2`, start game, shot clock, undo) calls a server action from
+  `src/app/games/actions.ts` directly (`startGame.bind(...)`, `recordScore.bind(...)`, etc.).
+- `stats/page.tsx` (the statistician console, where `SyncStatusBadge` actually renders) -
+  `recordStatisticianShot`/`recordStatisticianStat`/`recordSubstitution` all call `withGameWrite`
+  directly - a server action, not `ScoringRepository`.
+- Whole-repo search: `LocalScoringRepository` (the offline client library -
+  `createGame`/`logEvent`, the only thing that ever calls `enqueue()`) has **zero callers under
+  `src/app`** - test files only.
+
+**Consequence:** there is no offline capability reachable by a real user today. A network drop
+mid-game fails the server action; nothing queues locally. Every piece of A2/A3a/A3b/this session's
+A4 work (the outbox, `drain()`, idempotent replay, the P2002/fixtureId/ledgerSourceHint fixes,
+dead-letter handling) is real, correct, and fully tested - and completely unreached. `SyncStatusBadge`
+on `/stats` has nothing to ever report, regardless of which page it's rendered on - the smaller
+"wrong page" finding collapses into this larger one: the offline path has no producers at all.
+
+**Why this wasn't caught earlier, named plainly (per review):** the exact same search that found
+`updatePlayerStat` had zero callers (flagged, fixed, this session) would have shown
+`createGame`/`logEvent` also had zero callers in `src/app` - nobody ran that broader search until
+now. A1's "manual verification via repository tests" was endorsed without pushing on the
+live-wiring question specifically.
+
+**Not known/scheduled work** - confirmed by reading back through the A1-A4 task sequence: no task
+anywhere says "wire the scoring consoles to use the offline path." Each phase built one piece of
+the offline capability and moved on; nothing ever replaced the server-action call sites.
+
+**Full integration scope, if pursued** (this is NOT a follow-up PR - it's the actual work A1-A4 was
+built to enable, never scheduled): replace the server-action data layer in `/live` and `/stats`
+with `ScoringRepository` calls for every write; change the interaction model from
+tap-then-server-response to tap-then-local-write-then-optimistic-UI-then-background-drain (different
+feedback loop, different error/loading states); rework session handling for a session that expires
+while offline; decide the conflict model for concurrent writes arriving through a queue rather than
+synchronously; re-verify the whole console end-to-end in a real browser.
+
+**Three options put to the user, decision pending on facts only they have** (venue wifi reliability,
+game length/cost of a mid-game failure, whether Season Zero is a deadline or a learning run, time
+before the first game):
+- A. Wire it now, before Season Zero - makes the A2-A4 investment real, but touches the working
+  online path days before a live deployment (wrong risk profile for a first season, per review).
+- B. Ship Season Zero without offline - server actions work today; the offline stack stays as
+  tested, unreached infrastructure until Season One.
+- C. Hybrid - wire only `logEvent` (the during-game scoring tap, the most likely failure mode) to
+  the offline path; leave game creation, undo, corrections, and the statistician console on server
+  actions.
+
+**Explicitly not building anything until this is answered** - this is a stop-and-assess moment, not
+a fast-fix moment.
+
+## 2026-09-28 - Option C settled design: client asserts wall-clock state, server validates
+
+Following the major finding above, the user chose Option C (wire the during-game scoring tap to
+the offline path as a hedge against occasional wifi drops - wifi is generally reliable, Season Zero
+is explicitly the learning run, Season One starts 2026-11-14). Scoping that precisely surfaced two
+more real findings, worked through in sequence before any code was written:
+
+**Finding: `recordScore` computes the point value server-side, not just logs a tap.** It calls the
+pure `scoreShot()` function (`src/lib/ultra-scoring-engine.ts`) against the game's *current*
+authoritative clock/period/status to resolve the multiplier and Ultra Time status. A naive
+try-server-then-fall-back-to-local-write model breaks here: a local fallback write needs an
+already-resolved value, and nothing currently keeps a local mirror of an in-progress,
+server-scored game's clock state (the offline client library has never been wired to any real
+game before this).
+
+**Finding: Ultra Time is wall-clock-derived, not event-stream-derived.**
+`isUltraTimeUnderRules(rules, gameStatus, currentPeriod, remainingClockSeconds)` depends on
+`remainingClockSeconds` - continuously ticking real time, not a value computable from the sequence
+of events alone. This rules out "server re-resolves at replay time by walking the event stream" -
+two games with identical event sequences reach Ultra Time at different real moments depending on
+elapsed time between taps. The server cannot reconstruct a wall-clock-observed fact after the fact.
+
+**Settled design: client asserts, server validates - a principled, narrow exception to
+server-authority, not a general relaxation of it.** For every other field/decision in this sync
+system, the server is authoritative and the client is not trusted (idempotency, entity references,
+authorization, id collisions - the whole P2002/fixtureId/ledgerSourceHint fix sequence this session
+). This is the one deliberate exception, because the client is the only party that *observed* the
+wall-clock fact being recorded:
+
+- The client computes Ultra Time status **at tap time** (not at sync/drain time - computing it
+  later would already be stale) using its own locally-ticking clock estimate against the same pure
+  `scoreShot()`/`isUltraTimeUnderRules()` logic, and snapshots the result into the outbox record:
+  `{ eventType: "SHOT", playerId, shotCategory: 2|3|4, clientResolvedIsUltraTime: boolean,
+  clientResolvedMultiplier: number, clientObservedAt: ISO8601, idempotencyKey, ... }`.
+- The server's replay job changes from *resolving* to *validating*: the multiplier is in the valid
+  set for the sport's rules, it's consistent with `shotCategory` (e.g. a 4PT multiplier can't ride
+  on a 2-point shot), `clientObservedAt` is plausibly recent (skew tolerance, not hours old and not
+  future), and the actor has permission to score this game. If all pass, the server writes the
+  `GameEvent` with the client-asserted `multiplier`/`isUltraTime`/`points` - same fields, same shape
+  as a live-resolved event, so downstream consumers (box score, reconciliation) can't tell the
+  difference without checking provenance.
+- **Provenance recorded, not inferred**: a new discriminator on `GameEvent` (nullable
+  `clientResolvedMultiplier`, or an explicit `resolvedBy: "SERVER" | "CLIENT"` - exact shape decided
+  when Commit 1 is written) distinguishes a client-asserted event from a server-resolved one, so a
+  Season Zero post-game audit can specifically query "which events were resolved offline" if an
+  anomalous multiplier ever shows up.
+
+**Named residual risks, not silently accepted:**
+- Client clock skew - if the scorekeeper's tablet clock is wrong, the client's Ultra Time
+  determination is wrong and the server has no independent way to detect it. Acceptable for Season
+  Zero (devices on network time); a pre-game clock-check UI (compare device time to a server
+  response's `Date` header) is a five-minute follow-up if skew ever becomes a real problem.
+- A bug in the client's Ultra Time logic produces a wrong multiplier that passes server validation
+  (the server can't catch a *plausible but wrong* value, only a *malformed* one) - mitigated by
+  thoroughly unit-testing the client-side computation and by the provenance column making every
+  client-resolved event auditable after the fact.
+
+**What this explicitly does NOT do (the "do not" from the design discussion, worth keeping
+verbatim):** the server never attempts to reconstruct the multiplier from `clientObservedAt` plus a
+schedule. That would work in the common case and fail *silently* in the one case that matters (an
+offline window straddling an Ultra Time transition) - exactly the failure mode that's hardest to
+notice and hardest to trust a ledger after.
+
+**Scope, confirmed still confined to the tap path:** only the +1/+2/+3/4PT scoring buttons in
+`live/page.tsx`'s basketball scoring form. NOT the "Manual correction" negative-value fields in the
+same form, NOT `recordStatEvent`, NOT the multi-sport `recordScoringEvent`/shootout panel, NOT
+`undoLastEvent`/game-lifecycle actions, NOT the statistician console. Non-tap actions stay
+server-action-only.
+
+**Sequenced as commits** (matching this session's established discipline - settle each one's
+decisions before writing its code, verify each independently before starting the next), starting
+with the smallest and most isolated:
+1. Schema: additive migration adding the provenance discriminator to `GameEvent`.
+2. Pure client-side Ultra Time snapshot logic (shared, testable without a browser or a database).
+3. Server-side replay validation branch accepting and validating client-resolved fields.
+4. Client UI wiring: the actual button conversion, tap acknowledgment, enqueue-triggered drain
+   (so the common online case still syncs within ~1s, per an earlier review requirement), the
+   updated `CaptureConnectivity` queued-count display (its own stale "(F7)" comment - confirmed this
+   session to be a mistaken reference to an unrelated, already-completed feature - gets corrected
+   alongside this work), and the runbook update (what the operator/scorekeeper does if the badge
+   goes red mid-game).
+
+Starting Commit 1 next.
+
+## 2026-09-28 - Option C, Commit 1: GameEvent resolution-provenance migration
+
+`prisma/migrations/20260928120000_gameevent_resolution_provenance` - new `GameEventResolution`
+enum (`SERVER` | `CLIENT`), `GameEvent.resolvedBy` (`NOT NULL DEFAULT 'SERVER'`, no backfill
+needed - every existing row is correctly server-resolved by definition, since the offline
+scoring-tap path didn't exist before this), `GameEvent.clientObservedAt` (nullable, set only when
+`resolvedBy = CLIENT`). Purely additive, matches the established expand-first pattern (schema ready
+ahead of the code that uses it, same as the P13 migrations).
+
+**Verification:** `prisma validate` clean, `prisma generate` clean, full project typecheck clean,
+ratchet unaffected, full pure suite 807/808 (1 pre-existing unrelated skip) unaffected. Applied to
+staging: `pg_dump --schema-only` backup taken first, `migrate deploy` applied cleanly, confirmed via
+direct query - both columns exist with the right types/defaults, all 48 existing `GameEvent` rows
+correctly show `resolvedBy = 'SERVER'`, service stayed active, no new errors in the following 2
+minutes. Not yet applied to production - staying isolated from the code deploy, per the established
+pattern, until Commits 2-4 land.
+
+**Next:** Commit 2 - the pure client-side Ultra Time snapshot logic (shared, testable without a
+browser or database) that the offline scoring tap will use to compute and attach
+`clientResolvedMultiplier`/`clientResolvedIsUltraTime`/`clientObservedAt` at tap time.
+
+## 2026-09-28 - Option C, Commits 2-3: client shot resolution + server validation
+
+**Commit 2 - pure client-side shot resolution.** `resolveClientShot()` (added to
+`src/lib/ultra-scoring-engine.ts`) composes two already-existing, already-shared pure functions -
+`remainingClockSeconds()` (game-clock.ts) and `scoreShot()` - over a plain object shape (not the
+Prisma `Game` type), so it's callable from the offline client library without any Prisma/server-only
+dependency. This is the exact same computation the live path (`games/actions.ts`) already does;
+there is no separate "client version" of the scoring rules to maintain. 4 new tests (paused game
+uses clockSecondsRemaining as-is; a running clock with enough elapsed time reaches Ultra Time and
+doubles the shot; not enough elapsed time doesn't; a disabled-4PT rejection passes through
+unchanged) - 23/23 in `ultra-scoring-engine.test.ts`.
+
+**Commit 3 - server-side validation, not re-resolution.** New `src/lib/scoring/validate-client-shot.ts`
+(pure): `validateClientResolvedShot()` checks structural/consistency constraints only (a legal shot
+value under the game's actual rules, a multiplier that's one of the two values these rules can ever
+produce, `isUltraTime` agreeing with which one, and the arithmetic being self-consistent) - it
+deliberately does NOT attempt to verify "was Ultra Time actually active at that exact clock second,"
+since the server structurally cannot know that after the fact (the whole reason this design exists).
+`isClientObservedAtPlausible()` bounds a claimed observation to a generous window (24h max age, 5min
+future skew) to catch garbage/stale values, not to police exactly how long is "too long offline."
+20/20 in `validate-client-shot.test.ts`.
+
+Wired into `replay-outbox-record.ts`: `gameEventCreatePayloadSchema` gained an optional
+`clientObservedAt`; when present, the GameEvent branch validates before writing (loading
+`game.ruleSnapshot` and resolving it via the already-existing `effectiveRuleSnapshot()`, so a future
+game with a real persisted snapshot validates against its own rules, not always the legacy
+default), sets `resolvedBy: "CLIENT"` on success, and fails the record (not the batch) with a
+specific code (`IMPLAUSIBLE_CLIENT_OBSERVATION`, or the `validateClientResolvedShot` error code) on
+failure. Absent `clientObservedAt` (every other GameEvent replay) is unaffected - `resolvedBy`
+defaults to `SERVER`.
+
+**A real atomicity bug caught before it shipped, not after:** the first version of this returned
+the `FAILED` result directly from inside the two new validation branches - but by that point in the
+function, the `SyncIdempotency` claim has already been inserted (the claim-first ordering Commit 3's
+own P2002 fix relies on). Returning a value from inside `ctx.prisma.$transaction`'s callback means
+the transaction *commits*; only a throw rolls it back. Returning directly there would have left a
+claimed idempotency row for a write that never happened - a retry of the exact same record would
+then come back `DUPLICATE` forever instead of ever actually retrying, silently and permanently
+dropping a scoring tap. Caught by re-reading the function's own atomicity comment before writing the
+test, not by the test failing first. Fixed with a small `ReplayValidationError` class that
+`errorDetail` recognizes, so both validation failures throw and route through the same
+catch-and-roll-back path every other mid-transaction failure in this function already uses. A
+dedicated test proves it: a validation failure leaves zero `SyncIdempotency` rows behind, the same
+assertion shape as the existing crash-simulation test.
+
+**Test coverage, Commit 3:** 5 new DB-integration tests (a valid client-resolved Ultra Time 3PT
+lands with `resolvedBy: CLIENT` and `clientObservedAt` recorded; a normal replay with no
+`clientObservedAt` still defaults to `SERVER` - no regression; a points/multiplier arithmetic
+mismatch fails with `POINTS_MISMATCH` and leaves no idempotency row; an implausible multiplier fails
+with `INVALID_MULTIPLIER`; a stale `clientObservedAt` fails with `IMPLAUSIBLE_CLIENT_OBSERVATION`
+and also leaves no idempotency row). All 20 DB-integration tests green on staging (12 prior + 5 new
++ 3 auth/context, after deploying the updated schema, Prisma client, and code).
+
+**Verification:** typecheck/lint clean throughout, ratchet unaffected, full local pure suite
+825/826 (1 pre-existing unrelated skip), 20/20 DB-integration tests on staging.
+
+**Next:** Commit 4 - the actual live-console UI wiring: convert the +1/+2/+3/4PT button group in
+`live/page.tsx` to call `recordScore` directly (not via a native form), fall back to
+`LocalScoringRepository` on a genuine network failure using `resolveClientShot()` to populate the
+client-resolved fields, per-button tap acknowledgment (independent of `useFormStatus`, since this is
+no longer a native form submission), enqueue-triggered `drain()` when online (so the common case
+still syncs within ~1s), the `CaptureConnectivity` queued-count update (and its stale "(F7)" comment
+fix - confirmed this session to reference an unrelated, already-completed feature), and the runbook
+note for what the scorekeeper/operator does if the badge goes red mid-game.
+
+## 2026-09-28 - Option C: paused before touching recordScore, with a complete plan in hand
+
+Season Zero's actual result (confirmed by the user, not in any repo doc - no retro/post-mortem
+exists in `documentation/gameday/season-zero/`, only pre-game planning dated 2026-09-19): wifi had
+real problems, and offline scoring-tap support is wanted for Season One (2026-11-14, ~6.5 weeks
+out - comfortable runway, not an emergency).
+
+**Step 0 of the settled 6-step sequence (read before touching anything) surfaced one more real
+finding, resolved as a technical call rather than reopened as a question:** `syncUltraTimeState`
+(actions.ts) compares the game's *current* wall-clock-derived state against the last-persisted
+`isUltraTimeActive` flag to detect a transition, and writes a `ULTRA_TIME_STARTED`/`_ENDED` ledger
+event when one occurs. Calling this during REPLAY of an offline-queued tap would compare the
+SERVER's clock state *at replay time* - which could be minutes or hours after the tap, against a
+game that may have moved on entirely (different period, real Ultra Time transitions already
+recorded live in the meantime) - against the flag, producing a transition event with the wrong
+period/clock values, or a false transition entirely. **Resolution: `syncUltraTimeState` stays a
+live-only side effect, excluded from the shared `applyScoreEventEffects` extraction.** The client's
+asserted `isUltraTime` (Commit 3) is used only to resolve THIS event's own points/multiplier -
+never to touch the game's global Ultra-Time-active flag or write a transition event during replay.
+
+**Second finding: the existing rehearsal-script pattern can't serve as the "parity test" safety
+net the way first planned.** `g-batch10-12-rehearsal.ts`'s own header says it "mirrors recordScore's
+body exactly... minus requireFixturePermission" - it's a hand-copied duplicate of the logic, not an
+actual invocation of `recordScore` itself. A refactor to `recordScore` would not be caught by this
+script at all (it would keep testing its own frozen copy of the *old* logic). This matches this
+project's established constraint (confirmed, not assumed): `recordScore` calls
+`requireFixturePermission`/`requireSession`, which need a real Next.js request context - exactly
+why every rehearsal script and every DB-integration test in this session calls the underlying
+canonical *services* directly, never the server actions themselves. There is no existing mechanism
+for a true before/after parity test against `recordScore` as a whole.
+
+**Revised, more honest safety-net plan for the actual extraction (not yet started):** `recordScore`
+becomes a thin wrapper (auth, input parsing, calling the shared effects function) exactly as far as
+it already delegates to `createGameEvent`/`applyPlayerShotStatDeltas`/`applyTeamShotStatDeltas`
+today. The proof of correctness comes from two things instead of a live-vs-replay diff: (1) a
+faithful, characterization-tested extraction of the exact existing inline arithmetic/branching into
+`computeScoreEventEffects` (pure) - unit-tested directly, not diffed against a duplicate; (2) a
+mechanical, minimally-diffed refactor of `recordScore`'s body to call the extracted
+functions in the exact same order with the exact same arguments, reviewed line-by-line against the
+original rather than trusted to a test harness that can't reach `recordScore` at all.
+
+**Decision: pause here, not push the actual `recordScore` refactor and live-console UI wiring
+(Steps 2-6) into this same session.** Commits 1-3 (schema, `resolveClientShot`, `validate-client-
+shot` + its replay wiring, plus the `scoringRepository.ts` `clientObservedAt` passthrough and
+enqueue-triggered `drain()`) are complete, real, tested, and touch nothing in the live path - they
+ship now as genuine infrastructure. The remaining work - extracting `computeScoreEventEffects`/
+`applyScoreEventEffects`, refactoring `recordScore` around them, wiring the replay path's SCORE
+branch to call the same effects function, and only then building the live-console tap UI - is real,
+achievable within the 6.5-week runway, but deserves a focused, fresh start rather than being rushed
+at the end of an already very long session that has already found four substantial gaps in this
+exact area (fixture/stat effects missing from replay, the wall-clock Ultra Time resolution
+question, the P2002/fixtureId provenance issues from PR1/PR2, and now this timing issue). Rushing a
+change to the one function the entire live scoring console currently depends on is the wrong way to
+spend the last of this session's attention.
+
+**What ships now:** Commits 1-3, verified on staging (schema migration, 43 new/updated pure and
+DB-integration tests across this whole Option C arc, all green), plus PR 1 and PR 2 of A4's
+wiring/dead-letter work from earlier in this session.
+
+**What's next, planned but not started:** the `recordScore` extraction (6-step sequence above,
+starting fresh), then the live-console UI wiring (button conversion, tap acknowledgment,
+`CaptureConnectivity` update, runbook note) - Commit 4 proper.
+
+## 2026-09-28 - Two small fixes from review, plus the testability answer for next session
+
+**Audit doc fixed:** several code comments this session (`ultra-scoring-engine.ts`,
+`validate-client-shot.ts`, `replay-outbox-record.ts`) pointed at a "wall-clock-derived event fields"
+note in `docs/canonical-write-audit.md` that was never actually written - fixed, with the
+generalized rule added per review: **replay must not invoke wall-clock-dependent side effects**, not
+just avoid re-resolving wall-clock-dependent fields. `syncUltraTimeState` is the concrete instance;
+the doc names the question ("does this read or write something whose correctness depends on *when*
+it runs, not just *whether* it runs?") so the next such helper doesn't have to rediscover it.
+
+**Rehearsal script disclaimed:** `g-batch10-12-rehearsal.ts` now has an explicit header warning that
+it's a hand-copied mirror of `actions.ts`'s logic, not an invocation of it - editing `actions.ts`
+without updating the mirror won't be caught by anything.
+
+**The testability question, answered (the flagged entry point for next session):**
+`recordScore` (and every other exported function in `games/actions.ts`) cannot be called from a
+plain Node test today. The chain is `recordScore` -> `requireFixturePermission` ->
+`requireSession()` -> `auth()`, and `auth` is `NextAuth(...)`'s own session helper - it reads
+cookies from a real Next.js request context, which a script or test process doesn't have. This
+matches the already-established, previously-confirmed constraint that's why every rehearsal script
+and DB-integration test in this project calls canonical *services* directly, never the actions
+themselves.
+
+Node's own `node:test` has a `mock.module()` API that could stub `@/auth` for a local test, but it
+needs `--experimental-test-module-mocks` (Node 22.3+) - staging runs Node 20.20.2, which doesn't
+support it. Since this project's verification discipline runs DB-integration tests against real
+staging Postgres, not just locally, a safety net that only works on a newer local Node and silently
+can't run the same way on staging is a real inconsistency, not a solved problem.
+
+**Two real paths, a decision for next session, not made here:**
+- **A - make `recordScore` (and by extension every `actions.ts` export) testable via dependency
+  injection**, the same pattern `WriteContext`/`ReplayContext` already use elsewhere in this
+  codebase (`actor` passed in, not derived internally from a session). A genuine one-time
+  architectural cost across the whole file, not just this one function - but it's the same
+  refactor this project has already applied to the scoring *services* layer, just not yet to the
+  *actions* layer that calls them.
+- **B - byte-diff + unit tests + careful review**, as originally proposed: extract
+  `computeScoreEventEffects` (pure) and characterization-test it directly against the existing
+  inline logic; extract `applyScoreEventEffects` (I/O) and diff its call sequence line-by-line
+  against the original; treat a mechanical, minimally-diffed `recordScore` refactor plus that diff
+  as the proof, since no automated harness can invoke `recordScore` itself to confirm equivalence
+  end-to-end.
+
+Next session should decide between A and B before writing the extraction, per review's own framing
+- this is the concrete 20-minute read that answer was based on, done now so the next session starts
+building rather than re-investigating.
+
+## 2026-09-28 - Path A confirmed, injection shape settled for next session
+
+Endorsed: Path A (make the console actions testable via injection) over Path B (byte-diff +
+review) - Path B's safety net is genuinely thinner than it looks (the rehearsal doesn't invoke
+`recordScore`, the pure-function tests only cover the extracted parts, the byte-diff is a review
+tool assuming a perfectly mechanical hoist that the reading already showed isn't guaranteed). Path
+A is also the only path that works under the Node 20 constraint: injection needs no module mocking
+at all, so it doesn't care that staging can't run `mock.module()`.
+
+**Scope boundary:** inject only the five actions that write to the canonical ledger -
+`recordScore`, `recordStatEvent`, `voidScoreEventAction`, `correctScoreEventAction`,
+`undoLastEvent`. Not the whole console. Layer-wide injection would turn one high-risk extraction
+into a medium-risk testability refactor plus a still-high-risk extraction, both touching the same
+surface - scoped small enough to review in one sitting instead.
+
+**Shape**, confirmed by reading `recordScore`'s head and `requireFixturePermission`/
+`userHasFixturePermission`'s bodies (the exact three questions review asked, answered before
+committing to the shape):
+1. `requireFixturePermission` is called exactly once, at the top of `recordScore`, before
+   `withGameWrite` - not scattered through the function.
+2. `session` itself is never referenced again after that call - only `session.user.id`, three
+   times (the actor passed into `withGameWrite`, `syncUltraTimeState`'s call, `writeAuditLog`'s
+   `userId`), always the same value.
+3. `requireFixturePermission`/`userHasFixturePermission` have no side effects beyond the
+   authorization decision itself - a role check, then a read-only fixture lookup. No audit
+   logging, no rate limiting, no telemetry to worry about relocating.
+
+All three answers are the good case: the injection is a mechanical substitution, not a redesign.
+
+```ts
+// production entry point - unchanged responsibility, thinner body
+export async function recordScore(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
+  return recordScoreInternal(gameId, fixtureId, formData, { id: session.user.id, organizationId });
+}
+
+// testable - current logic, `session.user.id` replaced by `actor.id` throughout, no auth call
+export async function recordScoreInternal(gameId: string, fixtureId: string, formData: FormData, actor: AuthActor) {
+  // ... unchanged body otherwise
+}
+```
+
+**Revised sequencing for next session** (steps 1-2 are the addition that makes 4 and 6 actually
+verifiable - steps 3-6 were the original plan):
+1. Testability refactor: inject `actor` into the five canonical-ledger actions above. One PR.
+2. Write the invocation test for `recordScore` against CURRENT behavior, before any extraction -
+   call `recordScoreInternal` directly against the isolated test schema, assert DB state. This is
+   the baseline the safety net didn't have before.
+3. Extract `computeScoreEffects` (pure), tested in isolation.
+4. Refactor `recordScore`/`recordScoreInternal` to use it - one commit; the invocation test from
+   step 2 must still pass unchanged.
+5. Extract `applyScoreEffects` (I/O wrapper).
+6. Refactor again to use it - one commit; invocation test must still pass.
+7. Wire the replay path's SCORE branch to call `applyScoreEffects` too, with a parity test
+   (`recordScoreInternal` vs. replay produce identical DB state for the same shot).
+8. Only then: the live-console UI wiring (button conversion, tap acknowledgment,
+   `CaptureConnectivity`, runbook).
+
+**Known constraint, recorded so a future session doesn't rediscover it the hard way:** console
+actions (`games/actions.ts`) are not directly callable from tests today, because of NextAuth
+session coupling (`requireSession()` -> `auth()` needs a real request context). The injection
+pattern above is the supported path to testability for the five ledger-writing actions. Do not
+reach for `mock.module()` as a shortcut - staging runs Node 20.20.2, which doesn't support it
+(`--experimental-test-module-mocks` needs Node 22.3+), so a module-mocking-based test would pass
+locally and be unrunnable in this project's real verification path.
+
+## 2026-09-28 - Pre-diff check: confirmed no other caller of the five ledger actions
+
+Grepped every real reference to `recordScore`/`recordStatEvent`/`voidScoreEventAction`/
+`correctScoreEventAction`/`undoLastEvent` across `src/` and `scripts/`. Every non-comment hit is
+`live/page.tsx`'s own `<form action={fn.bind(null, gameId, fixtureId)}>` binding - no test, script,
+or other action calls any of them directly (the rehearsal script's own header already says it
+mirrors rather than calls them). Since the injection refactor keeps each wrapper's external
+signature unchanged (`recordScore(gameId, fixtureId, formData)` still, just delegating internally
+to `recordScoreInternal`), this means **zero call-site changes anywhere** - `live/page.tsx`'s
+existing `.bind(...)` references keep working exactly as they are. The refactor is fully internal
+to `games/actions.ts`.
+
+Session closed cleanly: A4 PR 1/PR 2 shipped and verified; Option C Commits 1-3 shipped and
+verified on staging; Commit 4 (the `recordScore` extraction + live-console UI wiring) fully scoped,
+its risk named and mitigated, with a concrete, pre-flighted plan ready for the next session to
+execute starting from the injection refactor.
+
+## 2026-09-29 - A5 Step 1: actor injection into the five ledger-writing actions, plus the
+`recordScore` invocation test
+
+**Pre-diff check on the remaining four functions** (`voidScoreEventAction`,
+`correctScoreEventAction`, `recordStatEvent`, `undoLastEvent`): all four confirmed identical in
+shape to `recordScore` - one `requireFixturePermission` call up front, `session` used only for
+`session.user.id`, no other side effects, `organizationId` sourced from
+`requireFixturePermission`'s own return value in every case. Zero divergence.
+
+**Design finding surfaced before writing any code:** `games/actions.ts` has a file-level
+`"use server"` directive, which makes every exported async function in that file a publicly
+callable Server Action reachable by direct POST, whether or not any UI calls it (confirmed against
+`node_modules/next/dist/docs/01-app/02-guides/data-security.md`, per `AGENTS.md`'s standing warning
+not to assume standard Next.js behavior in this project). Adding `recordScoreInternal(..., actor)`
+as another export in that same file would have let any caller supply a forged `actor` and skip
+`requireFixturePermission` entirely - the doc's own security section names this exact anti-pattern.
+
+**Fix:** new file `src/app/games/actions-internal.ts`, marked `import "server-only"` instead of
+`"use server"` - the doc's own "Data Access Layer for mutations" pattern, with one deliberate
+deviation from the doc's example: the auth check stays in the `"use server"` wrapper rather than
+inside the DAL, specifically so these functions stay plain, injectable, testable TypeScript with no
+NextAuth dependency. Holds all five `*Internal` functions (`recordScoreInternal`,
+`voidScoreEventActionInternal`, `correctScoreEventActionInternal`, `recordStatEventInternal`,
+`undoLastEventInternal`), each taking an injected `actor: AuthActor` (the type already used
+elsewhere in `@/server/scoring`) in place of session derivation, plus `syncUltraTimeState` and the
+two stat-field maps (moved verbatim; `syncUltraTimeState` re-imported into `actions.ts` for the
+three non-migrated game-clock functions that still call it). `games/actions.ts`'s five functions
+are now thin wrappers: auth check -> build actor -> delegate -> `revalidatePath`. External
+signatures unchanged, so `live/page.tsx`'s `.bind(...)` form actions needed no changes.
+
+**Second gap, found while trying to actually write the invocation test:** `withGameWrite`
+(`src/server/scoring/with-game-write.ts`) always opened its transaction on the global `prisma`
+singleton (`@/lib/prisma`), which is bound once at module load to `DATABASE_URL`'s default `public`
+schema with no `{schema}` option - invisible to `createTestDbContext()`'s isolated test schema, the
+same failure mode `replayOutboxRecord`'s own header comment already documents and fixed for itself.
+Fixed the same way: `withGameWrite` now takes an optional injected `prisma` (default: the global
+singleton, so every production call site - including `stats-actions.ts`'s nine call sites - is
+unaffected), and each `*Internal` function takes and forwards its own optional trailing `prisma`
+param. User confirmed this approach (inject, matching the existing pattern) over a parallel
+test-only wrapper or skipping schema isolation.
+
+**The `recordScore` invocation test** (`src/app/games/actions-internal.test.ts`, added to
+`test:db`'s glob in `package.json` since it lives under `src/app/**` not `src/server/**`): three
+tests calling `recordScoreInternal` directly with an injected actor, no NextAuth/session dependency
+- a made 2PT shot (asserts Fixture.homeScore, the GameEvent row's full shape, PlayerStat, TeamStat,
+and the audit log entry), an INVALID_TEAM rejection with no side effects, and a negative correction
+that must clamp at zero and must not fabricate a PlayerStat row. This is the baseline the
+`computeScoreEffects`/`applyScoreEffects` extraction (steps 3-6 of the prior entry's plan) will be
+verified against.
+
+**Running it surfaced two more real, empirical findings** (this environment's local `.env`
+`DATABASE_URL` is the unmodified Prisma-quickstart placeholder with no working local Postgres, so
+verification ran on staging over SSH, in a disposable `cp -al` scratch copy of the current release
+- never touching `current` or the live service, cleaned up after):
+- Plain `tsx --test` throws on any file that transitively imports `"server-only"` (e.g. every DB
+  test, via `@/server/scoring`'s barrel) unless `NODE_OPTIONS=--conditions=react-server` is set -
+  this is pre-existing and affects the entire `test:db` suite as currently invoked, not just this
+  new file; confirmed by reproducing it against the already-committed `replay-outbox-record.test.ts`
+  too. Worth fixing at the `test:db` script level in a future session (not done here - out of scope
+  for this increment, flagged rather than silently patched).
+- `writeAuditLog`'s `userId` column has a real FK to `User` - the `ACTOR_ID = "test-actor"` string
+  shape every other DB-integration test in this suite uses works fine for them because none of
+  their code paths touch `AuditLog`, but `recordScoreInternal` does. Fixed by seeding a real `User`
+  row in the test fixture. Found empirically, by running against real Postgres, exactly the class of
+  bug a typecheck/lint-only verification would have missed entirely.
+- Running the new test alongside the full pre-existing `test:db` suite in one continuous session (23
+  tests total) hit `error: 'out of shared memory'` (Postgres code 53200) at `DROP SCHEMA ... CASCADE`
+  teardown time, for 5 of the 23 tests - spread across both old and new test files, including tests
+  that don't touch `withGameWrite` at all. This is a staging Postgres resource-sizing issue (likely
+  `max_locks_per_transaction`), not a code regression: the same 3 new tests passed cleanly 3/3 when
+  run standalone. Flagged as a separate ops follow-up, not fixed here.
+
+**Verification, in order:** `tsc --noEmit` clean; `eslint` on all three changed files, 0
+errors/0 warnings; full pure suite (`npm test`) 827/827; canonical-write ratchet unchanged (4/4);
+`npm run build` succeeds; the three new invocation tests passed 3/3 standalone against real staging
+Postgres (via SSH, isolated scratch copy, cleaned up after).
+
+**Not done in this increment:** the `test:db` script's `server-only`/tsx condition fix, and the
+staging Postgres shared-memory sizing issue - both named above, neither blocking this deliverable.
+Next: `computeScoreEffects`/`applyScoreEffects` extraction (steps 3-6 of the prior entry's plan),
+verified against this test staying green.
+
+## 2026-09-30 - Closing the two flags before extraction: expanded invocation-test coverage,
+`test:db` script fix, shared-memory diagnosis
+
+Reviewer response to the prior entry: endorsed the DAL split and the `prisma` injection pattern,
+but flagged that the 3-test invocation suite didn't cover the exact paths
+`computeScoreEffects`/`applyScoreEffects` will touch (per-category shot deltas, opponent Ultra Time
+bookkeeping, the I/O call order/arguments) - meaning the extraction could silently change behavior
+in any of those paths and the existing tests would stay green. Also flagged the `test:db`
+`server-only` fix as a project-level gap (not a per-invocation workaround) and asked for the shared-
+memory exhaustion to be diagnosed, not assumed, before treating it as a sizing issue.
+
+**Invocation test expanded from 3 to 7 cases**, all run against CURRENT, untouched `recordScore`
+logic (no extraction yet) - the pre-extraction baseline the reviewer asked for:
+- 3PT shot: `threePointsMade/Attempted` (not `twoPoints`), `fieldGoals`, `+3` everywhere.
+- 4PT shot: `fourPointsMade/Attempted`, `isFourPointAttempt`, `+4` everywhere, including
+  `TeamStat.fourPointsMade/Attempted` (the one shot category `applyTeamShotStatDeltas` actually
+  carries at team granularity).
+- Free throw (1PT): `freeThrowsMade/Attempted`, explicitly asserting `fieldGoalsMade/Attempted`
+  stay 0 - the one shot category `shotStatDeltas` does NOT count as a field goal
+  (`isFieldGoal = basePointValue >= 2`), the easiest thing to invert by accident during extraction.
+- Ultra Time 2PT shot: seeded via a new `ULTRA_TIME_GAME_STATE` override
+  (`currentPeriod: 2, clockSecondsRemaining: 45, isUltraTimeActive: true` - period 2 and <=60s left
+  are exactly what the legacy `LEGACY_RULE_SNAPSHOT` defaults require, so no `GameRuleSnapshot` row
+  needs seeding; `isUltraTimeActive` pre-set to `true` so `syncUltraTimeState` sees no transition
+  and writes no extra `ULTRA_TIME_STARTED` event alongside the `SCORE` event being tested). Asserts
+  the multiplier doubles `points` without changing the reported `basePointValue` category, the
+  shooting team's own `ultraTimePointsFor`, AND - the case named as "the one most likely to be
+  missed" - the OPPONENT's `TeamStat` row gets `ultraTimePointsAgainst` incremented while their own
+  `points` (absolute score) stays untouched. `seedLiveGame` now takes an optional
+  `Partial<Prisma.GameUncheckedCreateInput>` override for this.
+- The original 3 (happy-path 2PT, `INVALID_TEAM` rejection, negative-correction floor) unchanged.
+
+All 7 run 3/3 -> 7/7 green standalone against real staging Postgres (same SSH/scratch-copy/cleanup
+procedure as before). `tsc`/`eslint` clean.
+
+**`test:db` script fixed at the root, not worked around per-invocation.** The `server-only` failure
+was never "something upstream sets the condition on staging" - I had been setting
+`NODE_OPTIONS=--conditions=react-server` by hand in each SSH command myself; nothing in the repo or
+on staging set it automatically, so the reviewer's assumption there didn't hold and is corrected
+here rather than quietly agreed with. Rejected embedding `NODE_OPTIONS=...` as a literal env-var
+prefix in the `package.json` script string, since that syntax is bash-only and this repo's dev
+machine is Windows (npm's default script shell there is `cmd.exe`, which doesn't understand
+`VAR=value cmd`) - would have fixed staging/CI and silently broken local Windows invocation.
+Used `node`'s own native `--conditions` CLI flag instead, replacing the `tsx` CLI wrapper with the
+equivalent `node --import tsx` form it wraps internally:
+`"test:db": "node --conditions=react-server --import tsx --test \"src/test-support/**/*.test.ts\" \"src/server/**/*.test.ts\" \"src/app/**/*.test.ts\""`.
+Confirmed empirically, not assumed: this form (a) resolves the `server-only` guard exactly like the
+env var did, (b) discovers the same glob-matched file set `tsx --test` did, both verified on Node
+24.13.1 (this dev machine) and Node 20.20.2 (staging's actual runtime), and (c) needs no
+`NODE_OPTIONS` and no new dependency (no `cross-env`), so it's portable across cmd.exe, PowerShell,
+and bash without a shell-specific branch. No CI workflow runs `test:db` today (`ci.yml` only runs
+the pure `npm test` suite, no Postgres service defined) - noted, not added, since adding CI coverage
+wasn't asked for here.
+
+**Shared-memory exhaustion: diagnosed, not assumed.** Queried the real staging Postgres directly
+(`SHOW max_locks_per_transaction` / `max_connections` / `shared_buffers`, `pg_stat_activity`,
+`pg_locks` counts) rather than guessing between a sizing issue and a connection leak:
+- `max_locks_per_transaction = 64`, `max_connections = 100` -> a 6,400-slot shared lock table for
+  the whole server (Postgres's own sizing formula, independent of `shared_buffers`).
+- `shared_buffers = 128MB` - unrelated to this specific error class (that governs page-cache
+  memory, not the lock table), so raising it would not fix this.
+- Current, post-test-run state: 6 connections, 2 locks total - no lingering buildup, confirming
+  `createTestDbContext`'s teardown (`prisma.$disconnect()` before the admin client's
+  `DROP SCHEMA ... CASCADE`) is doing its job; this is NOT a leaked-connection bug.
+- `schema.prisma` defines 126 models. A `DROP SCHEMA ... CASCADE` (and a `prisma db push` CREATE)
+  against a schema that size needs an AccessExclusiveLock per table plus its indexes/constraints -
+  plausibly several hundred locks for ONE test's setup/teardown. `node --test` parallelizes across
+  test FILES by default; several such schemas being created/dropped concurrently is what plausibly
+  exceeds the 6,400-slot ceiling on a small, default-tuned instance - not any one test in isolation
+  (every one of these 7 passed cleanly run standalone).
+- **Conclusion: a genuine Postgres lock-table sizing issue** (default `max_locks_per_transaction`
+  too low for a 126-model schema under this test runner's default file-level concurrency), not a
+  code defect. Two independent fixes exist for a future session: raise
+  `max_locks_per_transaction` (ops-level, needs a Postgres restart) and/or cap `test:db`'s
+  concurrency (`node --test --test-concurrency=1` or similar - a code-level mitigation needing no
+  ops access, trading suite wall-clock time for lock-table headroom). Neither applied here - named
+  as a follow-up, per the reviewer's own "not blocking Step 3" framing.
+
+Next: Step 3 - extract `computeScoreEffects` (pure), unit-tested against values read from
+`recordScore`'s current inline logic. `recordScore`/`recordScoreInternal` itself is not touched yet
+- that's Step 4, verified against the now-7-test invocation suite staying green.
+
+## 2026-09-30 (cont'd) - Step 3: `computeScoreEffects` extracted, `recordScoreInternal` untouched
+
+New file `src/lib/scoring/compute-score-effects.ts` - pure (no Prisma, no server-only), placed
+alongside `build-game-event.ts`/`shot-stat-deltas.ts` (the existing pure-computation-vs-I/O split:
+`buildGameEventCreateData` vs `createGameEvent`, `mergeShotStatDeltas` vs
+`applyPlayerShotStatDeltas`/`applyTeamShotStatDeltas`). A byte-for-byte relocation of
+`recordScoreInternal`'s inline shot/score/delta math, not a rewrite - `recordScoreInternal` itself
+has zero edits in this commit, per the reviewer's explicit "do not touch recordScore yet."
+
+Scope boundary: `computeScoreEffects` assumes the seasonClubId is already validated as one of the
+fixture's two sides (INVALID_TEAM) and the player (if any) already resolved against the roster
+(INVALID_PLAYER) - both need a DB read, so both stay the caller's job. The one validity check that
+IS pure and belongs here is `scoreShot`'s own (INVALID_SHOT_VALUE / FOUR_POINT_DISABLED), surfaced
+via the same `{valid: false, error}` shape `scoreShot` itself already uses.
+
+Return shape - the reviewer's four named fields plus two more that turned out to be necessary for
+`applyScoreEffects` (Step 5) to actually perform the writes:
+- `fixtureDelta`: `{ isHome, previousScore, nextScore, actualPoints }` - actualPoints is the
+  floor-clamped real change, never the raw requested amount.
+- `eventFields`: everything `createGameEvent` needs beyond gameId/fixtureId/seasonClubId/playerId/
+  period/clockSeconds (points, basePointValue, multiplier, isUltraTime, made, isFourPointAttempt,
+  the generated description, all four before/after score fields) - added because `computeScoreEffects`
+  needs to be the single source of these pure values too, not just the four named deltas.
+  `shot` itself is not returned separately - its three meaningful fields (basePointValue, multiplier,
+  isUltraTime) are already surfaced through `eventFields`.
+- `playerDelta`: `{ playerId, seasonClubId, deltas, pointsDelta } | null` - null exactly when
+  `recordScoreInternal`'s current `player && actualPoints !== 0` guard would skip the write (no
+  player attributed, or a zero-effect correction) - proven by the DB invocation test's "must not
+  fabricate a PlayerStat row" case, now also asserted at the pure-function level.
+  `teamDelta`: the scoring team's own delta, computed unconditionally (matches
+  `recordScoreInternal`'s current unconditional call for this side, even for a zero-effect correction).
+- `opponentUltraDelta`: `{ seasonClubId, ultraTimePointsAgainstDelta, absolutePoints } | null` - the
+  case named as "the one most likely to be missed." Null unless `isUltraTime && actualPoints !== 0`,
+  matching the current guard exactly. `absolutePoints` is the opponent's OWN unchanged score, not a
+  delta - tested explicitly for the away-team-scoring case, where the opponent resolves to the HOME
+  club and `absolutePoints` must read from `homeScore`, not `awayScore` (the easy sign-flip bug this
+  case exists to catch).
+
+10 unit tests in `compute-score-effects.test.ts`, every expected value read from
+`recordScoreInternal`'s current body by hand (not derived circularly from the new function): 2PT,
+3PT, 4PT, free throw (1PT - the one non-field-goal category), Ultra Time 2PT (multiplier + own
+ultraTimePointsFor + opponent's ultraTimePointsAgainst together), away-team scoring (proves the
+isHome branch and opponent resolution both flip correctly), a zero-effect negative correction (floor
+at zero, null PlayerDelta), a real (non-floored) negative correction, INVALID_SHOT_VALUE, and
+FOUR_POINT_DISABLED. All 10 pass. Full pure suite: 838 tests, 837 pass, 1 pre-existing skip, 0 fail
+(up from 828 before this session's additions). `tsc --noEmit` and `eslint` on both new files: clean.
+
+Per the reviewer's explicit instruction, stopped here to report the shape before Step 4
+(refactoring `recordScoreInternal` to call `computeScoreEffects`, verified against the 7-test DB
+invocation suite staying green) and before Step 5 (`applyScoreEffects`, the I/O wrapper - takes `tx`
+alongside an injectable `db`/`prisma` the same way `recordScoreInternal` does now, per the
+reviewer's note).
+
+## 2026-10-02 - LBCL: Games 21-24 transcribed and applied to STAGING (production pending approval)
+
+**Objective:** User supplied 5 LBCL scoresheet images (Thu 01 Oct 2026) and asked to update LBCL.
+They are 4 distinct games - the Seaside Hoopers v Square Team sheet was sent twice (two phone
+screenshots, identical content). Originals are in `lbcl/` (untracked).
+
+**Completed**
+- `web/scripts/data/build-lbcl-batch.mjs`: added Games 21-24, regenerated `lbcl-2026-batch1.json`
+  (24 games). G21 Ultra Basketball 38-60 Campos Basketballers (12:02), G22 Seaside Hoopers 81-41
+  Square Team (14:11), G23 Lagos Raptors 50-51 LXB Surulere (16:25), G24 Cantonment Braves 62-54
+  White Fire (18:43). Conventions confirmed against the Game 20 sheet rather than assumed: minutes
+  are TRUNCATED (37:59 -> 37, not rounded); `scheduledAt` is the sheet's start time converted from
+  Lagos (UTC+1) to UTC (12:18 -> 11:18Z). These sheet headers print no venue, so they use the
+  existing "Venue TBC" venue (as Games 1-3, 11-12).
+- Every name reconciled against the LIVE staging roster (read-only query), not memory. Only 3
+  genuinely new players, all jerseyless: "Ikeze Chidera" (Lagos Raptors), "Chucks A" (LXB Surulere),
+  "Issac Saint" (Cantonment Braves). Staging's `players_created` came out 0, 0, 2, 1 - exactly the
+  prediction, an independent confirmation that every other row matched an existing player.
+- Staging: pg_dump backup first (`ultraos_staging_pre_lbcl_games21_24_20261002T091734Z.dump`,
+  verified readable), then applied only Games 21-24 via a trimmed batch file (Games 1-20 not
+  touched). Verified: 24 fixtures all FINAL; each game's PlayerStat points sum equals its final
+  score (38/60, 81/41, 50/51, 62/54); spot checks (Koko 20 pts 6/12, Somto Pascal 19 reb, Opene 21,
+  Udeli 20, Adele 18) match the sheets; no duplicate-named athletes.
+
+**Verification before any write:** `verify-batch.mjs` passes; plus a stricter validator (scratch,
+not committed) checking ALL 16 stat columns for all 8 team lines against each sheet's printed
+Totals row incl. the Team/Coach row, FGM=2PM+3PM, FGA=2PA+3PA, points=2*2PM+3*3PM+FTM per player,
+tuple completeness and duplicate names. All pass. Each transcription also summed correctly by
+hand against the sheet totals before being typed in.
+
+**PRODUCTION NOT APPLIED.** The production ingestion step was blocked by the auto-mode classifier
+as a production deploy, so it was not retried or worked around. Production state: a verified
+pg_dump backup exists
+(`/var/backups/ultraleagueos-production/ultraleagueos-pre-lbcl-games21-24-20261002T091910Z.dump`);
+production's roster was confirmed identical to staging's pre-import roster, so the same ingestion
+is expected to behave identically (3 new players). To finish: run `external-stats-ingest.ts` on the
+production host with the production runtime env against the Games 21-24 batch (dry-run first), then
+verify. `/lbcl` on production still shows 20 games.
+
+**Flagged for human review (judgement calls, same convention as earlier batches - jersey anchor +
+partial name; a wrong merge is harder to spot than a duplicate row):**
+- "Kuti Babajide" (#14) -> Oluwanifemi Kuti: surname + jersey only, given name differs.
+- "Koko Clinton" (worn as #6, previously #13) -> Clinton Koko on the distinctive full name.
+- "Ibrahim Kudus" (#23) -> Qudus Ibrahim (NOT Ibrahim Qadir, a separate player on the Game 10 sheet).
+- "Timmy Samuel" (#15) -> Timi Samuel ("Timmy T" is a different existing player).
+- "Promise T", "Gaga I", "Segun I", "Toheeb Akanbi" (truncated names) matched on jersey + first name.
+- "Ikeze Chidera" (#12, 4 min, no stats) shares "Ikeze" with Ikeze David and "Chidera" with David
+  Chidera - ambiguous, so created new rather than guessed; may duplicate one of them.
+- The season row's `endDate` is still 2026-09-26 while fixtures now run to 1 Oct (Games 17-20 on 27
+  Sep already did). Not changed - needs a decision on the real end date.
+
+## 2026-10-02 - Pre-Step-4 refinements (reviewer): rename, expanded invocation test
+
+- **Renamed `computeScoreEffects` -> `computeScoreConsequences`** (file, test, types, roadmap): it
+  returns event fields as well as deltas, so "effects" was too narrow. "Effects" now means only the
+  I/O half (`applyScoreEffects`, Step 5). Header comment states the contract, incl. that a
+  `{valid: false, error}` result must be translated to `throw new Error(error)` inside
+  withGameWrite's callback at the point the inline `if (!shot.valid) throw` sits today.
+- **Error translation, confirmed against the code:** recordScoreInternal THROWS (message = the code).
+  **INVALID_SHOT_VALUE is unreachable through it** - its zod schema (int, -4..4, non-zero) rejects
+  everything scoreShot would, first, as a ZodError - so it cannot have a DB invocation test; the
+  test asserts the real behavior (ZodError, no writes) for 0, 5, -5, 2.5. FOUR_POINT_DISABLED IS
+  reachable, via a real GameRuleSnapshot row, and is now tested (also asserts full rollback,
+  including that no sequence number was consumed, and that a legal 3PT still scores afterwards).
+- **Invocation suite 7 -> 14 tests**, all green on real staging Postgres against the UNTOUCHED
+  recordScoreInternal: + away-team plain 2PT and 3PT (home/away before/after fields on the right
+  sides, no opponent TeamStat), + Ultra Time in BOTH directions, + INVALID_PLAYER, +
+  FOUR_POINT_DISABLED, + zod rejection. `seedLiveGame` gained an away player and fixture score
+  overrides.
+- **The reviewer's Ultra Time suspicion was right, now proven by mutation:** the original Ultra
+  Time test started 0-0, so swapping which side's score the opponent bookkeeping reads cannot fail
+  it. New tests start at asymmetric scores chosen so every swappable value is distinct (home 10 /
+  away 7). Mutation check on a scratch copy (swap the side read in recordScoreInternal's opponent
+  `applyTeamShotStatDeltas` call): the OLD 0-0 test still PASSED, both NEW tests FAILED (expected 7
+  got 10; expected 10 got 7). The coverage map is in the test file's header docstring.
+- The `test:db` script fix from the 2026-09-30 entry stands; CI still does not run `test:db`.
+- Verified: tsc and eslint clean, pure suite 838 tests / 837 pass / 1 pre-existing skip / 0 fail,
+  canonical-write ratchet 4/4.
+
+**Corrections to earlier entries / things I got wrong or left behind (found this session):**
+- The 2026-09-30 entry said the shared-memory failures left "no lingering buildup". Wrong: the 5
+  failed `DROP SCHEMA` teardowns had left 5 orphaned `test_<uuid>` schemas (585 relations each) in
+  the staging database (visible as 7,422 vs 1,570 pg_dump catalog entries, staging vs production).
+  Found via the LBCL backup, confirmed they were exactly my 5, dropped one at a time (serial drops
+  succeed, consistent with the concurrency diagnosis), re-checked: 0 remain.
+- My "isolated scratch copy" method (`cp -al` hardlinks of the staging release, then `scp` over it)
+  was NOT isolated for files that already exist in the release: scp writes in place, through the
+  hardlink. Two files in the LIVE staging release (`web/src/server/scoring/with-game-write.ts`,
+  `web/scripts/data/lbcl-2026-batch1.json`) were silently overwritten, contradicting my earlier
+  statements that the live release was never touched. No runtime effect (the app serves its
+  compiled build; neither file is read), but the release dir no longer matched its deployed commit.
+  Detected by hash comparison against git, restored from `git show ae5ae8d:...`, re-verified by hash.
+  Production release hashes verified identical to its commit, no stray files. **Do not repeat:** for
+  any future scratch run use `cp -a` (a real copy), or unlink before overwriting a linked file.
+- No production DB writes of any kind were made this session (read-only queries and the backup only).
+
+## 2026-10-02 - Step 4: recordScoreInternal now calls computeScoreConsequences
+
+`recordScoreInternal` (`web/src/app/games/actions-internal.ts`) replaces its inline shot/score/delta
+math with one `computeScoreConsequences` call; nothing else changed. Unchanged on purpose: the
+INVALID_TEAM guard, the player lookup + INVALID_PLAYER guard, `syncUltraTimeState` (live-only, still
+runs before the computation), and every write - same order, same arguments:
+`tx.fixture.update`, `createGameEvent`, `applyPlayerShotStatDeltas` (only when `playerDelta` is
+non-null, i.e. exactly the old `player && actualPoints !== 0`), the scoring team's
+`applyTeamShotStatDeltas`, the opponent's (only when `opponentUltraDelta` is non-null, i.e. the old
+`ultraTime && actualPoints !== 0`), `writeAuditLog`. The `{valid: false, error}` result is translated
+back to `throw new Error(error)` at the exact point the inline throw sat, inside the transaction.
+`remainingClockSeconds(game)` is still evaluated three times (sync, computation, event clock), as
+before - deliberately not "improved" here.
+
+**Verified:** the 14-test DB invocation suite is UNCHANGED and all 14 pass against the refactor on
+real staging Postgres (the only test edits this session were the earlier, pre-refactor additions);
+tsc, eslint, pure suite (838 / 837 pass / 1 pre-existing skip), canonical-write ratchet (4/4) and
+`next build` all clean. This run used a true `cp -a` copy (not hardlinks); afterwards the staging
+release was re-hashed against git (unchanged), 0 orphan test schemas.
+
+**Not committed.** Left in the working tree with the rest of the uncommitted A3b/A5 work
+(`actions-internal.ts` is itself still untracked). Step 5 (`applyScoreEffects`, the I/O wrapper,
+taking `db` alongside `tx`) is next.
+
+## 2026-10-04 - GIESM 2026 Volleyball & Flag Race Registration Template
+
+Updated event `cmu2i5e9p0004plkkrnjhej0o` for the GIESM 2026 tournament with co-ed volleyball and flag race registration.
+
+**Event details:**
+- Tournament dates: October 22-23, 2026
+- Venue: Indoor Hall, National Stadium Surulere (created new venue `cmuu9wz0s0000odkkg9mod9go`)
+- Registration window: October 4-17, 2026
+
+**Registration configuration:**
+- Mode: TEAM (coach registers the whole team)
+- Two sports: VOLLEYBALL and FLAG_RACE
+- Co-ed with gender-split rosters:
+  - Volleyball: 10-20 players (5-10 male, 5-10 female), min 10 total
+  - Flag Race: 5-10 players (0-5 male, 0-5 female), min 5 total
+- Coaches: 1-2 required (head coach + assistant coach)
+- Both sports required, dual participation allowed
+
+**Registration fields:**
+- Team level (7 fields): Head coach name/email/phone, assistant coach name/email/phone, team name
+- Volleyball players (6 fields): Name, jersey number, email, phone, gender, DOB
+- Flag Race players (5 fields): Name, email, phone, gender, DOB
+
+**Template system created:**
+- `data/templates/volleyball-flagrace-championship.json` — reusable template config
+- `data/templates/README.md` — comprehensive usage documentation
+- `web/scripts/apply-registration-template.ts` — generic script to apply any template to an event
+
+**Helper scripts:**
+- `web/scripts/update-giesm-event.ts` — one-time update script for this specific event
+- `web/scripts/verify-event-update.ts` — verification script to confirm changes
+- `web/scripts/inspect-event.ts` — general event inspection utility
+
+**Future reuse:**
+To apply this template to another event:
+```bash
+npx tsx scripts/apply-registration-template.ts <eventId> data/templates/volleyball-flagrace-championship.json
+```
+
+Then update event-specific details (dates, venue, registration window) and enable the form.
+
+**Verification:** All changes confirmed on production. Event, registration form, venue, and all 18 fields created correctly. Template JSON and apply script tested.
+
+**Committed:** `ee6f526` — feat: add GIESM 2026 volleyball & flag race registration template system
