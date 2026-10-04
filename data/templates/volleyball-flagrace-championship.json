@@ -1,0 +1,204 @@
+{
+  "name": "Volleyball & Flag Race Team Championship",
+  "description": "Template for co-ed volleyball and flag race championships with team registration",
+  "version": "1.0.0",
+  "created": "2026-09-27",
+  "sportConfig": {
+    "gender": "CO_ED",
+    "sports": ["VOLLEYBALL", "FLAG_RACE"],
+    "requireBothSports": true,
+    "requireCompleteRosters": true,
+    "requireGuardianConsent": false,
+    "dualParticipationAllowed": true,
+    "coaches": {
+      "required": true,
+      "min": 1,
+      "max": 2
+    },
+    "rosters": {
+      "VOLLEYBALL": {
+        "minRoster": 10,
+        "maxRoster": 20,
+        "activeCount": 12,
+        "orderRequired": false,
+        "substitutesAllowed": true,
+        "genderSplit": {
+          "male": { "min": 5, "max": 10 },
+          "female": { "min": 5, "max": 10 }
+        }
+      },
+      "FLAG_RACE": {
+        "minRoster": 5,
+        "maxRoster": 10,
+        "activeCount": 10,
+        "orderRequired": true,
+        "substitutesAllowed": false,
+        "genderSplit": {
+          "male": { "min": 0, "max": 5 },
+          "female": { "min": 0, "max": 5 }
+        }
+      }
+    }
+  },
+  "fields": {
+    "submission": [
+      {
+        "key": "headCoachName",
+        "label": "Head Coach Name",
+        "type": "TEXT",
+        "required": true,
+        "sortOrder": 1
+      },
+      {
+        "key": "headCoachEmail",
+        "label": "Head Coach Email",
+        "type": "EMAIL",
+        "required": true,
+        "sortOrder": 2
+      },
+      {
+        "key": "headCoachPhone",
+        "label": "Head Coach Phone",
+        "type": "PHONE",
+        "required": true,
+        "sortOrder": 3
+      },
+      {
+        "key": "assistantCoachName",
+        "label": "Assistant Coach Name",
+        "type": "TEXT",
+        "required": true,
+        "sortOrder": 4
+      },
+      {
+        "key": "assistantCoachEmail",
+        "label": "Assistant Coach Email",
+        "type": "EMAIL",
+        "required": false,
+        "sortOrder": 5
+      },
+      {
+        "key": "assistantCoachPhone",
+        "label": "Assistant Coach Phone",
+        "type": "PHONE",
+        "required": false,
+        "sortOrder": 6
+      },
+      {
+        "key": "teamName",
+        "label": "Team Name",
+        "type": "TEXT",
+        "required": true,
+        "sortOrder": 10
+      }
+    ],
+    "participant": {
+      "VOLLEYBALL": [
+        {
+          "key": "volleyball_playerName",
+          "label": "Player Name (Volleyball)",
+          "type": "TEXT",
+          "required": true,
+          "sortOrder": 20
+        },
+        {
+          "key": "volleyball_jerseyNumber",
+          "label": "Jersey Number (Volleyball)",
+          "type": "TEXT",
+          "required": true,
+          "sortOrder": 21
+        },
+        {
+          "key": "volleyball_email",
+          "label": "Email (Volleyball)",
+          "type": "EMAIL",
+          "required": true,
+          "sortOrder": 22
+        },
+        {
+          "key": "volleyball_phone",
+          "label": "Phone Number (Volleyball)",
+          "type": "PHONE",
+          "required": true,
+          "sortOrder": 23
+        },
+        {
+          "key": "volleyball_gender",
+          "label": "Gender (Volleyball)",
+          "type": "SELECT",
+          "required": true,
+          "sortOrder": 24,
+          "options": { "choices": ["MALE", "FEMALE"] }
+        },
+        {
+          "key": "volleyball_dateOfBirth",
+          "label": "Date of Birth (Volleyball)",
+          "type": "DATE",
+          "required": true,
+          "sortOrder": 25
+        }
+      ],
+      "FLAG_RACE": [
+        {
+          "key": "flagrace_playerName",
+          "label": "Player Name (Flag Race)",
+          "type": "TEXT",
+          "required": true,
+          "sortOrder": 30
+        },
+        {
+          "key": "flagrace_email",
+          "label": "Email (Flag Race)",
+          "type": "EMAIL",
+          "required": true,
+          "sortOrder": 31
+        },
+        {
+          "key": "flagrace_phone",
+          "label": "Phone Number (Flag Race)",
+          "type": "PHONE",
+          "required": true,
+          "sortOrder": 32
+        },
+        {
+          "key": "flagrace_gender",
+          "label": "Gender (Flag Race)",
+          "type": "SELECT",
+          "required": true,
+          "sortOrder": 33,
+          "options": { "choices": ["MALE", "FEMALE"] }
+        },
+        {
+          "key": "flagrace_dateOfBirth",
+          "label": "Date of Birth (Flag Race)",
+          "type": "DATE",
+          "required": true,
+          "sortOrder": 34
+        }
+      ]
+    }
+  },
+  "defaultSettings": {
+    "registrationWindow": {
+      "daysBeforeEvent": 18,
+      "durationDays": 14
+    },
+    "venue": {
+      "name": "Indoor Hall, National Stadium Surulere",
+      "address": "National Stadium, Surulere, Lagos",
+      "city": "Lagos",
+      "capacity": 5000
+    }
+  },
+  "usage": {
+    "description": "To use this template for a new event, copy the sportConfig and fields structure to a new registration form. Adjust dates, venue, and event-specific details as needed.",
+    "script": "scripts/update-giesm-event.ts",
+    "notes": [
+      "This template supports both volleyball and flag race in a single team registration",
+      "Coaches register players for both sports",
+      "Gender split is enforced for both sports",
+      "Volleyball requires jersey numbers, flag race does not",
+      "Template can be adapted for single-sport events by removing unwanted sport from config"
+    ]
+  }
+}
