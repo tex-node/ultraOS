@@ -8150,3 +8150,28 @@ Then update event-specific details (dates, venue, registration window) and enabl
 **Verification:** All changes confirmed on production. Event, registration form, venue, and all 18 fields created correctly. Template JSON and apply script tested.
 
 **Committed:** `ee6f526` — feat: add GIESM 2026 volleyball & flag race registration template system
+
+**Issue Resolution: 404 Error on Public Events Page**
+
+After the event update, clicking on the GIESM event from the public events page (https://app.neonultra.ng/public/events) resulted in a 404 error. 
+
+**Root Cause:** The event did not have a public resource locator entry in the database. Public events require a `PublicResourceLocator` record to be accessible via the public events page.
+
+**Solution:** Created a public resource locator for the GIESM event:
+- Public Key: `giesm-2026-13a3b800`
+- Status: ACTIVE
+- Public URL: https://app.neonultra.ng/public/events/giesm-2026-13a3b800
+
+**Verification:**
+- Event page now loads successfully (HTTP 200)
+- Event appears in the public events listing
+- Page displays correct event details (name, date, venue)
+
+**Scripts Created:**
+- `web/scripts/check-event-locator.ts` — Verify if an event has a public locator
+- `web/scripts/create-event-locator.ts` — Create a public locator for an event
+- `web/scripts/check-public-events-listing.ts` — List all active event locators
+
+**For Future Events:** When creating new events that should be publicly visible, ensure a public resource locator is created. Use the `create-event-locator.ts` script or create one manually in the `PublicResourceLocator` table.
+
+**Committed:** `7fd8cdb` — feat: add public locator scripts for event visibility
