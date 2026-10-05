@@ -8175,3 +8175,22 @@ After the event update, clicking on the GIESM event from the public events page 
 **For Future Events:** When creating new events that should be publicly visible, ensure a public resource locator is created. Use the `create-event-locator.ts` script or create one manually in the `PublicResourceLocator` table.
 
 **Committed:** `7fd8cdb` — feat: add public locator scripts for event visibility
+
+### 2026-10-05 - GIESM /giesm 500: sportConfig repair (my regression, fixed); no redirect needed
+
+**Reported:** ads use https://app.neonultra.ng/giesm and it returned a 500; asked to redirect it to the new URL. Investigation showed no redirect was wanted or needed.
+
+**Root cause (introduced by 2026-10-04 form update):** wrote RegistrationForm.sportConfig with gender 'CO_ED' - the zod schema (web/src/lib/registration/sport-config.ts) accepts only FEMALE|MALE|ANY. /giesm is a first-class route (web/src/app/giesm/page.tsx -> PublicRegistrationExperience -> parseSportConfig) that threw SportConfigError on load (confirmed in journalctl). The custom genderSplit/coaches keys were also silently stripped and the 6-12 age band + requireGuardianConsent were dropped.
+
+**Fix:** web/scripts/fix-giesm-sport-config.ts rewrote sportConfig schema-valid (gender ANY, minAge 6, maxAge 12, guardian consent true, rosters VOLLEYBALL 10-20 active 12 / FLAG_RACE 5-10 order-required), validated with parseSportConfig before the write. Applied on production via SSH (CRLF in the wrapper caused a first-run ERR_MODULE_NOT_FOUND; converted with sed and re-ran).
+
+**Redirect decision:** none added. /giesm renders the registration form in place (the correct ad target); /public/events/giesm-2026-13a3b800 is the zone/ticket page with no registration link, so redirecting would downgrade the flow. Verified: /giesm 200 (form title in HTML), /register/neon-ultra/giesm 200, public event page 200.
+
+**Hardening:** template to v1.1.0 (no CO_ED/genderSplit, added notes), apply-registration-template.ts now pre-validates sportConfig via parseSportConfig before writing, template README documents valid gender values. Fixed GIESM_2026_REGISTRATION_UPDATE.md which had listed the login-only /events/[id]/registration path as the public form URL.
+
+**Known limitation (documented, not silently claimed):** per-gender minimums (5 male + 5 female) are not enforceable by the current schema; gender is collected per participant and only total roster bounds are validated. Enforcing the split needs a validation.ts extension - follow-up.
+
+**Verification:** npm run typecheck clean; prod logs no new SportConfigError after fix; curl 200 on /giesm, /register/neon-ultra/giesm, /public/events/giesm-2026-13a3b800.
+
+**Next step:** optional follow-up - per-gender roster validation in web/src/lib/registration/validation.ts if ops wants the 5M+5F rule enforced, not just collected.
+

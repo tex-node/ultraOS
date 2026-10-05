@@ -1,4 +1,5 @@
 import { prisma } from '../src/lib/prisma';
+import { parseSportConfig } from '../src/lib/registration/sport-config';
 import { readFileSync } from 'fs';
 
 interface TemplateConfig {
@@ -20,6 +21,11 @@ async function applyTemplate(eventId: string, templatePath: string) {
 
   // Load template
   const template: TemplateConfig = JSON.parse(readFileSync(templatePath, 'utf-8'));
+
+  // Fail fast before any write: an invalid sportConfig would throw SportConfigError on every
+  // page load that resolves this form (see the /giesm 500 incident).
+  parseSportConfig(template.sportConfig);
+
   console.log(`Template: ${template.name}`);
   console.log(`Description: ${template.description}\n`);
 

@@ -105,8 +105,8 @@ All changes verified on production:
 The registration form is now ready for use. Coaches can:
 1. Register their team during the October 4-17 window
 2. Enter head coach and assistant coach information
-3. Add volleyball players (10-20, with gender split)
-4. Add flag race players (5-10, with gender split)
+3. Add volleyball players (10-20 total; gender collected per player — see the per-gender limitation below)
+4. Add flag race athletes (5-10; roster order required)
 5. Submit the team registration
 
 ## Issue Resolution: 404 Error on Public Events Page
@@ -133,6 +133,20 @@ The registration form is now ready for use. Coaches can:
 **For Future Events:**
 When creating new events that should be publicly visible, ensure a public resource locator is created. Use the `create-event-locator.ts` script or create one manually in the `PublicResourceLocator` table.
 
+## Issue Resolution: /giesm 500 (and the redirect question)
+
+**Question from ops (2026-10-05):** ads already use `https://app.neonultra.ng/giesm`; it was returning 500 — asked to redirect it to the "new" URL.
+
+**Root cause of the 500:** the 2026-10-04 form update wrote `sportConfig.gender: "CO_ED"`, but `web/src/lib/registration/sport-config.ts` only accepts `FEMALE | MALE | ANY`. The custom `genderSplit`/`coaches` keys were also silently stripped by zod, and the `minAge/maxAge` band (6–12) and `requireGuardianConsent: true` were dropped. `/giesm` is a first-class route (`web/src/app/giesm/page.tsx` → `PublicRegistrationExperience` → `loadPublicRegistration` → `parseSportConfig`) which threw `SportConfigError` on every load.
+
+**Fix applied:** `web/scripts/fix-giesm-sport-config.ts` rewrote the form's `sportConfig` schema-valid: `gender: "ANY"` (co-ed), `minAge: 6`, `maxAge: 12`, guardian consent restored, valid per-sport rosters (VOLLEYBALL 10–20, FLAG_RACE 5–10 order-required). Validated with `parseSportConfig` before writing.
+
+**Redirect needed?** No — and none was added. `/giesm` is the canonical ad URL and renders the registration form in place; redirecting it to `/public/events/giesm-2026-13a3b800` would be a downgrade, because that locator page is the zone/ticket page (this event has no seat zones and it does not link to the registration form). The 500 was data, not a dead route.
+
+**Hardening:** template bumped to v1.1.0 (no `CO_ED`/`genderSplit`), `apply-registration-template.ts` now pre-validates `sportConfig` with `parseSportConfig` before any write, README documents the valid values.
+
+**Known limitation:** per-gender minimums (5 male + 5 female for volleyball; 5+5 cap for flag race) are NOT enforceable by the current schema. The form collects `gender` per participant and enforces total roster bounds (volleyball min 10). Hardening this needs a `validation.ts` extension — flagged as a follow-up, not silently assumed enforced.
+
 ## All Files Modified/Created
 
 **Modified:**
@@ -154,8 +168,9 @@ When creating new events that should be publicly visible, ensure a public resour
 - `GIESM_2026_REGISTRATION_UPDATE.md` - Complete summary document
 
 **Production URLs:**
-- Event page: https://app.neonultra.ng/public/events/giesm-2026-13a3b800
-- Registration form: https://app.neonultra.ng/events/cmu2i5e9p0004plkkrnjhej0o/registration
+- Public registration (the ad URL): https://app.neonultra.ng/giesm — canonical; also aliased by https://app.neonultra.ng/register/neon-ultra/giesm
+- Public event page (locator): https://app.neonultra.ng/public/events/giesm-2026-13a3b800 (zone/ticket page; no registration link — not the ad target)
+- Admin view (requires login): https://app.neonultra.ng/events/cmu2i5e9p0004plkkrnjhej0o/registration
 
 ## Files Modified/Created
 
