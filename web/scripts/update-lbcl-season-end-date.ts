@@ -2,20 +2,19 @@
 // Games 11-15 (which extend LBCL's "2026 Season" through Sep 26) never updated the existing
 // Season row's endDate (still Sep 20 from the original 10-game ingestion). Corrects it directly.
 //
-// Usage: npx tsx scripts/update-lbcl-season-end-date.ts <organizationId> [--apply]
+// Usage: npx tsx scripts/update-lbcl-season-end-date.ts <organizationId> <YYYY-MM-DD> [--apply]
 import { prisma } from "../src/lib/prisma";
 import { withOrganizationContext } from "../src/lib/tenant-context";
 
-const NEW_END_DATE = new Date("2026-09-26T00:00:00.000Z");
-
 async function main() {
-  const [organizationId] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+  const [organizationId, endDateArg] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const apply = process.argv.includes("--apply");
-  if (!organizationId) {
-    console.error("Usage: npx tsx scripts/update-lbcl-season-end-date.ts <organizationId> [--apply]");
+  if (!organizationId || !endDateArg || !/^\d{4}-\d{2}-\d{2}$/.test(endDateArg)) {
+    console.error("Usage: npx tsx scripts/update-lbcl-season-end-date.ts <organizationId> <YYYY-MM-DD> [--apply]");
     process.exitCode = 1;
     return;
   }
+  const NEW_END_DATE = new Date(`${endDateArg}T00:00:00.000Z`);
 
   await withOrganizationContext(organizationId, async (tx) => {
     const season = await tx.season.findFirst({
