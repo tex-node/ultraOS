@@ -7,24 +7,19 @@ import { MissingOrganizationContextError, requireFixturePermission, requireSessi
 import { writeAuditLog } from "@/lib/audit";
 import {
   createGameEvent,
-  withGameWrite,
-  applyPlayerShotStatDeltas,
-  applyTeamShotStatDeltas,
-  applyCountingStatDelta,
-  voidScoreEvent,
-  correctScoreEvent,
+  type AuthActor,
 } from "@/server/scoring";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { remainingShotClockSeconds } from "@/lib/game-rules";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import {
-  detectUltraTimeTransition,
-  effectiveRuleSnapshot,
-  isUltraTimeUnderRules,
-  negateShotStatDeltas,
-  scoreShot,
-  shotStatDeltas,
-} from "@/lib/ultra-scoring-engine";
+  recordScoreInternal,
+  voidScoreEventActionInternal,
+  correctScoreEventActionInternal,
+  recordStatEventInternal,
+  undoLastEventInternal,
+  syncUltraTimeState,
+} from "./actions-internal";
 import { recalculateStandings } from "@/lib/standings-recalculate";
 import { getSportDefinition } from "@/lib/sports/registry";
 import { LEGACY_STRUCTURE, structureFromRules } from "@/lib/sports/game-structure";
@@ -38,7 +33,6 @@ import { shootoutWinner, type ShootoutKick } from "@/lib/sports/shootout";
 import { resolveScoringModule } from "@/lib/sports/scoring-modules";
 import { replayTennisGamePoints } from "@/lib/sports/tennis-scoring";
 import { hasBlockingIssue, runConstraints } from "@/lib/sports/validators";
-import type { Prisma } from "@/generated/prisma/client";
 
 function assertGameIsMutable(status: string, fixtureStatus: string) {
   if (
@@ -51,65 +45,9 @@ function assertGameIsMutable(status: string, fixtureStatus: string) {
   }
 }
 
-// Ultra Time is otherwise only ever inferred retrospectively from the clock. Called from
-// every action that can move the clock or period forward, this persists the boundary the
-// moment it's actually crossed - Game.isUltraTimeActive plus an explicit
-// ULTRA_TIME_STARTED/ULTRA_TIME_ENDED ledger event, not just a value re-derived on read.
-async function syncUltraTimeState(
-  tx: Prisma.TransactionClient,
-  game: { id: string; fixtureId: string; status: string; currentPeriod: number; isUltraTimeActive: boolean; nextEventSequence: number; ruleSnapshot: Parameters<typeof effectiveRuleSnapshot>[0] },
-  organizationId: string,
-  actorId: string,
-  remainingSeconds: number,
-) {
-  const { isActive, transition } = detectUltraTimeTransition(
-    effectiveRuleSnapshot(game.ruleSnapshot),
-    game.isUltraTimeActive,
-    game.status,
-    game.currentPeriod,
-    remainingSeconds,
-  );
-  if (!transition) return { isUltraTimeActive: game.isUltraTimeActive, nextEventSequence: game.nextEventSequence };
-
-  await tx.game.update({
-    where: { id: game.id },
-    data: { isUltraTimeActive: isActive },
-  });
-  await createGameEvent(
-    {
-      gameId: game.id,
-      fixtureId: game.fixtureId,
-      eventType: transition === "STARTED" ? "ULTRA_TIME_STARTED" : "ULTRA_TIME_ENDED",
-      period: game.currentPeriod,
-      clockSeconds: remainingSeconds,
-      description: transition === "STARTED" ? "Ultra Time started (×2 scoring active)" : "Ultra Time ended",
-      isUltraTime: isActive,
-    },
-    { actor: { id: actorId, organizationId }, source: "LIVE_UI", tx },
-  );
-  return { isUltraTimeActive: isActive, nextEventSequence: game.nextEventSequence + 1 };
-}
-
-const STAT_FIELD: Record<string, "rebounds" | "assists" | "steals" | "blocks" | "turnovers" | "fouls"> = {
-  REBOUND: "rebounds",
-  ASSIST: "assists",
-  STEAL: "steals",
-  BLOCK: "blocks",
-  TURNOVER: "turnovers",
-  FOUL: "fouls",
-};
-
-const ULTRA_TIME_STAT_FIELD: Record<
-  "rebounds" | "assists" | "steals" | "blocks" | "turnovers" | "fouls",
-  "ultraTimeRebounds" | "ultraTimeAssists" | "ultraTimeSteals" | "ultraTimeBlocks" | "ultraTimeTurnovers" | "ultraTimeFouls"
-> = {
-  rebounds: "ultraTimeRebounds",
-  assists: "ultraTimeAssists",
-  steals: "ultraTimeSteals",
-  blocks: "ultraTimeBlocks",
-  turnovers: "ultraTimeTurnovers",
-  fouls: "ultraTimeFouls",
-};
+// syncUltraTimeState, STAT_FIELD, and ULTRA_TIME_STAT_FIELD moved to ./actions-internal (A5,
+// 2026-09-29) alongside the five ledger-writing actions that use them - syncUltraTimeState is
+// still called from this file (pauseGame/resumeGame/advancePeriod below), imported above.
 
 export async function startGame(fixtureId: string) {
   const { organizationId } = await requireFixturePermission("game:operate", fixtureId);
@@ -366,383 +304,63 @@ export async function confirmMandatorySubstitution(gameId: string, fixtureId: st
   revalidatePath(`/games/${fixtureId}/live`);
 }
 
-const score = z.object({
-  seasonClubId: z.string(),
-  playerId: z.string(),
-  // The shot value as attempted (1-4 for a make, negative for a manual scoreboard correction).
-  // Ultra Time's 2x multiplier is applied server-side, not entered by the scorer.
-  points: z.coerce.number().int().min(-4).max(4).refine((value) => value !== 0),
-  description: z.string(),
-});
-
+// Thin wrapper: authorization stays here (requireFixturePermission), the actual write logic lives
+// in recordScoreInternal (./actions-internal), which takes an injected actor instead of deriving
+// one from a session - see actions-internal.ts's header comment for why. External signature
+// unchanged, so live/page.tsx's `<form action={recordScore.bind(null, gameId, fixtureId)}>` keeps
+// working exactly as before.
 export async function recordScore(
   gameId: string,
   fixtureId: string,
   formData: FormData,
 ) {
   const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
-  const input = score.parse(Object.fromEntries(formData.entries()));
-
-  await withGameWrite(
-    gameId,
-    fixtureId,
-    { actor: { id: session.user.id, organizationId }, source: "LIVE_UI" },
-    async ({ game, tx, ...writeCtx }) => {
-      if (
-        ![
-          game.fixture.homeSeasonClubId!,
-          game.fixture.awaySeasonClubId!,
-        ].includes(input.seasonClubId)
-      ) {
-        throw new Error("INVALID_TEAM");
-      }
-
-      const player = input.playerId
-        ? await tx.player.findFirst({
-            where: {
-              id: input.playerId,
-              seasonClubId: input.seasonClubId,
-            },
-          })
-        : null;
-      if (input.playerId && !player) throw new Error("INVALID_PLAYER");
-
-      await syncUltraTimeState(tx, game, organizationId, session.user.id, remainingClockSeconds(game));
-
-      // Games without a persisted GameRuleSnapshot (every Season Zero game) score under the
-      // same legacy defaults they always have - the engine only enforces something new (e.g.
-      // a disabled 4PT rule) once a game actually has a snapshot attached.
-      const shot = scoreShot({
-        rules: effectiveRuleSnapshot(game.ruleSnapshot),
-        shotValue: input.points,
-        gameStatus: game.status,
-        currentPeriod: game.currentPeriod,
-        remainingClockSeconds: remainingClockSeconds(game),
-      });
-      if (!shot.valid) throw new Error(shot.error);
-      const { basePointValue, multiplier, pointsAwarded, isUltraTime: ultraTime } = shot;
-
-      const isHome = input.seasonClubId === game.fixture.homeSeasonClubId!;
-      const currentScore = isHome
-        ? game.fixture.homeScore
-        : game.fixture.awayScore;
-      const nextScore = Math.max(0, currentScore + pointsAwarded);
-      const actualPoints = nextScore - currentScore;
-
-      await tx.fixture.update({
-        where: { id: game.fixtureId },
-        data: isHome ? { homeScore: nextScore } : { awayScore: nextScore },
-      });
-      await createGameEvent(
-        {
-          gameId,
-          fixtureId,
-          seasonClubId: input.seasonClubId,
-          playerId: player?.id ?? null,
-          eventType: "SCORE",
-          points: actualPoints,
-          basePointValue,
-          multiplier,
-          period: game.currentPeriod,
-          clockSeconds: remainingClockSeconds(game),
-          description:
-            input.description ||
-            `${actualPoints > 0 ? "+" : ""}${actualPoints} points${ultraTime && basePointValue ? ` (Ultra Time: ${basePointValue}×${multiplier})` : ""}`,
-          made: basePointValue !== null ? true : null,
-          isFourPointAttempt: basePointValue === 4,
-          isUltraTime: ultraTime,
-          homeScoreBefore: isHome ? currentScore : game.fixture.homeScore,
-          awayScoreBefore: isHome ? game.fixture.awayScore : currentScore,
-          homeScoreAfter: isHome ? nextScore : game.fixture.homeScore,
-          awayScoreAfter: isHome ? game.fixture.awayScore : nextScore,
-        },
-        { ...writeCtx, tx },
-      );
-
-      const deltas = shotStatDeltas({ basePointValue, isUltraTime: ultraTime });
-      if (player && actualPoints !== 0) {
-        await applyPlayerShotStatDeltas(tx, organizationId, gameId, player.id, input.seasonClubId, deltas, actualPoints);
-      }
-      await applyTeamShotStatDeltas(
-        tx,
-        organizationId,
-        gameId,
-        input.seasonClubId,
-        deltas,
-        ultraTime ? actualPoints : 0,
-        0,
-        nextScore,
-      );
-      const opposingSeasonClubId = isHome ? game.fixture.awaySeasonClubId! : game.fixture.homeSeasonClubId!;
-      if (ultraTime && actualPoints !== 0) {
-        await applyTeamShotStatDeltas(
-          tx,
-          organizationId,
-          gameId,
-          opposingSeasonClubId,
-          { fourPointsMade: 0, fourPointsAttempted: 0, ultraTimeFieldGoalsMade: 0, ultraTimeFieldGoalsAttempted: 0 },
-          0,
-          actualPoints,
-          isHome ? game.fixture.awayScore : game.fixture.homeScore,
-        );
-      }
-      await writeAuditLog(tx, {
-        organizationId,
-        userId: session.user.id,
-        action: actualPoints < 0 ? "SCORE_CORRECTED" : "SCORE_CHANGED",
-        entityType: "Game",
-        entityId: gameId,
-        details: {
-          fixtureId,
-          seasonClubId: input.seasonClubId,
-          playerId: player?.id ?? null,
-          requestedPoints: input.points,
-          actualPoints,
-          previousScore: currentScore,
-          newScore: nextScore,
-          description: input.description,
-        },
-      });
-    },
-  );
+  const actor: AuthActor = { id: session.user.id, organizationId };
+  await recordScoreInternal(gameId, fixtureId, formData, actor);
 
   revalidatePath(`/games/${fixtureId}/live`);
   revalidatePath(`/scoreboard/${gameId}`);
 }
 
-const voidScoreEventSchema = z.object({
-  eventId: z.string(),
-  reason: z.string().min(1),
-});
-
-// Reverses a SCORE event's effect (fixture score, player/team totals) and marks it VOIDED.
-// The event row itself is never deleted - only its status changes - so the ledger stays a
-// complete, append-only record and event-replay (summing points over ACTIVE events) still
-// reproduces the correct current score.
+// Reverses a SCORE event's effect (fixture score, player/team totals) and marks it VOIDED. Thin
+// wrapper - see recordScore's comment above for the split rationale.
 export async function voidScoreEventAction(
   gameId: string,
   fixtureId: string,
   formData: FormData,
 ) {
   const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
-  const input = voidScoreEventSchema.parse(Object.fromEntries(formData.entries()));
-
-  await withGameWrite(
-    gameId,
-    fixtureId,
-    { actor: { id: session.user.id, organizationId }, source: "LIVE_UI" },
-    async (writeCtx) => {
-      const { voided, previousScore, newScore } = await voidScoreEvent(input.eventId, input.reason, writeCtx);
-      await writeAuditLog(writeCtx.tx, {
-        organizationId,
-        userId: session.user.id,
-        action: "GAME_EVENT_VOIDED",
-        entityType: "GameEvent",
-        entityId: voided.id,
-        details: {
-          fixtureId,
-          gameId,
-          seasonClubId: voided.seasonClubId,
-          playerId: voided.playerId,
-          voidedPoints: voided.points ?? 0,
-          previousScore,
-          newScore,
-          reason: input.reason,
-        },
-      });
-    },
-  );
+  const actor: AuthActor = { id: session.user.id, organizationId };
+  await voidScoreEventActionInternal(gameId, fixtureId, formData, actor);
 
   revalidatePath(`/games/${fixtureId}/live`);
   revalidatePath(`/scoreboard/${gameId}`);
 }
 
-const correctScoreEventSchema = z.object({
-  eventId: z.string(),
-  // The corrected shot value (1-4), replacing whatever the original event recorded - e.g.
-  // 2PT -> 3PT, 3PT -> 4PT, or a made shot being corrected to a miss (points omitted/0 is
-  // not valid here; use voidScoreEventAction for "this never happened").
-  points: z.coerce.number().int().min(1).max(4),
-  // Optional: corrects a shot attributed to the wrong player. Must belong to the same
-  // SeasonClub as the original event - a correction fixes who scored, not which team.
-  playerId: z.string().optional(),
-  reason: z.string().min(1),
-});
-
-// Corrects a SCORE event's value and/or scoring player without losing the original record:
-// the original event is marked CORRECTED (never mutated in place beyond that status), and a
-// new event is created that supersedes it, carrying the corrected value re-evaluated under
-// the same rules and the same frozen period/clock the original shot actually happened at
-// (not "now" - a correction made minutes later shouldn't inherit a different Ultra Time state).
+// Corrects a SCORE event's value and/or scoring player without losing the original record. Thin
+// wrapper - see recordScore's comment above for the split rationale.
 export async function correctScoreEventAction(
   gameId: string,
   fixtureId: string,
   formData: FormData,
 ) {
   const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
-  const input = correctScoreEventSchema.parse(Object.fromEntries(formData.entries()));
-
-  await withGameWrite(
-    gameId,
-    fixtureId,
-    { actor: { id: session.user.id, organizationId }, source: "LIVE_UI" },
-    async ({ game, tx, ...writeCtx }) => {
-      // Validation (shot legality, wrong-player lookup) needs the original event's own fields
-      // (seasonClubId, frozen period/clockSeconds) - loaded here for that; correctScoreEvent loads
-      // it again itself for the write, the same double-load-is-safe pattern every prior batch uses.
-      const event = await tx.gameEvent.findUniqueOrThrow({ where: { id: input.eventId } });
-      if (event.gameId !== gameId) throw new Error("INVALID_EVENT");
-      if (event.eventType !== "SCORE" && event.eventType !== "SCORE_CORRECTION") throw new Error("NOT_A_SCORE_EVENT");
-      if (event.status !== "ACTIVE") throw new Error("EVENT_NOT_ACTIVE");
-      if (event.seasonClubId === null) throw new Error("INVALID_EVENT");
-
-      let newPlayer = null;
-      if (input.playerId) {
-        newPlayer = await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: event.seasonClubId } });
-        if (!newPlayer) throw new Error("INVALID_PLAYER");
-      }
-
-      const shot = scoreShot({
-        rules: effectiveRuleSnapshot(game.ruleSnapshot),
-        shotValue: input.points,
-        gameStatus: "LIVE",
-        currentPeriod: event.period,
-        remainingClockSeconds: event.clockSeconds ?? 0,
-      });
-      if (!shot.valid) throw new Error(shot.error);
-
-      const { original, previousScore, newScore, actualPoints } = await correctScoreEvent(
-        {
-          eventId: input.eventId,
-          reason: input.reason,
-          replacement: {
-            playerId: newPlayer?.id ?? null,
-            basePointValue: shot.basePointValue,
-            multiplier: shot.multiplier,
-            isUltraTime: shot.isUltraTime,
-            pointsAwarded: shot.pointsAwarded,
-          },
-        },
-        { game, tx, ...writeCtx },
-      );
-
-      await writeAuditLog(tx, {
-        organizationId,
-        userId: session.user.id,
-        action: "GAME_EVENT_CORRECTED",
-        entityType: "GameEvent",
-        entityId: original.id,
-        details: {
-          fixtureId,
-          gameId,
-          seasonClubId: original.seasonClubId,
-          previousPlayerId: event.playerId,
-          newPlayerId: newPlayer?.id ?? event.playerId ?? null,
-          previousPoints: event.points,
-          newPoints: actualPoints,
-          previousScore,
-          newScore,
-          reason: input.reason,
-        },
-      });
-    },
-  );
+  const actor: AuthActor = { id: session.user.id, organizationId };
+  await correctScoreEventActionInternal(gameId, fixtureId, formData, actor);
 
   revalidatePath(`/games/${fixtureId}/live`);
   revalidatePath(`/scoreboard/${gameId}`);
 }
 
-const statEvent = z.object({
-  seasonClubId: z.string(),
-  playerId: z.string().min(1),
-  eventType: z.enum([
-    "REBOUND",
-    "ASSIST",
-    "STEAL",
-    "BLOCK",
-    "TURNOVER",
-    "FOUL",
-  ]),
-  // Only meaningful when eventType is FOUL, and even then never required - some fouls
-  // (technicals, unclear contact) don't have a clearly attributable other party.
-  fouledPlayerId: z.string().optional(),
-  foulType: z.preprocess((v) => (v === "" ? undefined : v), z.enum(["PERSONAL", "TECHNICAL", "FLAGRANT", "OFFENSIVE"]).optional()),
-  description: z.string(),
-});
-
+// Thin wrapper - see recordScore's comment above for the split rationale.
 export async function recordStatEvent(
   gameId: string,
   fixtureId: string,
   formData: FormData,
 ) {
   const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
-  const input = statEvent.parse(Object.fromEntries(formData.entries()));
-
-  await withGameWrite(
-    gameId,
-    fixtureId,
-    { actor: { id: session.user.id, organizationId }, source: "LIVE_UI" },
-    async ({ game, tx, ...writeCtx }) => {
-      if (
-        ![
-          game.fixture.homeSeasonClubId!,
-          game.fixture.awaySeasonClubId!,
-        ].includes(input.seasonClubId)
-      ) {
-        throw new Error("INVALID_TEAM");
-      }
-
-      const player = await tx.player.findFirst({
-        where: {
-          id: input.playerId,
-          seasonClubId: input.seasonClubId,
-        },
-      });
-      if (!player) throw new Error("INVALID_PLAYER");
-
-      let fouledPlayerId: string | undefined;
-      if (input.eventType === "FOUL" && input.fouledPlayerId) {
-        const fouledPlayer = await tx.player.findFirst({
-          where: { id: input.fouledPlayerId, seasonClubId: { in: [game.fixture.homeSeasonClubId!, game.fixture.awaySeasonClubId!] } },
-        });
-        if (!fouledPlayer) throw new Error("INVALID_FOULED_PLAYER");
-        fouledPlayerId = fouledPlayer.id;
-      }
-
-      const field = STAT_FIELD[input.eventType];
-      const remaining = remainingClockSeconds(game);
-      await syncUltraTimeState(tx, game, organizationId, session.user.id, remaining);
-      const ultraTime = isUltraTimeUnderRules(effectiveRuleSnapshot(game.ruleSnapshot), game.status, game.currentPeriod, remaining);
-
-      await createGameEvent(
-        {
-          gameId,
-          fixtureId,
-          seasonClubId: input.seasonClubId,
-          playerId: player.id,
-          fouledPlayerId: input.eventType === "FOUL" ? fouledPlayerId : undefined,
-          foulType: input.eventType === "FOUL" ? input.foulType || undefined : undefined,
-          eventType: input.eventType,
-          period: game.currentPeriod,
-          clockSeconds: remaining,
-          description: input.description || input.eventType,
-          isUltraTime: ultraTime,
-        },
-        { ...writeCtx, tx },
-      );
-      const ultraField = ULTRA_TIME_STAT_FIELD[field];
-      await applyCountingStatDelta(
-        tx,
-        organizationId,
-        gameId,
-        player.id,
-        input.seasonClubId,
-        field,
-        1,
-        ultraTime ? { field: ultraField, delta: 1 } : null,
-      );
-    },
-  );
+  const actor: AuthActor = { id: session.user.id, organizationId };
+  await recordStatEventInternal(gameId, fixtureId, formData, actor);
 
   revalidatePath(`/games/${fixtureId}/live`);
 }
@@ -837,126 +455,11 @@ export async function finalizeGame(gameId: string, fixtureId: string) {
 // intact and auditable. If the operator meant to undo something further back, they should use
 // the general correction form (negative points / another stat entry) instead - this button only
 // ever targets the single most recent action.
+// Thin wrapper - see recordScore's comment above for the split rationale.
 export async function undoLastEvent(gameId: string, fixtureId: string) {
   const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
-
-  await withGameWrite(
-    gameId,
-    fixtureId,
-    { actor: { id: session.user.id, organizationId }, source: "LIVE_UI" },
-    async ({ game, tx, ...writeCtx }) => {
-      const last = await tx.gameEvent.findFirst({
-        // Ultra Time transitions are system-generated (see syncUltraTimeState), not something
-        // an operator entered - undo should skip past them to the real last manual action.
-        where: { gameId, eventType: { notIn: ["ULTRA_TIME_STARTED", "ULTRA_TIME_ENDED"] } },
-        orderBy: { createdAt: "desc" },
-      });
-      if (!last) throw new Error("NO_EVENTS_TO_UNDO");
-      if (!last.seasonClubId) throw new Error("EVENT_NOT_UNDOABLE");
-
-      const clockSeconds = remainingClockSeconds(game);
-
-      if (last.eventType === "SCORE") {
-        const isHome = last.seasonClubId === game.fixture.homeSeasonClubId!;
-        const currentScore = isHome ? game.fixture.homeScore : game.fixture.awayScore;
-        const reversal = -(last.points ?? 0);
-        const nextScore = Math.max(0, currentScore + reversal);
-        const actualReversal = nextScore - currentScore;
-
-        await tx.fixture.update({
-          where: { id: fixtureId },
-          data: isHome ? { homeScore: nextScore } : { awayScore: nextScore },
-        });
-        await createGameEvent(
-          {
-            gameId,
-            fixtureId,
-            seasonClubId: last.seasonClubId,
-            playerId: last.playerId,
-            eventType: "SCORE",
-            points: actualReversal,
-            period: game.currentPeriod,
-            clockSeconds,
-            description: `Undo: reversed previous ${last.points! > 0 ? "+" : ""}${last.points} score entry`,
-          },
-          { ...writeCtx, tx },
-        );
-        // Reverse the shot-category deltas too, not just the raw point total - the same helper
-        // voidScoreEventAction uses, so undoing a made 3-pointer decrements 3PM/3PA the same way
-        // voiding it would, instead of leaving those fields inflated relative to `points`.
-        const reversedDeltas = negateShotStatDeltas(shotStatDeltas({ basePointValue: last.basePointValue, isUltraTime: last.isUltraTime }));
-        if (last.playerId && actualReversal !== 0) {
-          await applyPlayerShotStatDeltas(tx, organizationId, gameId, last.playerId, last.seasonClubId, reversedDeltas, actualReversal);
-        }
-        await applyTeamShotStatDeltas(
-          tx,
-          organizationId,
-          gameId,
-          last.seasonClubId,
-          reversedDeltas,
-          last.isUltraTime ? actualReversal : 0,
-          0,
-          nextScore,
-        );
-        if (last.isUltraTime && actualReversal !== 0) {
-          const opposingSeasonClubId = isHome ? game.fixture.awaySeasonClubId! : game.fixture.homeSeasonClubId!;
-          await applyTeamShotStatDeltas(
-            tx,
-            organizationId,
-            gameId,
-            opposingSeasonClubId,
-            { fourPointsMade: 0, fourPointsAttempted: 0, ultraTimeFieldGoalsMade: 0, ultraTimeFieldGoalsAttempted: 0 },
-            0,
-            actualReversal,
-            isHome ? game.fixture.awayScore : game.fixture.homeScore,
-          );
-        }
-      } else if (last.playerId && STAT_FIELD[last.eventType]) {
-        const field = STAT_FIELD[last.eventType];
-        await createGameEvent(
-          {
-            gameId,
-            fixtureId,
-            seasonClubId: last.seasonClubId,
-            playerId: last.playerId,
-            fouledPlayerId: last.fouledPlayerId,
-            foulType: last.foulType,
-            eventType: last.eventType,
-            period: game.currentPeriod,
-            clockSeconds,
-            description: `Undo: reversed previous ${last.eventType.toLowerCase()}`,
-          },
-          { ...writeCtx, tx },
-        );
-        const existing = await tx.playerStat.findUnique({ where: { gameId_playerId: { gameId, playerId: last.playerId } } });
-        if (existing && existing[field] > 0) {
-          const ultraField = ULTRA_TIME_STAT_FIELD[field];
-          const reverseUltraTime = last.isUltraTime && (existing[ultraField] ?? 0) > 0;
-          await applyCountingStatDelta(
-            tx,
-            organizationId,
-            gameId,
-            last.playerId,
-            last.seasonClubId,
-            field,
-            -1,
-            reverseUltraTime ? { field: ultraField, delta: -1 } : null,
-          );
-        }
-      } else {
-        throw new Error("EVENT_NOT_UNDOABLE");
-      }
-
-      await writeAuditLog(tx, {
-        organizationId,
-        userId: session.user.id,
-        action: "GAME_EVENT_UNDONE",
-        entityType: "Game",
-        entityId: gameId,
-        details: { fixtureId, undoneEventId: last.id, undoneEventType: last.eventType, undoneDescription: last.description },
-      });
-    },
-  );
+  const actor: AuthActor = { id: session.user.id, organizationId };
+  await undoLastEventInternal(gameId, fixtureId, actor);
 
   revalidatePath(`/games/${fixtureId}/live`);
   revalidatePath(`/scoreboard/${gameId}`);

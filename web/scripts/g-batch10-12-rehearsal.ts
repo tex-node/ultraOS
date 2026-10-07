@@ -13,6 +13,15 @@
 // explicit actor for the session-derived one - not a shortcut around the logic under test, only
 // around the login form.
 //
+// IMPORTANT - this is a MIRROR, not an invocation: it does not import or call recordScore/
+// recordStatEvent/etc. themselves, only a hand-copied reimplementation of their bodies. It does
+// NOT automatically track a future change to those functions' actual logic - editing
+// actions.ts without also updating the corresponding mirror here will not be caught by anything,
+// and this script will keep silently testing the OLD behavior. Confirmed the hard way (2026-09-28):
+// a planned refactor of recordScore (extracting its score/stat effects into a shared function
+// reusable by the offline-sync replay path) cannot use this script as a before/after safety net for
+// exactly this reason - see docs/canonical-write-audit.md.
+//
 // Requires NODE_OPTIONS=--conditions=react-server to resolve the "server-only" package guard to
 // its empty stub (the condition it uses in a real Next.js server build) instead of the throwing
 // default a plain Node/tsx run would otherwise get.
