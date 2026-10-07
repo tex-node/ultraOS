@@ -8,6 +8,7 @@ import {
   LEGACY_RULE_SNAPSHOT,
   negateShotStatDeltas,
   replayScore,
+  resolveClientShot,
   scoreShot,
   shotStatDeltas,
   type RuleSnapshotForScoring,
@@ -61,6 +62,55 @@ test("scoreShot rejects impossible shot values", () => {
     assert.equal(result.valid, false);
     if (!result.valid) assert.equal(result.error, "INVALID_SHOT_VALUE");
   }
+});
+
+// ================= resolveClientShot: A4's offline-tap counterpart to the live path =================
+// The live path (games/actions.ts) calls scoreShot({ ..., remainingClockSeconds:
+// remainingClockSeconds(game) }) using the server's own Game row. resolveClientShot is the exact
+// same composition, over a plain object shape the offline client's LocalGame record already
+// matches - these tests prove the composition is correct, not scoreShot's own rules (already
+// covered above) or remainingClockSeconds' own elapsed-time math (covered in game-clock.test.ts).
+
+test("resolveClientShot: a paused game (no clockStartedAt) uses clockSecondsRemaining as-is, no elapsed-time deduction", () => {
+  const result = resolveClientShot({
+    game: { status: "PAUSED", clockSecondsRemaining: 500, clockStartedAt: null, currentPeriod: 2 },
+    rules: RULES,
+    shotValue: 2,
+  });
+  assert.deepEqual(result, { valid: true, basePointValue: 2, multiplier: 1, pointsAwarded: 2, isUltraTime: false });
+});
+
+test("resolveClientShot: a running clock with enough real time elapsed to be inside Ultra Time doubles the shot", () => {
+  // Ultra Time starts at <=60s remaining, final period. Clock started with 65s left, 10s of real
+  // time have elapsed since then (a fixed timestamp in the recent past, not a mocked Date.now()) -
+  // 55s remaining now, inside the window.
+  const clockStartedAt = new Date(Date.now() - 10_000).toISOString();
+  const result = resolveClientShot({
+    game: { status: "LIVE", clockSecondsRemaining: 65, clockStartedAt, currentPeriod: 2 },
+    rules: RULES,
+    shotValue: 3,
+  });
+  assert.deepEqual(result, { valid: true, basePointValue: 3, multiplier: 2, pointsAwarded: 6, isUltraTime: true });
+});
+
+test("resolveClientShot: a running clock with too little real time elapsed to reach Ultra Time is not multiplied", () => {
+  // Clock started with 90s left, 5s elapsed - 85s remaining, outside the <=60s Ultra Time window.
+  const clockStartedAt = new Date(Date.now() - 5_000).toISOString();
+  const result = resolveClientShot({
+    game: { status: "LIVE", clockSecondsRemaining: 90, clockStartedAt, currentPeriod: 2 },
+    rules: RULES,
+    shotValue: 3,
+  });
+  assert.deepEqual(result, { valid: true, basePointValue: 3, multiplier: 1, pointsAwarded: 3, isUltraTime: false });
+});
+
+test("resolveClientShot: still rejects a 4PT attempt when the rule snapshot disables it, same as the live path", () => {
+  const result = resolveClientShot({
+    game: { status: "LIVE", clockSecondsRemaining: 30, clockStartedAt: null, currentPeriod: 2 },
+    rules: RULES_NO_4PT,
+    shotValue: 4,
+  });
+  assert.deepEqual(result, { valid: false, error: "FOUR_POINT_DISABLED" });
 });
 
 test("isUltraTimeUnderRules requires LIVE status, final period, and the clock window", () => {

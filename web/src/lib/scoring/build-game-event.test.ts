@@ -103,3 +103,22 @@ test("sync-replayed statistician events keep the statistician ledger value; sync
   assert.equal(data.syncBatchId, "batch-1");
   assert.equal(data.sequenceNumber, 42);
 });
+
+test("resolvedBy: defaults to SERVER, clientObservedAt to null, for every existing call site", () => {
+  const data = buildGameEventCreateData(flipPossessionFields, {
+    organizationId: "org-1",
+    actorId: "user-1",
+    source: "ULTRA_NATIVE_LIVE_STATISTICIAN",
+  });
+  assert.equal(data.resolvedBy, "SERVER");
+  assert.equal(data.clientObservedAt, null);
+});
+
+test("resolvedBy: CLIENT and clientObservedAt are honored when the offline scoring-tap replay path supplies them", () => {
+  const data = buildGameEventCreateData(
+    { ...flipPossessionFields, resolvedBy: "CLIENT", clientObservedAt: "2026-09-28T20:00:00.000Z" },
+    { organizationId: "org-1", actorId: "user-1", source: "OFFLINE_SYNC" },
+  );
+  assert.equal(data.resolvedBy, "CLIENT");
+  assert.equal((data.clientObservedAt as Date).toISOString(), "2026-09-28T20:00:00.000Z");
+});

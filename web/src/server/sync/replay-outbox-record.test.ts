@@ -271,6 +271,164 @@ test("ID collision: a second record with a different idempotencyKey but the same
   }
 });
 
+// ================= Test 8: P2002 disambiguation under a genuine concurrent race =================
+test("concurrent resubmission of the identical record (same idempotencyKey, same entityId) resolves to one APPLIED and one DUPLICATE - never ID_COLLISION", async () => {
+  const ctx = await createTestDbContext();
+  try {
+    const { org, fixture, homeSeasonClub, rosterPlayer } = await seedOrgAndFixture(ctx);
+    const game = await seedGame(ctx, org.id, fixture.id);
+    const ctxArgs = { actor: { id: ACTOR_ID, organizationId: org.id }, deviceId: "device-1", syncBatchId: "batch-8", prisma: ctx.prisma };
+
+    // The exact same record, submitted twice at once - a flaky-retry race, not two different
+    // records. Before the fix, the idempotency claim happened LAST (after the entity insert), so
+    // both transactions would pass the earlier findUnique check and race into GameEvent's own id
+    // constraint instead - the loser would come back ID_COLLISION, not DUPLICATE, which would leave
+    // it permanently stuck in an offline client's outbox (drain() never retries a FAILED record).
+    const record = gameEventRecord({
+      idempotencyKey: "550e8400-e29b-41d4-a716-446655440040",
+      entityId: "6ba7b810-9dad-11d1-80b4-00c04fd43040",
+      payload: { gameId: game.id, seasonClubId: homeSeasonClub.id, playerId: rosterPlayer.id, eventType: "REBOUND", description: "raced", period: 1, clockSeconds: 500 },
+    });
+
+    const [first, second] = await Promise.all([
+      replayOutboxRecord(record, ctxArgs),
+      replayOutboxRecord(record, ctxArgs),
+    ]);
+
+    const statuses = [first.status, second.status].sort();
+    assert.deepEqual(statuses, ["APPLIED", "DUPLICATE"], "exactly one side of the race must win APPLIED and the other must see DUPLICATE - neither may come back ID_COLLISION/FAILED");
+
+    const events = await ctx.prisma.gameEvent.findMany({ where: { id: record.entityId } });
+    assert.equal(events.length, 1, "the race must produce exactly one GameEvent row, not zero and not two");
+
+    const idempotencyRows = await ctx.prisma.syncIdempotency.findMany({ where: { idempotencyKey: record.idempotencyKey } });
+    assert.equal(idempotencyRows.length, 1, "exactly one SyncIdempotency row, regardless of which side of the race claimed it");
+  } finally {
+    await ctx.teardown();
+  }
+});
+
+// ================= Test 9: unsupported operation rejected per-record, not batch-wide =================
+test("a batch containing an unsupported operation (Game UPDATE) fails only that record - the others still land", async () => {
+  const ctx = await createTestDbContext();
+  try {
+    const { org, fixture, homeSeasonClub, rosterPlayer } = await seedOrgAndFixture(ctx);
+    const game = await seedGame(ctx, org.id, fixture.id);
+    const ctxArgs = { actor: { id: ACTOR_ID, organizationId: org.id }, deviceId: "device-1", syncBatchId: "batch-9", prisma: ctx.prisma };
+
+    const goodBefore = gameEventRecord({
+      idempotencyKey: "550e8400-e29b-41d4-a716-446655440050",
+      entityId: "6ba7b810-9dad-11d1-80b4-00c04fd43050",
+      payload: { gameId: game.id, seasonClubId: homeSeasonClub.id, playerId: rosterPlayer.id, eventType: "REBOUND", description: "before", period: 1, clockSeconds: 500 },
+    });
+    // No client ever produces this today (LocalScoringRepository's createGame only enqueues
+    // CREATE) - constructed directly here to prove the endpoint's own defense, not to exercise a
+    // real client path.
+    const unsupported: OutboxRecord = {
+      idempotencyKey: "550e8400-e29b-41d4-a716-446655440051",
+      entityType: "Game",
+      operation: "UPDATE",
+      entityId: game.id,
+      payload: { status: "PAUSED" },
+      clientUpdatedAt: "2026-09-28T10:00:01.000Z",
+    };
+    const goodAfter = gameEventRecord({
+      idempotencyKey: "550e8400-e29b-41d4-a716-446655440052",
+      entityId: "6ba7b810-9dad-11d1-80b4-00c04fd43052",
+      payload: { gameId: game.id, seasonClubId: homeSeasonClub.id, playerId: rosterPlayer.id, eventType: "STEAL", description: "after", period: 1, clockSeconds: 490 },
+    });
+
+    const results = [];
+    for (const record of [goodBefore, unsupported, goodAfter]) results.push(await replayOutboxRecord(record, ctxArgs));
+
+    assert.deepEqual(results.map((r) => r.status), ["APPLIED", "FAILED", "APPLIED"]);
+    assert.equal((results[1].detail as { code: string }).code, "UNSUPPORTED_OPERATION");
+
+    const events = await ctx.prisma.gameEvent.findMany({ where: { gameId: game.id } });
+    assert.equal(events.length, 2, "both GameEvent CREATEs must land even though the Game UPDATE between them was rejected");
+
+    const idempotencyRow = await ctx.prisma.syncIdempotency.findUnique({ where: { idempotencyKey: unsupported.idempotencyKey } });
+    assert.equal(idempotencyRow, null, "a rejected-before-any-write record must never claim an idempotency row - nothing happened for it to be idempotent about");
+  } finally {
+    await ctx.teardown();
+  }
+});
+
+// ================= Test 10: missing ledgerSourceHint is rejected, not silently defaulted =================
+test("a GameEvent record with no ledgerSourceHint FAILS with MISSING_LEDGER_SOURCE_HINT, never silently applies with the wrong ledger source", async () => {
+  const ctx = await createTestDbContext();
+  try {
+    const { org, fixture, homeSeasonClub, rosterPlayer } = await seedOrgAndFixture(ctx);
+    const game = await seedGame(ctx, org.id, fixture.id);
+    const ctxArgs = { actor: { id: ACTOR_ID, organizationId: org.id }, deviceId: "device-1", syncBatchId: "batch-10", prisma: ctx.prisma };
+
+    // The wire schema (outbox-schema.ts's superRefine) already rejects this one hop upstream, in
+    // route.ts - constructed directly here, bypassing that layer, exactly as this test suite
+    // already does for every other case, to prove replayOutboxRecord has its own defense and does
+    // not rely solely on the caller having validated first.
+    const record = gameEventRecord({
+      payload: { gameId: game.id, seasonClubId: homeSeasonClub.id, playerId: rosterPlayer.id, eventType: "REBOUND", description: "no hint", period: 1, clockSeconds: 500 },
+      ledgerSourceHint: undefined,
+    });
+
+    const result = await replayOutboxRecord(record, ctxArgs);
+    assert.equal(result.status, "FAILED");
+    assert.equal((result.detail as { code: string }).code, "MISSING_LEDGER_SOURCE_HINT");
+
+    const events = await ctx.prisma.gameEvent.findMany({ where: { gameId: game.id } });
+    assert.equal(events.length, 0, "no GameEvent row must be created with a degraded/wrong ledger source - reject, don't silently downgrade");
+  } finally {
+    await ctx.teardown();
+  }
+});
+
+// ================= Test 11: two devices both start the same fixture's game offline =================
+test("two devices both enqueue Game:CREATE for the same fixture (different client ids): the second fails on fixtureId, not a generic id collision", async () => {
+  const ctx = await createTestDbContext();
+  try {
+    const { org, fixture } = await seedOrgAndFixture(ctx);
+    const ctxArgs = { actor: { id: ACTOR_ID, organizationId: org.id }, deviceId: "device-A", syncBatchId: "batch-11", prisma: ctx.prisma };
+
+    const deviceARecord: OutboxRecord = {
+      idempotencyKey: "550e8400-e29b-41d4-a716-446655440060",
+      entityType: "Game",
+      operation: "CREATE",
+      entityId: "6ba7b810-9dad-11d1-80b4-00c04fd43060",
+      payload: { fixtureId: fixture.id, status: "LIVE" },
+      clientUpdatedAt: "2026-09-28T09:00:00.000Z",
+    };
+    // A different device, a different client-generated Game id, the same fixture - the realistic
+    // shape of "two scorekeepers both went offline and both started the same game."
+    const deviceBRecord: OutboxRecord = {
+      idempotencyKey: "550e8400-e29b-41d4-a716-446655440061",
+      entityType: "Game",
+      operation: "CREATE",
+      entityId: "6ba7b810-9dad-11d1-80b4-00c04fd43061",
+      payload: { fixtureId: fixture.id, status: "LIVE" },
+      clientUpdatedAt: "2026-09-28T09:00:01.000Z",
+    };
+
+    const firstResult = await replayOutboxRecord(deviceARecord, ctxArgs);
+    assert.equal(firstResult.status, "APPLIED");
+
+    const secondResult = await replayOutboxRecord(deviceBRecord, { ...ctxArgs, deviceId: "device-B" });
+    assert.equal(secondResult.status, "FAILED");
+    // Named exploratory, not a settled design: this test's job right now is to prove the failure
+    // is diagnosable as "this fixture already has a game" rather than lumped under the generic
+    // ID_COLLISION code (whose message claims an id collided, which is false here - the two
+    // records use different, non-colliding entityIds). What the client should DO in response
+    // (discover the canonical gameId, rehome its queued GameEvents onto it) is a reconciliation
+    // feature, not yet built - flagged in docs/canonical-write-audit.md, not silently implemented.
+    assert.equal((secondResult.detail as { code: string }).code, "FIXTURE_ALREADY_HAS_GAME");
+
+    const games = await ctx.prisma.game.findMany({ where: { fixtureId: fixture.id } });
+    assert.equal(games.length, 1, "exactly one Game row must exist for the fixture - no duplicate, no data corruption");
+    assert.equal(games[0].id, deviceARecord.entityId, "the first device's Game is the one that won");
+  } finally {
+    await ctx.teardown();
+  }
+});
+
 // ================= Test 7: ordering preserved at replay level =================
 test("ordering: records processed out of array order still land in clientUpdatedAt order (visible in sequenceNumber assignment)", async () => {
   const ctx = await createTestDbContext();
@@ -297,6 +455,145 @@ test("ordering: records processed out of array order still land in clientUpdated
     const earlyEvent = await ctx.prisma.gameEvent.findUniqueOrThrow({ where: { id: early.entityId } });
     const lateEvent = await ctx.prisma.gameEvent.findUniqueOrThrow({ where: { id: late.entityId } });
     assert.ok(earlyEvent.sequenceNumber! < lateEvent.sequenceNumber!, "the event with the earlier clientUpdatedAt got the earlier sequence number, proving it was replayed first");
+  } finally {
+    await ctx.teardown();
+  }
+});
+
+// ================= A4: offline scoring tap - client-asserted shot resolution =================
+
+test("a valid client-resolved shot (Ultra Time doubled 3PT) is APPLIED with resolvedBy CLIENT and clientObservedAt recorded", async () => {
+  const ctx = await createTestDbContext();
+  try {
+    const { org, fixture, homeSeasonClub, rosterPlayer } = await seedOrgAndFixture(ctx);
+    const game = await seedGame(ctx, org.id, fixture.id);
+    const ctxArgs = { actor: { id: ACTOR_ID, organizationId: org.id }, deviceId: "device-1", syncBatchId: "batch-8", prisma: ctx.prisma };
+    const clientObservedAt = "2026-09-28T10:00:00.000Z";
+
+    const record = gameEventRecord({
+      payload: {
+        gameId: game.id, seasonClubId: homeSeasonClub.id, playerId: rosterPlayer.id,
+        eventType: "SCORE", description: "offline Ultra Time 3PT", period: 2, clockSeconds: 45,
+        basePointValue: 3, multiplier: 2, points: 6, isUltraTime: true, made: true,
+        clientObservedAt,
+      },
+    });
+
+    const result = await replayOutboxRecord(record, ctxArgs);
+    assert.equal(result.status, "APPLIED");
+
+    const event = await ctx.prisma.gameEvent.findUniqueOrThrow({ where: { id: record.entityId } });
+    assert.equal(event.resolvedBy, "CLIENT");
+    assert.equal(event.clientObservedAt?.toISOString(), clientObservedAt);
+    assert.equal(event.points, 6);
+    assert.equal(event.isUltraTime, true);
+  } finally {
+    await ctx.teardown();
+  }
+});
+
+test("a GameEvent replayed without clientObservedAt still defaults to resolvedBy SERVER - no regression for every existing (statistician/other) replay path", async () => {
+  const ctx = await createTestDbContext();
+  try {
+    const { org, fixture, homeSeasonClub, rosterPlayer } = await seedOrgAndFixture(ctx);
+    const game = await seedGame(ctx, org.id, fixture.id);
+    const ctxArgs = { actor: { id: ACTOR_ID, organizationId: org.id }, deviceId: "device-1", syncBatchId: "batch-9", prisma: ctx.prisma };
+
+    const record = gameEventRecord({
+      payload: { gameId: game.id, seasonClubId: homeSeasonClub.id, playerId: rosterPlayer.id, eventType: "REBOUND", description: "no client resolution", period: 1, clockSeconds: 500 },
+    });
+    const result = await replayOutboxRecord(record, ctxArgs);
+    assert.equal(result.status, "APPLIED");
+
+    const event = await ctx.prisma.gameEvent.findUniqueOrThrow({ where: { id: record.entityId } });
+    assert.equal(event.resolvedBy, "SERVER");
+    assert.equal(event.clientObservedAt, null);
+  } finally {
+    await ctx.teardown();
+  }
+});
+
+test("a client-resolved shot with inconsistent points/multiplier arithmetic FAILS validation - and leaves no SyncIdempotency row behind", async () => {
+  const ctx = await createTestDbContext();
+  try {
+    const { org, fixture, homeSeasonClub, rosterPlayer } = await seedOrgAndFixture(ctx);
+    const game = await seedGame(ctx, org.id, fixture.id);
+    const ctxArgs = { actor: { id: ACTOR_ID, organizationId: org.id }, deviceId: "device-1", syncBatchId: "batch-10", prisma: ctx.prisma };
+
+    const record = gameEventRecord({
+      payload: {
+        gameId: game.id, seasonClubId: homeSeasonClub.id, playerId: rosterPlayer.id,
+        eventType: "SCORE", description: "bad arithmetic", period: 2, clockSeconds: 45,
+        // 3 * 2 = 6, not 5 - the client's asserted points don't match its own asserted
+        // basePointValue/multiplier.
+        basePointValue: 3, multiplier: 2, points: 5, isUltraTime: true,
+        clientObservedAt: "2026-09-28T10:00:00.000Z",
+      },
+    });
+
+    const result = await replayOutboxRecord(record, ctxArgs);
+    assert.equal(result.status, "FAILED");
+    assert.equal((result.detail as { code: string }).code, "POINTS_MISMATCH");
+
+    const events = await ctx.prisma.gameEvent.findMany({ where: { gameId: game.id } });
+    assert.equal(events.length, 0, "the invalid event must not have been created");
+    // This is the atomicity check that matters: the SyncIdempotency claim happens BEFORE this
+    // validation runs (see replay-outbox-record.ts's own comment on why validation failures must
+    // throw, not return, from inside the transaction) - confirming no row survives here is what
+    // proves that ordering is actually correct, not just documented as intended.
+    const idempotencyRow = await ctx.prisma.syncIdempotency.findUnique({ where: { idempotencyKey: record.idempotencyKey } });
+    assert.equal(idempotencyRow, null, "a validation failure must roll back the idempotency claim too, or a retry of this exact record would come back DUPLICATE instead of retrying");
+  } finally {
+    await ctx.teardown();
+  }
+});
+
+test("a client-resolved shot claiming an implausible multiplier (not 1 or the rules' own Ultra Time multiplier) FAILS validation", async () => {
+  const ctx = await createTestDbContext();
+  try {
+    const { org, fixture, homeSeasonClub, rosterPlayer } = await seedOrgAndFixture(ctx);
+    const game = await seedGame(ctx, org.id, fixture.id);
+    const ctxArgs = { actor: { id: ACTOR_ID, organizationId: org.id }, deviceId: "device-1", syncBatchId: "batch-11", prisma: ctx.prisma };
+
+    const record = gameEventRecord({
+      payload: {
+        gameId: game.id, seasonClubId: homeSeasonClub.id, playerId: rosterPlayer.id,
+        eventType: "SCORE", description: "bogus multiplier", period: 2, clockSeconds: 45,
+        basePointValue: 2, multiplier: 5, points: 10, isUltraTime: true,
+        clientObservedAt: "2026-09-28T10:00:00.000Z",
+      },
+    });
+
+    const result = await replayOutboxRecord(record, ctxArgs);
+    assert.equal(result.status, "FAILED");
+    assert.equal((result.detail as { code: string }).code, "INVALID_MULTIPLIER");
+  } finally {
+    await ctx.teardown();
+  }
+});
+
+test("a client-resolved shot with an implausibly old clientObservedAt FAILS with IMPLAUSIBLE_CLIENT_OBSERVATION", async () => {
+  const ctx = await createTestDbContext();
+  try {
+    const { org, fixture, homeSeasonClub, rosterPlayer } = await seedOrgAndFixture(ctx);
+    const game = await seedGame(ctx, org.id, fixture.id);
+    const ctxArgs = { actor: { id: ACTOR_ID, organizationId: org.id }, deviceId: "device-1", syncBatchId: "batch-12", prisma: ctx.prisma };
+
+    const record = gameEventRecord({
+      payload: {
+        gameId: game.id, seasonClubId: homeSeasonClub.id, playerId: rosterPlayer.id,
+        eventType: "SCORE", description: "stale observation", period: 1, clockSeconds: 500,
+        basePointValue: 2, multiplier: 1, points: 2, isUltraTime: false,
+        clientObservedAt: "2020-01-01T00:00:00.000Z",
+      },
+    });
+
+    const result = await replayOutboxRecord(record, ctxArgs);
+    assert.equal(result.status, "FAILED");
+    assert.equal((result.detail as { code: string }).code, "IMPLAUSIBLE_CLIENT_OBSERVATION");
+
+    const idempotencyRow = await ctx.prisma.syncIdempotency.findUnique({ where: { idempotencyKey: record.idempotencyKey } });
+    assert.equal(idempotencyRow, null, "this failure must also roll back the idempotency claim");
   } finally {
     await ctx.teardown();
   }

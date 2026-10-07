@@ -9,6 +9,7 @@
 // GameRuleSnapshot — this covers every Season Zero game) scores identically to before this
 // module existed: LEGACY_RULE_SNAPSHOT is just ULTRA_RULES reshaped into RuleSnapshotForScoring.
 import { ULTRA_RULES } from "@/lib/game-rules";
+import { remainingClockSeconds } from "@/lib/game-clock";
 
 export type RuleSnapshotForScoring = {
   fourPointEnabled: boolean;
@@ -90,6 +91,37 @@ export function scoreShot(input: ScoreShotInput): ScoreShotResult {
     pointsAwarded: shotValue * multiplier,
     isUltraTime: ultraTime,
   };
+}
+
+// A4 (offline scoring tap): the client-side counterpart to the live path's
+// `scoreShot({ ..., remainingClockSeconds: remainingClockSeconds(game) })` call in
+// games/actions.ts. Ultra Time is wall-clock-derived, not event-stream-derived (see
+// docs/canonical-write-audit.md's "wall-clock-derived event fields" note) - the server cannot
+// correctly re-resolve it for a record that arrives via offline sync, so the offline scorer
+// console must observe and assert it at tap time instead, using the exact same two pure functions
+// (`remainingClockSeconds`, `scoreShot`) the server uses live. Composing them here, rather than
+// requiring every caller to do it, is the only new logic this needs - there is no separate
+// "client version" of the scoring rules to maintain and drift out of sync with the server's.
+//
+// Takes a plain object shape (not the Prisma Game type) so this has no dependency on Prisma or the
+// server - callable from the offline client library, which must not import server-only code.
+export function resolveClientShot(input: {
+  game: { status: string; clockSecondsRemaining: number; clockStartedAt: string | null; currentPeriod: number };
+  rules: RuleSnapshotForScoring;
+  shotValue: number;
+}): ScoreShotResult {
+  const remaining = remainingClockSeconds({
+    status: input.game.status,
+    clockSecondsRemaining: input.game.clockSecondsRemaining,
+    clockStartedAt: input.game.clockStartedAt ? new Date(input.game.clockStartedAt) : null,
+  });
+  return scoreShot({
+    rules: input.rules,
+    shotValue: input.shotValue,
+    gameStatus: input.game.status,
+    currentPeriod: input.game.currentPeriod,
+    remainingClockSeconds: remaining,
+  });
 }
 
 export type UltraTimeTransition = "STARTED" | "ENDED" | null;

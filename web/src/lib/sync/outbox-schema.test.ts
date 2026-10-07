@@ -1,4 +1,4 @@
-import { MAX_BATCH_SIZE, sortRecordsForProcessing, syncOutboxRequestSchema } from "./outbox-schema";
+import { MAX_BATCH_SIZE, isSupportedReplayOperation, sortRecordsForProcessing, syncOutboxRequestSchema } from "./outbox-schema";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -120,4 +120,31 @@ test("ordering: numeric timestamp comparison is correct even with differing frac
   // comparison of parsed Date values does not have this problem.
   const sorted = sortRecordsForProcessing([withMillis, withoutMillis] as never[]);
   assert.deepEqual(sorted.map((r) => (r as { entityId: string }).entityId), ["without-millis", "with-millis"]);
+});
+
+// ================= replay vocabulary: narrower than the wire format =================
+// The wire format (operation: CREATE|UPDATE|DELETE) is forward-compatible on purpose - see the
+// tests above. isSupportedReplayOperation is the separate, narrower gate replayOutboxRecord
+// actually enforces: only the two combinations with a real producer and a real replay
+// implementation today.
+
+test("isSupportedReplayOperation: Game CREATE is supported", () => {
+  assert.equal(isSupportedReplayOperation({ entityType: "Game", operation: "CREATE" }), true);
+});
+
+test("isSupportedReplayOperation: GameEvent CREATE is supported", () => {
+  assert.equal(isSupportedReplayOperation({ entityType: "GameEvent", operation: "CREATE" }), true);
+});
+
+test("isSupportedReplayOperation: Game UPDATE is not supported - no producer, no defined conflict-resolution shape", () => {
+  assert.equal(isSupportedReplayOperation({ entityType: "Game", operation: "UPDATE" }), false);
+});
+
+test("isSupportedReplayOperation: GameEvent UPDATE is not supported", () => {
+  assert.equal(isSupportedReplayOperation({ entityType: "GameEvent", operation: "UPDATE" }), false);
+});
+
+test("isSupportedReplayOperation: DELETE is not supported for either entity type", () => {
+  assert.equal(isSupportedReplayOperation({ entityType: "Game", operation: "DELETE" }), false);
+  assert.equal(isSupportedReplayOperation({ entityType: "GameEvent", operation: "DELETE" }), false);
 });

@@ -84,4 +84,10 @@ export interface CreateGameEventInput {
   awayScoreAfter?: number | null;
   // Supersession: a correcting event points back at the event it replaces.
   supersedesEventId?: string | null;
+  // A4 (offline scoring tap): who resolved points/basePointValue/multiplier/isUltraTime above.
+  // Absent (SERVER) for every existing call site. See GameEventFields's comment in
+  // src/lib/scoring/build-game-event.ts and docs/canonical-write-audit.md's "wall-clock-derived
+  // event fields" note.
+  resolvedBy?: "SERVER" | "CLIENT";
+  clientObservedAt?: string | null;
 }

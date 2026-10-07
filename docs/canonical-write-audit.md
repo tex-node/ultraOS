@@ -401,12 +401,157 @@ dependency that ever writes anything, so a call count of zero is equivalent proo
 dependencies (`withOrganizationContext`-scoped fixture resolution, `requireFixturePermission`,
 `replayOutboxRecord` against the real client).
 
-**Test coverage, final:** 7 DB-integration tests (single record, mixed-batch partial success,
+**Test coverage, final:** 8 DB-integration tests (single record, mixed-batch partial success,
 idempotent replay, crash simulation - a real FK violation after real prior work in the same
 transaction, not a mocked throw, asserting the prior work rolled back too - cross-record
-dependency, ID collision, and ordering at the replay level) plus 3 pure orchestration tests
-(including the exact auth-rejection failure mode: a 3-record batch, the middle fixture
-unauthorized, `replay` called for none of the three).
+dependency, ID collision, concurrent-race disambiguation, and ordering at the replay level) plus 3
+pure orchestration tests (including the exact auth-rejection failure mode: a 3-record batch, the
+middle fixture unauthorized, `replay` called for none of the three).
+
+**P2002 disambiguation fix (post-Commit-3, pre-Commit-4).** Flagged in review: `P2002` fires on
+*any* unique-constraint violation, and a replayed record touches two of them -
+`SyncIdempotency.idempotencyKey` (correct answer: `DUPLICATE`) and the entity table's own id
+(correct answer: `ID_COLLISION`). The original ordering - `findUnique` check, then the canonical
+write, then `SyncIdempotency.create` last - meant a genuine concurrent race (two simultaneous
+submissions of the identical record, same `idempotencyKey` and `entityId`) would have both
+transactions pass the initial check before either committed, then race into the *entity* table's
+own id constraint, since the `SyncIdempotency` insert hadn't been reached yet by either side. The
+race's loser would have come back `ID_COLLISION`, not `DUPLICATE` - exactly the failure mode that
+leaves a record stuck in an offline client's outbox forever, since `drain()` (Commit 4) only
+retires records on `APPLIED`/`DUPLICATE`, never `FAILED`.
+
+Fixed by making the claim step structurally incapable of throwing, rather than catching and
+inspecting `error.meta.target` after the fact: the idempotency row is now claimed first, via
+`syncIdempotency.createMany({ skipDuplicates: true })` (`INSERT ... ON CONFLICT DO NOTHING`), which
+resolves a collision to a row count of zero instead of an exception. By the time any code path can
+throw a genuine `P2002` in this function, the idempotency claim has already succeeded - so that
+`P2002` can only be the entity table's own id constraint, unambiguously. This also sidesteps
+relying on Postgres's aborted-transaction-then-COMMIT-degrades-to-ROLLBACK behavior, which a
+catch-and-continue approach inside the same interactive transaction would have depended on.
+
+Verified with a new test (concurrent resubmission of the identical record via `Promise.all`,
+asserting the pair resolves to exactly one `APPLIED` and one `DUPLICATE`, never `ID_COLLISION`) and
+confirmed the existing ID-collision test (distinct `idempotencyKey`s, same `entityId`) still
+correctly returns `ID_COLLISION` - the reordering didn't blur that case. All 8 DB-integration tests
+run green against real staging Postgres after the fix; no regressions in the other 7.
+
+### Point 8 - Commit 4: drain(), the replay vocabulary narrowed, SyncConflictLog deferred
+
+**Naming.** `outbox.ts`'s pre-existing `drain()` (a pure local read, no network) had zero callers
+outside its own test - confirmed by reading every real call site before deciding, not assumed. Since
+nothing depended on its current behavior, it was renamed `readPendingBatch()` (it doesn't drain
+anything by itself) and `drain()` was reserved for the new network-syncing orchestrator, matching
+domain language: draining the outbox means emptying it via sync, not reading it.
+
+**`drain()`** (`src/lib/offline/outbox.ts`): reads the pending batch, POSTs it to
+`/api/sync/outbox`, matches `results[]` back to outbox records by `idempotencyKey` (never array
+index - the server processes in `clientUpdatedAt` order, not necessarily submission order), marks
+`APPLIED`/`DUPLICATE` records synced, and marks `FAILED`/`CONFLICT` records failed
+(`attemptCount` incremented, left in the outbox). A module-level in-flight flag makes a second
+concurrent call a no-op rather than a second POST - safe because JS is single-threaded between
+awaits, so the flag is visible to a second call before that call's own first `await`. A non-2xx
+response (auth rejection, malformed body) touches nothing in the outbox - that failure isn't any
+individual record's fault.
+
+**Two real gaps found while building this, both closed:**
+
+1. **No client producer of `Game` `UPDATE` exists at all** - `LocalScoringRepository.createGame`
+   only ever enqueues `CREATE`; nothing calls `.update` and enqueues it. The only Game-level
+   conflict actually reachable today is two devices both creating the same fixture's Game while
+   offline (`Game.fixtureId`'s unique constraint), not a field-level UPDATE race.
+2. **The wire contract already requires `ledgerSourceHint` for every `GameEvent` record** (Point 2,
+   Commit 3's fix), but nothing on the client ever set it - `LocalGameEvent`/`CreateGameEventInput`
+   had no such field. `drain()` would have 400'd on every real GameEvent the moment it was wired up.
+   Closed by making `ledgerSourceHint` a required field on `CreateGameEventInput`, threaded through
+   `logEvent()` into the enqueued wire record (not stored on `LocalGameEvent` itself - it's outbox
+   routing metadata, not something the local console reads back).
+
+**`readPendingBatch`/`pendingCount`'s filter was also wrong for the new attemptCount-based retry
+model** - found while wiring `drain()`, not by reading first. The filter excluded any record with a
+`failureReason` set, meaning a `FAILED` record would never be retried after its first failure,
+making `attemptCount` pointless (nothing would ever reach a second attempt to count). Fixed: a
+record is "pending" until `syncedAt` is set; `failureReason` no longer excludes it. Dead-lettering a
+record after N failures is a real cutoff `attemptCount` enables - that's A4's job, not this filter's.
+
+**SyncConflictLog and LWW: narrowed the replay vocabulary instead of building conflict resolution
+speculatively.** With no real `Game` `UPDATE` producer, the shape LWW should take (full-snapshot vs.
+partial-update replay, whole-record vs. per-field timestamp comparison) depends on a producer that
+doesn't exist yet - building it now would mean guessing at both. Instead, `replayOutboxRecord`'s
+accepted vocabulary is now explicit and enforced (`outbox-schema.ts`'s
+`supportedReplayOperationSchema`): only `Game:CREATE` and `GameEvent:CREATE` have both a real
+producer and a real replay implementation. Every other combination (`Game:UPDATE`, `GameEvent:UPDATE`,
+either entity's `DELETE`) is rejected per-record with `UNSUPPORTED_OPERATION`, checked before a
+transaction even opens - not a whole-batch 400, so one client with a stale or buggy producer never
+blocks every other record in its batch. The `SyncConflictLog` table stays in the schema, unused -
+that's evidence the case doesn't arise yet, not evidence of a gap. When a `Game` `UPDATE` producer
+is added, LWW semantics and `SyncConflictLog` writes are scoped to that producer's actual shape, as
+part of that change, not guessed at here.
+
+**Test coverage:** pure - `isSupportedReplayOperation` (5 tests, `outbox-schema.test.ts`), `drain()`
+(6 tests: empty outbox skips the network call, idempotencyKey-based matching under out-of-order
+server results, per-status handling of all four `SyncOutboxRecordResult` statuses, the in-flight
+guard under genuine concurrent calls, a non-ok response leaving the outbox untouched), plus the
+`readPendingBatch`/`markFailed` retry-eligibility tests updated for the corrected filter. DB-integration
+- a new `replayOutboxRecord` test proving a `Game:UPDATE` in a mixed batch fails only that record
+(the `GameEvent:CREATE`s before and after it still land, and the rejected record claims no
+`SyncIdempotency` row), plus a full end-to-end rehearsal (`drain-e2e.test.ts`): a real offline client
+(`fake-indexeddb`, no browser) enqueues 3 `GameEvent` `CREATE`s via `LocalScoringRepository.logEvent`,
+`drain()` is called with a `fetchFn` that routes into the real `processOutboxBatch`/
+`replayOutboxRecord` against a real, isolated Postgres schema (only HTTP transport and session/auth
+are stubbed - the same "substitute an explicit actor, bypass the browser" pattern this project's
+rehearsal scripts already use), and asserts 3 `GameEvent` rows, an empty outbox, and 3
+`SyncIdempotency` rows. All 13 DB-integration tests (9 replay + 2 resolve-batch-authorization + 1
+db-test-context + 1 new e2e) pass against real staging Postgres; full local pure suite 795/796 (1
+pre-existing, unrelated skip), 0 failures.
+
+**Two flags from review, both closed before A4:**
+
+1. **`ledgerSourceHint` had no defense at the replay layer, only at the wire layer.** The wire
+   schema's `superRefine` already rejects a `GameEvent` record missing the hint, but that check runs
+   in `route.ts`, one hop upstream of `replayOutboxRecord` - and this project's own test suite calls
+   `replayOutboxRecord` directly, bypassing wire validation entirely, so "unreachable without a hint"
+   was false on its face. Traced the actual consequence: `ledgerSourceFor`'s `OFFLINE_SYNC` branch
+   does not throw on an undefined hint - it silently returns the bare `"OFFLINE_SYNC"` ledger value,
+   which (per that function's own comment) makes a statistician event invisible to the live box
+   score and uncorrectable. Silent wrong output, not a crash - the worse failure mode. Fixed with an
+   explicit guard in `replayOutboxRecord`: a `GameEvent` record with no `ledgerSourceHint` now fails
+   with `MISSING_LEDGER_SOURCE_HINT` before the transaction opens, never silently defaults. New test
+   proves it: zero `GameEvent` rows created, not a degraded one.
+
+2. **The CREATE-CREATE `fixtureId` collision is a real, reachable conflict the vocabulary narrowing
+   doesn't cover.** `Game.fixtureId` is `@unique` (confirmed by reading the schema, not assumed) -
+   two devices both starting the same fixture's game offline, each with its own client-generated
+   `Game.id`, means the second device's `createGame` fails on `fixtureId`, not on `id`. The previous
+   blanket `P2002` -> `ID_COLLISION` mapping was actively wrong here: the two ids never collided, so
+   the message ("an entity with this id already exists") was false. Added `FIXTURE_ALREADY_HAS_GAME`
+   as a distinct code. Detecting which field failed took an empirical detour: `error.meta.target`
+   (the classic Prisma query-engine shape) is not populated at all by this project's driver-adapter
+   build (`@prisma/adapter-pg`) - confirmed by writing a throwaway script that triggered a real
+   collision against staging Postgres and printing the actual error. The real constraint name lives
+   nested under `meta.driverAdapterError.cause.constraint.fields`, an adapter-internal shape with no
+   documented stability guarantee, so detection matches on `error.message` instead (reliably names
+   the failing field: `` Unique constraint failed on the fields: (`"fixtureId"`) ``).
+
+   **What this does NOT do: reconciliation - named as a mechanism, not just a product question.**
+   The losing device's queued `GameEvent`s still reference its own (never-created) local `Game.id`.
+   Concretely, what's missing is:
+   - **A response-shape addition.** `replayOutboxRecord`'s `FAILED` result for this case carries no
+     way to learn the winning `gameId` today - `SyncOutboxRecordResult.detail` is whatever
+     `errorDetail` returns (`{code, message}`), and neither field names the existing Game's id. The
+     server would need to look it up (by `fixtureId`, already known from the payload) and include it.
+   - **A client-side state-machine change in `drain()`.** On seeing this specific failure, the
+     client needs to: rewrite every queued `GameEvent` record's `gameId` reference from its own
+     (losing) local id to the winning id, drop its own `Game:CREATE` from the outbox (it will never
+     apply), and re-drain the rewritten batch. `drain()` today has no such per-failure-code branch -
+     every `FAILED` result is currently treated uniformly (bump `attemptCount`, leave in outbox).
+   - **Only after both of the above exist** does the product question ("does the second scorekeeper
+     see a silent merge, or a prompt?") become answerable - it's downstream of the mechanism, not a
+     precondition for it. A future implementer should expect to build a response-shape change plus a
+     `drain()` state machine, not a single UI decision on top of already-working plumbing.
+
+   New test proves the failure is diagnosable and non-destructive (exactly one `Game` row for the
+   fixture, the first device's write wins) - it deliberately does not attempt any of the above.
+   Flagged as the next real gap once the mechanism is scoped.
 
 **Outbox entity vocabulary.** The outbox carries `Game` and `GameEvent` only.
 `PlayerStat`/`TeamStat` are projections, never wire entities - enforced at the type level,
@@ -676,3 +821,40 @@ site appears within a month.
 
 A3 was one phase on paper. It is two in reality: **A3a** (consolidation, no migration) and
 **A3b** (sync endpoint, one migration). Recorded in `documentation/PRODUCT_ROADMAP.md`.
+
+## Wall-clock-derived event fields (A4, offline scoring tap)
+
+Several `src/lib/ultra-scoring-engine.ts`/`src/lib/scoring/validate-client-shot.ts`/
+`src/server/sync/replay-outbox-record.ts` comments point here. Collected in one place because the
+same constraint will recur for the next wall-clock-dependent helper, and it's cheaper to recognize
+than to rediscover.
+
+**The rule:** for a field whose correct value depends on real elapsed time (Ultra Time's
+`isUltraTime`/`multiplier`, which depend on `remainingClockSeconds` - continuously ticking wall-clock
+time, not something derivable from the event sequence), the server cannot correctly resolve it for
+a record that arrives via offline sync. By the time a queued tap replays, the server's "now" is not
+the client's "now" at tap time - potentially minutes or hours apart, during which the game may have
+moved to a different period, or a real Ultra Time transition may already have happened live.
+
+**Resolution for the event's own fields (Commit 3):** the client - the only party that actually
+observed the wall-clock fact - asserts the resolved value (`clientResolvedAt`/`resolvedBy: CLIENT`
+on `GameEvent`) at tap time, and the server validates rather than re-resolves: structural/consistency
+checks only (a legal shot value under the game's own rules, a multiplier the rules can actually
+produce, internal arithmetic consistency, a plausible observation timestamp) - never an attempt to
+verify "was Ultra Time actually active at that exact clock second," since the server structurally
+cannot know that after the fact. See `validate-client-shot.ts`'s own header comment.
+
+**The broader rule, generalized (flagged in review, 2026-09-29): replay must not invoke
+wall-clock-dependent side effects, not just avoid re-resolving wall-clock-dependent fields.**
+`syncUltraTimeState` (`games/actions.ts`) is the concrete instance found so far: it compares the
+game's *current* wall-clock state against the last-persisted `isUltraTimeActive` flag to detect a
+transition, and writes a `ULTRA_TIME_STARTED`/`_ENDED` ledger event when one occurs. Calling this
+during replay of an offline-queued tap would compare the SERVER's clock state at *replay* time -
+not tap time - against that flag, producing a transition event with the wrong period/clock values
+(or a false transition entirely) and corrupting `isUltraTimeActive` itself. `syncUltraTimeState`
+therefore stays a **live-only** side effect, deliberately excluded from the shared score-event
+effects extraction (`computeScoreEventEffects`/`applyScoreEventEffects`, planned, not yet built) -
+the client's asserted `isUltraTime` flows through for this event's own resolution only, never for
+the game's global Ultra-Time-active state. The next wall-clock-dependent helper anyone adds to the
+live path should be checked against this same question before being wired into replay: does it
+read or write something whose correctness depends on *when* it runs, not just *whether* it runs?

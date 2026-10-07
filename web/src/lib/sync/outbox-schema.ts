@@ -52,6 +52,24 @@ export const syncOutboxRequestSchema = z.object({
 export type OutboxRecord = z.infer<typeof outboxRecordSchema>;
 export type SyncOutboxRequest = z.infer<typeof syncOutboxRequestSchema>;
 
+// The REPLAY vocabulary - which entityType+operation combinations replayOutboxRecord can actually
+// process - is narrower than the wire format above (operation accepts CREATE/UPDATE/DELETE for
+// forward compatibility). Explicit here, not implicit in replay logic: an accepted-but-unhandled
+// combination is worse than a rejected one, since accepting it would mean either silently doing
+// nothing or applying undefined semantics (e.g. a Game UPDATE has no defined conflict-resolution
+// shape yet - see docs/canonical-write-audit.md's "SyncConflictLog scope" note). Only two
+// combinations have a real producer and a real replay implementation today; everything else comes
+// back FAILED/UNSUPPORTED_OPERATION per-record, not a whole-batch rejection - one client with a
+// stale/buggy producer must not block every other record in its batch.
+export const supportedReplayOperationSchema = z.union([
+  z.object({ entityType: z.literal("Game"), operation: z.literal("CREATE") }),
+  z.object({ entityType: z.literal("GameEvent"), operation: z.literal("CREATE") }),
+]);
+
+export function isSupportedReplayOperation(record: Pick<OutboxRecord, "entityType" | "operation">): boolean {
+  return supportedReplayOperationSchema.safeParse(record).success;
+}
+
 export interface SyncOutboxRecordResult {
   idempotencyKey: string;
   status: "APPLIED" | "DUPLICATE" | "CONFLICT" | "FAILED";

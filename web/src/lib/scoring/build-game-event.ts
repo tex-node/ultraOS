@@ -57,6 +57,12 @@ export interface GameEventFields {
   homeScoreAfter?: number | null;
   awayScoreAfter?: number | null;
   supersedesEventId?: string | null;
+  // A4 (offline scoring tap): who resolved points/basePointValue/multiplier/isUltraTime above.
+  // Absent (SERVER) for every existing call site - only the offline scoring-tap replay path ever
+  // supplies "CLIENT", when the offline scorer console asserted these wall-clock-derived values
+  // itself. See docs/canonical-write-audit.md's "wall-clock-derived event fields" note.
+  resolvedBy?: "SERVER" | "CLIENT";
+  clientObservedAt?: string | null;
 }
 
 export interface GameEventWriteMeta {
@@ -116,5 +122,7 @@ export function buildGameEventCreateData(
     idempotencyKey: meta.provenance?.idempotencyKey ?? null,
     clientUpdatedAt: meta.provenance?.clientUpdatedAt ? new Date(meta.provenance.clientUpdatedAt) : null,
     syncBatchId: meta.provenance?.syncBatchId ?? null,
+    resolvedBy: input.resolvedBy ?? "SERVER",
+    clientObservedAt: input.clientObservedAt ? new Date(input.clientObservedAt) : null,
   };
 }
