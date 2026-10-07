@@ -8194,3 +8194,79 @@ After the event update, clicking on the GIESM event from the public events page 
 
 **Next step:** optional follow-up - per-gender roster validation in web/src/lib/registration/validation.ts if ops wants the 5M+5F rule enforced, not just collected.
 
+## 2026-10-07 - LBCL: Games 25-33 (Fri 2 - Sun 4 Oct) applied to staging AND production
+
+**Objective:** User sent 20 scoresheet screenshots (no text) - same job as before: update LBCL.
+Only 8 are new games; the rest are repeats of Games 21-24 (already live). Identified by building a
+labeled contact sheet and comparing header/md5, not by assuming file order (my first guess at the
+file order was wrong). Games 26 and 28 were not among the screenshots (numbering gap).
+
+**Games (sheet start times are Lagos UTC+1 -> stored UTC; minutes truncated; venue unprinted -> "Venue TBC")**
+- Fri 2 Oct 14:34 Leo Kareem Foundation 54-47 Ogra Hoop Kings (sheet "LBCL" template, Game No. 25)
+- Fri 2 Oct 16:40 Seaside Hoopers 83-80 LXB Surulere, OVERTIME (Game No. also printed 25 - two different
+  games share the number; data quirk on the league's side). OT stored as period 5 / label "OT".
+- Fri 2 Oct 19:09 Campos Basketballers 75-40 White Fire (Game 27)
+- Sat 3 Oct 11:50 White Fire 55-58 Ogra Hoop Kings (Game 29)
+- Sun 4 Oct 12:10 Square Team 37-103 Campos Basketballers (Game 30)
+- Sun 4 Oct 12:48 Seaside Hoopers 52-75 Lagos Raptors BA (Game 31)
+- Sun 4 Oct 12:59 Leo Kareem Foundation 51-39 Ultra Basketball (Game 32)
+- Sun 4 Oct 18:42 LXB Surulere 54-58 Cantonment Braves (Game 33)
+
+**Verification before any write.** `verify-batch.mjs` passes. Plus a stricter scratch validator (not
+committed): all 16 stat columns x 16 team lines vs each sheet's printed Totals row incl. the Team/Coach
+row, FGM=2PM+3PM, FGA=2PA+3PA, points=2*2PM+3*3PM+FTM, tuple completeness, duplicate names, and an
+efficiency cross-check. **It caught 2 real transcription errors my hand-sums missed** (Godswill
+Akunebe's PF/FD swapped; Oparaugo Ikay's +/- and EF transposed) - fixed before writing. The EF check
+also flagged 2 rows (Dodeke Bibowei G29, Dannis Godwill G31) where the SHEET's own printed EF differs
+by 1 from the formula; kept as printed (EF is not an input to any rule).
+
+**Applied.** Staging first (backup `ultraos_staging_pre_lbcl_games25_33_20261007T081719Z.dump`; dry run;
+apply), then production (backup `/var/backups/ultraleagueos-production/ultraleagueos-pre-lbcl-games25-33-20261007T081902Z.dump`,
+1,570 catalog entries = clean; dry run; apply). Both environments: 8/8 IMPORTED, `players_created`
+= 1,0,1,2,0,0,0,0 exactly as predicted; 32/32 fixtures FINAL; every game's PlayerStat points sum equals
+its final score; quarter/OT scores stored; 0 duplicate-named athletes; 181 athletes. Only Games 25-33
+were sent (trimmed batch), so Games 1-24 were untouched. The live `/lbcl/fixtures` shows all 8 games.
+This time I used true `cp -a` copies of the release (not hardlinks) and re-hashed the staging release
+afterwards: unchanged. No production release files touched.
+
+**New players (4):** Ibrahim Dal (Ogra Hoop Kings, #0, DNP in G25, played 7 min in G29), Godswill Akunebe
+(Campos, played 22 min in G27, no jersey - Muiz Salam holds #12), Izundu Okwuosa (White Fire, #16),
+Ajana Onu (Ogra Hoop Kings, no jersey - Anas Usman holds #40, 13 pts in G29).
+
+**Judgement calls to review (a wrong merge is harder to spot than a duplicate):**
+- The Game 30 (Square Team v Campos) sheet abbreviates every name to first name + surname initial. Matched
+  on jersey + first name: "Jamelo W" #0 -> Jamelo U (NOT Whatson Shedrack, who also wore #0 and played the
+  G27 sheet as "Shedrack Whaton"; they may be the same person - 25 pts here), "Anthony C" #24 -> Joshua
+  Anthony (jersey only), "Donald O"/"Stephen U"/"Adekunle A"/"Nasir A".
+- "Chuka O" #41 -> Chukwu Obi (same #41 + initial as the G20 sheet), NOT Chuka Sampson. "Nana Onu" #44 ->
+  Nana Anu. "Ajana Onu" #40 NOT merged into Anas Usman (shares only the jersey).
+- White Fire #5: G27 "Joseph Reynld" -> Joseph Reginald, G29 "Reynald Kelechi" -> Reginald Kelechi. Same
+  jersey on both sheets, so probably one person already split into two roster records.
+- White Fire "Okoye Faith" -> the existing exact-spelling record; a separate "Okeye Faith" (#13) also exists
+  (likely a duplicate from my own earlier transcription). "David Clinton" -> Clinton David.
+- Moderate: Obasohan Sunday -> Obasana Sunday; Itsukwu John -> John I; Opeyemi Akinola -> Akinofa Ope;
+  Igule Ikechukwu #25 -> Ik Igwe; Chukwuka Rapheal #28 -> Chibuere Rapheal; Folorunso Segun -> Florunsho
+  Segun; "Timmy R" #3 (21 pts) -> Timmy T; Onyedikachi Chiemeka #55 -> Onyedikachi Anekwe;
+  Kuti Babajide (G33 "Uti Babajide") -> Oluwanifemi Kuti (as in G24).
+- Season `endDate` still 2026-09-26 while games now run to 4 Oct (flagged before, still undecided).
+- Caption on the G25 Seaside v LXB post says "TA Arena"; not applied (other sheets give no venue).
+
+**Left behind:** `/tmp/lbcl-p2` (a throwaway copy of the production release) on the host. My cleanup
+command touched the production release dir and was blocked by the permission classifier, so I did not
+retry it. It is a plain copy, safe to delete (`rm -rf /tmp/lbcl-p2`); it contains no secrets beyond what
+the release already holds.
+
+**Not done:** none of the A5 work (Step 4 etc.) or this batch is committed. `build-lbcl-batch.mjs` and
+`lbcl-2026-batch1.json` (now 32 games) are modified in the working tree.
+
+
+## 2026-10-07 - LBCL season end date set to 2026-11-29 (staging + production)
+
+User confirmed the LBCL season ends 29 Nov 2026. `ensureSeason()` never updates an existing row, so
+applied via `web/scripts/update-lbcl-season-end-date.ts`, which now takes the date as an argument
+(`<organizationId> <YYYY-MM-DD> [--apply]`; it was hardcoded to 2026-09-26). Both environments: dry
+run, apply, re-run reported "already correct". The previous value was 2026-09-27 (earlier notes saying
+26 Sep were off by one). Season row only; no fixture data touched. `/lbcl` still 200 / ONGOING.
+`build-lbcl-batch.mjs`'s SEASON.endDate updated to match (JSON regenerated, 32 games). Uncommitted.
+Scratch copies `/tmp/lbcl-p2` and `/tmp/lbcl-se-p` (plain copies of the production release) remain on the
+host - cleanup of production-adjacent paths was blocked by the permission classifier earlier, so not retried.

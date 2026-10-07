@@ -1,8 +1,8 @@
 ---
 title: Product Roadmap
 status: Active
-version: product-0.6
-last_updated: 2026-09-27
+version: product-0.7
+last_updated: 2026-09-29
 ---
 
 # Product Roadmap
@@ -73,7 +73,7 @@ These apply to every phase and every screen.
 | P10 | Capture depth (soccer, tennis, volleyball) | Live depth stats per sport, all traceable to events | `Not started` |
 | P11 | Tournament engine extensions | Swiss/double-elim/ladder formats, H2H + discipline tiebreaks, cross-sport leaders | `Not started` |
 | P12 | Fan & organizer dual experience | Public portal + organizer workspace + tournament sub-sites (F1–F6 below) | `Done` |
-| P13 | Offline scoring & sync (Workstream A) | Scorekeeper can score a full game with network disabled; all writes sync cleanly on reconnect | `Not started` |
+| P13 | Offline scoring & sync (Workstream A) | Scorekeeper can score a full game with network disabled; all writes sync cleanly on reconnect | `In progress` |
 | P14 | AI vision player profiling (Workstream B) | Upload game video → AI-derived player metrics → human review (review-only; never writes canonical stats) | `Not started` |
 
 P0-P5 are partly delivered for basketball Season Zero; the roadmap makes them complete and sport-agnostic.
@@ -764,9 +764,10 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | A0 | Offline scoring: project setup (flag, deps, skeleton, runbook draft) | P13/A | `Done` | — |
 | A1 | Local data layer: Dexie db, ScoringRepository (local+remote), outbox, types | P13/A | `Done` | A0 |
 | A2 | Serwist SW, PWA manifest, SyncStatusBadge, Background Sync + fallback | P13/A | `Done` | A1 |
-| A3a | Canonical-write consolidation: `src/server/scoring/` services + ESLint guard + ratchet baseline; migrate inline sites | P13/A | `In progress` | A2 |
-| A3b | `POST /api/sync/outbox`, LWW, SyncIdempotency + SyncConflictLog, sync dashboard | P13/A | `Not started` | A3a |
-| A4 | Retry/backoff/DLQ, `/admin/sync-health`, load test 50×500, runbook, rollout | P13/A | `Not started` | A3b |
+| A3a | Canonical-write consolidation: `src/server/scoring/` services + ESLint guard + ratchet baseline; migrate inline sites | P13/A | `Done` | A2 |
+| A3b | `POST /api/sync/outbox`, LWW, SyncIdempotency + SyncConflictLog, sync dashboard | P13/A | `In progress` — Commits 1–3 shipped and verified on staging (schema, client shot resolution, server validation, replay with per-record idempotency); two-device integration test pending; Commit 4 (live-console wiring) moved to A5. | A3a |
+| A4 | Retry/backoff/DLQ, `/admin/sync-health`, load test 50×500, runbook, rollout | P13/A | `In progress` — PR 1 (trigger wiring) and PR 2 (dead-letter badge, attempt-based cutoff 5) shipped; PR 3 (admin page) deferred pending fleet-visibility evidence; PR 4 (load test) pending. | A3b |
+| A5 | Live console offline integration: actor injection into the five ledger-writing actions, `recordScore` invocation test, effects extraction, replay parity, live console UI wiring | P13/A | `Not started` | A3b |
 | B0 | Vision: project setup (flag, `/services/vision` FastAPI+Celery+Redis, Docker, storage adapter) | P14/B | `Done` | — |
 | B1 | FastAPI inference service with `/analyze` + `/health`, VisionAnalysisRun lifecycle | P14/B | `Not started` | B0 |
 | B2 | RF-DETR-Small/YOLOv11-M detector + ByteTrack, ONNX Runtime, jersey OCR, homography, VisionTrack rows | P14/B | `Not started` | B1 |
@@ -809,6 +810,7 @@ connection does not lose events; recovery is automatic and visible" (P4 usabilit
 | A3a | Canonical-write consolidation | Extract `createGameEvent` (+ `createGame` if device-created) into `src/server/scoring/` with a `WriteContext` (`actor`, `source`, optional `tx`); ESLint guard (`no-restricted-syntax`) allowing canonical writes only there; `eslint-suppressions.json` baseline + `check-canonical-write-baseline.mjs` monotonic-shrink CI check; migrate inline sites one batch per PR | Guard active with a 36-entry baseline; new violations fail CI; baseline shrinks as sites migrate; no behavior change in live flows |
 | A3b | Sync engine & conflict resolution | `POST /api/sync/outbox` (batch ≤ 100) importing the A3a services; idempotency insert in the same transaction as the canonical write; per-record results; LWW on `clientUpdatedAt` logged to `SyncConflictLog`; PlayerStat **derived** (not synced); `SyncIdempotency` + `SyncConflictLog` tables; Background Sync + periodic fallback; sync status dashboard | Two devices score offline, reconnect, reconcile without duplicates or lost events; integration test simulates 3 offline sessions + 1 reconnect |
 | A4 | Hardening & rollout | Exponential backoff retry (1s→4s→16s→64s, cap 5); dead-letter queue for permanently failed; `/admin/sync-health` admin page (pending per device, conflicts, DLQ with retry); load test 50 devices × 500 events × 4h; runbook `docs/offline-scoring-runbook.md`; feature-flag rollout 1 league → 1 region → all | Zero data loss in load test; runbook signed off by ops |
+| A5 | Live console offline integration | Inject `actor` into the five ledger-writing server actions (`recordScore`, `recordStatEvent`, `voidScoreEventAction`, `correctScoreEventAction`, `undoLastEvent`); write an invocation test for `recordScore` against current behavior as the refactor safety net; extract `computeScoreConsequences` (pure) and `applyScoreEffects` (I/O); wire `replayOutboxRecord` to call the shared effect helper for SCORE events; wire the live console UI to `ScoringRepository` | A tap on an offline tablet produces the same DB state as a tap while online, verified by a parity test; Season One venue wifi drop does not lose events or the scoreboard |
 
 **A3 rescope note (2026-09-27).** The A3 brief assumed one HTTP route handler owning the canonical
 write. Discovery: there are **20 inline server-action write sites** across two files and **no
@@ -819,6 +821,16 @@ no migration) and **A3b** (the sync endpoint). See `docs/canonical-write-audit.m
 **PlayerStat is derived, not synced** (decided). The outbox syncs `Game` + `GameEvent` only;
 `PlayerStat`/`TeamStat` are recomputed server-side from the canonical event ledger. This eliminates
 per-field LWW and additive-counter race conditions, and requires no `PlayerStat` schema change.
+
+**Client-asserts, server-validates for wall-clock-derived fields.** Ultra Time status is wall-clock-derived, not event-stream-derived, so the server cannot reconstruct the observed value at sync time. For event attributes that depend on the client's clock (Ultra Time multiplier), the client asserts the observed value and the server validates it is well-formed and consistent with other event fields. Provenance is recorded (`resolvedBy`, `clientObservedAt` on `GameEvent`) so client-resolved events can be audited separately from server-resolved ones. This is a principled exception to server-authority, not a general relaxation.
+
+**Replay must not invoke wall-clock-dependent side effects.** `syncUltraTimeState` compares the server's current wall clock against `isUltraTimeActive` to detect transitions. Called during replay, it would write transition events against post-hoc game state. Replay uses the client-asserted `isUltraTime` on the event row only; the global flag is never touched by replay.
+
+**Vocabulary narrowing.** The sync endpoint rejects `GameEvent: UPDATE`, `GameEvent: DELETE`, and `Game: DELETE` per-record with `UNSUPPORTED_OPERATION`. Only `Game: CREATE` and `GameEvent: CREATE` are accepted. `Game: UPDATE` (LWW) is deferred until a client producer exists — building LWW speculatively would guess at the producer's full-snapshot-vs-partial-update shape.
+
+**Fixture CREATE-CREATE collision.** Two devices offline-starting the same fixture's game collide on `Game.fixtureId` (`@unique`). The server returns `FIXTURE_ALREADY_HAS_GAME` per-record with a structured diagnostic. Reconciliation (rehoming the losing device's queued GameEvents onto the winning gameId) is deferred — it requires a response-shape addition (returning the winning gameId) plus a `drain()` state-machine change, and a product decision (silent merge vs. prompt the scorekeeper).
+
+**Effects-extraction gap.** `replayOutboxRecord` creates the `GameEvent` row but does not update `Fixture.homeScore`/`awayScore`, `PlayerStat`, or `TeamStat`. Latent today because nothing replays SCORE events. Closed by A5's extraction: `computeScoreConsequences` (pure) and `applyScoreEffects` (I/O), shared by both `recordScore` and replay, proven equivalent by a parity test.
 
 **Cross-cutting concerns:**
 
