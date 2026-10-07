@@ -1,5 +1,5 @@
 import { offlineDb, type OfflineScoringDatabase } from "../db";
-import { enqueue } from "../outbox";
+import { drain, enqueue } from "../outbox";
 import type { LocalGame, LocalGameEvent, LocalPlayerStat } from "../entities";
 
 export interface CreateGameInput {
@@ -18,6 +18,16 @@ export type CreateGameEventInput = Omit<
 > & {
   organizationId?: string;
   clientUpdatedAt?: string;
+  // Required, not optional: outbox-schema.ts's wire contract requires this for every GameEvent
+  // record (Point 2, docs/canonical-write-audit.md) - a console that doesn't know which ledger
+  // it's writing to is a bug at the call site, not something to default away here.
+  ledgerSourceHint: "SCORER" | "STATISTICIAN";
+  // A4 (offline scoring tap): present only when the caller already resolved this shot's
+  // multiplier/isUltraTime itself (via resolveClientShot, src/lib/ultra-scoring-engine.ts) rather
+  // than relying on the live server action to do it - see docs/canonical-write-audit.md's
+  // "wall-clock-derived event fields" note. Carried on the outbox payload only, not on
+  // LocalGameEvent itself - nothing local reads it back today.
+  clientObservedAt?: string;
 };
 
 // No updatePlayerStat here (removed - see docs/canonical-write-audit.md "Outbox entity
@@ -86,8 +96,12 @@ export class LocalScoringRepository implements ScoringRepository {
     if (!game) throw new Error("GAME_NOT_FOUND");
     const timestamp = input.clientUpdatedAt ?? now();
     const sequenceNumber = game.nextEventSequence;
+    // ledgerSourceHint/clientObservedAt aren't LocalGameEvent fields (outbox routing/replay
+    // metadata, not something this console needs to read back locally) - destructured out here so
+    // they land only on the enqueued wire record's payload, not duplicated into the stored event.
+    const { ledgerSourceHint, clientObservedAt, ...eventInput } = input;
     const event: LocalGameEvent = {
-      ...input,
+      ...eventInput,
       organizationId: input.organizationId ?? game.organizationId,
       sequenceNumber,
       createdAt: timestamp,
@@ -105,13 +119,25 @@ export class LocalScoringRepository implements ScoringRepository {
           entityType: "GameEvent",
           entityId: event.id,
           operation: "CREATE",
-          payload: event,
+          // clientObservedAt travels on the payload itself (gameEventCreatePayloadSchema's own
+          // field), not as a sibling outbox record property the way ledgerSourceHint is - it's
+          // part of what the server validates against this specific event, not generic routing.
+          payload: clientObservedAt ? { ...event, clientObservedAt } : event,
           clientUpdatedAt: timestamp,
           deviceId: this.deviceId,
+          ledgerSourceHint,
         },
         this.db,
       );
     });
+    // Enqueue-triggered drain when online: without this, the common case (wifi is up, the tap
+    // just needed to queue briefly for some other reason) would only sync on the next
+    // online/visibilitychange trigger, which could be tens of seconds away - not the "sync within
+    // ~1s" the offline-tap UX design calls for. Fire-and-forget: drain()'s own in-flight guard
+    // makes an overlapping call from a rapid second tap a no-op, not a problem.
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      void drain(this.deviceId);
+    }
     return event;
   }
 

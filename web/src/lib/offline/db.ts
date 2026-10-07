@@ -13,6 +13,10 @@ interface OutboxRow {
   deviceId: string;
   syncedAt?: string | null;
   failureReason?: string | null;
+  attemptCount: number;
+  deadLetteredAt?: string | null;
+  lastManualRetryAt?: string | null;
+  ledgerSourceHint?: "SCORER" | "STATISTICIAN";
 }
 
 interface MetaRow {

@@ -47,6 +47,7 @@ const eventInput = (gameId: string, id: string): CreateGameEventInput => ({
   period: 1,
   clockSeconds: 540,
   description: "made 2",
+  ledgerSourceHint: "SCORER",
 });
 
 test("createGame writes the game locally and enqueues a CREATE outbox record", async () => {
@@ -120,4 +121,27 @@ test("every local write lands in the outbox with pending status", async () => {
   await repo.createGame({ id: "g1", organizationId: "org", fixtureId: "f1" });
   await repo.logEvent(eventInput("g1", "e1"));
   assert.equal(await pendingCount(db), 2);
+});
+
+test("logEvent carries clientObservedAt onto the outbox payload, not onto the stored LocalGameEvent", async () => {
+  const { db, repo } = setup();
+  await repo.createGame({ id: "g1", organizationId: "org", fixtureId: "f1" });
+  const event = await repo.logEvent({ ...eventInput("g1", "e1"), clientObservedAt: "2026-09-28T20:00:00.000Z" });
+
+  // clientObservedAt is replay/wire metadata (the offline scoring-tap validation path), not a
+  // field this console needs back from its own local cache - it must not leak onto the stored
+  // event object.
+  assert.equal((event as unknown as Record<string, unknown>).clientObservedAt, undefined);
+
+  const record = await db.outbox.where("entityId").equals("e1").first();
+  assert.equal((record?.payload as Record<string, unknown>)?.clientObservedAt, "2026-09-28T20:00:00.000Z");
+});
+
+test("logEvent omits clientObservedAt from the outbox payload entirely when not supplied - not even as an explicit undefined", async () => {
+  const { db, repo } = setup();
+  await repo.createGame({ id: "g1", organizationId: "org", fixtureId: "f1" });
+  await repo.logEvent(eventInput("g1", "e1"));
+
+  const record = await db.outbox.where("entityId").equals("e1").first();
+  assert.equal("clientObservedAt" in (record?.payload as Record<string, unknown>), false, "the server-resolved path's payload must look identical to before this field existed");
 });

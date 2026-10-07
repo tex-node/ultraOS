@@ -19,6 +19,21 @@ export interface OutboxRecord {
   deviceId: string;
   syncedAt?: string | null;
   failureReason?: string | null;
+  // Incremented on every FAILED/CONFLICT replay result (never on APPLIED/DUPLICATE). Reaching
+  // DEAD_LETTER_ATTEMPT_THRESHOLD (outbox.ts) sets deadLetteredAt below.
+  attemptCount: number;
+  // Set once attemptCount crosses DEAD_LETTER_ATTEMPT_THRESHOLD - readPendingBatch/pendingCount
+  // exclude a dead-lettered record from further automatic retry; retryDeadLetteredRecords clears
+  // this (and resets attemptCount) for a manual retry.
+  deadLetteredAt?: string | null;
+  // Stamped by retryDeadLetteredRecords on every reset it actually performs - MANUAL_RETRY_COOLDOWN_MS
+  // (outbox.ts) uses this to stop a permanently-failing record from being reset (and burning
+  // another 5 attempts) on every repeated click within the cooldown window.
+  lastManualRetryAt?: string | null;
+  // Wire-required for GameEvent only (outbox-schema.ts's superRefine) - which console's ledger a
+  // replayed event belongs to. A Game record has no scorer/statistician distinction, so this is
+  // absent for those.
+  ledgerSourceHint?: "SCORER" | "STATISTICIAN";
 }
 
 export interface OutboxEnqueueInput {
@@ -29,6 +44,7 @@ export interface OutboxEnqueueInput {
   clientUpdatedAt?: string;
   deviceId: string;
   idempotencyKey?: string;
+  ledgerSourceHint?: "SCORER" | "STATISTICIAN";
 }
 
 export type SyncResultStatus = "APPLIED" | "DUPLICATE" | "CONFLICT" | "FAILED";
