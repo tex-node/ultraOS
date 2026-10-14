@@ -8270,3 +8270,42 @@ run, apply, re-run reported "already correct". The previous value was 2026-09-27
 `build-lbcl-batch.mjs`'s SEASON.endDate updated to match (JSON regenerated, 32 games). Uncommitted.
 Scratch copies `/tmp/lbcl-p2` and `/tmp/lbcl-se-p` (plain copies of the production release) remain on the
 host - cleanup of production-adjacent paths was blocked by the permission classifier earlier, so not retried.
+
+## 2026-10-14 - GIESM registration: ages 10-20, independent sports, individual flag-race registration
+
+**Request:** change contestant ages to 10-20; make flag race independent of volleyball and support
+individual (no-team) registration; guardian consent only for under-18s.
+
+**Findings (before coding):** the registration system was TEAM-only (RegistrationMode.INDIVIDUAL
+unused; UI always rendered a team form; only the permissive runtime schema existed). A form is
+one-per-event (`RegistrationForm @@unique([organizationId, eventId])`), so a single form must serve
+both shapes. The admin write-schema (`sportConfigFormSchema`) hard-codes flag race = exactly 6,
+which contradicts the GIESM 5-10 config (written via the permissive schema) - left as-is, noted.
+
+**Implemented (additive, backward-compatible):**
+- `sport-config.ts`: added `individualSports: RegistrationSport[]` (default []) and
+  `guardianConsentUnderAge: number | null` (default null = all ages).
+- `validation.ts`: extracted `validatePersonCore`; added `guardianConsentRequiredFor` (minors-only,
+  unknown DOB safe-fails to required) and `validateIndividualSubmission` (one athlete, sport must be
+  in individualSports, no team/roster checks). Team validation now uses the minors-only consent rule.
+- `service.ts`: `CreateRegistrationInput.registrationMode` (TEAM|INDIVIDUAL); per-submission `mode`;
+  individual branch validates a single athlete and skips team checks.
+- Public form: "A team / An individual athlete" selector; individual = one flag-race athlete, no team
+  name, sport locked/selectable; consent fields labelled "(required under 18)".
+- Tests: config defaults, guardianConsentRequiredFor thresholds, individual submission (valid /
+  sport-not-allowed / duplicate-in-event). 28 registration tests pass; full suite 843 pass / 0 fail.
+
+**Applied to production:**
+- Deployed release `3be51dc` (see deploy note). A `npm ci` EUSAGE (Missing @swc/helpers@0.5.23) was
+  hit again; regenerated package-lock on the deploy host (npm 10.8.2) and committed as `3be51dc`.
+- Updated GIESM form `cmu2i5eal0005plkkwj1fsc5e` sportConfig: minAge 10 / maxAge 20,
+  requireBothSports false, individualSports ["FLAG_RACE"], guardianConsentUnderAge 18,
+  rosters VOLLEYBALL 10-20 active 12 / FLAG_RACE 5-10 order-required.
+- Verified live: /giesm 200, page shows the mode selector ("A team" / "individual athlete") and the
+  10-20 band; no SportConfigError in the service log.
+
+**Known issues / follow-ups:**
+- Per-gender minimums (5 male + 5 female) remain collected-not-enforced (needs validation extension).
+- `sportConfigFormSchema` still asserts flag race = exactly 6, so an admin-form save of the GIESM
+  config would be rejected and, if saved, would drop the two new keys (admin form does not render
+  them). If GIESM is to be admin-editable, relax that rule and add the new fields to the admin form.

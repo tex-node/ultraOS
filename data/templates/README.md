@@ -10,9 +10,11 @@ This directory contains reusable registration form templates for common tourname
 
 **Important schema rules (learned from the 2026-10-05 `/giesm` 500 incident):**
 - `sportConfig.gender` must be exactly `FEMALE`, `MALE`, or `ANY` — **co-ed is `ANY`**. There is no `CO_ED`; writing it throws `SportConfigError` and 500s every page that loads the form.
-- Only keys present in `web/src/lib/registration/sport-config.ts` are honored (`sports`, `requireBothSports`, `dualParticipationAllowed`, `minAge`, `maxAge`, `requireGuardianConsent`, `requireCompleteRosters`, `gender`, `rosters`). Anything else (e.g. `genderSplit`, `coaches`) is **silently stripped** by zod — never rely on it.
+- `sportConfig.individualSports` lists sports open to **individual (no-team) registration** (e.g. `["FLAG_RACE"]`). When non-empty, the public form shows an "A team / An individual athlete" choice; an individual submission is one athlete for one of those sports. Empty = team-only (the default). A team's sports are independent unless `requireBothSports: true`.
+- `sportConfig.guardianConsentUnderAge` (e.g. `18`) makes guardian consent required **only for participants under that age**; `null` requires it for everyone (historical behaviour).
+- Only keys present in `web/src/lib/registration/sport-config.ts` are honored (`sports`, `individualSports`, `requireBothSports`, `dualParticipationAllowed`, `minAge`, `maxAge`, `requireGuardianConsent`, `guardianConsentUnderAge`, `requireCompleteRosters`, `gender`, `rosters`). Anything else (e.g. `genderSplit`, `coaches`) is **silently stripped** by zod — never rely on it.
 - Per-gender minimums (5 male + 5 female) are **not enforceable** by the current schema; gender is collected per participant and only total roster bounds are validated. Enforcing a split needs a `validation.ts` extension — tracked as follow-up.
-- `apply-registration-template.ts` now pre-validates `sportConfig` with `parseSportConfig` before writing.
+- `apply-registration-template.ts` pre-validates `sportConfig` with `parseSportConfig` before writing.
 
 **Features:**
 - Team-based registration (one coach registers the whole team)

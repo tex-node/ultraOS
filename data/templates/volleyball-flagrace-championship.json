@@ -1,18 +1,20 @@
 {
   "name": "Volleyball & Flag Race Team Championship",
   "description": "Template for co-ed volleyball and flag race championships with team registration",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "created": "2026-09-27",
-  "updated": "2026-10-05",
+  "updated": "2026-10-14",
   "sportConfig": {
     "gender": "ANY",
     "sports": ["VOLLEYBALL", "FLAG_RACE"],
-    "minAge": 6,
-    "maxAge": 12,
-    "requireBothSports": true,
-    "requireCompleteRosters": true,
-    "requireGuardianConsent": true,
+    "individualSports": ["FLAG_RACE"],
+    "requireBothSports": false,
     "dualParticipationAllowed": true,
+    "minAge": 10,
+    "maxAge": 20,
+    "requireGuardianConsent": true,
+    "guardianConsentUnderAge": 18,
+    "requireCompleteRosters": true,
     "rosters": {
       "VOLLEYBALL": {
         "minRoster": 10,
@@ -31,8 +33,10 @@
     }
   },
   "notes": [
-    "Co-ed is expressed as gender ANY; per-gender minimums (5 male + 5 female) are NOT enforceable by the current sportConfig schema (web/src/lib/registration/sport-config.ts) - gender is collected per participant and total roster bounds are enforced, but a hard per-gender split needs a validation extension.",
-    "v1.0.0 carried an invalid gender CO_ED and non-schema keys (genderSplit, coaches) which threw SportConfigError on the live /giesm route; do not reintroduce them. The apply script now pre-validates."
+    "individualSports lists sports open to no-team individual registration (here FLAG_RACE); the form shows a 'A team / An individual athlete' choice when this is non-empty.",
+    "guardianConsentUnderAge: 18 = guardian consent required only for participants under 18; null = required for everyone.",
+    "Co-ed is gender ANY; per-gender minimums are NOT enforceable by sportConfig (gender is collected per participant; only total roster bounds are enforced).",
+    "v1.0.0 carried an invalid gender CO_ED and non-schema keys (genderSplit, coaches) which threw SportConfigError on the live /giesm route; do not reintroduce them. The apply script pre-validates."
   ],
   "fields": {
     "submission": [
