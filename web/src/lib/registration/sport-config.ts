@@ -23,10 +23,16 @@ export const sportConfigSchema = z.object({
   sports: z.array(sportEnum).min(1),
   // Every team must register a roster for each configured sport.
   requireBothSports: z.boolean().default(false),
+  // Sports that may ALSO be entered by an individual, without a team (e.g. flag race).
+  // A sport not listed here is team-only. Empty = no individual registration.
+  individualSports: z.array(sportEnum).default([]),
   dualParticipationAllowed: z.boolean().default(true),
   minAge: z.number().int().min(0).default(0),
   maxAge: z.number().int().min(0).default(120),
   requireGuardianConsent: z.boolean().default(true),
+  // When set (e.g. 18), guardian consent is required only for participants younger than this.
+  // null = required for every participant (the historical behaviour).
+  guardianConsentUnderAge: z.number().int().min(0).max(120).nullable().default(null),
   requireCompleteRosters: z.boolean().default(true),
   gender: z.enum(["FEMALE", "MALE", "ANY"]).default("FEMALE"),
   rosters: z

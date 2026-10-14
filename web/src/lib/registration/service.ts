@@ -6,7 +6,7 @@ import { assertSameOrganization } from "@/lib/authorization";
 import { participantMatchKey } from "./normalization";
 import { createWithReference } from "./reference";
 import { parseSportConfig, type SportConfig } from "./sport-config";
-import { validateTeamSubmission, type ParticipantInput, type TeamSubmissionInput, type ValidationIssue } from "./validation";
+import { validateTeamSubmission, validateIndividualSubmission, type ParticipantInput, type TeamSubmissionInput, type ValidationIssue, type ValidationResult } from "./validation";
 
 export class RegistrationNotFoundError extends Error {
   constructor() {
@@ -67,6 +67,8 @@ export type CreateRegistrationInput = {
   formId: string;
   eventId: string;
   mode: "DRAFT" | "SUBMIT";
+  // The registration shape: a team, or a single individual athlete (no team). Defaults to TEAM.
+  registrationMode?: "TEAM" | "INDIVIDUAL";
   applicantUserId?: string | null;
   team: TeamSubmissionInput;
   submissionAnswers?: Record<string, unknown>;
@@ -83,8 +85,36 @@ export async function createTeamRegistration(input: CreateRegistrationInput) {
     if (form.organizationId !== input.organizationId || form.eventId !== input.eventId) throw new RegistrationNotFoundError();
     const config = parseSportConfig(form.sportConfig);
 
+    const exactMode = input.registrationMode ?? "TEAM";
     const existingMatchKeys = await existingMatchKeysForEvent(tx, input.organizationId, input.eventId);
-    const result = validateTeamSubmission(input.team, { config, requireCompleteRosters: input.mode === "SUBMIT", existingMatchKeys });
+    const requireCompleteRosters = input.mode === "SUBMIT";
+    let result: ValidationResult;
+    if (exactMode === "INDIVIDUAL") {
+      if (input.team.participants.length !== 1) {
+        throw new RegistrationValidationError([{ path: "participants", code: "INDIVIDUAL_ONE_ATHLETE", message: "Individual registration must have exactly one athlete." }]);
+      }
+      const athlete = input.team.participants[0];
+      const sport = athlete.sportMemberships[0]?.sport;
+      if (!sport) {
+        throw new RegistrationValidationError([{ path: "sport", code: "NO_SPORT", message: "Choose the sport to register for." }]);
+      }
+      result = validateIndividualSubmission(
+        {
+          fullName: athlete.fullName,
+          dateOfBirth: athlete.dateOfBirth,
+          gender: athlete.gender,
+          guardianName: athlete.guardianName,
+          guardianPhone: athlete.guardianPhone,
+          consentAccepted: athlete.consentAccepted,
+          clubOrSchool: input.team.teamClubOrSchool,
+          category: input.team.teamCategory,
+          sport,
+        },
+        { config, requireCompleteRosters, existingMatchKeys },
+      );
+    } else {
+      result = validateTeamSubmission(input.team, { config, requireCompleteRosters, existingMatchKeys });
+    }
     if (!result.valid) throw new RegistrationValidationError(result.errors);
 
     const now = new Date();
@@ -95,7 +125,7 @@ export async function createTeamRegistration(input: CreateRegistrationInput) {
           organizationId: input.organizationId,
           formId: form.id,
           eventId: form.eventId,
-          mode: form.mode,
+          mode: exactMode,
           status,
           referenceNumber,
           applicantUserId: input.applicantUserId ?? null,

@@ -7,6 +7,8 @@ import { parseSportConfig, SportConfigError, ageInYears } from "@/lib/registrati
 import {
   validateFieldAnswers,
   validateTeamSubmission,
+  validateIndividualSubmission,
+  guardianConsentRequiredFor,
   type ParticipantInput,
   type RegistrationFieldDef,
 } from "@/lib/registration/validation";
@@ -181,4 +183,60 @@ test("field answers validate required, type, options and conditional visibility"
   assert.deepEqual(hiddenGuardian, []);
   const shownGuardian = validateFieldAnswers(fields, { isMinor: true }, "PARTICIPANT");
   assert.ok(shownGuardian.some((issue) => issue.path === "guardian"));
+});
+
+test("sport config defaults individual sports to none and guardian consent to all ages", () => {
+  const parsed = parseSportConfig({ sports: [RegistrationSport.VOLLEYBALL] });
+  assert.deepEqual(parsed.individualSports, []);
+  assert.equal(parsed.guardianConsentUnderAge, null);
+});
+
+test("guardianConsentRequiredFor honours the under-age threshold", () => {
+  assert.equal(guardianConsentRequiredFor(config(), "2000-01-01", NOW), true);
+  const minors = config({ guardianConsentUnderAge: 18 });
+  assert.equal(guardianConsentRequiredFor(minors, "2015-01-01", NOW), true); // 11
+  assert.equal(guardianConsentRequiredFor(minors, "2007-01-01", NOW), false); // 19
+  assert.equal(guardianConsentRequiredFor(config({ requireGuardianConsent: false }), "2015-01-01", NOW), false);
+});
+
+test("guardian consent is required only for under-18s when the threshold is set", () => {
+  const cfg = config({ guardianConsentUnderAge: 18, minAge: 0, maxAge: 120 });
+  const adult = child(1, [{ sport: RegistrationSport.VOLLEYBALL }]);
+  adult.dateOfBirth = "2000-01-01"; adult.guardianName = ""; adult.guardianPhone = ""; adult.consentAccepted = false;
+  const okResult = validateTeamSubmission({ teamName: "T", participants: [adult] }, { config: cfg, now: NOW, requireCompleteRosters: true });
+  assert.ok(!okResult.errors.some((issue) => issue.code === "CONSENT_REQUIRED"));
+
+  const minor = child(2, [{ sport: RegistrationSport.VOLLEYBALL }]);
+  minor.dateOfBirth = "2015-01-01"; minor.guardianName = ""; minor.consentAccepted = false;
+  const badResult = validateTeamSubmission({ teamName: "T", participants: [minor] }, { config: cfg, now: NOW, requireCompleteRosters: true });
+  assert.ok(badResult.errors.some((issue) => issue.code === "CONSENT_REQUIRED"));
+});
+
+test("individual flag-race registration validates a single athlete", () => {
+  const cfg = config({ individualSports: [RegistrationSport.FLAG_RACE] });
+  const result = validateIndividualSubmission(
+    { fullName: "Ada Obi", dateOfBirth: "2016-01-01", gender: "FEMALE", guardianName: "G", guardianPhone: "08010000000", consentAccepted: true, sport: RegistrationSport.FLAG_RACE },
+    { config: cfg, now: NOW, requireCompleteRosters: true },
+  );
+  assert.equal(result.valid, true);
+  assert.deepEqual(result.errors, []);
+});
+
+test("individual registration rejects a sport not opened to individuals", () => {
+  const cfg = config({ individualSports: [RegistrationSport.FLAG_RACE] });
+  const result = validateIndividualSubmission(
+    { fullName: "Ada Obi", dateOfBirth: "2016-01-01", gender: "FEMALE", sport: RegistrationSport.VOLLEYBALL },
+    { config: cfg, now: NOW, requireCompleteRosters: false },
+  );
+  assert.ok(result.errors.some((issue) => issue.code === "INDIVIDUAL_NOT_ALLOWED"));
+});
+
+test("individual registration flags a duplicate already registered in the event", () => {
+  const cfg = config({ individualSports: [RegistrationSport.FLAG_RACE] });
+  const existing = new Set([participantMatchKey("Ada Obi", "2016-01-01")!]);
+  const result = validateIndividualSubmission(
+    { fullName: "Ada Obi", dateOfBirth: "2016-01-01", gender: "FEMALE", sport: RegistrationSport.FLAG_RACE },
+    { config: cfg, now: NOW, requireCompleteRosters: false, existingMatchKeys: existing },
+  );
+  assert.ok(result.errors.some((issue) => issue.code === "DUPLICATE_IN_EVENT"));
 });

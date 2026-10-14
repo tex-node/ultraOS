@@ -2,17 +2,26 @@ import { prisma } from '../src/lib/prisma';
 import { parseSportConfig } from '../src/lib/registration/sport-config';
 import { readFileSync } from 'fs';
 
+interface TemplateField {
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  sortOrder: number;
+  options?: Record<string, unknown>;
+}
+
 interface TemplateConfig {
   name: string;
   description: string;
-  sportConfig: any;
+  sportConfig: unknown;
   fields: {
-    submission: any[];
+    submission: TemplateField[];
     participant: {
-      [sport: string]: any[];
+      [sport: string]: TemplateField[];
     };
   };
-  defaultSettings: any;
+  defaultSettings: unknown;
 }
 
 async function applyTemplate(eventId: string, templatePath: string) {
@@ -24,7 +33,7 @@ async function applyTemplate(eventId: string, templatePath: string) {
 
   // Fail fast before any write: an invalid sportConfig would throw SportConfigError on every
   // page load that resolves this form (see the /giesm 500 incident).
-  parseSportConfig(template.sportConfig);
+  const config = parseSportConfig(template.sportConfig);
 
   console.log(`Template: ${template.name}`);
   console.log(`Description: ${template.description}\n`);
@@ -54,8 +63,8 @@ async function applyTemplate(eventId: string, templatePath: string) {
         mode: 'TEAM',
         status: 'DRAFT',
         publicEnabled: false,
-        sports: template.sportConfig.sports,
-        sportConfig: template.sportConfig
+        sports: config.sports,
+        sportConfig: config as never
       }
     });
     console.log(`Created form: ${form.id}\n`);
@@ -66,8 +75,8 @@ async function applyTemplate(eventId: string, templatePath: string) {
       data: {
         title: `${event.name} — Registration`,
         description: template.description,
-        sports: template.sportConfig.sports,
-        sportConfig: template.sportConfig
+        sports: config.sports,
+        sportConfig: config as never
       }
     });
   }
@@ -86,11 +95,11 @@ async function applyTemplate(eventId: string, templatePath: string) {
       formId: form.id,
       key: field.key,
       label: field.label,
-      type: field.type,
+      type: field.type as never,
       scope: 'SUBMISSION',
       required: field.required,
       sortOrder: field.sortOrder,
-      options: field.options || null
+      options: (field.options ?? null) as never
     }))
   });
 
@@ -104,11 +113,11 @@ async function applyTemplate(eventId: string, templatePath: string) {
         formId: form.id,
         key: field.key,
         label: field.label,
-        type: field.type,
+        type: field.type as never,
         scope: 'PARTICIPANT',
         required: field.required,
         sortOrder: field.sortOrder,
-        options: { ...field.options, sport }
+        options: { ...field.options, sport } as never
       }))
     });
     participantFieldCount += fields.length;

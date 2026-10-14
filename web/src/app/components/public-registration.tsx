@@ -46,6 +46,8 @@ export async function PublicRegistrationExperience({
         requireGuardianConsent={config.requireGuardianConsent}
         rosters={config.rosters as Record<string, { minRoster: number; maxRoster: number; activeCount?: number; substitutesAllowed: boolean; orderRequired: boolean } | undefined>}
         gender={config.gender}
+        individualSports={config.individualSports}
+        guardianConsentUnderAge={config.guardianConsentUnderAge}
       />
     </main>
   );

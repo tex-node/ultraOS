@@ -28,6 +28,7 @@ const participantSchema = z.object({
 });
 
 const payloadSchema = z.object({
+  registrationMode: z.enum(["TEAM", "INDIVIDUAL"]).optional(),
   teamName: z.string().max(120).optional(),
   teamClubOrSchool: z.string().max(160).optional(),
   teamCategory: z.string().max(80).optional(),
@@ -90,6 +91,7 @@ export async function submitTeamRegistration(
       formId: ctx.form.id,
       eventId: ctx.event.id,
       mode: mode,
+      registrationMode: payload.registrationMode ?? "TEAM",
       applicantUserId: session?.user?.id ?? null,
       actorUserId: session?.user?.id ?? null,
       submissionAnswers: payload.submissionAnswers,

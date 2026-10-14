@@ -5,7 +5,6 @@ async function main() {
   console.log('Creating public resource locator for GIESM event...\n');
 
   const eventId = 'cmu2i5e9p0004plkkrnjhej0o';
-  const organizationId = 'cmt4odhgn0000wokk8fbwr6ro'; // Neon Ultra Basketball League
 
   // Verify event exists
   const event = await prisma.event.findUnique({

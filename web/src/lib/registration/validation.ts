@@ -45,6 +45,20 @@ export type TeamSubmissionInput = {
   participants: ParticipantInput[];
 };
 
+// Individual (no-team) registration: one athlete entering a single sport that the
+// competition has opened to individuals (sportConfig.individualSports).
+export type IndividualSubmissionInput = {
+  fullName: string;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+  guardianName?: string | null;
+  guardianPhone?: string | null;
+  consentAccepted?: boolean;
+  clubOrSchool?: string | null;
+  category?: string | null;
+  sport: RegistrationSportValue;
+};
+
 export type ValidateOptions = {
   config: SportConfig;
   now?: Date;
@@ -56,6 +70,66 @@ export type ValidateOptions = {
 
 function empty(value: unknown): boolean {
   return value === undefined || value === null || (typeof value === "string" && value.trim() === "") || (Array.isArray(value) && value.length === 0);
+}
+
+// Whether guardian consent applies to a participant of this age. `guardianConsentUnderAge`
+// null means "every participant" (historical behaviour); a number means "minors only" (under N),
+// and an unknown/invalid DOB is treated as consent-required so a minor can never slip through.
+export function guardianConsentRequiredFor(
+  config: SportConfig,
+  dateOfBirth: string | null | undefined,
+  now: Date,
+): boolean {
+  if (!config.requireGuardianConsent) return false;
+  if (config.guardianConsentUnderAge == null) return true;
+  if (empty(dateOfBirth)) return true;
+  const parsed = new Date(String(dateOfBirth));
+  if (Number.isNaN(parsed.getTime())) return true;
+  return ageInYears(parsed, now) < config.guardianConsentUnderAge;
+}
+
+type PersonCore = {
+  fullName: string;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+  guardianName?: string | null;
+  guardianPhone?: string | null;
+  consentAccepted?: boolean;
+};
+
+// Shared per-person checks (name, gender eligibility, age band, consent) used by both the
+// team and individual validators. Guardian issues become warnings when not finalising.
+function validatePersonCore(
+  person: PersonCore,
+  config: SportConfig,
+  now: Date,
+  requireCompleteRosters: boolean,
+): { errors: ValidationIssue[]; warnings: ValidationIssue[] } {
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+  if (empty(person.fullName)) errors.push({ path: "fullName", code: "REQUIRED", message: "Full name is required." });
+
+  if (config.gender !== "ANY") {
+    if (empty(person.gender)) errors.push({ path: "gender", code: "GENDER_REQUIRED", message: "Gender is required for eligibility." });
+    else if (String(person.gender).toUpperCase() !== config.gender) errors.push({ path: "gender", code: "GENDER_INELIGIBLE", message: `This competition is ${config.gender.toLowerCase()}-only.` });
+  }
+
+  if (empty(person.dateOfBirth)) {
+    errors.push({ path: "dateOfBirth", code: "DOB_REQUIRED", message: "Date of birth is required for age eligibility." });
+  } else {
+    const age = ageInYears(String(person.dateOfBirth), now);
+    if (age < config.minAge || age > config.maxAge) errors.push({ path: "dateOfBirth", code: "AGE_INELIGIBLE", message: `Age ${age} is outside the configured ${config.minAge}-${config.maxAge} range.` });
+  }
+
+  if (guardianConsentRequiredFor(config, person.dateOfBirth, now)) {
+    const sink = requireCompleteRosters ? errors : warnings;
+    const under = config.guardianConsentUnderAge == null ? "every participant" : `participants under ${config.guardianConsentUnderAge}`;
+    if (empty(person.guardianName)) sink.push({ path: "guardianName", code: "GUARDIAN_REQUIRED", message: `Guardian name is required for ${under}.` });
+    if (empty(person.guardianPhone)) sink.push({ path: "guardianPhone", code: "GUARDIAN_REQUIRED", message: `Guardian phone is required for ${under}.` });
+    if (person.consentAccepted !== true) sink.push({ path: "consentAccepted", code: "CONSENT_REQUIRED", message: `Guardian consent is required for ${under}.` });
+  }
+
+  return { errors, warnings };
 }
 
 export function validateFieldAnswers(
@@ -128,25 +202,9 @@ export function validateTeamSubmission(input: TeamSubmissionInput, options: Vali
   const seenInSubmission = new Map<string, string>();
   for (const participant of input.participants) {
     const base = `participants.${participant.clientId}`;
-    if (empty(participant.fullName)) errors.push({ path: `${base}.fullName`, code: "REQUIRED", message: "Full name is required." });
-
-    if (config.gender !== "ANY") {
-      if (empty(participant.gender)) errors.push({ path: `${base}.gender`, code: "GENDER_REQUIRED", message: "Gender is required for eligibility." });
-      else if (String(participant.gender).toUpperCase() !== config.gender) errors.push({ path: `${base}.gender`, code: "GENDER_INELIGIBLE", message: `This competition is ${config.gender.toLowerCase()}-only.` });
-    }
-
-    if (empty(participant.dateOfBirth)) {
-      errors.push({ path: `${base}.dateOfBirth`, code: "DOB_REQUIRED", message: "Date of birth is required for age eligibility." });
-    } else {
-      const age = ageInYears(String(participant.dateOfBirth), now);
-      if (age < config.minAge || age > config.maxAge) errors.push({ path: `${base}.dateOfBirth`, code: "AGE_INELIGIBLE", message: `Age ${age} is outside the configured ${config.minAge}-${config.maxAge} range.` });
-    }
-
-    if (config.requireGuardianConsent) {
-      if (empty(participant.guardianName)) (requireCompleteRosters ? errors : warnings).push({ path: `${base}.guardianName`, code: "GUARDIAN_REQUIRED", message: "Guardian name is required." });
-      if (empty(participant.guardianPhone)) (requireCompleteRosters ? errors : warnings).push({ path: `${base}.guardianPhone`, code: "GUARDIAN_REQUIRED", message: "Guardian phone is required." });
-      if (participant.consentAccepted !== true) (requireCompleteRosters ? errors : warnings).push({ path: `${base}.consentAccepted`, code: "CONSENT_REQUIRED", message: "Guardian consent is required for every child." });
-    }
+    const core = validatePersonCore(participant, config, now, requireCompleteRosters);
+    for (const issue of core.errors) errors.push({ ...issue, path: `${base}.${issue.path}` });
+    for (const issue of core.warnings) warnings.push({ ...issue, path: `${base}.${issue.path}` });
 
     if (participant.sportMemberships.length === 0) errors.push({ path: `${base}.sportMemberships`, code: "NO_SPORT", message: "Assign the child to at least one sport." });
     const memberSports = new Set(participant.sportMemberships.map((membership) => membership.sport));
@@ -201,6 +259,33 @@ export function validateTeamSubmission(input: TeamSubmissionInput, options: Vali
       const values = orders.map((entry) => entry.order).filter((value): value is number => typeof value === "number" && value > 0);
       if (new Set(values).size !== values.length) errors.push({ path: `rosters.${sport}`, code: "ORDER_DUPLICATE", message: `Race order must be unique within the ${sport} roster.` });
     }
+  }
+
+  return { valid: errors.length === 0, errors, warnings };
+}
+
+// Individual (no-team) registration: exactly one athlete, one sport, and that sport must be
+// opened to individuals by the competition. No team name, no roster size/order checks.
+export function validateIndividualSubmission(
+  input: IndividualSubmissionInput,
+  options: ValidateOptions,
+): ValidationResult {
+  const { config, requireCompleteRosters } = options;
+  const now = options.now ?? new Date();
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+
+  if (!config.individualSports.includes(input.sport)) {
+    errors.push({ path: "sport", code: "INDIVIDUAL_NOT_ALLOWED", message: `${input.sport} is not open for individual registration.` });
+  }
+
+  const core = validatePersonCore(input, config, now, requireCompleteRosters);
+  errors.push(...core.errors);
+  warnings.push(...core.warnings);
+
+  const matchKey = participantMatchKey(input.fullName, input.dateOfBirth);
+  if (matchKey && options.existingMatchKeys?.has(matchKey)) {
+    errors.push({ path: "fullName", code: "DUPLICATE_IN_EVENT", message: "An athlete with this name and date of birth is already registered in this event. Manual review required." });
   }
 
   return { valid: errors.length === 0, errors, warnings };
