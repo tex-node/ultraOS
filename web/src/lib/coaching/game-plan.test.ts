@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { GameCore, PlayerLine, TeamSideStats } from "@/lib/analytics/types";
-import { buildGamePlan, buildGamePlanReview } from "./game-plan";
+import { buildGamePlan, buildGamePlanReview, seriesCaptured, zeroMeansNotCaptured } from "./game-plan";
 import type { PlayerMeta } from "./player-development";
 
 type TeamSpec = {
@@ -187,4 +187,46 @@ test("a late-game closer must be at or above the league median, not just the bes
   const plan = buildGamePlan(league([weakFt("A"), plain("B"), plain("C"), plain("D")], 2), "A", "B", noMeta)!;
   assert.equal(plan.lateGame!.closers.find((c) => c.role === "FREE_THROWS"), undefined);
   assert.ok(plan.lateGame!.notes.some((n) => /league median/.test(n)), plan.lateGame!.notes.join(" | "));
+});
+
+test("poor FT shooter is league-relative and deduped from the late-game plan", () => {
+  const opp: TeamSpec = { id: "B", players: [{ id: "B1", stat: { freeThrowsMade: 2, freeThrowsAttempted: 10 } }, { id: "B2" }, { id: "B3" }, { id: "B4" }, { id: "B5" }] };
+  const plan = buildGamePlan(league([plain("A"), opp, plain("C"), plain("D")], 2), "A", "B", noMeta)!;
+  const key = plan.keys.find((k) => k.kind === "FOUL_POOR_FT_SHOOTER");
+  assert.ok(key, plan.keys.map((k) => k.kind).join() || "no keys");
+  assert.match(key!.evidence[0].baseline, /league 25th pct/);
+  // B1 is also the late-game foul target, so that duplicate line is dropped and referenced instead.
+  assert.equal(plan.lateGame!.foulTarget, null);
+  assert.ok(plan.lateGame!.notes.some((n) => /same player as the/.test(n)), plan.lateGame!.notes.join(" | "));
+});
+
+test("half-split keys require the margin to clear 2x its standard error", () => {
+  const b = (h2: number): TeamSpec => ({ ...plain("B"), periods: [25, 25 + h2] });
+  const noisy = [
+    game(plain("A"), b(-20)), game(plain("A"), b(8)),
+    game(b(-20), plain("A")), game(b(8), plain("A")),
+  ];
+  const steady = [
+    game(plain("A"), b(-6)), game(plain("A"), b(-6)),
+    game(b(-6), plain("A")), game(b(-6), plain("A")),
+  ];
+  assert.ok(!buildGamePlan(noisy, "A", "B", noMeta)!.keys.some((k) => k.kind === "WIN_THE_SECOND_HALF"), "noisy -6 mean must not fire");
+  assert.ok(buildGamePlan(steady, "A", "B", noMeta)!.keys.some((k) => k.kind === "WIN_THE_SECOND_HALF"), "steady -6 must fire");
+});
+
+test("ATTACK_FOUL_TROUBLE fires at the league 90th percentile, not a fixed 3.0", () => {
+  const opp: TeamSpec = { id: "B", players: [{ id: "fouler", stat: { fouls: 5 } }, { id: "B2" }, { id: "B3" }, { id: "B4" }, { id: "B5" }] };
+  const plan = buildGamePlan(league([plain("A"), opp, plain("C"), plain("D")], 2), "A", "B", noMeta)!;
+  const key = plan.keys.find((k) => k.kind === "ATTACK_FOUL_TROUBLE");
+  assert.ok(key, plan.keys.map((k) => k.kind).join() || "no keys");
+  assert.equal(key!.subject?.playerId, "fouler");
+  assert.match(key!.evidence[0].baseline, /league 90th pct/);
+});
+
+test("an all-zero team series counts as not captured", () => {
+  assert.equal(seriesCaptured([0, 0, 0]), false);
+  assert.equal(seriesCaptured([0, 1, 0]), true);
+  assert.equal(seriesCaptured([]), true);
+  assert.equal(zeroMeansNotCaptured("bench"), true);
+  assert.equal(zeroMeansNotCaptured("pf"), false);
 });

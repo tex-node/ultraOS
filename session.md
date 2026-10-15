@@ -8553,3 +8553,52 @@ reports failed on the host (not investigated).
 
 **Not done / next:** nothing pushed or deployed. Apply (or reject) the proposals above; then C1
 remainder (CoachingPlan table + adopt action) and C3.
+
+## 2026-10-15 (cont'd) - P15 C3 Step 0-1: push, staging cleanup, backup diagnosis, league-relative thresholds
+
+**C3 prompt:** docs/agents/prompts/2026-10-15-c3-coach-hub.md. Stopped after Step 1 as instructed.
+
+**Step 0**
+- Pushed the C0-C2 series (`d45ec04..89bd7ae`) to origin/main.
+- Staging cleanup: `/opt/ultraos-staging/current` is release `ae5ae8d` (2026-09-28). It contained
+  stray copies of `src/lib/coaching/` (11 files) and `scripts/coaching-development-preview.ts` +
+  `coaching-game-plan-preview.ts`, all mtime 2026-10-15 (left by verification). Removed only those;
+  nothing else changed.
+- `ultraos-backup.service`: has failed every night (status **203/EXEC**, since at least Oct 3).
+  Cause: `ExecStart=/opt/ultraleagueos/current/web/scripts/backup-database.sh` exists but is mode
+  `100644` (not executable) - it was committed without the exec bit (`git ls-files -s` = 100644).
+  The shebang (`#!/usr/bin/env bash`) is fine. **Not fixed** (needs approval). Fix = commit mode
+  100755 (`git update-index --chmod=+x web/scripts/backup-database.sh`) and `chmod +x` the current
+  release so tonight's timer runs.
+
+**Step 1 - thresholds, league-/game-length-relative (approved)**
+- `minMinutesShare` 0.25 (per-game dims only qualify at >= 25% of game length = team minutes / 5;
+  games with no minutes are ignored; below gate -> INSUFFICIENT_DATA with the mpg).
+- `focusBelowPercentile` 40 -> 30. `trend.recentGames` 5 -> 3 (trend from 5 games; half-gate kept).
+- `poorFtPct` 60 -> `poorFtPercentile` 25 (league 25th pct FT% among 10+ FTA), used by the key and
+  lateGame.foulTarget; duplicate late-game line dropped and referenced when they name one player.
+- Half-split keys need |mean second-half margin| >= max(3, 2 x its standard error); SE shown in the
+  evidence sample.
+- `foulTroublePerGame` (fixed 3) -> `foulTroublePercentile` 90 for ATTACK_FOUL_TROUBLE (among
+  minutes-gated players), plus strictly above the league median so a tie-heavy league can't flag
+  everyone. `foulTroublePerGame` remains only as the defender foul-risk flag.
+- Three-point keys: dropped absolute `threeRateHigh`; rate must be >= league mean x `highRatio`.
+- `seriesCaptured`/`zeroMeansNotCaptured` guard: an all-zero team series (bench/paint/fast-break/
+  biggest lead) counts as not captured, so a future rule never reads a fabricated 0.
+- ADR-011 Consequences notes thresholds are league-/game-length-relative; config comments explain
+  each change.
+
+**Before -> after (LBCL season, tmp/lbcl-cores.clean.json, 90 ordered team pairs, all players)**
+- DEV: assessable 93 -> 82; withFocus 97% -> 88%; atCap 53% -> 30%; avgFocus 2.24 -> 1.78.
+  Per-game dims INSUFFICIENT 83 -> 96 players (the minutes gate).
+- PLAN: avgKeys 3.10 -> 2.70; pairs with >=1 key 100% -> 90%; FOUL_POOR_FT 90 -> 63;
+  PACK_THE_PAINT 0 -> 36; half-split (WIN+BUILD) 63 -> 18; ATTACK_FOUL_TROUBLE 45 -> 45
+  (LBCL's p90 fouls/game is ~3.0, so unchanged here, but now league-relative); RUN_THEM 0.
+
+**Verification**
+- `tsc` pass; `eslint` 0 errors (7 pre-existing warnings); `npm test` 884 pass / 1 skipped / 0 fail
+  (coaching tests 33 -> 41); `lint:canonical-writes` 4/4.
+- No migration in Step 1 (C3 has none so far). Not pushed (Step 7 pushes).
+
+**Next:** Step 2 (CoachingViewer loader), Step 3 (squad position/height setup), Step 4 (pages),
+Step 5 (tests), Step 6 (staging deploy), Step 7 (record, commit, push).

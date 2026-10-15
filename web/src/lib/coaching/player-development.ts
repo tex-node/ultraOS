@@ -99,26 +99,59 @@ export type PlayerDevelopmentPlan = {
 
 type Measure = { value: number; attempts: number | null; games: number } | null;
 
-type PlayerSeason = { playerId: string; name: string; jerseyNumber: number | null; seasonClubId: string; lines: PlayerLine[] };
+type PlayerSeason = {
+  playerId: string;
+  name: string;
+  jerseyNumber: number | null;
+  seasonClubId: string;
+  lines: PlayerLine[];
+  // Per game (only games where the team logged minutes), this player's minutes as a share of the
+  // game length. Game length = (sum of the team's player minutes) / 5, so it works for any format.
+  minutesShares: number[];
+  minutes: number[];
+};
 
 export function collectPlayerSeasons(games: GameCore[]): Map<string, PlayerSeason> {
   const ordered = [...games].sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime());
   const map = new Map<string, PlayerSeason>();
   for (const game of ordered) {
+    const teamMinutesByClub = new Map<string, number>();
+    for (const line of game.players) {
+      if (line.didNotPlay) continue;
+      teamMinutesByClub.set(line.seasonClubId, (teamMinutesByClub.get(line.seasonClubId) ?? 0) + line.minutesPlayed);
+    }
     for (const line of game.players) {
       if (line.didNotPlay) continue;
       const existing = map.get(line.playerId);
-      if (existing) {
-        existing.lines.push(line);
-        existing.seasonClubId = line.seasonClubId;
-        existing.name = line.name;
-        existing.jerseyNumber = line.jerseyNumber ?? existing.jerseyNumber;
-      } else {
-        map.set(line.playerId, { playerId: line.playerId, name: line.name, jerseyNumber: line.jerseyNumber, seasonClubId: line.seasonClubId, lines: [line] });
-      }
+      const entry: PlayerSeason =
+        existing ?? { playerId: line.playerId, name: line.name, jerseyNumber: line.jerseyNumber, seasonClubId: line.seasonClubId, lines: [], minutesShares: [], minutes: [] };
+      entry.lines.push(line);
+      entry.minutes.push(line.minutesPlayed);
+      const gameLength = (teamMinutesByClub.get(line.seasonClubId) ?? 0) / 5;
+      if (gameLength > 0) entry.minutesShares.push(line.minutesPlayed / gameLength);
+      entry.seasonClubId = line.seasonClubId;
+      entry.name = line.name;
+      entry.jerseyNumber = line.jerseyNumber ?? entry.jerseyNumber;
+      map.set(line.playerId, entry);
     }
   }
   return map;
+}
+
+// Mean minutes share across games with recorded team minutes; null when no game logged minutes
+// (then the gate is not applied, so a source without minutes does not flag everyone).
+function meanMinutesShare(ps: PlayerSeason): number | null {
+  if (ps.minutesShares.length === 0) return null;
+  return ps.minutesShares.reduce((a, b) => a + b, 0) / ps.minutesShares.length;
+}
+
+export function passesMinutesGate(ps: PlayerSeason): boolean {
+  const share = meanMinutesShare(ps);
+  return share == null || share >= cfg.minMinutesShare;
+}
+
+function meanMinutes(ps: PlayerSeason): number {
+  return ps.minutes.length ? ps.minutes.reduce((a, b) => a + b, 0) / ps.minutes.length : 0;
 }
 
 function sumPct(lines: PlayerLine[], made: (l: PlayerLine) => number | null, att: (l: PlayerLine) => number | null): Measure {
@@ -225,6 +258,7 @@ function qualifiedPool(spec: DimensionSpec, seasons: Map<string, PlayerSeason>, 
   const gate = gateFor(spec);
   const pool: Qualified[] = [];
   for (const ps of seasons.values()) {
+    if (spec.kind === "PER_GAME" && !passesMinutesGate(ps)) continue;
     const m = measure(spec, ps.lines);
     if (!gate.ok(m, ps.lines.length) || m == null) continue;
     pool.push({ playerId: ps.playerId, group: positionGroup(meta.get(ps.playerId)?.position), value: m.value });
@@ -331,6 +365,16 @@ export function buildPlayerDevelopmentPlan(
     const gate = gateFor(spec);
     const m = measure(spec, ps.lines);
     const label = DEVELOPMENT_DIMENSION_LABEL[spec.key];
+    if (spec.kind === "PER_GAME" && !passesMinutesGate(ps)) {
+      readings.push({
+        dimension: spec.key,
+        label,
+        status: "INSUFFICIENT_DATA",
+        sampleLabel: `${meanMinutes(ps).toFixed(1)} mpg`,
+        gate: `${Math.round(cfg.minMinutesShare * 100)}% of game minutes`,
+      });
+      continue;
+    }
     if (m == null || !gate.ok(m, gamesPlayed)) {
       const att = m?.attempts;
       const sampleLabel = spec.kind === "PERCENT" ? `${gamesPlayed} games, ${Math.round(att ?? 0)} ${attemptNoun(spec)}` : `${gamesPlayed} games`;

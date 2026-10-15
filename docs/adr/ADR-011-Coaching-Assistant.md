@@ -59,6 +59,9 @@ opponent can be any club in the same competition.
 
 - Two vocabularies on purpose: public pages say "developing area", coach pages say "focus area".
 - Every new coaching metric needs a gate and a baseline before it can recommend anything.
+- Thresholds are league- or game-length-relative (percentile bands, ratios against the league mean,
+  a minutes share of game length), not absolute numbers, so the same engine carries across formats
+  (LBCL 4x10-minute quarters, Ultra 2x10-minute halves) and levels without re-tuning.
 - Small samples (short Ultra format, early season) show more `INSUFFICIENT_DATA`, which is
   intended.
 

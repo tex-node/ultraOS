@@ -1,6 +1,6 @@
 import type { GameCore, PeriodScoreLine, PlayerLine, TeamSideStats } from "@/lib/analytics/types";
 import { gamePlanConfig as cfg, type Confidence } from "./config";
-import { collectPlayerSeasons, type PlayerMeta } from "./player-development";
+import { collectPlayerSeasons, passesMinutesGate, type PlayerMeta } from "./player-development";
 import { positionGroup } from "./positions";
 
 // Opponent Game Plan Engine (ADR-011, phase C2). Pure function of season GameCores. Builds a
@@ -18,6 +18,9 @@ type TeamProfile = {
   shortName: string;
   games: number;
   stats: Map<string, Acc>;
+  // Raw per-game values, kept for statistics that need spread, not just mean (e.g. second-half
+  // margin standard error), and to tell a genuinely-zero series from a not-captured one.
+  values: Map<string, number[]>;
 };
 
 function add(p: TeamProfile, key: string, v: number | null | undefined) {
@@ -26,6 +29,9 @@ function add(p: TeamProfile, key: string, v: number | null | undefined) {
   a.sum += v;
   a.n += 1;
   p.stats.set(key, a);
+  const list = p.values.get(key) ?? [];
+  list.push(v);
+  p.values.set(key, list);
 }
 
 function addPair(p: TeamProfile, made: string, att: string, m: number | null | undefined, a: number | null | undefined) {
@@ -72,7 +78,7 @@ export function buildTeamProfiles(games: GameCore[]): Map<string, TeamProfile> {
   const map = new Map<string, TeamProfile>();
   for (const g of games) {
     for (const [side, opp, isHome] of [[g.home, g.away, true], [g.away, g.home, false]] as [TeamSideStats, TeamSideStats, boolean][]) {
-      const p = map.get(side.seasonClubId) ?? { seasonClubId: side.seasonClubId, name: side.name, shortName: side.shortName, games: 0, stats: new Map() };
+      const p = map.get(side.seasonClubId) ?? { seasonClubId: side.seasonClubId, name: side.name, shortName: side.shortName, games: 0, stats: new Map(), values: new Map() };
       p.games += 1;
       add(p, "pf", side.score);
       add(p, "pa", opp.score);
@@ -109,6 +115,39 @@ export function buildTeamProfiles(games: GameCore[]): Map<string, TeamProfile> {
 function leagueMean(profiles: Map<string, TeamProfile>, key: string): number | null {
   const vals = [...profiles.values()].filter((p) => p.games >= 2).map((p) => perGame(p, key)).filter((v): v is number => v != null);
   return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+}
+
+// Linear-interpolated percentile (0-100), matching the numpy default.
+function percentileOf(values: number[], p: number): number | null {
+  if (values.length === 0) return null;
+  const s = [...values].sort((a, b) => a - b);
+  const idx = (p / 100) * (s.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  return lo === hi ? s[lo] : s[lo] + (s[hi] - s[lo]) * (idx - lo);
+}
+
+// Some sources store a stat they never captured as 0, not NULL (LBCL: bench points, points in
+// paint, fast-break points and biggest lead are 0 on every team side). An all-zero season series is
+// treated as "not captured" so no rule (C5 and later) reads a fabricated 0.
+const ZERO_MEANS_NOT_CAPTURED = new Set(["bench", "pointsInPaint", "fastBreakPoints", "biggestLead"]);
+export function seriesCaptured(values: number[]): boolean {
+  return values.length === 0 || values.some((v) => v !== 0);
+}
+export function zeroMeansNotCaptured(key: string): boolean {
+  return ZERO_MEANS_NOT_CAPTURED.has(key);
+}
+
+// League 25th-percentile free-throw %, over players with enough attempts. A "poor" FT shooter is
+// defined relative to the league, not against a fixed 60%, so it carries across formats and levels.
+function poorFtLeagueThreshold(seasons: Map<string, PlayerSeason>): number | null {
+  const values: number[] = [];
+  for (const p of seasons.values()) {
+    const a = p.lines.reduce((s, l) => s + (l.freeThrowsAttempted ?? 0), 0);
+    if (a < cfg.poorFtMinAttempts) continue;
+    values.push((p.lines.reduce((s, l) => s + (l.freeThrowsMade ?? 0), 0) / a) * 100);
+  }
+  return percentileOf(values, cfg.poorFtPercentile);
 }
 
 // ---------- types ----------
@@ -212,6 +251,7 @@ function keysFor(
   profiles: Map<string, TeamProfile>,
   seasons: Map<string, PlayerSeason>,
   usIsFocus: boolean,
+  poorFt: number | null,
 ): KeyToTheGame[] {
   const keys: KeyToTheGame[] = [];
   const conf = confidenceFromGames(Math.min(us.games, them.games));
@@ -241,13 +281,13 @@ function keysFor(
     }
   }
 
-  // 2. Poor free-throw shooter who gets real minutes
-  const ftCandidates = themRoster
+  // 2. Poor free-throw shooter who gets real minutes, relative to the league 25th percentile.
+  const ftCandidates = poorFt == null ? [] : themRoster
     .map((p) => ({ p, fta: sumL(p.lines, (l) => l.freeThrowsAttempted), ftm: sumL(p.lines, (l) => l.freeThrowsMade) }))
-    .filter((x) => x.fta >= cfg.poorFtMinAttempts && (x.ftm / x.fta) * 100 < cfg.poorFtPct)
+    .filter((x) => x.fta >= cfg.poorFtMinAttempts && (x.ftm / x.fta) * 100 < poorFt)
     .sort((a, b) => a.ftm / a.fta - b.ftm / b.fta);
   const worstFt = ftCandidates[0];
-  if (worstFt) {
+  if (worstFt && poorFt != null) {
     const ftPct = (worstFt.ftm / worstFt.fta) * 100;
     const themFta = total(them, "fta");
     const share = themFta > 0 ? worstFt.fta / themFta : 0;
@@ -256,9 +296,9 @@ function keysFor(
       title: `When you must foul, foul ${label(ref(worstFt.p))}`,
       rationale: `${worstFt.p.name} shoots ${fp(ftPct)} from the line. Late in the game or in the bonus, send ${worstFt.p.name} to the line instead of their shooters.`,
       subject: ref(worstFt.p),
-      evidence: [{ metric: "Free-throw %", value: fp(ftPct), baseline: `${cfg.poorFtPct}% threshold`, sample: `${worstFt.fta} attempts over ${worstFt.p.lines.length} games` }],
+      evidence: [{ metric: "Free-throw %", value: fp(ftPct), baseline: `league 25th pct ${fp(poorFt)} (10+ FTA)`, sample: `${worstFt.fta} attempts over ${worstFt.p.lines.length} games` }],
       confidence: worstFt.fta >= cfg.poorFtMinAttempts * 2 ? "HIGH" : "MEDIUM",
-      strength: (cfg.poorFtPct - ftPct) / 10 + 1,
+      strength: (poorFt - ftPct) / 10 + 1,
       check: { stat: "PLAYER_FTA_SHARE", side: sideThem, playerId: worstFt.p.playerId, baseline: r1(share * 100), want: "ABOVE" },
     });
   }
@@ -322,13 +362,13 @@ function keysFor(
   const rate = fgaR > 0 ? (total(them, "tpaForRate") / fgaR) * 100 : null;
   const tp = pct(them, "tpm", "tpa");
   const tpaPg = perGame(them, "tpa");
-  // Must clear the absolute volume bar AND take more threes than the league's typical team, so a
-  // league where everyone shoots a lot of threes doesn't flag every opponent.
+  // Must take meaningfully more threes than the league's typical team (>= league mean x highRatio),
+  // so a league where everyone shoots a lot of threes doesn't flag every opponent.
   const lgRates = [...profiles.values()]
     .filter((p) => p.games >= 2 && total(p, "fgaForRate") > 0)
     .map((p) => (total(p, "tpaForRate") / total(p, "fgaForRate")) * 100);
   const lgRate = lgRates.length ? lgRates.reduce((a, b) => a + b, 0) / lgRates.length : null;
-  if (rate != null && tp != null && tpaPg != null && lgRate != null && rate >= cfg.threeRateHigh && rate > lgRate) {
+  if (rate != null && tp != null && tpaPg != null && lgRate != null && rate >= lgRate * cfg.highRatio) {
     if (tp < cfg.threePctWeak) {
       keys.push({
         kind: "PACK_THE_PAINT",
@@ -370,49 +410,62 @@ function keysFor(
     });
   }
 
-  // 9. Foul trouble among their main rotation
+  // 9. Foul trouble among their main rotation, at or above the league 90th percentile of fouls per
+  // game among players who clear the minutes gate. Also require strictly above the league median,
+  // because a league where everyone fouls alike puts the p90 at the median and would flag everyone.
   const rotation = [...themRoster].sort((a, b) => b.lines.length - a.lines.length || sumL(b.lines, (l) => l.points) - sumL(a.lines, (l) => l.points)).slice(0, 6);
-  const foulProne = rotation
+  const foulPool = [...seasons.values()]
+    .filter((p) => p.lines.length >= cfg.minPlayerGames && passesMinutesGate(p))
+    .map((p) => sumL(p.lines, (l) => l.fouls) / p.lines.length);
+  const foulBar = percentileOf(foulPool, cfg.foulTroublePercentile);
+  const foulMedian = percentileOf(foulPool, 50);
+  const foulProne = foulBar == null ? undefined : rotation
     .map((p) => ({ p, fpg: sumL(p.lines, (l) => l.fouls) / p.lines.length }))
-    .filter((x) => x.fpg >= cfg.foulTroublePerGame)
+    .filter((x) => x.fpg >= foulBar && (foulMedian == null || x.fpg > foulMedian))
     .sort((a, b) => b.fpg - a.fpg)[0];
-  if (foulProne) {
+  if (foulProne && foulBar != null) {
     keys.push({
       kind: "ATTACK_FOUL_TROUBLE",
       title: `Attack ${label(ref(foulProne.p))} early`,
       rationale: `${foulProne.p.name} averages ${f1(foulProne.fpg)} fouls a game. Drive at ${foulProne.p.name} from the opening possessions to force early foul trouble.`,
       subject: ref(foulProne.p),
-      evidence: [{ metric: "Fouls per game", value: f1(foulProne.fpg), baseline: `${cfg.foulTroublePerGame} threshold`, sample: `${foulProne.p.lines.length} games` }],
+      evidence: [{ metric: "Fouls per game", value: f1(foulProne.fpg), baseline: `league 90th pct ${f1(foulBar)}`, sample: `${foulProne.p.lines.length} games` }],
       confidence: confidenceFromGames(foulProne.p.lines.length),
-      strength: foulProne.fpg / cfg.foulTroublePerGame,
+      strength: foulProne.fpg / foulBar,
       check: { stat: "PLAYER_FOULS", side: sideThem, playerId: foulProne.p.playerId, baseline: r1(foulProne.fpg), want: "ABOVE" },
     });
   }
 
-  // 10/11. Half splits
-  const h1 = perGame(them, "h1");
-  const h2 = perGame(them, "h2");
-  if (h1 != null && h2 != null && (them.stats.get("h2")?.n ?? 0) >= cfg.minOpponentGames) {
-    if (h2 <= -cfg.halfMarginSwing) {
+  // 10/11. Half splits: only when |mean second-half margin| clears the floor AND 2 x its standard
+  // error (a 6-7 game half-split has an SE near 4 points, so +/-3 alone is noise).
+  const h2vals = them.values.get("h2") ?? [];
+  const h2n = h2vals.length;
+  if (h2n >= cfg.minOpponentGames) {
+    const h2 = h2vals.reduce((a, b) => a + b, 0) / h2n;
+    const variance = h2n > 1 ? h2vals.reduce((a, b) => a + (b - h2) ** 2, 0) / (h2n - 1) : 0;
+    const se = Math.sqrt(variance / h2n);
+    const bar = Math.max(cfg.halfMarginSwing, 2 * se);
+    const halfSample = `${them.name}: ${h2n} games, SE ${f1(se)}`;
+    if (h2 <= -bar) {
       keys.push({
         kind: "WIN_THE_SECOND_HALF",
         title: "Stay close, they fade late",
         rationale: `${them.name} are ${f1(h2)} per game in second halves. Keep it within reach at half-time and push the pace after the break.`,
         subject: null,
-        evidence: [{ metric: "Their second-half margin per game", value: f1(h2), baseline: `±${cfg.halfMarginSwing} threshold`, sample }],
+        evidence: [{ metric: "Their second-half margin per game", value: f1(h2), baseline: `±${f1(bar)} threshold`, sample: halfSample }],
         confidence: conf,
-        strength: Math.abs(h2) / cfg.halfMarginSwing,
+        strength: Math.abs(h2) / bar,
         check: { stat: "SECOND_HALF_MARGIN", side: sideUs, baseline: 0, want: "ABOVE" },
       });
-    } else if (h2 >= cfg.halfMarginSwing) {
+    } else if (h2 >= bar) {
       keys.push({
         kind: "BUILD_EARLY_LEAD",
         title: "Build the lead before half-time",
         rationale: `${them.name} win second halves by ${f1(h2)} per game. Start fast and don't rely on a late comeback.`,
         subject: null,
-        evidence: [{ metric: "Their second-half margin per game", value: `+${f1(h2)}`, baseline: `±${cfg.halfMarginSwing} threshold`, sample }],
+        evidence: [{ metric: "Their second-half margin per game", value: `+${f1(h2)}`, baseline: `±${f1(bar)} threshold`, sample: halfSample }],
         confidence: conf,
-        strength: h2 / cfg.halfMarginSwing,
+        strength: h2 / bar,
         check: { stat: "FIRST_HALF_MARGIN", side: sideUs, baseline: 0, want: "ABOVE" },
       });
     }
@@ -512,7 +565,7 @@ function bestShooter(
   return { pick, ownQualified: own.length, leagueMedian };
 }
 
-function buildLateGame(focus: TeamProfile, opp: TeamProfile, focusRoster: PlayerSeason[], oppRoster: PlayerSeason[], everyone: PlayerSeason[]): LateGamePlan {
+function buildLateGame(focus: TeamProfile, opp: TeamProfile, focusRoster: PlayerSeason[], oppRoster: PlayerSeason[], everyone: PlayerSeason[], poorFt: number | null): LateGamePlan {
   const closers: CloserRole[] = [];
   const notes: string[] = [];
   const ftC = bestShooter(focusRoster, everyone, (l) => l.freeThrowsMade, (l) => l.freeThrowsAttempted, cfg.closerFtMinAttempts);
@@ -539,10 +592,10 @@ function buildLateGame(focus: TeamProfile, opp: TeamProfile, focusRoster: Player
     oppUt.length ? sumL(b.lines, (l) => l.ultraTimePoints) - sumL(a.lines, (l) => l.ultraTimePoints) : sumL(b.lines, (l) => l.points) / b.lines.length - sumL(a.lines, (l) => l.points) / a.lines.length,
   )[0];
 
-  const foul = oppRoster
+  const foul = poorFt == null ? undefined : oppRoster
     .filter((p) => p.lines.length >= cfg.minPlayerGames)
     .map((p) => ({ p, m: sumL(p.lines, (l) => l.freeThrowsMade), a: sumL(p.lines, (l) => l.freeThrowsAttempted) }))
-    .filter((x) => x.a >= cfg.poorFtMinAttempts)
+    .filter((x) => x.a >= cfg.poorFtMinAttempts && (x.m / x.a) * 100 < poorFt)
     .sort((x, y) => x.m / x.a - y.m / y.a)[0];
 
   if (!ultraTimeDataAvailable) notes.push("No Ultra Time data for these teams yet; closers are picked from season shooting.");
@@ -556,7 +609,7 @@ function buildLateGame(focus: TeamProfile, opp: TeamProfile, focusRoster: Player
       : null,
     closers,
     deny: deny ? ref(deny) : null,
-    foulTarget: foul && (foul.m / foul.a) * 100 < cfg.poorFtPct ? { ...ref(foul.p), ftPct: fp((foul.m / foul.a) * 100), sample: `${foul.a} FTA` } : null,
+    foulTarget: foul ? { ...ref(foul.p), ftPct: fp((foul.m / foul.a) * 100), sample: `${foul.a} FTA` } : null,
     notes,
   };
 }
@@ -610,14 +663,24 @@ export function buildGamePlan(games: GameCore[], focusSeasonClubId: string, oppo
       lateGame: null,
     };
   }
+  const poorFt = poorFtLeagueThreshold(seasons);
+  const keys = keysFor(focus, opp, profiles, seasons, true, poorFt);
+  const lateGame = buildLateGame(focus, opp, focusRoster, oppRoster, [...seasons.values()], poorFt);
+  // If the late-game foul target is the same player the FOUL_POOR_FT_SHOOTER key already names, drop
+  // the duplicate line and point at the key instead.
+  const foulKey = keys.find((k) => k.kind === "FOUL_POOR_FT_SHOOTER");
+  if (lateGame && lateGame.foulTarget && foulKey?.subject && lateGame.foulTarget.playerId === foulKey.subject.playerId) {
+    lateGame.foulTarget = null;
+    lateGame.notes.push(`Late-game foul target is the same player as the "${foulKey.title}" key above.`);
+  }
   return {
     ...base,
     status: "OK",
     insufficientReason: null,
-    keys: keysFor(focus, opp, profiles, seasons, true),
-    howTheyBeatUs: keysFor(opp, focus, profiles, seasons, false).slice(0, 3),
+    keys,
+    howTheyBeatUs: keysFor(opp, focus, profiles, seasons, false, poorFt).slice(0, 3),
     assignments: buildAssignments(focusRoster, oppRoster, meta),
-    lateGame: buildLateGame(focus, opp, focusRoster, oppRoster, [...seasons.values()]),
+    lateGame,
   };
 }
 

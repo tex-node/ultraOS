@@ -32,6 +32,11 @@ export const DEVELOPMENT_DIMENSION_LABEL: Record<DevelopmentDimensionKey, string
 export const developmentConfig = {
   // A player needs this many games played before ANY dimension can be assessed.
   minGames: 4,
+  // A player qualifies for PER-GAME dimensions only if their mean minutes are at least this share
+  // of a game's length, where game length = (sum of the team's player minutes) / 5. 0.25 is 10 mpg
+  // in a 40-minute game and 5 mpg in a 20-minute game, so it carries across formats (LBCL 4x10,
+  // Ultra 2x10). Games with no minutes recorded are ignored by the gate.
+  minMinutesShare: 0.25,
   // Attempt gates for percentage dimensions. Scoring efficiency uses true-shooting attempts
   // (FGA + 0.44 x FTA).
   attemptGates: {
@@ -46,14 +51,16 @@ export const developmentConfig = {
   // Below this many qualified peers in the position group, the baseline falls back to the league.
   minPeers: 5,
   // Percentile (0-100 vs baseline) below which a dimension becomes a Focus Area candidate.
-  focusBelowPercentile: 40,
+  // 30 (not higher): most players should have something to work on, but not a flag for everyone.
+  focusBelowPercentile: 30,
   // Percentile at or above which a dimension is a Strength.
   strengthAtOrAbovePercentile: 70,
   maxFocusAreas: 3,
   maxStrengths: 2,
   drillsPerFocusArea: 3,
   trend: {
-    recentGames: 5,
+    // 3 recent games so a trend appears once a player has 5 games played (n + 2).
+    recentGames: 3,
     // Relative change in a per-game rate, or absolute change in percentage points, needed to call
     // a trend improving or declining.
     perGameRelative: 0.15,
@@ -98,12 +105,19 @@ export const gamePlanConfig = {
   highRatio: 1.15,
   lowRatio: 0.87,
   focalUsageShare: 0.28,
-  poorFtPct: 60,
+  // League-relative "poor free-throw shooter": below the league 25th percentile FT% among players
+  // with poorFtMinAttempts+ attempts (LBCL today ~40%). Used by both the FOUL_POOR_FT_SHOOTER key
+  // and lateGame.foulTarget so they agree.
+  poorFtPercentile: 25,
   poorFtMinAttempts: 10,
-  threeRateHigh: 30,
+  // Which three-point key fires once the rate bar is cleared.
   threePctWeak: 30,
   threePctStrong: 33,
+  // ATTACK_FOUL_TROUBLE fires at/above the league 90th percentile of fouls per game among players
+  // who clear the minutes gate. foulTroublePerGame stays only as the defender "foul risk" flag.
+  foulTroublePercentile: 90,
   foulTroublePerGame: 3,
+  // Floor for half-split keys; the effective bar is max(this, 2 x the margin's standard error).
   halfMarginSwing: 3,
   threatsToAssign: 3,
   closerFtMinAttempts: 10,

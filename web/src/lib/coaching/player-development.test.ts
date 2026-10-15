@@ -151,3 +151,47 @@ test("scoring-efficiency evidence reports whole true-shooting attempts, not a fr
   const ft = plan.readings.find((r) => r.dimension === "FREE_THROWS")!;
   if (ft.status === "OK") assert.match(ft.evidence.sample.label, /^\d+ attempts over \d+ games$/);
 });
+
+test("minutes gate: a player under 25% of game minutes gets no per-game dimension", () => {
+  const ids = ["low", "h1", "h2", "h3", "h4", "h5"];
+  const games = season(6, ids.map((id) => ({
+    id, club: "A",
+    stat: () => (id === "low" ? { minutesPlayed: 4, rebounds: 0.1 } : { minutesPlayed: 36 }),
+  })));
+  const plan = buildPlayerDevelopmentPlan("low", games, meta(ids.map((i) => [i, "PF"])))!;
+  for (const d of ["PLAYMAKING", "BALL_SECURITY", "REBOUNDING", "DEFENSIVE_ACTIVITY", "FOUL_DISCIPLINE"] as const) {
+    const r = plan.readings.find((x) => x.dimension === d)!;
+    assert.equal(r.status, "INSUFFICIENT_DATA", d);
+    if (r.status === "INSUFFICIENT_DATA") {
+      assert.match(r.sampleLabel, /mpg/, d);
+      assert.match(r.gate, /% of game minutes/, d);
+    }
+  }
+});
+
+test("minutes gate is skipped when no game logs minutes", () => {
+  const ids = ["p1", "p2", "p3", "p4", "p5"];
+  const games = season(6, ids.map((id) => ({ id, club: "A", stat: () => ({ rebounds: id === "p1" ? 0.1 : 4 }) })));
+  const plan = buildPlayerDevelopmentPlan("p1", games, meta(ids.map((i) => [i, "PF"])))!;
+  const reb = plan.readings.find((r) => r.dimension === "REBOUNDING")!;
+  assert.equal(reb.status, "OK");
+});
+
+test("focus threshold is 30: the 35th percentile is not flagged", () => {
+  const ids = Array.from({ length: 10 }, (_, i) => `p${i}`);
+  const games = season(6, ids.map((id, i) => ({ id, club: "A", stat: () => ({ rebounds: i, minutesPlayed: 30 }) })));
+  const plan = buildPlayerDevelopmentPlan("p3", games, meta(ids.map((i) => [i, "PF"])))!;
+  const reb = plan.readings.find((r) => r.dimension === "REBOUNDING")!;
+  assert.equal(reb.status, "OK");
+  if (reb.status === "OK") assert.equal(reb.evidence.percentile, 35);
+  assert.ok(!plan.focusAreas.some((f) => f.dimension === "REBOUNDING"), "35th percentile must not be a focus area at a 30 threshold");
+});
+
+test("trend is available once a player has five games", () => {
+  const ids = ["t1", "t2", "t3", "t4", "t5"];
+  const games = season(5, ids.map((id) => ({ id, club: "A", stat: (g: number) => ({ rebounds: id === "t1" ? (g < 2 ? 8 : 1) : 4, minutesPlayed: 30 }) })));
+  const plan = buildPlayerDevelopmentPlan("t1", games, meta(ids.map((i) => [i, "PF"])))!;
+  const reb = plan.readings.find((r) => r.dimension === "REBOUNDING")!;
+  assert.equal(reb.status, "OK");
+  if (reb.status === "OK") assert.notEqual(reb.trend.direction, "UNKNOWN");
+});
