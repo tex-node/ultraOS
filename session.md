@@ -8685,3 +8685,26 @@ success 23 Aug).
 
 **Not done:** backup wiring; screenshots (staging needs a login through the tunnel; views verified by render, not visually);
 C1 remainder (CoachingPlan table + adopt action).
+
+## 2026-10-15 (cont'd) - P15 C3 decisions follow-up: backup FIXED (privileged-role drop-in)
+
+**Decisions doc:** docs/agents/prompts/2026-10-15-c3-decisions-after-step1.md (approved by the user).
+
+**Decision 1 - backup (FIXED).** exec bit was already committed (`29becbb`) and the host copy is 755, but the night run then
+failed with `pg_dump: query failed: ERROR: query would be affected by row-level security policy for table "Accreditation"` - the
+unit runs as the runtime role (`ultraos_app`, RLS-subject; 116 public tables have FORCE RLS). Approved fix: a systemd drop-in
+`/etc/systemd/system/ultraos-backup.service.d/privileged-role.conf` that resets `EnvironmentFile=` and points at
+`/opt/ultraleagueos/shared/migrate.env` (root:ultraos 640; the migration role is superuser with BYPASSRLS), then
+`daemon-reload`. Ran once: `Result=success`, `ExecMainStatus=0`, dump `ultraos-20261015-091940.dump` (1,055,028 bytes, 11:19 CEST);
+`sha256sum -c` OK; `pg_restore --list` shows a valid CUSTOM archive (db `ultraleagueos`, 1560 TOC entries, 127 TABLE DATA, dumped
+from 16.13 by pg_dump 16.15). Removed the incomplete 08:58 dump left by the failed attempt. **Last successful automated backup
+before today was 2026-09-07 01:03** (`ultraos-20260907-010322.dump`); the nightly had been failing since 2026-09-08 (~5.5 weeks).
+`deploy.sh` preserves the mode (`git checkout --force` + `cp -a "$SRC/web"`), so the fix survives deploys. No repo change beyond
+`29becbb`; the drop-in lives only on the host (production), flag unchanged.
+
+**Decision 2 - ATTACK_FOUL_TROUBLE (done earlier today).** Core-3 (opponent top 3 by mpg, or by ppg when minutes unrecorded);
+LBCL 90 pairs: whole-roster p90 54, core-3 p90 36 (>30) -> core-3 p95 18 -> `foulTroublePercentile: 95`.
+
+**Steps 2-7** were already completed and pushed (`c2199f8`..`8e6f59c`); staging carries `COACHING_ASSISTANT_ENABLED=true`,
+production stays off. Only the two new prompt docs under `docs/agents/prompts/` remain untracked.
+Restored an accidental trailing-newline change to `web/postcss.config.mjs` (no-op).
