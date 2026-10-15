@@ -8309,3 +8309,151 @@ which contradicts the GIESM 5-10 config (written via the permissive schema) - le
 - `sportConfigFormSchema` still asserts flag race = exactly 6, so an admin-form save of the GIESM
   config would be rejected and, if saved, would drop the two new keys (admin form does not render
   them). If GIESM is to be admin-editable, relax that rule and add the new fields to the admin form.
+
+## 2026-10-15 - P15 Coaching Assistant: C0 (ADR-011 + access) and C1 engine
+
+**Objective:** resume the coaching assistant: a coach-private layer that says what each player
+should develop and (next, C2) how to beat a known opponent. Plan and prompts:
+`docs/agents/prompts/2026-10-15-coaching-assistant-and-vision.md`.
+
+**C0 - completed**
+- `docs/adr/ADR-011-Coaching-Assistant.md` (+ INDEX): resolves the conflict with lib/analytics'
+  "describe, never prescribe" rule by putting prescriptive output in a separate coach-private
+  layer, `src/lib/coaching/`. Rules: notFound() for non-access, Evidence on every recommendation,
+  sample-size gates, deterministic engine first (LLM only rephrases, validated), typed signal
+  sources, no canonical writes, flag off by default.
+- Root `GLOSSARY.md` created with the Coaching Assistant terms (Development Plan, Focus Area,
+  Strength, Drill Block, Target, Evidence, Confidence, Position Group, Game Plan, Key to the Game).
+- `src/lib/coaching/feature-flag.ts`: `COACHING_ASSISTANT_ENABLED` (server-side, not NEXT_PUBLIC).
+- `src/lib/coaching/access.ts`: pure `coachingAccessReason` / `canViewCoaching` /
+  `coachedSeasonClubIds` over a plain `CoachingViewer`: SUPER_ADMIN any org; LEAGUE_OPERATOR /
+  TOURNAMENT_DIRECTOR own org; head/assistant coach (SeasonClub.headCoachId/assistantCoachId via
+  Staff.userId) own club only; legacy insights email kept. COACH role alone = no access. The DB
+  loader that builds a CoachingViewer from the session is deferred to C3 (first page that needs it).
+
+**C1 - engine completed (no schema yet)**
+- `src/lib/coaching/config.ts`: dimensions, gates (Ultra short format: 4 games; TS 20 / FT 10 /
+  3P 12 / 4P 8 attempts), focus < p40, strength >= p70, role-impact weights per position group,
+  trend and target steps. No magic numbers in the engine.
+- `src/lib/coaching/positions.ts`: free-text Player.position -> GUARD / WING / BIG / UNKNOWN.
+- `src/lib/coaching/drills.ts`: 28-drill registry across 9 dimensions (3-4 each, FOUNDATION /
+  BUILD / GAME_SPEED, each with a success measure); `drillBlockFor` starts very weak players
+  (< p20) on fundamentals.
+- `src/lib/coaching/player-development.ts`: `buildPlayerDevelopmentPlan` /
+  `buildSquadDevelopmentPlans` over GameCore[] + Player position meta. Per dimension: value,
+  position-peer baseline (league fallback under 5 peers), mid-rank percentile (ties count half so
+  an all-null/all-equal stat never flags anyone), confidence from sample vs gate, last-5 trend,
+  priority = gap x role weight x confidence. Output: top 3 Focus Areas (evidence, why-it-matters
+  sentence, measurable Target over 6 games, 3-drill block) + top 2 Strengths + every reading,
+  with INSUFFICIENT_DATA below gates. Null box-score fields (imported games) are skipped per game,
+  never treated as zero.
+- `scripts/coaching-development-preview.ts`: read-only real-data preview.
+
+**Verification**
+- `tsx --test src/lib/coaching/*.test.ts`: 19 pass / 0 fail (fixtures: poor-FT big, turnover-prone
+  guard, 2-game bench player, league-average player, no 4P data, small position group fallback,
+  declining trend, squad filtering, percentile ties, position mapping, drill registry integrity).
+- `tsc` scoped to src/lib/coaching + the script: clean. Full-project tsc, eslint and build not run
+  (they exceed the time limit over the remote mount); run them locally before committing.
+- Not yet run against real data: local DATABASE_URL is localhost on the Windows machine.
+
+**Next step**
+1. Run locally: `npm run typecheck && npm run lint && npm test`, then
+   `npx tsx scripts/coaching-development-preview.ts <lbclOrgId> <2026SeasonId> "Ultra Basketball"`
+   on staging data; sanity-check 3 plans against box scores and tune `config.ts` if needed.
+2. C1 remainder: additive `CoachingPlan` table (org-scoped + RLS) and the "Adopt plan" action that
+   writes AthleteTrainingRecord.developmentFocus; seed TrainingMetricDefinition rows for target keys.
+3. C2 Opponent Game Plan Engine (prompt C2).
+
+## 2026-10-15 (cont'd) - P15 C2: Opponent Game Plan Engine
+
+**Objective:** a prescriptive plan for a focus club against one opponent, generalised from the
+hardcoded "Ultra Basketball" Insights page to any SeasonClub. The existing descriptive
+`opponent-scouting.ts` and the LBCL Insights page are untouched.
+
+**Completed**
+- `src/lib/coaching/game-plan.ts` (pure):
+  - `buildTeamProfiles`: per-team per-game accumulators that skip null box-score fields per game
+    (points for/against, turnovers committed/forced, fouls, OREB and OREB allowed, steals summed
+    from player lines, bench, 3P/FT pairs, 3PA rate, opponent 3P, Ultra Time for/against,
+    first/second-half margins from regulation periods, OT excluded).
+  - Keys to the Game (11 rules, written from the attacker's side): DENY_FOCAL_POINT (>= 28% of
+    team points), FOUL_POOR_FT_SHOOTER (< 60% on 10+ FTA), PRESSURE_THE_BALL, PROTECT_THE_BALL,
+    CRASH_OFFENSIVE_GLASS, PACK_THE_PAINT / RUN_THEM_OFF_THE_LINE (3PA rate must be >= 30% AND above
+    the league mean, so a three-heavy league doesn't flag everyone), CONTROL_TEMPO,
+    ATTACK_FOUL_TROUBLE (>= 3 fouls/game in their top-6 rotation), WIN_THE_SECOND_HALF /
+    BUILD_EARLY_LEAD (+/-3 second-half margin). Ratios use 1.15 / 0.87 vs league mean, matching
+    Team DNA. Ranked by strength x confidence, top 5.
+  - "How they beat us": the same rules run with the roles swapped, top 3.
+  - Defensive assignments for the opponent's top-3 scorers: steals+blocks percentile within our
+    roster, +same position group, +height match, -foul risk; each defender used once, reasons
+    and 2 alternatives returned. A fixed `DEFENSE_NOTE` says box scores don't measure on-ball
+    defence.
+  - Late-game / Ultra Time plan: best qualified FT, 3P and 4P closers (attempt gates), who to
+    deny (Ultra Time points when recorded, else PPG), who to foul; notes when Ultra Time data is
+    missing.
+  - Head-to-head; INSUFFICIENT_DATA under 3 games for either side.
+  - `buildGamePlanReview(plan, game)`: every key carries a typed `check` (stat, side, player,
+    baseline, want ABOVE/BELOW) -> HELD / BROKEN / NOT_TESTABLE with actual vs expected.
+- Config: `gamePlanConfig` in `src/lib/coaching/config.ts`. All copy gender-neutral (women's divisions).
+- `scripts/coaching-game-plan-preview.ts`: read-only preview, one opponent or all.
+
+**Verification**
+- `tsx --test src/lib/coaching/*.test.ts`: 28 pass / 0 fail (9 new game-plan tests: focal point +
+  poor FT + turnover-prone opponent; average league gives no keys either way; reverse plan;
+  insufficient data; assignment uniqueness and position match; late-game closer; above-league
+  three-point team; fading team; review HELD/BROKEN/NOT_TESTABLE).
+- The first run caught a real flaw: absolute 3PA-rate thresholds fired for every team in an
+  all-equal league. Fixed with the above-league-mean condition and covered by a test.
+- Scoped `tsc` (coaching + both scripts): clean. Full tsc, eslint and build not run (remote-mount timeout).
+
+**Next step**
+1. Locally: `npm run typecheck && npm run lint && npm test`, then
+   `npx tsx scripts/coaching-game-plan-preview.ts <lbclOrgId> <2026SeasonId> "Ultra Basketball"`;
+   check keys against box scores; tune `gamePlanConfig` with the coaches.
+2. C1 remainder: `CoachingPlan` table + adopt action.
+3. C3 Coach Hub UI (`/coaching`), including the session -> CoachingViewer loader.
+
+## 2026-10-15 (cont'd) - P15 C0-C2 verification, real-data check, commit prep
+
+**Task:** verify C0/C1/C2 written in a remote session that could only run the new unit tests and a
+scoped type check; run full checks and a real-data check, fix what is wrong, commit (no push).
+
+**Step 1 - full checks (web/, local)**
+- `npm run typecheck`: pass. `npm run lint`: 0 errors (7 pre-existing warnings). `npm test`: 872 tests,
+  871 pass, 1 skipped, 0 fail (was 843; +28 coaching +1 config test). `npm run lint:canonical-writes`:
+  pass (4/4). `npm run build`: pass.
+
+**Step 2 - database used**
+- Local `web/.env` DATABASE_URL is the placeholder (`localhost:5432/mydb`) with no LBCL data, so the
+  check ran read-only on **staging** (`/opt/ultraos-staging`, db `ultraos_staging` on 127.0.0.1:55411)
+  via the established copy-into-release + `npx tsx` pattern. Production was not touched.
+- Ids: LBCL org `cmucf1lo500003bkk1zyyoxmh`, season "2026 Season" `cmucf1t9p0003l3kkhs9zx31u`.
+
+**Step 3 - previews (saved to tmp/coaching-preview-2026-10-15.txt, not committed)**
+- Development: 15 squad players, 32 games; 4-GP+ players get focus areas, <4 GP INSUFFICIENT_DATA.
+- Game plan: all 12 LBCL opponents; 2-5 keys each; guards/closers/H2H/"their path" all populated.
+
+**Step 4 - sanity checks vs raw rows (numbers all correct)**
+- Haleem Akinyemi FT 2/12 = 16.7%, fouls 18/6 = 3.0; Micheal Igbanesi FT 15/36 = 41.7%, 3P 4/17 = 23.5%,
+  TS 57/(2x58+0.88x36) = 38.6%; Benjamin Chibuzor TS 35.9%, reb 9/6 = 1.5. Seaside Hoopers 438/7 = 62.6
+  PPG, Campos 465/7 = 66.4. Matches the engine output.
+- Findings (no code bugs; all data/limitations):
+  - `Player.position` is the literal string `"Unknown"` for all 181 players, so every plan falls back
+    to the whole league as the peer baseline and game-plan defender position-matching is inert.
+    positions.ts is correct (Unknown is not a position); this is a roster-data gap.
+  - `trend` is UNKNOWN for everyone by design: `trendFor` needs `recentGames + 2` games (7) and LBCL
+    players have at most 6. It will populate as the season progresses.
+  - FOUR_POINT and Ultra Time: zero rows for LBCL (fourPointsMade/ultraTimePointsFor all 0), so those
+    dimensions are INSUFFICIENT_DATA and the Ultra Time plan prints its "no data" note. Expected.
+  - OREB and period scores exist (second-half keys fire); no bench-dependency key exists in the engine,
+    so missing bench data is not a problem.
+  - Threshold behaviour is reasonable: ~3 focus areas per qualified player, 2-5 keys per opponent.
+- Cosmetic fix: development preview printed `#- Name` when a jersey number is missing; now omits the
+  `#-`. Doc fix: docs/adr/INDEX.md had ADR-010 and ADR-011 merged onto one line.
+
+**Proposed config changes (not applied - waiting on approval)**
+- None required by the data. If position data stays empty, consider a coach-set position in the UI
+  before relying on peer-group baselines; that is a product decision, not a config tweak.
+
+**Commits:** see the C0-C2 commit series below (not pushed).
