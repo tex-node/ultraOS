@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { isCoachingAssistantEnabled } from "@/lib/coaching/feature-flag";
 import { buildOpponentScoutingReports, type OpponentScoutingReport } from "@/lib/analytics/opponent-scouting";
 import { loadSeasonGameCores } from "@/lib/analytics/game-analytics";
 import { TEAM_DNA_TAG_LABEL } from "@/lib/analytics/team-dna";
@@ -25,6 +27,8 @@ export default async function VanityTournamentInsights({ params }: { params: Pro
     session = null;
   }
   if (!hasInsightsAccess(session?.user?.email)) notFound();
+  // Link each opponent to its coach-private game plan only while the Coaching Assistant is on.
+  const coachingEnabled = isCoachingAssistantEnabled();
 
   const { vanitySlug } = await params;
   const resolved = await resolveVanityCompetitionId(vanitySlug);
@@ -72,7 +76,11 @@ export default async function VanityTournamentInsights({ params }: { params: Pro
           ) : (
             <div className="mt-4 grid gap-4">
               {season.reports.map((report) => (
-                <OpponentCard key={report.seasonClubId} report={report} />
+                <OpponentCard
+                  key={report.seasonClubId}
+                  report={report}
+                  coachingHref={coachingEnabled ? `/coaching/${season.focusTeamId}/opponents/${report.seasonClubId}` : null}
+                />
               ))}
             </div>
           )}
@@ -82,11 +90,16 @@ export default async function VanityTournamentInsights({ params }: { params: Pro
   );
 }
 
-function OpponentCard({ report }: { report: OpponentScoutingReport }) {
+function OpponentCard({ report, coachingHref }: { report: OpponentScoutingReport; coachingHref: string | null }) {
   return (
     <div className="rounded-lg border border-line bg-ink-800 p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h4 className="text-lg font-bold text-text-1">{report.name}</h4>
+        {coachingHref ? (
+          <Link href={coachingHref} className="text-xs text-info">
+            Game plan
+          </Link>
+        ) : null}
         <span className="text-sm text-text-3">
           {report.wins}-{report.losses} · {report.pointsForPerGame} PPG · {report.pointsAgainstPerGame} PA/G
         </span>
