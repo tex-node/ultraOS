@@ -131,3 +131,23 @@ test("drill registry: unique ids and at least 3 drills per dimension", () => {
   const dims: DevelopmentDimensionKey[] = ["SCORING_EFFICIENCY", "FREE_THROWS", "THREE_POINT", "FOUR_POINT", "PLAYMAKING", "BALL_SECURITY", "REBOUNDING", "DEFENSIVE_ACTIVITY", "FOUL_DISCIPLINE"];
   for (const d of dims) assert.ok(DRILLS.filter((x) => x.dimension === d).length >= 3, d);
 });
+
+test("per-game targets stay strictly above the current value on a tiny base", () => {
+  const ids = ["r1", "r2", "r3", "r4", "r5"];
+  const games = season(10, ids.map((id) => ({ id, club: "A", stat: (g: number) => ({ rebounds: id === "r1" ? (g === 0 ? 1 : 0) : 4 }) })));
+  const plan = buildPlayerDevelopmentPlan("r1", games, meta(ids.map((i) => [i, "PF"])))!;
+  const reb = plan.focusAreas.find((f) => f.dimension === "REBOUNDING")!;
+  assert.ok(reb, "expected a rebounding focus area");
+  assert.ok(reb.target.target > reb.target.current, reb.target.statement);
+});
+
+test("scoring-efficiency evidence reports whole true-shooting attempts, not a fractional attempts count", () => {
+  const ids = ["s1", "s2", "s3", "s4", "s5"];
+  const games = season(6, ids.map((id) => ({ id, club: "A", stat: () => (id === "s1" ? { points: 2, fieldGoalsAttempted: 7, freeThrowsAttempted: 3 } : { points: 12, fieldGoalsAttempted: 7, freeThrowsAttempted: 3 }) })));
+  const plan = buildPlayerDevelopmentPlan("s1", games, meta(ids.map((i) => [i, "SG"])))!;
+  const ts = plan.focusAreas.find((f) => f.dimension === "SCORING_EFFICIENCY")!;
+  assert.ok(ts, "expected a scoring-efficiency focus area");
+  assert.equal(ts.evidence.sample.label, "50 true-shooting attempts over 6 games");
+  const ft = plan.readings.find((r) => r.dimension === "FREE_THROWS")!;
+  if (ft.status === "OK") assert.match(ft.evidence.sample.label, /^\d+ attempts over \d+ games$/);
+});

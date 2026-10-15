@@ -173,12 +173,16 @@ function measure(spec: DimensionSpec, lines: PlayerLine[]): Measure {
   }
 }
 
+// Scoring efficiency counts true-shooting attempts (FGA + 0.44 x FTA), which are not shot attempts a
+// coach can count from a box score, so say so wherever the number is shown.
+const attemptNoun = (spec: DimensionSpec) => (spec.key === "SCORING_EFFICIENCY" ? "true-shooting attempts" : "attempts");
+
 function gateFor(spec: DimensionSpec): { ok: (m: Measure, games: number) => boolean; label: string; size: (m: Measure, games: number) => number; min: number } {
   const attemptGate = cfg.attemptGates[spec.key];
   if (spec.kind === "PERCENT" && attemptGate != null) {
     return {
       ok: (m, games) => games >= cfg.minGames && m != null && (m.attempts ?? 0) >= attemptGate,
-      label: `${cfg.minGames}+ games and ${attemptGate}+ attempts`,
+      label: `${cfg.minGames}+ games and ${attemptGate}+ ${attemptNoun(spec)}`,
       size: (m) => m?.attempts ?? 0,
       min: attemptGate,
     };
@@ -260,6 +264,10 @@ function targetFor(spec: DimensionSpec, current: number, baselineMedian: number)
     if (target >= current) target = Math.max(0, current - 0.5);
   }
   target = round1(target);
+  // Rounding must never collapse the step: "from 0.1 to 0.1" is not a target.
+  const shownCurrent = round1(current);
+  if (spec.direction === "HIGHER_IS_BETTER" && target <= shownCurrent) target = round1(shownCurrent + 0.1);
+  else if (spec.direction === "LOWER_IS_BETTER" && target >= shownCurrent && shownCurrent > 0) target = round1(Math.max(0, shownCurrent - 0.1));
   const verb = spec.direction === "HIGHER_IS_BETTER" ? "Raise" : "Bring down";
   return {
     metricKey: spec.metricKey,
@@ -325,7 +333,7 @@ export function buildPlayerDevelopmentPlan(
     const label = DEVELOPMENT_DIMENSION_LABEL[spec.key];
     if (m == null || !gate.ok(m, gamesPlayed)) {
       const att = m?.attempts;
-      const sampleLabel = spec.kind === "PERCENT" ? `${gamesPlayed} games, ${att ?? 0} attempts` : `${gamesPlayed} games`;
+      const sampleLabel = spec.kind === "PERCENT" ? `${gamesPlayed} games, ${Math.round(att ?? 0)} ${attemptNoun(spec)}` : `${gamesPlayed} games`;
       readings.push({ dimension: spec.key, label, status: "INSUFFICIENT_DATA", sampleLabel, gate: gate.label });
       continue;
     }
@@ -352,7 +360,7 @@ export function buildPlayerDevelopmentPlan(
       sample: {
         games: gamesPlayed,
         attempts: m.attempts,
-        label: spec.kind === "PERCENT" ? `${m.attempts} attempts over ${m.games} games` : `${gamesPlayed} games`,
+        label: spec.kind === "PERCENT" ? `${Math.round(m.attempts ?? 0)} ${attemptNoun(spec)} over ${m.games} games` : `${gamesPlayed} games`,
       },
       gate: gate.label,
       confidence,
