@@ -53,6 +53,17 @@ function halfMargins(periods: PeriodScoreLine[], isHome: boolean): { first: numb
   return { first: margin(reg.slice(0, cut)), second: margin(reg.slice(cut)) };
 }
 
+// TeamStat has no three-point or free-throw columns and game-analytics leaves those team fields
+// null, so derive them from the side's player lines when every player who played reports the field.
+type ShootingField = "threePointsMade" | "threePointsAttempted" | "freeThrowsMade" | "freeThrowsAttempted";
+function sideTotal(side: TeamSideStats, players: PlayerLine[], field: ShootingField): number | null {
+  const own = side[field];
+  if (own != null) return own;
+  const rows = players.filter((p) => p.seasonClubId === side.seasonClubId && !p.didNotPlay);
+  if (rows.length === 0 || rows.some((p) => p[field] == null)) return null;
+  return rows.reduce((sum, p) => sum + (p[field] as number), 0);
+}
+
 function teamSteals(players: PlayerLine[], seasonClubId: string): number {
   return players.filter((p) => p.seasonClubId === seasonClubId && !p.didNotPlay).reduce((s, p) => s + p.steals, 0);
 }
@@ -73,12 +84,13 @@ export function buildTeamProfiles(games: GameCore[]): Map<string, TeamProfile> {
       add(p, "stl", teamSteals(g.players, side.seasonClubId));
       add(p, "bench", side.benchPoints);
       add(p, "fga", side.fieldGoalsAttempted);
-      addPair(p, "tpm", "tpa", side.threePointsMade, side.threePointsAttempted);
-      addPair(p, "ftm", "fta", side.freeThrowsMade, side.freeThrowsAttempted);
-      addPair(p, "oppTpm", "oppTpa", opp.threePointsMade, opp.threePointsAttempted);
-      if (side.fieldGoalsAttempted != null && side.threePointsAttempted != null) {
+      const tpa = sideTotal(side, g.players, "threePointsAttempted");
+      addPair(p, "tpm", "tpa", sideTotal(side, g.players, "threePointsMade"), tpa);
+      addPair(p, "ftm", "fta", sideTotal(side, g.players, "freeThrowsMade"), sideTotal(side, g.players, "freeThrowsAttempted"));
+      addPair(p, "oppTpm", "oppTpa", sideTotal(opp, g.players, "threePointsMade"), sideTotal(opp, g.players, "threePointsAttempted"));
+      if (side.fieldGoalsAttempted != null && tpa != null) {
         add(p, "fgaForRate", side.fieldGoalsAttempted);
-        add(p, "tpaForRate", side.threePointsAttempted);
+        add(p, "tpaForRate", tpa);
       }
       add(p, "utFor", side.ultraTimePointsFor);
       add(p, "utAgainst", side.ultraTimePointsAgainst);
@@ -474,21 +486,49 @@ function buildAssignments(
 
 // ---------- late game ----------
 
-function bestShooter(roster: PlayerSeason[], made: (l: PlayerLine) => number | null, att: (l: PlayerLine) => number | null, minAtt: number) {
-  return roster
-    .map((p) => ({ p, m: sumL(p.lines, made), a: sumL(p.lines, att) }))
-    .filter((x) => x.a >= minAtt)
-    .sort((x, y) => y.m / y.a - x.m / x.a || y.a - x.a)[0];
+function medianOf(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-function buildLateGame(focus: TeamProfile, opp: TeamProfile, focusRoster: PlayerSeason[], oppRoster: PlayerSeason[]): LateGamePlan {
+type Shooter = { p: PlayerSeason; m: number; a: number };
+
+// A closer is the focus club's best qualified shooter, but only if that player is at or above the
+// league median for the stat. "Best of a weak group" is not a closer, and naming one would
+// contradict the Development Plan that flags the same player for the same skill.
+function bestShooter(
+  roster: PlayerSeason[],
+  everyone: PlayerSeason[],
+  made: (l: PlayerLine) => number | null,
+  att: (l: PlayerLine) => number | null,
+  minAtt: number,
+): { pick: Shooter | undefined; ownQualified: number; leagueMedian: number | null } {
+  const qualified = (players: PlayerSeason[]): Shooter[] => players.map((p) => ({ p, m: sumL(p.lines, made), a: sumL(p.lines, att) })).filter((x) => x.a >= minAtt);
+  const own = qualified(roster).sort((x, y) => y.m / y.a - x.m / x.a || y.a - x.a);
+  const pool = qualified(everyone).map((x) => (x.m / x.a) * 100);
+  const leagueMedian = pool.length ? medianOf(pool) : null;
+  const pick = leagueMedian == null ? undefined : own.find((x) => (x.m / x.a) * 100 >= leagueMedian);
+  return { pick, ownQualified: own.length, leagueMedian };
+}
+
+function buildLateGame(focus: TeamProfile, opp: TeamProfile, focusRoster: PlayerSeason[], oppRoster: PlayerSeason[], everyone: PlayerSeason[]): LateGamePlan {
   const closers: CloserRole[] = [];
-  const ft = bestShooter(focusRoster, (l) => l.freeThrowsMade, (l) => l.freeThrowsAttempted, cfg.closerFtMinAttempts);
+  const notes: string[] = [];
+  const ftC = bestShooter(focusRoster, everyone, (l) => l.freeThrowsMade, (l) => l.freeThrowsAttempted, cfg.closerFtMinAttempts);
+  const threeC = bestShooter(focusRoster, everyone, (l) => l.threePointsMade, (l) => l.threePointsAttempted, cfg.closerThreeMinAttempts);
+  const fourC = bestShooter(focusRoster, everyone, (l) => l.fourPointsMade, (l) => l.fourPointsAttempted, cfg.closerFourMinAttempts);
+  const ft = ftC.pick;
+  const three = threeC.pick;
+  const four = fourC.pick;
   if (ft) closers.push({ role: "FREE_THROWS", player: ref(ft.p), value: fp((ft.m / ft.a) * 100), sample: `${ft.a} FTA` });
-  const three = bestShooter(focusRoster, (l) => l.threePointsMade, (l) => l.threePointsAttempted, cfg.closerThreeMinAttempts);
   if (three) closers.push({ role: "THREE_POINT", player: ref(three.p), value: fp((three.m / three.a) * 100), sample: `${three.a} 3PA` });
-  const four = bestShooter(focusRoster, (l) => l.fourPointsMade, (l) => l.fourPointsAttempted, cfg.closerFourMinAttempts);
   if (four) closers.push({ role: "FOUR_POINT", player: ref(four.p), value: fp((four.m / four.a) * 100), sample: `${four.a} 4PA` });
+  for (const [c, name] of [[ftC, "free-throw"], [threeC, "three-point"], [fourC, "four-point"]] as const) {
+    if (!c.pick && c.ownQualified > 0 && c.leagueMedian != null) {
+      notes.push(`No ${name} closer named: nobody with enough attempts is at or above the league median (${fp(c.leagueMedian)}).`);
+    }
+  }
 
   const utKnown = (p: TeamProfile) => (p.stats.get("utFor")?.n ?? 0) > 0;
   const ultraTimeDataAvailable = utKnown(focus) || utKnown(opp);
@@ -505,10 +545,9 @@ function buildLateGame(focus: TeamProfile, opp: TeamProfile, focusRoster: Player
     .filter((x) => x.a >= cfg.poorFtMinAttempts)
     .sort((x, y) => x.m / x.a - y.m / y.a)[0];
 
-  const notes: string[] = [];
   if (!ultraTimeDataAvailable) notes.push("No Ultra Time data for these teams yet; closers are picked from season shooting.");
-  if (!ft) notes.push(`No player has ${cfg.closerFtMinAttempts}+ free-throw attempts yet, so there is no evidence-backed late-game ball-handler.`);
-  if (four && closers.some((c) => c.role === "FOUR_POINT")) notes.push("In Ultra Time a made four counts eight: only take it from the named shooter on an open look.");
+  if (ftC.ownQualified === 0) notes.push(`No player has ${cfg.closerFtMinAttempts}+ free-throw attempts yet, so there is no evidence-backed late-game ball-handler.`);
+  if (four) notes.push("In Ultra Time a made four counts eight: only take it from the named shooter on an open look.");
 
   return {
     ultraTimeDataAvailable,
@@ -578,7 +617,7 @@ export function buildGamePlan(games: GameCore[], focusSeasonClubId: string, oppo
     keys: keysFor(focus, opp, profiles, seasons, true),
     howTheyBeatUs: keysFor(opp, focus, profiles, seasons, false).slice(0, 3),
     assignments: buildAssignments(focusRoster, oppRoster, meta),
-    lateGame: buildLateGame(focus, opp, focusRoster, oppRoster),
+    lateGame: buildLateGame(focus, opp, focusRoster, oppRoster, [...seasons.values()]),
   };
 }
 
@@ -599,11 +638,19 @@ export function buildGamePlanReview(plan: GamePlan, game: GameCore): KeyReview[]
     switch (c.stat) {
       case "PLAYER_POINTS": actual = pl ? pl.points : null; break;
       case "PLAYER_FOULS": actual = pl ? pl.fouls : null; break;
-      case "PLAYER_FTA_SHARE": actual = pl && pl.freeThrowsAttempted != null && team.freeThrowsAttempted ? (pl.freeThrowsAttempted / team.freeThrowsAttempted) * 100 : null; break;
+      case "PLAYER_FTA_SHARE": {
+        const teamFta = sideTotal(team, game.players, "freeThrowsAttempted");
+        actual = pl && pl.freeThrowsAttempted != null && teamFta ? (pl.freeThrowsAttempted / teamFta) * 100 : null;
+        break;
+      }
       case "TEAM_TO": actual = team.turnovers; break;
       case "TEAM_OREB": actual = team.offensiveRebounds; break;
-      case "TEAM_3P_PCT": actual = team.threePointsAttempted ? ((team.threePointsMade ?? 0) / team.threePointsAttempted) * 100 : null; break;
-      case "TEAM_3PA": actual = team.threePointsAttempted; break;
+      case "TEAM_3P_PCT": {
+        const att = sideTotal(team, game.players, "threePointsAttempted");
+        actual = att ? ((sideTotal(team, game.players, "threePointsMade") ?? 0) / att) * 100 : null;
+        break;
+      }
+      case "TEAM_3PA": actual = sideTotal(team, game.players, "threePointsAttempted"); break;
       case "TEAM_POINTS": actual = team.score; break;
       case "FIRST_HALF_MARGIN":
       case "SECOND_HALF_MARGIN": {

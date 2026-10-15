@@ -158,3 +158,33 @@ test("post-game review marks keys HELD, BROKEN or NOT_TESTABLE", () => {
   const absent = game(plain("A"), { ...opp, players: opp.players.slice(1) });
   assert.equal(buildGamePlanReview(plan, absent).find((r) => r.key.kind === "DENY_FOCAL_POINT")!.verdict, "NOT_TESTABLE");
 });
+
+// Real LBCL rows carry no team-level three-point or free-throw totals (TeamStat has no such
+// columns and game-analytics leaves them null), so the plan must derive them from player lines.
+const noTeamShooting = { threePointsAttempted: null, threePointsMade: null, freeThrowsAttempted: null, freeThrowsMade: null };
+
+test("three-point profile keys still fire when team rows carry no three-point totals", () => {
+  const withNull = (t: TeamSpec): TeamSpec => ({ ...t, side: { ...t.side, ...noTeamShooting } });
+  const shooters: TeamSpec = withNull({ id: "B", players: [1, 2, 3, 4, 5].map((n) => ({ id: `B${n}`, stat: { threePointsAttempted: 5, threePointsMade: 2 } })) });
+  const teams = [withNull(plain("A")), shooters, withNull(plain("C")), withNull(plain("D"))];
+  const plan = buildGamePlan(league(teams, 2), "A", "B", noMeta)!;
+  assert.ok(plan.keys.some((k) => k.kind === "RUN_THEM_OFF_THE_LINE"), plan.keys.map((k) => k.kind).join() || "no keys");
+});
+
+test("free-throw share check is testable when team rows carry no free-throw totals", () => {
+  const withNull = (t: TeamSpec): TeamSpec => ({ ...t, side: { ...t.side, ...noTeamShooting } });
+  const opp = withNull({ id: "B", players: [{ id: "bigFT", stat: { freeThrowsMade: 2, freeThrowsAttempted: 6 } }, { id: "B2" }, { id: "B3" }, { id: "B4" }, { id: "B5" }] });
+  const teams = [withNull(plain("A")), opp, withNull(plain("C")), withNull(plain("D"))];
+  const plan = buildGamePlan(league(teams, 2), "A", "B", noMeta)!;
+  const key = plan.keys.find((k) => k.kind === "FOUL_POOR_FT_SHOOTER")!;
+  assert.equal(key.check.baseline, 27.3); // 6 of their 22 attempts per game
+  const verdict = buildGamePlanReview(plan, game(withNull(plain("A")), opp)).find((r) => r.key.kind === "FOUL_POOR_FT_SHOOTER")!;
+  assert.notEqual(verdict.verdict, "NOT_TESTABLE");
+});
+
+test("a late-game closer must be at or above the league median, not just the best of a weak group", () => {
+  const weakFt = (id: string): TeamSpec => ({ id, players: [1, 2, 3, 4, 5].map((n) => ({ id: `${id}${n}`, stat: { freeThrowsMade: 2, freeThrowsAttempted: 4 } })) });
+  const plan = buildGamePlan(league([weakFt("A"), plain("B"), plain("C"), plain("D")], 2), "A", "B", noMeta)!;
+  assert.equal(plan.lateGame!.closers.find((c) => c.role === "FREE_THROWS"), undefined);
+  assert.ok(plan.lateGame!.notes.some((n) => /league median/.test(n)), plan.lateGame!.notes.join(" | "));
+});
