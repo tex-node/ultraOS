@@ -113,9 +113,11 @@ export const gamePlanConfig = {
   // Which three-point key fires once the rate bar is cleared.
   threePctWeak: 30,
   threePctStrong: 33,
-  // ATTACK_FOUL_TROUBLE fires at/above the league 90th percentile of fouls per game among players
+  // ATTACK_FOUL_TROUBLE fires at/above the league 95th percentile of fouls per game among players
   // who clear the minutes gate. foulTroublePerGame stays only as the defender "foul risk" flag.
-  foulTroublePercentile: 90,
+  foulTroublePercentile: 95,
+  // ...and only for the opponent's core: their top N by minutes per game or by points per game.
+  foulTroubleCorePlayers: 3,
   foulTroublePerGame: 3,
   // Floor for half-split keys; the effective bar is max(this, 2 x the margin's standard error).
   halfMarginSwing: 3,

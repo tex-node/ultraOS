@@ -413,7 +413,13 @@ function keysFor(
   // 9. Foul trouble among their main rotation, at or above the league 90th percentile of fouls per
   // game among players who clear the minutes gate. Also require strictly above the league median,
   // because a league where everyone fouls alike puts the p90 at the median and would flag everyone.
-  const rotation = [...themRoster].sort((a, b) => b.lines.length - a.lines.length || sumL(b.lines, (l) => l.points) - sumL(a.lines, (l) => l.points)).slice(0, 6);
+  // Only their core players count: a bench player's foul trouble is low value. Core = top
+  // `foulTroubleCorePlayers` by minutes per game (when minutes are recorded) or by points per game.
+  const perGameOf = (p: PlayerSeason, f: (l: PlayerLine) => number | null) => sumL(p.lines, f) / p.lines.length;
+  const topBy = (f: (l: PlayerLine) => number | null) => [...themRoster].sort((a, b) => perGameOf(b, f) - perGameOf(a, f)).slice(0, cfg.foulTroubleCorePlayers);
+  const minutesRecorded = themRoster.some((p) => sumL(p.lines, (l) => l.minutesPlayed) > 0);
+  const coreIds = new Set([...(minutesRecorded ? topBy((l) => l.minutesPlayed) : []), ...topBy((l) => l.points)].map((p) => p.playerId));
+  const rotation = themRoster.filter((p) => coreIds.has(p.playerId));
   const foulPool = [...seasons.values()]
     .filter((p) => p.lines.length >= cfg.minPlayerGames && passesMinutesGate(p))
     .map((p) => sumL(p.lines, (l) => l.fouls) / p.lines.length);
@@ -429,7 +435,7 @@ function keysFor(
       title: `Attack ${label(ref(foulProne.p))} early`,
       rationale: `${foulProne.p.name} averages ${f1(foulProne.fpg)} fouls a game. Drive at ${foulProne.p.name} from the opening possessions to force early foul trouble.`,
       subject: ref(foulProne.p),
-      evidence: [{ metric: "Fouls per game", value: f1(foulProne.fpg), baseline: `league 90th pct ${f1(foulBar)}`, sample: `${foulProne.p.lines.length} games` }],
+      evidence: [{ metric: "Fouls per game", value: f1(foulProne.fpg), baseline: `league ${cfg.foulTroublePercentile}th pct ${f1(foulBar)}`, sample: `${foulProne.p.lines.length} games` }],
       confidence: confidenceFromGames(foulProne.p.lines.length),
       strength: foulProne.fpg / foulBar,
       check: { stat: "PLAYER_FOULS", side: sideThem, playerId: foulProne.p.playerId, baseline: r1(foulProne.fpg), want: "ABOVE" },

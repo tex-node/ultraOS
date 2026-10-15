@@ -214,13 +214,13 @@ test("half-split keys require the margin to clear 2x its standard error", () => 
   assert.ok(buildGamePlan(steady, "A", "B", noMeta)!.keys.some((k) => k.kind === "WIN_THE_SECOND_HALF"), "steady -6 must fire");
 });
 
-test("ATTACK_FOUL_TROUBLE fires at the league 90th percentile, not a fixed 3.0", () => {
+test("ATTACK_FOUL_TROUBLE fires at the league percentile bar, not a fixed 3.0", () => {
   const opp: TeamSpec = { id: "B", players: [{ id: "fouler", stat: { fouls: 5 } }, { id: "B2" }, { id: "B3" }, { id: "B4" }, { id: "B5" }] };
   const plan = buildGamePlan(league([plain("A"), opp, plain("C"), plain("D")], 2), "A", "B", noMeta)!;
   const key = plan.keys.find((k) => k.kind === "ATTACK_FOUL_TROUBLE");
   assert.ok(key, plan.keys.map((k) => k.kind).join() || "no keys");
   assert.equal(key!.subject?.playerId, "fouler");
-  assert.match(key!.evidence[0].baseline, /league 90th pct/);
+  assert.match(key!.evidence[0].baseline, /league \d+th pct/);
 });
 
 test("an all-zero team series counts as not captured", () => {
@@ -229,4 +229,17 @@ test("an all-zero team series counts as not captured", () => {
   assert.equal(seriesCaptured([]), true);
   assert.equal(zeroMeansNotCaptured("bench"), true);
   assert.equal(zeroMeansNotCaptured("pf"), false);
+});
+
+test("ATTACK_FOUL_TROUBLE ignores a bench player and names a top-3 scorer", () => {
+  const mk = (benchFouls: number, starFouls: number): TeamSpec => ({
+    id: "B",
+    players: [
+      { id: "star", stat: { points: 18, fouls: starFouls } }, { id: "B2", stat: { points: 14 } }, { id: "B3", stat: { points: 12 } },
+      { id: "benchFouler", stat: { points: 1, fouls: benchFouls } }, { id: "B5", stat: { points: 1 } },
+    ],
+  });
+  const kinds = (o: TeamSpec) => buildGamePlan(league([plain("A"), o, plain("C"), plain("D")], 2), "A", "B", noMeta)!.keys.filter((k) => k.kind === "ATTACK_FOUL_TROUBLE");
+  assert.equal(kinds(mk(6, 2)).length, 0, "a foul-prone bench player is low value");
+  assert.equal(kinds(mk(2, 6))[0]?.subject?.playerId, "star");
 });
