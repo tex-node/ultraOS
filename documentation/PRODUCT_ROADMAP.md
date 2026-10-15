@@ -779,7 +779,7 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | C0 | Coaching: ADR-011 boundary, glossary, access rules, `COACHING_ASSISTANT_ENABLED` flag | P15/C | `Done` | — |
 | C1 | Player Development Engine (pure): dimensions, peer baselines, focus areas, drill registry, targets | P15/C | `In progress` (engine done and real-data checked on LBCL staging; CoachingPlan table + adopt action pending; minutes-played gate and focus-area threshold proposed, awaiting approval) | C0 |
 | C2 | Opponent Game Plan Engine: keys to the game, assignments, Ultra Time plan, post-game review | P15/C | `Done` (engine + preview script; real-data checked on LBCL staging; threshold proposals awaiting approval, see session.md 2026-10-15) | C0 |
-| C3 | Coach Hub UI (`/coaching`) + printable pre-game and training-week sheets | P15/C | `Not started` | C1, C2 |
+| C3 | Coach Hub UI (`/coaching`) + printable pre-game and training-week sheets | P15/C | `In progress` (pages, viewer loader, squad setup and tests committed; staging deploy pending push approval) | C1, C2 |
 | C4 | Grounded AI briefing (validated against plan JSON; flag off) | P15/C | `Not started` | C3 |
 | C5 | Reviewed vision signals into development and game plans | P15/C | `Not started` | C3, B4 |
 

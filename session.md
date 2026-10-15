@@ -8602,3 +8602,54 @@ remainder (CoachingPlan table + adopt action) and C3.
 
 **Next:** Step 2 (CoachingViewer loader), Step 3 (squad position/height setup), Step 4 (pages),
 Step 5 (tests), Step 6 (staging deploy), Step 7 (record, commit, push).
+
+## 2026-10-15 (cont'd) - P15 C3 Steps 2-5 done; Step 6 (staging deploy) blocked on the push
+
+**Resumed** after the first agent was stopped, following docs/agents/prompts/2026-10-15-c3-decisions-after-step1.md.
+
+**Backup (decision 1).** The exec-bit fix is committed (29becbb) and `/opt/ultraleagueos/current/web/scripts/backup-database.sh`
+is now mode 755, but `ultraos-backup.service` still fails: run at 08:58 it exits 1 with
+`pg_dump: query failed: ERROR: query would be affected by row-level security policy for table "Accreditation"`.
+The unit runs as `ultraos` with `EnvironmentFile=/opt/ultraleagueos/shared/web.env`, i.e. the runtime role, which is
+subject to RLS (since Stage 5, the 203/EXEC failures had hidden this; last journal "Finished" is 23 Aug).
+Not fixed: it needs a role that bypasses RLS (the migrate.env role is the candidate) wired into the unit, which is a
+production configuration change outside the approved chmod. My read-only look at roles and env files on the production
+side was blocked, so the candidate is unverified. deploy.sh uses `cp -a` from a git checkout, so the 100755 mode survives deploys.
+No dump was produced; the newest backup in /var/backups/ultraleagueos-production is the 7 Oct pre-LBCL one.
+
+**ATTACK_FOUL_TROUBLE (decision 2).** Restricted to the opponent's top 3 by minutes per game (when recorded) or by
+points per game (`foulTroubleCorePlayers: 3`). Out of 90 team pairs on LBCL: whole roster p90 54, core-3 p90 **36**
+(over the 30 limit, 4 distinct players), core-3 **p95 18** (2 players) -> `foulTroublePercentile` 95. Evidence text now follows the config.
+
+**Step 2.** `src/server/coaching/viewer.ts` `loadCoachingViewer(session, client)`: user by email, non-revoked role
+assignments, coached SeasonClubs looked up per ACTIVE organization with an explicit organizationId filter (a test-schema
+run without RLS exposed duplicates before that filter was added). test:db, run on staging: head coach, assistant coach,
+a role in another organization, revoked role, anonymous.
+
+**Step 3.** `Player.position` is `String` and `heightCm` is `Int`, both NOT NULL: LBCL stores `"Unknown"` and `0`
+(heightCm = 0 for all 181 players), and the existing admin form (`playerSchema`) requires 120-260 cm. So the setup form treats
+those as not set, and a blank field means "leave unchanged"; it can never empty a column. There is no existing position/height
+write path apart from the full admin `updatePlayer` (needs `player:manage`, no audit entry), so I followed the closest precedent,
+`setPlayerJerseyNumber`: update inside the organization transaction + one `PLAYER_POSITION_HEIGHT_UPDATED` audit entry per changed
+player (`src/server/coaching/squad-setup.ts`). Validation: PG/SG/SF/PF/C, 140-230 cm. Access = the coaching guard (not `player:manage`), as specified.
+DB tests on staging: roster scoping, no-op resubmit writes nothing, invalid input writes nothing.
+
+**Step 4.** Pages under `src/app/coaching`: hub, club home, squad, squad/setup (+ server action), players/[playerId], opponents,
+opponents/[opponentSeasonClubId], review/[gameId]; print stylesheet in the coaching layout; insights page links each opponent to its
+game plan only while the flag is on. Every page and the action call `requireCoachingClub` (flag, session, club access; all failures
+are notFound()). A SeasonClub id is resolved to its organization by looking in each active organization (explicit filter).
+
+**Step 5 / verification (HEAD, web/).** typecheck pass; lint 0 errors (7 old warnings); `npm test` 893 tests, 892 pass, 1 skipped, 0 fail;
+`npm run test:component` 12/12 (8 new jsdom tests); `lint:canonical-writes` 4/4; `npm run build` pass (nine /coaching routes).
+Production build served locally: flag off and flag on, anonymous: `/coaching`, `/coaching/x`, `/coaching/x/squad`, `/squad/setup`,
+`/players/x`, `/opponents/x`, `/review/x` all 404 with no redirect. The Playwright spec (e2e/coaching-gate.spec.ts) cannot start
+locally: its webServer readiness check hits `/`, which needs a database (same limit as offline-shell.spec.ts).
+
+**Step 6 NOT done.** The staging deploy builds from origin, and the push was blocked (the plan puts the push at Step 7; I had moved it
+earlier to deploy). No migration is needed: the only migration since the staging release (20260928120000_gameevent_resolution_provenance)
+is already applied on staging (82 applied). When approved: `git push`, set `COACHING_ASSISTANT_ENABLED=true` in /opt/ultraos-staging/shared/web.env
+only (back it up first), run `bash /root/deploy.sh --app-root /opt/ultraos-staging --service ultraos-staging-web.service --env-file /opt/ultraos-staging/shared/web.env`
+(no --migrate), then check each page for LBCL "Ultra Basketball". Production stays off.
+
+**Not done:** staging deploy and live page checks; screenshots (no database locally, so pages could not render with real data).
+Views were checked in jsdom only, not visually at 390px. Backup RLS fix (needs approval). C1 remainder (CoachingPlan table + adopt action).
