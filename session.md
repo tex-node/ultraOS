@@ -8457,3 +8457,99 @@ scoped type check; run full checks and a real-data check, fix what is wrong, com
   before relying on peer-group baselines; that is a product decision, not a config tweak.
 
 **Commits:** see the C0-C2 commit series below (not pushed).
+
+## 2026-10-15 (cont'd) - P15 C0-C2 verification, second pass: fixes, threshold proposals (supersedes parts of the entry above)
+
+**Context.** A parallel session verified and committed the same work at 06:12 (commits d45ec04..908ed27)
+while this pass was running. This entry adds what that pass did not find, and corrects three of its
+statements where the data says otherwise (see "Corrections"). Nothing here edits the entry above.
+
+**Checks, final tree (HEAD + the fix commit), web/**
+- `npm run typecheck`: pass. `npm run lint`: 0 errors, 7 pre-existing warnings (none in coaching files).
+  `npm test`: 877 tests, 876 pass, 1 skipped (pre-existing), 0 fail (843 before this work; +28 coaching
+  +1 config; +5 new regression tests here). `npm run lint:canonical-writes`: 4/4 (ceiling 4). `npm run build`: pass.
+
+**Real data.** Local `web/.env` DATABASE_URL is the Prisma placeholder (`johndoe@localhost/mydb`,
+authentication fails), so everything ran read-only on **staging** (`ultraos_staging`, via a hardlink
+scratch copy of `/opt/ultraos-staging/current/web`, staging runtime env, `NODE_OPTIONS=--conditions=react-server`).
+Production untouched. LBCL org `cmucf1lo500003bkk1zyyoxmh`, "2026 Season" `cmucf1t9p0003l3kkhs9zx31u`:
+**32** fixtures, all FINAL (the brief's "33" is the sheet numbering: Games 26 and 28 missing, two games
+printed as 25). Previews saved to tmp/coaching-preview-2026-10-15.txt (after fixes) and
+tmp/coaching-preview-2026-10-15.before-fixes.txt (not committed). The season's GameCore[] was dumped
+once (tmp/lbcl-cores.clean.json) so thresholds could be swept locally against the same data.
+
+**Cross-check against the transcribed box scores** (`scripts/data/lbcl-2026-batch1.json`, the ingest
+source, validated against sheet totals in earlier sessions; the sheet images were NOT re-read). Every
+number matched: Micheal Igbanesi FT 15/36, 3P 4/17, reb 22/6, PF 13/6; Haleem Akinyemi FT 2/12, PF 18/6,
+stl+blk 16/6; Elijah Nwodo reb 39/6, PF 17/6, tov 4/6; Square Team 27.5 PPG, 26.3 TO/g, 2nd-half margin
+-28.7, OREB allowed 12.7, Peter Okeke 50/165 = 30.3%; Lagos Raptors 2nd-half +6.0, OREB allowed 12.0,
+Dele Ajigboye FT 5/14; Campos 66.4 PPG, forced TO 21.6.
+
+**Bugs fixed (each test-first; 5 new tests)**
+1. Team three-point and free-throw totals are null for every data source (TeamStat has no such columns;
+   game-analytics hard-codes null), so PACK_THE_PAINT / RUN_THEM_OFF_THE_LINE could never fire and the
+   FOUL_POOR_FT_SHOOTER review check (`PLAYER_FTA_SHARE`) was always NOT_TESTABLE with baseline 0.
+   `game-plan.ts` now derives them from player lines when every player who played reports the field.
+   `lib/analytics` untouched.
+2. Late-game "closer" was the best qualified shooter even when poor: Micheal Igbanesi (41.7% FT, league
+   median 50.0%) was named FT closer on all 9 plans while his own Development Plan lists free throws as a
+   focus area. A closer must now be at or above the league median for the stat; otherwise no closer and
+   a note says so. No new threshold (reuses the league median); behaviour change, easy to revert.
+3. Per-game targets could round to the current value ("from 0.1 to 0.1"): the 25% step was applied to
+   an already-rounded base. `targetFor` now guarantees a strictly better rounded target.
+4. Scoring-efficiency sample read "87.7 attempts" (it is FGA + 0.44 x FTA). Now "88 true-shooting
+   attempts over 6 games"; the gate label says so too.
+
+**Findings that need no code change**
+- `Player.position` is the literal string "Unknown" for all 181 players and `heightCm` is 0 for all
+  (the engine already treats 0 as unknown). So every baseline is the whole league, and the defender
+  assignments are the same three players in the same order against every opponent. positions.ts needs
+  no extension (no basketball position strings exist). Capture position and height before C3 ships.
+- Trend is UNKNOWN for everyone: needs 7 games, LBCL Ultra players have at most 6.
+- INSUFFICIENT_DATA: four-point (93/93 assessed players), three-point (81/93), free throws (49/93),
+  scoring efficiency (29/93). Four-point and Ultra Time are null on all 632 played lines, so the Ultra
+  Time plan and FOUR_POINT closers can never fire for LBCL. Period scores (Q1-Q4, one OT game), OREB,
+  and player 3PA/FTA are present. Bench points, points in paint, fast-break points and biggest lead
+  are stored as **0 on 64/64 team sides, not NULL**: no rule uses them today, but any future rule must
+  treat 0 as not captured.
+- Read the full preview output for wording: defender reasons are honest but
+  thin ("1.4 steals + blocks per game") until positions exist.
+
+**Corrections to the entry above**
+- "all 12 LBCL opponents": there are 9 opponents (10 teams).
+- "~3 focus areas per qualified player" and "threshold behaviour is reasonable": measured over all 93
+  assessable players, 90 (97%) get at least one focus area and 49 (53%) hit the cap of 3 (average 2.24).
+  Percentile < 40 flags 40% of readings by construction.
+- "Proposed config changes: none": see below.
+
+**Proposed changes, NOT applied (need approval).** Numbers are from the real season (10 teams, 90
+ordered team pairs, 93 assessable players):
+1. **Minutes gate for per-game dimensions (new `minMinutesPerGame`, suggest 10).** Per-game rates
+   mislead for players who barely play: David Udanyi (5.5 mpg, 0.7 pts) gets focus areas in rebounding
+   0.2 (p1), playmaking and defence, plus "strengths" in fouls 0.3 (p97) and turnovers 0.3 (p94);
+   Tobi Egunjobi (5.8 mpg) and Tawo Bamidele (6.0 mpg) likewise. A 10-mpg gate removes 13 of 93
+   players league-wide (3 of 11 Ultra) and leaves flag rates unchanged. Longer term: per-minute rates.
+2. `focusBelowPercentile` 40 -> 25: players with >=1 focus 97% -> 77%, at cap 53% -> 15%, average
+   2.24 -> 1.43 (30 gives 89% / 26% / 1.77).
+3. `gamePlanConfig.poorFtPct` 60 -> 40 (league FT%, 10+ FTA: p25 40, median 50, p75 58; only 23% reach
+   60): FOUL_POOR_FT_SHOOTER fires in 90/90 pairs now, 63/90 at 40 (45/90 at 35). It also duplicates
+   `lateGame.foulTarget`.
+4. `halfMarginSwing` 3 -> 8: half-split keys in 63/90 pairs -> 18/90. A team's mean second-half margin
+   has a standard error of about 4.5 (median; range 2.9-7.7) over 6-7 games, so +/-3 is noise.
+5. `foulTroublePerGame` 3 -> 3.2 (strictly above 3.0): 45/90 -> 18/90 (3.5 gives 9/90).
+6. `threeRateHigh` 30 -> 25: 0/90 -> 36/90 (PACK_THE_PAINT only). LBCL's highest 3PA rate is 26.6%
+   (league mean 21.0%) and best team 3P% is 22.4%, so RUN_THEM_OFF_THE_LINE (>= 33%) cannot fire here.
+Left alone: `focalUsageShare` (9/90), ratios 1.15 / 0.87, gates, attempt minimums.
+
+**Staging incident (mine).** The staging release already contained the coaching tree (pushed at ~06:03
+local, apparently by the parallel session). My scratch copy was made with `cp -al` (hardlinks) and my
+first `scp` overwrote 7 coaching sources and 2 preview scripts **in place in the live release directory**.
+The 4 test files I did not touch are byte-identical to this working tree, so the previous contents were
+almost certainly identical and only mtimes changed; the running service is unaffected (it serves the
+Sep 28 build, never imports src/lib/coaching). From then on uploads were write-then-rename, and the
+scratch copy was removed. The coaching files under `/opt/ultraos-staging/current/web/` are not part of
+release ae5ae8d and could be cleaned up by their owner. Also seen incidentally: `ultraos-backup.service`
+reports failed on the host (not investigated).
+
+**Not done / next:** nothing pushed or deployed. Apply (or reject) the proposals above; then C1
+remainder (CoachingPlan table + adopt action) and C3.

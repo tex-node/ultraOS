@@ -777,8 +777,8 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | B5 | Coach player profile, team insights, vision-evaluation nightly, model versioning | P14/B | `Not started` | B4 |
 | B6 | Rust acceleration & edge deployment (conditional — triggers only if cost/latency/on-prem demands) | P14/B | `Not started` | B5 + trigger |
 | C0 | Coaching: ADR-011 boundary, glossary, access rules, `COACHING_ASSISTANT_ENABLED` flag | P15/C | `Done` | — |
-| C1 | Player Development Engine (pure): dimensions, peer baselines, focus areas, drill registry, targets | P15/C | `In progress` (engine done; CoachingPlan table + adopt action pending) | C0 |
-| C2 | Opponent Game Plan Engine: keys to the game, assignments, Ultra Time plan, post-game review | P15/C | `Done` (engine + preview script; real-data checked on LBCL staging) | C0 |
+| C1 | Player Development Engine (pure): dimensions, peer baselines, focus areas, drill registry, targets | P15/C | `In progress` (engine done and real-data checked on LBCL staging; CoachingPlan table + adopt action pending; minutes-played gate and focus-area threshold proposed, awaiting approval) | C0 |
+| C2 | Opponent Game Plan Engine: keys to the game, assignments, Ultra Time plan, post-game review | P15/C | `Done` (engine + preview script; real-data checked on LBCL staging; threshold proposals awaiting approval, see session.md 2026-10-15) | C0 |
 | C3 | Coach Hub UI (`/coaching`) + printable pre-game and training-week sheets | P15/C | `Not started` | C1, C2 |
 | C4 | Grounded AI briefing (validated against plan JSON; flag off) | P15/C | `Not started` | C3 |
 | C5 | Reviewed vision signals into development and game plans | P15/C | `Not started` | C3, B4 |
@@ -880,12 +880,6 @@ does not weaken that test.
 | B4 | Canonical alignment & review | Wire/extend the existing `canonical-event-alignment.ts` (already present in `src/lib/vision/`) to match VisionObservation → GameEvent candidates; review queue UI ("confirm/correct/reject") reusing the existing `/vision/games/[fixtureId]` console and `reviewObservation()`/`reviewEventMatch()`; rejection marks REJECTED with reason + failure category. **Review changes status only — never writes GameEvent/PlayerStat/TeamStat** | Full game's observations reviewable in < 10 minutes; reviewed signals remain non-canonical (boundary test still green) |
 | B5 | Coach dashboard & evaluation | Player profile (top speed, distance, pass accuracy, heatmap, trend vs previous); team passing network + pace; `vision-evaluation.ts` nightly against gold-standard set; internal metrics dashboard; model versioning (each VisionObservation references VisionModel row) | Coach opens player profile, sees AI metrics with confidence + source clip link |
 | B6 | Rust acceleration & edge (conditional) | Trigger only if: inference cost > $X/month, on-prem camera deployment requested, P95 latency > 10-min SLA, or browser-side inference needed. Port decode + homography + tracker to Rust (napi-rs + PyO3); keep the ONNX-runtime Python inference unchanged. Do not port detector training or jersey OCR fine-tuning | Not started — conditional |
-| C0 | Coaching: ADR-011 boundary, glossary, access rules, `COACHING_ASSISTANT_ENABLED` flag | P15/C | `Done` | — |
-| C1 | Player Development Engine (pure): dimensions, peer baselines, focus areas, drill registry, targets | P15/C | `In progress` (engine done; CoachingPlan table + adopt action pending) | C0 |
-| C2 | Opponent Game Plan Engine: keys to the game, assignments, Ultra Time plan, post-game review | P15/C | `Done` (engine + preview script; real-data checked on LBCL staging) | C0 |
-| C3 | Coach Hub UI (`/coaching`) + printable pre-game and training-week sheets | P15/C | `Not started` | C1, C2 |
-| C4 | Grounded AI briefing (validated against plan JSON; flag off) | P15/C | `Not started` | C3 |
-| C5 | Reviewed vision signals into development and game plans | P15/C | `Not started` | C3, B4 |
 
 **Risk register:**
 
