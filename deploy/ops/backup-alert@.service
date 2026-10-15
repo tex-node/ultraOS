@@ -1,0 +1,9 @@
+[Unit]
+Description=Backup failure alert for %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/root/raivstream/scripts/backup-alert.sh %i

@@ -1,0 +1,16 @@
+# deploy/ops/raivstream-backup.timer
+#
+# Runs the Raivstream Supabase backup nightly at 03:20 server time.
+# Staggered from: ultraos-backup (02:00 Africa/Lagos + 10m jitter), the Raivstream
+# share-retention cron (03:17), the canary (06:00). Persistent=true so a missed
+# window (reboot/off) runs on next boot.
+[Unit]
+Description=Nightly Raivstream Supabase database backup
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

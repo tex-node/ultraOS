@@ -1,0 +1,21 @@
+# deploy/ops/raivstream-backup.service
+#
+# Nightly backup of the Raivstream Supabase Postgres (Docker container
+# `supabase-db`). Installed at /etc/systemd/system/raivstream-backup.service;
+# the script it runs is installed at /root/raivstream/scripts/backup-supabase.sh
+# (copied from deploy/ops/backup-supabase.sh).
+#
+# Failure alerting is added in a later step (OnFailure=backup-alert@%n.service).
+[Unit]
+Description=Raivstream Supabase PostgreSQL backup
+After=network-online.target docker.service
+Wants=docker.service
+OnFailure=backup-alert@%n.service
+
+[Service]
+Type=oneshot
+# Container + user are read from the container; no secrets in this unit.
+ExecStart=/root/raivstream/scripts/backup-supabase.sh
+
+[Install]
+WantedBy=multi-user.target

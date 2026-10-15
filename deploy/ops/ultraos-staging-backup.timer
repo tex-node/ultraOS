@@ -1,0 +1,16 @@
+# deploy/ops/ultraos-staging-backup.timer
+#
+# Nightly Ultra League OS staging backup at 03:35 server time.
+# Staggered from: ultraos-backup (02:00 Africa/Lagos + 10m jitter), the
+# Raivstream share-retention cron (03:17), raivstream-backup (03:20),
+# the canary (06:00). Persistent=true.
+[Unit]
+Description=Nightly Ultra League OS staging database backup
+
+[Timer]
+OnCalendar=*-*-* 03:35:00
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

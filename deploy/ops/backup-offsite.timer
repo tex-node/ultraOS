@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily off-site copy of backups to Cloudflare R2
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

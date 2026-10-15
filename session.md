@@ -8708,3 +8708,51 @@ LBCL 90 pairs: whole-roster p90 54, core-3 p90 36 (>30) -> core-3 p95 18 -> `fou
 **Steps 2-7** were already completed and pushed (`c2199f8`..`8e6f59c`); staging carries `COACHING_ASSISTANT_ENABLED=true`,
 production stays off. Only the two new prompt docs under `docs/agents/prompts/` remain untracked.
 Restored an accidental trailing-newline change to `web/postcss.config.mjs` (no-op).
+
+## 2026-10-15 (cont'd) - scheduled backups, off-site (R2) and failure alerts
+
+**Prompt:** docs/agents/prompts/2026-10-15-scheduled-backups-offsite.md. Steps 1-4 were done earlier
+by a parallel session (installed raivstream-backup 03:20, ultraos-staging-backup 03:35 + privileged
+drop-in, shared retention + 04:30 cron); I verified that work, adopted its flat `deploy/ops/` layout,
+removed my duplicates, then did Steps 5-8.
+
+**Step 1 - inventory.** Databases: `ultraos-postgres` (127.0.0.1:55411, PG 16.13) holds BOTH
+`ultraleagueos` (prod, 24 MB) and `ultraos_staging` (51 MB); `supabase-db` (PG 15.8) is the Raivstream
+Supabase (`_supabase` 239 MB); `powervend-db` (`_supabase` 9.3 GB), `current-postgres-1` (syncshowflow),
+`raivstream-staging-postgres`, `raivstream-phase9a-postgres`, `raivstream-phase8b2-postgres`,
+`raivstream-phase9a-supabase-postgres` and host `redis-server` (7.0.15) are other projects — left alone
+(scope = named three). Disk 58 G free; existing `ultraos-backup.sh` retention = `find -mtime +14` (daily only).
+
+**Step 2/3 - Raivstream + staging backups.** Verified: raivstream dump 16.5 MB (sha256 OK, `zcat` shows
+a cluster dump); staging dump 1.04 MB. Both timers enabled.
+
+**Step 4 - retention.** `backup-retention.sh` (14 daily + 8 weekly, never deletes newest, safe to
+re-run) driven by `backup-retention-all.sh` at 04:30. Projection < 0.5 GB. Fixed the conflict where
+`web/scripts/backup-database.sh` self-pruned at 14 days: prune is now opt-in (`default 0`); the units
+set `ULTRA_BACKUP_RETENTION_DAYS=3650` (inert, safe even against the older deployed script). The shared
+script now owns retention.
+
+**Step 5 - off-site (Cloudflare R2).** rclone v1.60.1 (already installed). Config parsed from the
+user's details file **on the host** (secret never in git/transcript) into `/etc/ultraos-backup/rclone.conf`
+(0600 root). Bucket `vps-backups-raivstream`, endpoint `https://3478db71b0394bf155af6281f8e07887.r2.cloudflarestorage.com`,
+bucket-scoped key. `backup-offsite.timer` (04:00) runs `backup-offsite.sh` (copy-only, never sync):
+`r2:<bucket>/<host>/<db>/` daily, plus `monthly/...` on the 1st. Verified: all three dumps + .sha256 in
+R2; downloaded the prod dump back, sha256 matched, temp deleted. **R2 lifecycle rules to set in the
+dashboard:** prefix `<host>/` → delete after 30 days; prefix `monthly/` → delete after 365 days.
+
+**Step 6 - alerts.** `send-alert.sh` (SMTP from `/opt/ultraleagueos/shared/web.env`, to
+texdevices@gmail.com) + `backup-alert@.service` wired via `OnFailure=backup-alert@%n.service` on every
+backup/offsite unit (prod via drop-in `alerts-retention.conf`). `backup-freshness.timer` (09:00) alerts
+if any local dump or R2 object is > 26 h old. Tested: direct send OK; deliberate failure (temp bad
+`SUPABASE_DB_CONTAINER` override) → `backup-alert@raivstream-backup.service` ran exit 0; forced-stale
+freshness (MAX_AGE_HOURS=0) alerted 4 problems; real threshold reports all fresh; override removed.
+
+**Step 7 - restore drill.** `documentation/runbooks/BACKUP_RESTORE.md`. Restored `ultraos-20261015-091940.dump`
+into scratch DB `ultraos_restore_test` on `ultraos-postgres`: Game 53=53, GameEvent 9=9, Player 400=400,
+Application 342=342 (all MATCH); scratch DB dropped.
+
+**Step 8 - record.** Added `deploy/ops/README.md`, updated `SERVER_MAINTENANCE.md` follow-ups 2 & 3 to
+done, gitignored the secrets file (`*DO NOT COMMIT*`). Schedule: ultraos 03:00, raivstream 03:20,
+staging 03:35, offsite 04:00, retention 04:30, freshness 09:00. Concurrency: a parallel session worked
+Steps 1-4 (12:42-15:42); a lone raivstream backup ran at 20:38 (source unknown, no active SSH session) —
+monitor for further parallel activity.

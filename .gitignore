@@ -5,3 +5,7 @@ UI/.env.*
 !UI/.env.example
 cred/
 *.log
+
+# Backup credentials / secrets — never commit
+*DO NOT COMMIT*
+vps-backups-raivstream*.txt

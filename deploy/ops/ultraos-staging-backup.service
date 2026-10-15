@@ -1,0 +1,30 @@
+# deploy/ops/ultraos-staging-backup.service
+#
+# Nightly backup of the Ultra League OS STAGING database `ultraos_staging`
+# (which lives inside the same `ultraos-postgres` container as production, but
+# is NOT covered by ultraos-backup.service, which dumps only `ultraleagueos`).
+#
+# Reuses the existing web/scripts/backup-database.sh (pg_dump --format=custom
+# --compress=9 + sha256), pointed at the staging DB + a separate backup dir.
+#
+# NOTE: verify the staging DB role can run pg_dump (the prod unit needed the
+# privileged-role drop-in). If it cannot, add a drop-in pointing at a
+# privileged EnvironmentFile for staging — do not change production's.
+[Unit]
+Description=Ultra League OS staging (ultraos_staging) PostgreSQL backup
+After=network-online.target
+OnFailure=backup-alert@%n.service
+
+[Service]
+Type=oneshot
+User=ultraos
+WorkingDirectory=/opt/ultraleagueos/current/web
+EnvironmentFile=/opt/ultraos-staging/shared/web.env
+Environment=ULTRA_BACKUP_DIR=/var/backups/ultraleagueos-staging
+# Retention is owned by deploy/ops/backup-retention-all.sh; disable the inline prune
+# (3650 days, safe even against an older deployed backup-database.sh whose default is 14).
+Environment=ULTRA_BACKUP_RETENTION_DAYS=3650
+ExecStart=/opt/ultraleagueos/current/web/scripts/backup-database.sh
+
+[Install]
+WantedBy=multi-user.target
