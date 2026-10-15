@@ -8653,3 +8653,35 @@ only (back it up first), run `bash /root/deploy.sh --app-root /opt/ultraos-stagi
 
 **Not done:** staging deploy and live page checks; screenshots (no database locally, so pages could not render with real data).
 Views were checked in jsdom only, not visually at 390px. Backup RLS fix (needs approval). C1 remainder (CoachingPlan table + adopt action).
+
+## 2026-10-15 (cont'd) - P15 C3 Step 6-7: pushed, deployed to STAGING only; backup wiring blocked
+
+**Push.** `29becbb..8e6f59c` pushed to origin/main (approved).
+
+**Staging deploy.** `COACHING_ASSISTANT_ENABLED=true` added to `/opt/ultraos-staging/shared/web.env` only (backup:
+`web.env.before-coaching-flag-20261015T081057Z`). `deploy.sh --app-root /opt/ultraos-staging ...` with no `--migrate` (the one
+migration since the old release, 20260928120000_gameevent_resolution_provenance, was already applied on staging; C3 adds none).
+Staging is now `release-8e6f59c-20261015T081105Z`, service active, no errors in its log. Production untouched, flag off.
+
+**Verification on staging.**
+- Anonymous requests to the live service: `/coaching`, `/coaching/nope`, `/coaching/nope/squad` -> 404, no redirect; `/login` 200.
+- Ran what every page runs against LBCL "Ultra Basketball" (season club `cmucf1tc80007l3kkekjm8pbx`) in a throwaway hardlink copy
+  (new files only, removed afterwards) and rendered all 32 views (squad, squad setup, 15 player plans, 9 game plans, 6 reviews)
+  to HTML: 0 throws, 0 NaN/undefined. texdevices@gmail.com resolves to SUPER_ADMIN, so the hub shows an organization picker, then
+  LBCL's 10 clubs. Game plans: 9 OK, 0 insufficient. Reviews rebuild from prior games only and give HELD/BROKEN (e.g. Campos:
+  PROTECT_THE_BALL held, CONTROL_TEMPO broken).
+- LBCL squad: 15 players, 8 assessed, 13 focus areas; positions usable 0/15 and heights usable 0/15, so the "set positions" banner shows.
+  No fixture is scheduled, so "next opponent" falls back to the opponents list.
+- Staging is not public: `AUTH_URL` is `http://127.0.0.1:4120`, so pages are opened through an SSH tunnel
+  (`ssh -L 4120:127.0.0.1:4120 raivstream`), signed in as texdevices@gmail.com.
+
+**Backup wiring: NOT done (blocked).** Findings: runtime role `ultraos_app` is not superuser/BYPASSRLS and 116 public tables have
+FORCE row level security; the migrate.env role `ultraos` is superuser with BYPASSRLS, and pg_dump 16.15 is installed. The intended
+change is a systemd drop-in `/etc/systemd/system/ultraos-backup.service.d/privileged-role.conf` that resets `EnvironmentFile=` and points it at
+`/opt/ultraleagueos/shared/migrate.env` (root:ultraos 640, so the unit's user can read it), then `daemon-reload`, run once, verify the dump
+(`sha256sum -c`, `pg_restore --list | head`). The permission checker refused it as a privilege grant (superuser credential for a production
+unit) and also refused a read-only listing of the unit's drop-in directory, so nothing was written. The backup is still failing nightly (last
+success 23 Aug).
+
+**Not done:** backup wiring; screenshots (staging needs a login through the tunnel; views verified by render, not visually);
+C1 remainder (CoachingPlan table + adopt action).
