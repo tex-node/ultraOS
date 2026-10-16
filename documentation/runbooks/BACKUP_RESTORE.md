@@ -16,7 +16,12 @@ Then: **04:00** off-site copy (`/root/ops/backup-offsite.sh` → R2, encrypted),
 retention (14 daily + newest of each of the last 8 ISO weeks; never the newest), **09:00**
 freshness check (26 h staleness → email to `texdevices@gmail.com`).
 
-- Dumps are **copy-only** to R2 (never `sync`); R2 lifecycle: `daily/`=30 d, `monthly/`=365 d.
+- Dumps are **copy-only** to R2 (never `sync`). Layout: `daily/<host>/<db>/` + `monthly/<host>/<db>/`.
+  **R2 lifecycle rules must use the ENCRYPTED directory prefixes** (the `r2crypt` remote
+  encrypts directory names). Current values — re-derive with
+  `rclone cryptdecode --reverse r2crypt: daily monthly` after any crypt-password change:
+  - `daily` → `9e497clv8m370i8vk9hamgc028/` → delete after **30 days**
+  - `monthly` → `ikbpmvklas3jaf8f1b9b7gia0o/` → delete after **365 days**
 - Off-site is **encrypted** by an rclone `crypt` remote (`r2crypt`). **Two secrets are
   required to decrypt:** the crypt password and the salt, stored at
   `/etc/ultraos-backup/rclone-crypt-password.txt` and `…-password-salt.txt` (mode 600).

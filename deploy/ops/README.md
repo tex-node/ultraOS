@@ -1,73 +1,78 @@
-# deploy/ops — raivstream VPS backups
+# deploy/ops — VPS-wide operations (NOT UltraLeague-only)
 
-Nightly backups of every UltraLeague OS database and the Raivstream Supabase stack, off-site
-copies to Cloudflare R2, retention, and failure/freshness alerts. Operator runbook:
-`documentation/runbooks/BACKUP_RESTORE.md`.
+These files run on the shared **raivstream VPS** (`ssh raivstream`, `81.0.246.223`).
+That host runs **several projects** — do **not** treat this folder as UltraLeague-only
+and do not delete a script because UltraLeague doesn't reference it.
 
-## Files
+| Project | Backed up by | Schedule (server time) |
+|---|---|---|
+| UltraLeague OS production (`ultraleagueos`) | `ultraos-backup.timer` | 02:00 Africa/Lagos (+jitter) |
+| Raivstream Supabase (`supabase-db`) | `raivstream-backup.timer` | 03:20 (+jitter) |
+| UltraLeague OS staging (`ultraos_staging`) | `ultraos-staging-backup.timer` | 03:35 (+jitter) |
+| off-site copy → Cloudflare R2 | `backup-offsite.timer` | 04:00 |
+| retention (14 daily + 8 weekly) | `backup-retention.timer` | 04:30 |
+| freshness check (26 h → email) | `backup-freshness.timer` | 09:00 |
+| Powervend, syncshowflow, Redis | not ours — **do not touch** | — |
 
-| File | Installed as |
+## Files here and where they install on the host
+
+| File | Installs to |
 |---|---|
-| `backup-supabase.sh` | `/root/raivstream/scripts/backup-supabase.sh` |
-| `backup-offsite.sh` | `/root/raivstream/scripts/backup-offsite.sh` |
-| `backup-retention.sh` | `/root/raivstream/scripts/backup-retention.sh` |
-| `backup-retention-all.sh` | `/root/raivstream/scripts/backup-retention-all.sh` |
-| `send-alert.sh` | `/root/raivstream/scripts/send-alert.sh` |
-| `backup-alert.sh` | `/root/raivstream/scripts/backup-alert.sh` |
-| `backup-freshness.sh` | `/root/raivstream/scripts/backup-freshness.sh` |
-| `raivstream-backup.{service,timer}` | `/etc/systemd/system/` |
-| `ultraos-staging-backup.{service,timer}` | `/etc/systemd/system/` |
-| `backup-offsite.{service,timer}` | `/etc/systemd/system/` |
-| `backup-alert@.service` | `/etc/systemd/system/` |
-| `backup-freshness.{service,timer}` | `/etc/systemd/system/` |
-| `ultraos-staging-backup.service.d/privileged-role.conf` | `/etc/systemd/system/ultraos-staging-backup.service.d/` |
-| `ultraos-backup.service.d/privileged-role.conf` | `/etc/systemd/system/ultraos-backup.service.d/` |
-| `ultraos-backup.service.d/alerts-retention.conf` | `/etc/systemd/system/ultraos-backup.service.d/` |
+| `backup-supabase.sh`, `backup-retention.sh`, `backup-retention-all.sh`, `backup-offsite.sh`, `backup-freshness.sh`, `backup-alert.sh`, `r2-configure.sh` | `/root/ops/` |
+| `backup-offsite.{service,timer}`, `backup-freshness.{service,timer}`, `backup-retention.{service,timer}`, `backup-alert@.service` | `/etc/systemd/system/` |
+| `raivstream-backup.{service,timer}` + `.service.d/script-path.conf` | `/etc/systemd/system/` |
+| `ultraos-staging-backup.{service,timer}` + `.service.d/privileged-role.conf` | `/etc/systemd/system/` |
+| `ultraos-backup.service.d/retention-defer.conf` | `/etc/systemd/system/ultraos-backup.service.d/` |
 
-The production unit `ultraos-backup.service` itself and `web/scripts/backup-database.sh` live in
-the app repo (`web/`); the drop-ins above adapt them.
+Every backup/offsite/retention/freshness unit sets **`OnFailure=backup-alert@%n.service`**,
+which emails the failing unit + last 30 journal lines.
 
-## Schedule (server time, CEST/CET)
+## Alerting
 
-`ultraos 03:00` → `raivstream 03:20` → `staging 03:35` → `offsite 04:00` → `retention (cron) 04:30`
-→ `freshness 09:00`. Every backup/offsite unit has `OnFailure=backup-alert@%n.service`.
+`backup-alert.sh` sends via **Resend** (`RESEND_API_KEY` read at runtime from
+`/root/raivstream/.env`; never in git). Recipient defaults to `texdevices@gmail.com`.
 
-## Install / rebuild on the host
+## Off-site (R2)
 
-```bash
-# from a checkout of the repo, on the VPS
-sudo install -d -m 0755 /root/raivstream/scripts
-sudo cp deploy/ops/*.sh /root/raivstream/scripts/
-sudo sed -i 's/\r$//' /root/raivstream/scripts/*.sh
-sudo chmod 0755 /root/raivstream/scripts/*.sh
-sudo cp deploy/ops/*.service deploy/ops/*.timer /etc/systemd/system/
-sudo sed -i 's/\r$//' /etc/systemd/system/raivstream-backup.* /etc/systemd/system/ultraos-staging-backup.* \
-  /etc/systemd/system/backup-offsite.* /etc/systemd/system/backup-alert@.service /etc/systemd/system/backup-freshness.*
-sudo install -d /etc/systemd/system/ultraos-backup.service.d /etc/systemd/system/ultraos-staging-backup.service.d
-sudo cp deploy/ops/ultraos-backup.service.d/*.conf /etc/systemd/system/ultraos-backup.service.d/
-sudo cp deploy/ops/ultraos-staging-backup.service.d/*.conf /etc/systemd/system/ultraos-staging-backup.service.d/
-sudo sed -i 's/\r$//' /etc/systemd/system/ultraos-backup.service.d/*.conf /etc/systemd/system/ultraos-staging-backup.service.d/*.conf
-sudo systemctl daemon-reload
-sudo systemctl enable --now raivstream-backup.timer ultraos-staging-backup.timer backup-offsite.timer backup-freshness.timer
-# retention cron
-( crontab -l 2>/dev/null | grep -v backup-retention-all.sh; \
-  echo '30 4 * * * /bin/bash /root/raivstream/scripts/backup-retention-all.sh >> /root/raivstream/backup-retention.log 2>&1' ) | crontab -
-```
+- `r2-configure.sh` builds `/etc/ultraos-backup/rclone.conf` (mode 600) from a root-only
+  source file, then shreds the source. Defines `[r2]` (Cloudflare S3) + `[r2crypt]`
+  (rclone crypt over `r2:vps-backups-raivstream`).
+- Layout (top-level prefixes so R2 needs only 2 lifecycle rules):
+  `r2:<bucket>/**daily**/<host>/<db>/<file>` and `…/**monthly**/<host>/<db>/<file>` on the 1st.
+  **Copy-only** (never `sync`).
+- **Lifecycle rules use the ENCRYPTED directory names**, because `r2crypt` encrypts
+  directory names. For the current crypt password+salt:
+  - `daily` → prefix **`9e497clv8m370i8vk9hamgc028/`** → delete after **30 days**
+  - `monthly` → prefix **`ikbpmvklas3jaf8f1b9b7gia0o/`** → delete after **365 days**
 
-## Secrets (not in git)
+  Re-derive after any crypt-password change: `rclone cryptdecode --reverse r2crypt: daily monthly`.
+  (If the crypt remote is regenerated these prefixes change and the rules must be updated,
+  or expiry silently stops matching.)
+- **Two crypt secrets are required to decrypt** (password **and** salt). Stored at
+  `/etc/ultraos-backup/rclone-crypt-password.txt` and `…-password-salt.txt` (mode 600),
+  and held **offline by the owner**. Without both, off-site restores are impossible.
 
-- `/etc/ultraos-backup/rclone.conf` (mode 600, root-only) — R2 S3 credentials for bucket
-  `vps-backups-raivstream`. Rebuild it from the Cloudflare R2 API token (access key id + secret,
-  endpoint `https://<account-id>.r2.cloudflarestorage.com`).
-- SMTP settings are read at send time from `/opt/ultraleagueos/shared/web.env` (the app's own
-  settings) — never copied here.
+## Retention
 
-## Notes
+`backup-retention.sh` keeps the **newest 14 dumps + the newest of each of the last 8 ISO
+weeks**, never deletes the newest, `DRY_RUN=1` reports only. The prod/staging units set
+`ULTRA_BACKUP_RETENTION_DAYS=3650` (`retention-defer.conf`) so `web/scripts/backup-database.sh`'s
+inline 14-day prune does not fight this rule.
 
-- Both `ultraleagueos` and `ultraos_staging` are databases inside the `ultraos-postgres` container
-  (127.0.0.1:55411). The production unit needs a privileged `EnvironmentFile`
-  (`/opt/ultraleagueos/shared/migrate.env`, superuser/BYPASSRLS) because the runtime role is subject
-  to row-level security; staging mirrors this via its own drop-in.
-- Retention is owned by `backup-retention-all.sh`; the inline prune in
-  `web/scripts/backup-database.sh` is off unless `ULTRA_BACKUP_RETENTION_DAYS` is a positive number
-  (units set 3650 to keep it inert, including against older deployed copies).
+## Secrets
+
+**Never in git.** Runtime credentials live in root-only env files on the host
+(`/etc/ultraos-backup/*`, `*.env`, mode 600).
+
+## Ownership
+
+VPS **backups, off-site copies and backup alerts are owned by the ops session**. Other
+agents/sessions must **not** create backup units, timers or scripts on this host — that is
+exactly how a duplicate design appeared on 2026-10-15. If you need a change here, edit
+these files and open a PR; do not add a parallel implementation.
+
+## History
+
+A duplicate design was committed 2026-10-15 19:51 (`16b8628`) and **never installed**.
+The design described above is the one **deployed** on the VPS (backups 2026-10-15,
+off-site + freshness + alerts 2026-10-15/16) and is what this folder now matches.
