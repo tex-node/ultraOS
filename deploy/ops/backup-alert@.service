@@ -1,9 +1,12 @@
+# deploy/ops/backup-alert@.service
+#
+# Failure-alert template. Every backup + offsite unit sets
+#   OnFailure=backup-alert@%n.service
+# so a failed run emails the unit name, host, time and the last 30 journal lines.
+# %i = the failing unit name (e.g. raivstream-backup.service).
 [Unit]
 Description=Backup failure alert for %i
-After=network-online.target
-Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=root
-ExecStart=/root/raivstream/scripts/backup-alert.sh %i
+ExecStart=/root/ops/backup-alert.sh "backup FAILED: %i on %H" %i

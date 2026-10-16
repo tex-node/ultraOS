@@ -1,72 +1,61 @@
 #!/usr/bin/env bash
 # deploy/ops/backup-freshness.sh
 #
-# Daily freshness check (09:00). Alerts if any backup folder's newest dump, or the
-# newest R2 object, is older than MAX_AGE_HOURS. This is what catches the
-# silently-not-running case that hid the 5.5-week backup failure.
-set -uo pipefail
+# Daily 09:00 check: alerts if the newest LOCAL dump (any backup folder) or the
+# newest OFF-SITE (R2) object is older than MAX_AGE_H hours. This catches the
+# "silently not running" case that hid the 5.5-week failure.
+#
+# Installed at /root/ops/backup-freshness.sh; cron 0 9 * * *.
+set -euo pipefail
 
+MAX_AGE_H="${MAX_AGE_H:-26}"
 CONF="${RCLONE_CONF:-/etc/ultraos-backup/rclone.conf}"
-BUCKET="${R2_BUCKET:-vps-backups-raivstream}"
-HOSTN="$(hostname -s)"
-MAX_AGE_HOURS="${MAX_AGE_HOURS:-26}"
-HOSTNAME_FULL="$(hostname)"
+ALERT=/root/ops/backup-alert.sh
+NOW="$(date +%s)"
+STALE=0
 
-problems=()
+alert() { "$ALERT" "$1" "" >/dev/null 2>&1 || true; echo "[backup.freshness] ALERT: $1"; STALE=1; }
 
-check_dir() { # dir glob label
-  local dir="$1" glob="$2" label="$3" newest age
-  newest="$(ls -1t "$dir"/$glob 2>/dev/null | grep -v '\.sha256$' | head -1 || true)"
-  if [ -z "$newest" ]; then
-    problems+=("${label}: no dump found in ${dir}")
-    return 0
-  fi
-  age=$(( ( $(date +%s) - $(stat -c %Y "$newest") ) / 3600 ))
-  if [ "$age" -gt "$MAX_AGE_HOURS" ]; then
-    problems+=("${label}: newest LOCAL dump is ${age}h old ($(basename "$newest"))")
-  fi
-}
-
-check_r2() { # label
-  local label="$1" newest dt ep age
-  newest="$(rclone --config "$CONF" lsl "r2:${BUCKET}/${HOSTN}/${label}/" 2>/dev/null | sort -k2,3 | tail -1 || true)"
-  if [ -z "$newest" ]; then
-    problems+=("${label}: no object in R2 (${BUCKET}/${HOSTN}/${label}/)")
-    return 0
-  fi
-  dt="$(printf '%s' "$newest" | awk '{print $2" "$3}')"
-  ep="$(date -d "$dt" +%s 2>/dev/null || echo 0)"
-  if [ "$ep" -eq 0 ]; then
-    problems+=("${label}: cannot parse R2 timestamp ('${dt}')")
-    return 0
-  fi
-  age=$(( ( $(date +%s) - ep ) / 3600 ))
-  if [ "$age" -gt "$MAX_AGE_HOURS" ]; then
-    problems+=("${label}: newest R2 object is ${age}h old")
+check_local() { # $1 dir  $2 glob  $3 label
+  local dir="$1" glob="$2" label="$3"
+  [ -d "$dir" ] || { alert "STALE BACKUP: $label folder missing ($dir)"; return; }
+  local newest
+  newest="$(ls -t "$dir"/$glob 2>/dev/null | grep -v '\.sha256$' | head -n1 || true)"
+  if [ -z "$newest" ]; then alert "STALE BACKUP: $label has no dumps in $dir"; return; fi
+  local age=$(( (NOW - $(stat -c %Y "$newest")) / 3600 ))
+  if [ "$age" -gt "$MAX_AGE_H" ]; then
+    alert "STALE BACKUP: $label newest is ${age}h old (limit ${MAX_AGE_H}h) — $newest"
+  else
+    echo "[backup.freshness] ok local $label age=${age}h"
   fi
 }
 
-check_dir /var/backups/ultraleagueos         'ultraos-*.dump'    ultraleagueos
-check_dir /var/backups/ultraleagueos-staging 'ultraos-*.dump'    ultraos_staging
-check_dir /var/backups/raivstream            'supabase-*.sql.gz' raivstream_supabase
-check_r2 ultraleagueos
-check_r2 ultraos_staging
-check_r2 raivstream_supabase
+check_local /var/backups/raivstream            'supabase-*.sql.gz' raivstream
+check_local /var/backups/ultraleagueos         'ultraos-*.dump'    ultraleagueos
+check_local /var/backups/ultraleagueos-staging '*.dump'           ultraleagueos-staging
 
-if [ "${#problems[@]}" -eq 0 ]; then
-  echo "[freshness] all backups fresh (< ${MAX_AGE_HOURS}h)"
-  exit 0
+# Off-site freshness: newest object under <host>/ on the crypt remote.
+# lsf --format "tp" => "<YYYY-MM-DD HH:MM:SS>;<path>" (rclone lsl has no -R here).
+if command -v rclone >/dev/null 2>&1 && [ -f "$CONF" ]; then
+  newest_r2="$(rclone --config "$CONF" lsf "r2crypt:$(hostname)/" -R --format tp 2>/dev/null \
+    | sort | tail -n1 || true)"
+  if [ -z "$newest_r2" ]; then
+    alert "STALE BACKUP: no off-site objects found on R2 for $(hostname)"
+  else
+    r2_date="$(printf '%s' "$newest_r2" | cut -d';' -f1)"
+    r2_epoch="$(date -d "$r2_date" +%s 2>/dev/null || echo 0)"
+    if [ "$r2_epoch" -gt 0 ]; then
+      age=$(( (NOW - r2_epoch) / 3600 ))
+      if [ "$age" -gt "$MAX_AGE_H" ]; then
+        alert "STALE BACKUP: newest R2 object is ${age}h old (limit ${MAX_AGE_H}h)"
+      else
+        echo "[backup.freshness] ok offsite age=${age}h"
+      fi
+    else
+      echo "[backup.freshness] could not parse R2 date: $newest_r2"
+    fi
+  fi
 fi
 
-{
-  echo "Backup freshness check FAILED."
-  echo
-  echo "Host: ${HOSTNAME_FULL}"
-  echo "Time: $(date -Is)"
-  echo "Threshold: ${MAX_AGE_HOURS}h"
-  echo
-  printf ' - %s\n' "${problems[@]}"
-} | /root/raivstream/scripts/send-alert.sh "[ultraos] BACKUP STALE on ${HOSTN}"
-
-echo "[freshness] alerted: ${#problems[@]} problem(s)" >&2
-exit 1
+if [ "$STALE" = 0 ]; then echo "[backup.freshness] all fresh"; fi
+exit 0

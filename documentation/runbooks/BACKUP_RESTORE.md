@@ -1,88 +1,97 @@
-# Backup & Restore Runbook (raivstream VPS)
+# Backup & restore runbook (raivstream VPS)
 
-Everything here runs on the shared Contabo VPS `vmi3208643` (81.0.246.223, Ubuntu 24.04,
-SSH alias `raivstream`). Source of truth for the scripts/units is `deploy/ops/` in the
-`tex-node/ultraOS` repo; this runbook is the operator view.
+Covers every database on the host (`ssh raivstream`, `81.0.246.223`). Backups run
+nightly; each is copied off-site to Cloudflare R2 encrypted. See also
+`SERVER_MAINTENANCE.md` and `../../deploy/ops/README.md`.
 
-## What is backed up, when
+## What is backed up, when, and where
 
-| Time (server, CEST/CET) | Unit | What | Local path | R2 path |
+| DB | Container / user | Nightly (server time) | Local dump dir | R2 path (`<host>/<db>/`) |
 |---|---|---|---|---|
-| 03:00 | `ultraos-backup.timer` | `ultraleagueos` (production) | `/var/backups/ultraleagueos/ultraos-*.dump` | `<host>/ultraleagueos/` |
-| 03:20 (+jitter) | `raivstream-backup.timer` | Raivstream Supabase (`supabase-db`, `pg_dumpall`) | `/var/backups/raivstream/supabase-*.sql.gz` | `<host>/raivstream_supabase/` |
-| 03:35 (+jitter) | `ultraos-staging-backup.timer` | `ultraos_staging` | `/var/backups/ultraleagueos-staging/ultraos-*.dump` | `<host>/ultraos_staging/` |
-| 04:00 (+jitter) | `backup-offsite.timer` | copies the newest of each to R2 | — | see above |
-| 04:30 | cron (`backup-retention-all.sh`) | local retention | all three folders | — |
-| 09:00 | `backup-freshness.timer` | alerts if anything is > 26 h old | — | — |
+| Raivstream Supabase | `supabase-db` (`postgres`) | 03:26 (`raivstream-backup.timer`) | `/var/backups/raivstream/supabase-*.sql.gz` (+ `.sha256`) | `raivstream/daily|monthly/` |
+| UltraLeague OS prod (`ultraleagueos`) | `ultraos-postgres` (`ultraos`) | 03:00 (`ultraos-backup.timer`) | `/var/backups/ultraleagueos/ultraos-*.dump` | `ultraleagueos/daily|monthly/` |
+| UltraLeague OS staging (`ultraos_staging`) | `ultraos-postgres` (`ultraos_staging`) | 03:43 (`ultraos-staging-backup.timer`) | `/var/backups/ultraleagueos-staging/ultraos-*.dump` | `ultraleagueos-staging/daily|monthly/` |
 
-- Production and staging both live inside the `ultraos-postgres` container (127.0.0.1:55411),
-  as databases `ultraleagueos` and `ultraos_staging`.
-- Retention (local): **14 daily + one per week for 8 weeks**, applied by the shared
-  `backup-retention.sh` (never deletes the newest). The inline prune in
-  `web/scripts/backup-database.sh` is disabled (`ULTRA_BACKUP_RETENTION_DAYS=3650`) so there is a
-  single owner of retention.
-- Retention (off-site): R2 lifecycle rules (see below) — 30 days daily, 365 days monthly.
-- Every backup/offsite unit has `OnFailure=backup-alert@%n.service`; alerts go to
-  **texdevices@gmail.com** via the app's SMTP settings.
+Then: **04:00** off-site copy (`/root/ops/backup-offsite.sh` → R2, encrypted), **04:30**
+retention (14 daily + newest of each of the last 8 ISO weeks; never the newest), **09:00**
+freshness check (26 h staleness → email to `texdevices@gmail.com`).
 
-## Off-site (Cloudflare R2)
+- Dumps are **copy-only** to R2 (never `sync`); R2 lifecycle: `daily/`=30 d, `monthly/`=365 d.
+- Off-site is **encrypted** by an rclone `crypt` remote (`r2crypt`). **Two secrets are
+  required to decrypt:** the crypt password and the salt, stored at
+  `/etc/ultraos-backup/rclone-crypt-password.txt` and `…-password-salt.txt` (mode 600).
+  Both are also held **offline** by the owner — without them the off-site backups are lost.
 
-- Bucket: `vps-backups-raivstream`. Endpoint (account `3478db71b0394bf155af6281f8e07887`):
-  `https://3478db71b0394bf155af6281f8e07887.r2.cloudflarestorage.com`.
-- Credentials: `/etc/ultraos-backup/rclone.conf` (mode 600, root-only; never in git). The key is
-  scoped to this one bucket.
-- Layout: `r2:vps-backups-raivstream/<host>/<db>/` (daily) and `.../monthly/<host>/<db>/` (1st of
-  the month).
-- **Lifecycle rules to set in the Cloudflare dashboard** (R2 has no native daily+monthly tier, so
-  two rules with disjoint prefixes):
-  1. Prefix `<host>/` (e.g. `vmi3208643/`) → **Delete objects after 30 days**.
-  2. Prefix `monthly/` → **Delete objects after 365 days**.
-- Copies are **copy-only** (`rclone copy`, never `sync`) — a local deletion never propagates to R2.
+## Restore — Raivstream Supabase (the important one)
 
-## Verify a dump
+The Raivstream dump is a **`pg_dumpall` plain SQL** dump (includes roles + all schemas:
+`public`, `auth`, `storage`, `realtime`, …). Restore it into a **throwaway Postgres
+container**, never the live Supabase cluster.
 
 ```bash
-# local
-cd /var/backups/ultraleagueos && sha256sum -c ultraos-YYYYMMDD-HHMMSS.dump.sha256
-# list what's in the dump
-pg_restore --list ultraos-YYYYMMDD-HHMMSS.dump | head
-# off-site: download and check
+# 1. pick the newest local dump (or download one from R2 first — see below)
+NEW=$(ls -t /var/backups/raivstream/supabase-*.sql.gz | head -n 1)
+
+# 2. verify integrity
+sha256sum -c "$NEW.sha256"
+
+# 3. throwaway container (no volume, non-default port)
+docker run -d --name restore_test -e POSTGRES_PASSWORD=testonly -p 127.0.0.1:55999:5432 postgres:16-alpine
+docker exec restore_test pg_isready -U postgres
+
+# 4. restore (ON_ERROR_STOP=0: Supabase extensions/roles are absent in vanilla PG)
+zcat "$NEW" | docker exec -i restore_test psql -U postgres -d postgres -q -v ON_ERROR_STOP=0 > /tmp/restore.log 2>&1
+
+# 5. compare row counts against live
+for t in public.users public.videos public.generation_jobs public.credit_transactions public.story_projects auth.users; do
+  echo "$t live=$(psql "$DATABASE_URL" -tAc "SELECT COUNT(*) FROM $t") restored=$(docker exec restore_test psql -U postgres -tAc "SELECT COUNT(*) FROM $t")"
+done
+
+# 6. clean up
+docker rm -f restore_test
+```
+
+**Supabase-extension caveat (measured 2026-10-16):** a vanilla `postgres:16-alpine`
+restore produces ~120 `ERROR` lines (`schema "net" does not exist`, `vault.*` relations/
+functions, `extensions.verify`, `permission denied` on roles) — **none touch application
+data**. For a *complete* restore use a **Supabase Postgres image** or pre-create
+`pg_net`/`vault`/`pgcrypto` etc. before restoring.
+
+### Download a dump from R2 (encrypted)
+
+```bash
 rclone --config /etc/ultraos-backup/rclone.conf copy \
-  r2:vps-backups-raivstream/$(hostname -s)/ultraleagueos/ /tmp/check/
-cd /tmp/check && sha256sum -c ultraos-YYYYMMDD-HHMMSS.dump.sha256
+  "r2crypt:$(hostname)/raivstream/daily/" /var/backups/roundtrip \
+  --include "supabase-<stamp>.sql.gz"
+# r2crypt decrypts transparently; then sha256sum against the local copy.
 ```
 
-## Restore
+## Restore — UltraLeague OS prod / staging
 
-Never restore over the live database. Restore into a scratch database on the same container
-(`ultraos-postgres`, superuser role `ultraos`), check it, then drop it.
-
-### UltraLeague OS production (`ultraleagueos`) / staging (`ultraos_staging`)
+Custom-format dumps → `pg_restore`:
 
 ```bash
-C=ultraos-postgres; U=ultraos; TDB=ultraos_restore_test
-DUMP=/var/backups/ultraleagueos/ultraos-YYYYMMDD-HHMMSS.dump   # or download from R2 first
-docker exec $C dropdb -U $U --if-exists $TDB
-docker exec $C createdb -U $U $TDB
-docker exec -i $C pg_restore -U $U -d $TDB --no-owner --no-acl < "$DUMP"
-docker exec $C psql -U $U -d $TDB -Atc 'select count(*) from "Game"'
-docker exec $C dropdb -U $U $TDB
-```
-To restore staging instead, use `pg_restore` against a scratch DB and the staging dump from
-`/var/backups/ultraleagueos-staging/` (or R2 `.../ultraos_staging/`).
-
-### Raivstream Supabase (`supabase-db`)
-
-The dump is a `pg_dumpall` (roles + all databases), gzipped.
-
-```bash
-gunzip -c /var/backups/raivstream/supabase-YYYYMMDD-HHMMSS.sql.gz > /tmp/supabase.sql
-# restore into a scratch container/DB, never the live one; pg_dumpall includes CREATE ROLE etc.
-docker exec -i supabase-db psql -U postgres -d postgres < /tmp/supabase.sql
+NEW=$(ls -t /var/backups/ultraleagueos/ultraos-*.dump | head -n 1)
+createdb -h 127.0.0.1 -p <scratch> ultraos_restore_test
+pg_restore --dbname="postgresql://…/ultraos_restore_test" "$NEW"
+# compare Game, GameEvent, Player, Application counts, then drop the scratch DB
 ```
 
-## Last drill
+## Drill results — 2026-10-16 (Raivstream)
 
-2026-10-15: restored `ultraos-20261015-091940.dump` into `ultraos_restore_test` and compared to
-production — Game 53 = 53, GameEvent 9 = 9, Player 400 = 400, Application 342 = 342 (all MATCH);
-scratch DB dropped.
+Restored `supabase-20261016-012217.sql.gz` into a throwaway container; **all counts matched**:
+
+| Table | live | restored |
+|---|---|---|
+| `public.users` | 55 | 55 |
+| `public.videos` | 12 | 12 |
+| `public.generation_jobs` | 558 | 558 |
+| `public.credit_transactions` | 1539 | 1539 |
+| `public.story_projects` | 89 | 89 |
+| `auth.users` | 1 | 1 |
+
+## Alerts / health
+
+- Any backup/offsite unit failure → `backup-alert@%n.service` → email (Resend).
+- 09:00 freshness check: newest local dump or newest R2 object older than 26 h → email.
+- Check by hand: `systemctl list-timers | grep backup`, `crontab -l`, `tail /root/ops/logs/*.log`.

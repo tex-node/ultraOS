@@ -55,7 +55,12 @@ chmod 600 "$CONF"
 
 printf '%s\n' "$CRYPTPW" > "$PW"
 chmod 600 "$PW"
+# rclone crypt uses TWO secrets: the password AND password2 (the salt).
+# Both are required to decrypt; without the salt the backups are lost.
+PW2="${PW%.txt}-salt.txt"
+printf '%s\n' "$CRYPTSALT" > "$PW2"
+chmod 600 "$PW2"
 
 shred -u "$SRC" 2>/dev/null || rm -f "$SRC"
 
-echo "wrote $CONF and $PW; source shredded"
+echo "wrote $CONF, $PW and $PW2; source shredded"
