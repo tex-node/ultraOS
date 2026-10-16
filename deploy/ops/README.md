@@ -37,8 +37,17 @@ which emails the failing unit + last 30 journal lines.
 - `r2-configure.sh` builds `/etc/ultraos-backup/rclone.conf` (mode 600) from a root-only
   source file, then shreds the source. Defines `[r2]` (Cloudflare S3) + `[r2crypt]`
   (rclone crypt over `r2:vps-backups-raivstream`).
-- Layout: `r2:<bucket>/<host>/<db>/daily/<file>` and `…/<db>/monthly/<file>` on the 1st.
-  **Copy-only** (never `sync`). Lifecycle: `daily/`=30 d, `monthly/`=365 d.
+- Layout (top-level prefixes so R2 needs only 2 lifecycle rules):
+  `r2:<bucket>/**daily**/<host>/<db>/<file>` and `…/**monthly**/<host>/<db>/<file>` on the 1st.
+  **Copy-only** (never `sync`).
+- **Lifecycle rules use the ENCRYPTED directory names**, because `r2crypt` encrypts
+  directory names. For the current crypt password+salt:
+  - `daily` → prefix **`9e497clv8m370i8vk9hamgc028/`** → delete after **30 days**
+  - `monthly` → prefix **`ikbpmvklas3jaf8f1b9b7gia0o/`** → delete after **365 days**
+
+  Re-derive after any crypt-password change: `rclone cryptdecode --reverse r2crypt: daily monthly`.
+  (If the crypt remote is regenerated these prefixes change and the rules must be updated,
+  or expiry silently stops matching.)
 - **Two crypt secrets are required to decrypt** (password **and** salt). Stored at
   `/etc/ultraos-backup/rclone-crypt-password.txt` and `…-password-salt.txt` (mode 600),
   and held **offline by the owner**. Without both, off-site restores are impossible.
@@ -54,6 +63,13 @@ inline 14-day prune does not fight this rule.
 
 **Never in git.** Runtime credentials live in root-only env files on the host
 (`/etc/ultraos-backup/*`, `*.env`, mode 600).
+
+## Ownership
+
+VPS **backups, off-site copies and backup alerts are owned by the ops session**. Other
+agents/sessions must **not** create backup units, timers or scripts on this host — that is
+exactly how a duplicate design appeared on 2026-10-15. If you need a change here, edit
+these files and open a PR; do not add a parallel implementation.
 
 ## History
 
