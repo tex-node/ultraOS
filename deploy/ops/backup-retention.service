@@ -1,0 +1,8 @@
+[Unit]
+Description=Backup retention (14 daily + 8 weekly)
+After=network-online.target
+OnFailure=backup-alert@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/root/ops/backup-retention-all.sh
