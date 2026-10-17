@@ -2,10 +2,11 @@ import "server-only";
 
 import { z } from "zod";
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
-import { createGame, createGameEvent } from "@/server/scoring";
+import { applyScoreEffects, createGame, createGameEvent } from "@/server/scoring";
 import { isSupportedReplayOperation, type OutboxRecord, type SyncOutboxRecordResult } from "@/lib/sync/outbox-schema";
 import { effectiveRuleSnapshot } from "@/lib/ultra-scoring-engine";
 import { isClientObservedAtPlausible, validateClientResolvedShot } from "@/lib/scoring/validate-client-shot";
+import { computeScoreConsequencesForResolvedShot } from "@/lib/scoring/compute-score-consequences";
 
 export interface ReplayContext {
   actor: { id: string; organizationId: string };
@@ -242,6 +243,9 @@ export async function replayOutboxRecord(record: OutboxRecord, ctx: ReplayContex
         // Game.CREATE earlier in this same serially-processed batch has already committed by now.
         // ruleSnapshot is only needed for the client-resolved-shot validation branch below, but
         // selecting it unconditionally is cheap and keeps this one lookup shared by both paths.
+        // fixture is loaded here too: the SCORE branch below needs both sides' seasonClubIds (to
+        // resolve which side scored) and both current scores (the before/after base every effect is
+        // computed from), all from the same locked-in read rather than a second query.
         const game = await tx.game.findUniqueOrThrow({
           where: { id: payload.gameId },
           select: {
@@ -256,6 +260,9 @@ export async function replayOutboxRecord(record: OutboxRecord, ctx: ReplayContex
                 ultraTimeAppliesFinalPeriodOnly: true,
                 periodCount: true,
               },
+            },
+            fixture: {
+              select: { homeSeasonClubId: true, awaySeasonClubId: true, homeScore: true, awayScore: true },
             },
           },
         });
@@ -285,13 +292,111 @@ export async function replayOutboxRecord(record: OutboxRecord, ctx: ReplayContex
           resolvedBy = "CLIENT";
         }
 
-        await createGameEvent(
-          // id: the offline client's own client-generated id, preserved rather than replaced by
-          // a new server-generated one - a later record (in this batch or a future one)
-          // referencing this event via causedByEventId/supersedesEventId uses that same id.
-          { ...payload, id: record.entityId, gameId: payload.gameId, fixtureId: game.fixtureId, resolvedBy, clientObservedAt: payload.clientObservedAt },
-          { actor: ctx.actor, source: "OFFLINE_SYNC", ledgerSourceHint: record.ledgerSourceHint, provenance, tx },
-        );
+        if (payload.eventType === "SCORE") {
+          // A5 Step 7: a replayed SCORE now applies the SAME effects a live tap does - fixture score,
+          // PlayerStat, TeamStat, and the opponent's ultraTimePointsAgainst - through the same
+          // applyScoreEffects function recordScoreInternal uses. Before this, replay created the
+          // GameEvent row and nothing else ("the effects-extraction gap"): the ledger and the
+          // scoreboard disagreed after every offline score.
+          //
+          // The shot is NOT re-resolved here. An offline tap carries its own resolution
+          // (basePointValue/multiplier/points/isUltraTime) because Ultra Time is wall-clock-derived
+          // and the server cannot reconstruct it after the fact - see docs/canonical-write-audit.md.
+          // What the server does instead: validate that assertion (below, when the client didn't
+          // already assert it via clientObservedAt's own validation), then derive the deltas from it
+          // with the same pure function the live path uses.
+          const side = payload.seasonClubId;
+          if (!side || (side !== game.fixture.homeSeasonClubId && side !== game.fixture.awaySeasonClubId)) {
+            // Without a valid side there is no scoreboard to move - writing the event anyway would
+            // repeat exactly the split state this branch exists to prevent.
+            throw new ReplayValidationError("INVALID_TEAM", "A replayed SCORE must name one of the fixture's two sides.");
+          }
+          if (payload.points === null || payload.points === undefined || !Number.isInteger(payload.points)) {
+            throw new ReplayValidationError("INVALID_SCORE_PAYLOAD", "A replayed SCORE must carry an integer points delta.");
+          }
+          // A playerId, if present, must be on the scoring side - the same INVALID_PLAYER guard
+          // recordScoreInternal applies before it ever computes consequences. A mismatched player
+          // would otherwise credit a player's stats to the wrong club.
+          if (payload.playerId) {
+            const player = await tx.player.findFirst({ where: { id: payload.playerId, seasonClubId: side }, select: { id: true } });
+            if (!player) throw new ReplayValidationError("INVALID_PLAYER", "A replayed SCORE's player must be on the scoring side's roster.");
+          }
+          // Validate the asserted shot when clientObservedAt's own block above did not already do it
+          // (that block only runs for client-resolved records). A manual correction (basePointValue
+          // null) has no shot to validate - it is a signed delta, bounded by the same clamp live uses.
+          if (!payload.clientObservedAt && payload.basePointValue !== null && payload.basePointValue !== undefined) {
+            const shotValidation = validateClientResolvedShot(
+              {
+                basePointValue: payload.basePointValue,
+                multiplier: payload.multiplier ?? 1,
+                points: payload.points,
+                isUltraTime: payload.isUltraTime ?? false,
+              },
+              effectiveRuleSnapshot(game.ruleSnapshot),
+            );
+            if (!shotValidation.valid) {
+              throw new ReplayValidationError(shotValidation.error, "A replayed SCORE's asserted shot failed server-side validation.");
+            }
+          }
+
+          const isHome = side === game.fixture.homeSeasonClubId;
+          const consequences = computeScoreConsequencesForResolvedShot({
+            shot: {
+              basePointValue: payload.basePointValue ?? null,
+              multiplier: payload.multiplier ?? null,
+              pointsAwarded: payload.points,
+              isUltraTime: payload.isUltraTime ?? false,
+            },
+            seasonClubId: side,
+            opposingSeasonClubId: isHome ? game.fixture.awaySeasonClubId! : game.fixture.homeSeasonClubId!,
+            isHome,
+            // The SERVER's current scores, not the client's before/after snapshot - the client may
+            // have been offline for an hour while another device scored, so its snapshot can be
+            // stale. Server state wins; the recomputed before/after fields are what get persisted.
+            homeScore: game.fixture.homeScore,
+            awayScore: game.fixture.awayScore,
+            player: payload.playerId ? { id: payload.playerId } : null,
+            description: payload.description,
+          });
+
+          await applyScoreEffects(
+            {
+              gameId: payload.gameId,
+              fixtureId: game.fixtureId,
+              seasonClubId: side,
+              playerId: payload.playerId ?? null,
+              // period/clockSeconds: the client's captured values when it sent them (the event's
+              // domain time is when the tap happened, not when it synced); undefined otherwise, which
+              // createGameEvent resolves from current game state - today's behavior for those records.
+              period: payload.period,
+              clockSeconds: payload.clockSeconds,
+              consequences,
+              eventId: record.entityId,
+              resolvedBy,
+              clientObservedAt: payload.clientObservedAt,
+              // Attribution the effects computation doesn't derive, carried through unchanged from
+              // what this branch used to spread into createGameEvent wholesale.
+              extraEventFields: {
+                entrantId: payload.entrantId,
+                fouledPlayerId: payload.fouledPlayerId,
+                foulType: payload.foulType,
+                causedByEventId: payload.causedByEventId,
+                typeKey: payload.typeKey,
+                assistedByPlayerId: payload.assistedByPlayerId,
+                substitutedOutPlayerId: payload.substitutedOutPlayerId,
+              },
+            },
+            { actor: ctx.actor, source: "OFFLINE_SYNC", ledgerSourceHint: record.ledgerSourceHint, provenance, tx },
+          );
+        } else {
+          await createGameEvent(
+            // id: the offline client's own client-generated id, preserved rather than replaced by
+            // a new server-generated one - a later record (in this batch or a future one)
+            // referencing this event via causedByEventId/supersedesEventId uses that same id.
+            { ...payload, id: record.entityId, gameId: payload.gameId, fixtureId: game.fixtureId, resolvedBy, clientObservedAt: payload.clientObservedAt },
+            { actor: ctx.actor, source: "OFFLINE_SYNC", ledgerSourceHint: record.ledgerSourceHint, provenance, tx },
+          );
+        }
       }
 
       return { idempotencyKey: record.idempotencyKey, status: "APPLIED" as const };

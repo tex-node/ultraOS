@@ -6,6 +6,14 @@ import { sortRecordsForProcessing, type OutboxRecord } from "@/lib/sync/outbox-s
 
 const ACTOR_ID = "test-actor";
 
+// "Recent" relative to the run, not a literal date. isClientObservedAtPlausible only accepts a 24h
+// window (CLIENT_OBSERVATION_MAX_AGE_MS) and runs before every other SCORE validation, so a hardcoded
+// timestamp silently expires: from 2026-09-29 onward the three client-resolved-shot tests below failed
+// with IMPLAUSIBLE_CLIENT_OBSERVATION instead of exercising the code they name. Found 2026-10-17, when
+// the suite (written 2026-09-28, green then) turned red with no code change - confirmed against an
+// unpatched copy of the deployed release, so it was never a regression in this session's work.
+const RECENT_CLIENT_OBSERVED_AT = new Date(Date.now() - 60_000).toISOString();
+
 async function seedOrgAndFixture(ctx: TestDbContext) {
   const org = await ctx.prisma.organization.create({ data: { name: "Test Org", slug: "test-org" } });
   const sport = await ctx.prisma.sport.create({ data: { name: "Test Sport", slug: "test-sport" } });
@@ -468,7 +476,7 @@ test("a valid client-resolved shot (Ultra Time doubled 3PT) is APPLIED with reso
     const { org, fixture, homeSeasonClub, rosterPlayer } = await seedOrgAndFixture(ctx);
     const game = await seedGame(ctx, org.id, fixture.id);
     const ctxArgs = { actor: { id: ACTOR_ID, organizationId: org.id }, deviceId: "device-1", syncBatchId: "batch-8", prisma: ctx.prisma };
-    const clientObservedAt = "2026-09-28T10:00:00.000Z";
+    const clientObservedAt = RECENT_CLIENT_OBSERVED_AT;
 
     const record = gameEventRecord({
       payload: {
@@ -487,6 +495,22 @@ test("a valid client-resolved shot (Ultra Time doubled 3PT) is APPLIED with reso
     assert.equal(event.clientObservedAt?.toISOString(), clientObservedAt);
     assert.equal(event.points, 6);
     assert.equal(event.isUltraTime, true);
+
+    // A5 Step 7: the replay applies the full effect set, not just the GameEvent row. Before the
+    // effects-extraction fix these three assertions all failed (score 0, no stat rows) - the ledger
+    // and the scoreboard disagreed after every offline score.
+    const fixtureAfter = await ctx.prisma.fixture.findUniqueOrThrow({ where: { id: fixture.id } });
+    assert.equal(fixtureAfter.homeScore, 6, "a replayed SCORE must move the fixture score");
+    const playerStat = await ctx.prisma.playerStat.findUniqueOrThrow({ where: { gameId_playerId: { gameId: game.id, playerId: rosterPlayer.id } } });
+    assert.equal(playerStat.points, 6);
+    assert.equal(playerStat.threePointsMade, 1, "the base 3PT category is recorded once, unmultiplied");
+    assert.equal(playerStat.ultraTimeThreePointsMade, 1);
+    const homeTeamStat = await ctx.prisma.teamStat.findUniqueOrThrow({ where: { gameId_seasonClubId: { gameId: game.id, seasonClubId: homeSeasonClub.id } } });
+    assert.equal(homeTeamStat.points, 6);
+    assert.equal(homeTeamStat.ultraTimePointsFor, 6);
+    const awayTeamStat = await ctx.prisma.teamStat.findUniqueOrThrow({ where: { gameId_seasonClubId: { gameId: game.id, seasonClubId: fixture.awaySeasonClubId! } } });
+    assert.equal(awayTeamStat.points, 0);
+    assert.equal(awayTeamStat.ultraTimePointsAgainst, 6, "the opponent's Ultra Time bookkeeping is written by replay too");
   } finally {
     await ctx.teardown();
   }
@@ -527,7 +551,7 @@ test("a client-resolved shot with inconsistent points/multiplier arithmetic FAIL
         // 3 * 2 = 6, not 5 - the client's asserted points don't match its own asserted
         // basePointValue/multiplier.
         basePointValue: 3, multiplier: 2, points: 5, isUltraTime: true,
-        clientObservedAt: "2026-09-28T10:00:00.000Z",
+        clientObservedAt: RECENT_CLIENT_OBSERVED_AT,
       },
     });
 
@@ -560,7 +584,7 @@ test("a client-resolved shot claiming an implausible multiplier (not 1 or the ru
         gameId: game.id, seasonClubId: homeSeasonClub.id, playerId: rosterPlayer.id,
         eventType: "SCORE", description: "bogus multiplier", period: 2, clockSeconds: 45,
         basePointValue: 2, multiplier: 5, points: 10, isUltraTime: true,
-        clientObservedAt: "2026-09-28T10:00:00.000Z",
+        clientObservedAt: RECENT_CLIENT_OBSERVED_AT,
       },
     });
 
@@ -594,6 +618,110 @@ test("a client-resolved shot with an implausibly old clientObservedAt FAILS with
 
     const idempotencyRow = await ctx.prisma.syncIdempotency.findUnique({ where: { idempotencyKey: record.idempotencyKey } });
     assert.equal(idempotencyRow, null, "this failure must also roll back the idempotency claim");
+  } finally {
+    await ctx.teardown();
+  }
+});
+
+// ================= A5 Step 7: a replayed SCORE may not write a split state =================
+// The SCORE branch moves the fixture score and three stat rows, so its guards run before any of that
+// happens - a rejected record must leave the scoreboard and the ledger untouched (the whole
+// transaction rolls back, claim included).
+
+test("a replayed SCORE naming a side that is not one of the fixture's two FAILS with INVALID_TEAM and changes nothing", async () => {
+  const ctx = await createTestDbContext();
+  try {
+    const { org, fixture, rosterPlayer } = await seedOrgAndFixture(ctx);
+    const game = await seedGame(ctx, org.id, fixture.id);
+    const ctxArgs = { actor: { id: ACTOR_ID, organizationId: org.id }, deviceId: "device-1", syncBatchId: "batch-13", prisma: ctx.prisma };
+    const sport = await ctx.prisma.sport.findFirstOrThrow();
+    const otherClub = await ctx.prisma.club.create({ data: { organizationId: org.id, sportId: sport.id, name: "Other", shortName: "O" } });
+    const foreignSeasonClub = await ctx.prisma.seasonClub.create({
+      data: { organizationId: org.id, seasonId: fixture.seasonId, clubId: otherClub.id, divisionId: fixture.divisionId },
+    });
+
+    const record = gameEventRecord({
+      payload: {
+        gameId: game.id, seasonClubId: foreignSeasonClub.id, playerId: rosterPlayer.id,
+        eventType: "SCORE", description: "wrong side", period: 1, clockSeconds: 500,
+        basePointValue: 2, multiplier: 1, points: 2, isUltraTime: false,
+        clientObservedAt: RECENT_CLIENT_OBSERVED_AT,
+      },
+    });
+
+    const result = await replayOutboxRecord(record, ctxArgs);
+    assert.equal(result.status, "FAILED");
+    assert.equal((result.detail as { code: string }).code, "INVALID_TEAM");
+    assert.equal((await ctx.prisma.fixture.findUniqueOrThrow({ where: { id: fixture.id } })).homeScore, 0);
+    assert.equal(await ctx.prisma.gameEvent.count({ where: { gameId: game.id } }), 0);
+    assert.equal(await ctx.prisma.playerStat.count({ where: { gameId: game.id } }), 0);
+  } finally {
+    await ctx.teardown();
+  }
+});
+
+test("a replayed SCORE crediting a player from the OTHER side FAILS with INVALID_PLAYER and changes nothing", async () => {
+  const ctx = await createTestDbContext();
+  try {
+    const { org, fixture, homeSeasonClub } = await seedOrgAndFixture(ctx);
+    const game = await seedGame(ctx, org.id, fixture.id);
+    const ctxArgs = { actor: { id: ACTOR_ID, organizationId: org.id }, deviceId: "device-1", syncBatchId: "batch-14", prisma: ctx.prisma };
+    // A real player, but on the away roster - not the home side this SCORE credits.
+    const wrongSideAthlete = await ctx.prisma.athlete.create({
+      data: { organizationId: org.id, firstName: "P", lastName: "WrongSide", gender: "MALE", dateOfBirth: new Date("2000-01-01"), dominantHand: "RIGHT" },
+    });
+    const wrongSidePlayer = await ctx.prisma.player.create({
+      data: {
+        organizationId: org.id,
+        athleteId: wrongSideAthlete.id,
+        seasonId: fixture.seasonId,
+        seasonClubId: fixture.awaySeasonClubId!,
+        position: "G",
+        heightCm: 180,
+        weightKg: 80,
+      },
+    });
+
+    const record = gameEventRecord({
+      payload: {
+        gameId: game.id, seasonClubId: homeSeasonClub.id, playerId: wrongSidePlayer.id,
+        eventType: "SCORE", description: "wrong player", period: 1, clockSeconds: 500,
+        basePointValue: 2, multiplier: 1, points: 2, isUltraTime: false,
+        clientObservedAt: RECENT_CLIENT_OBSERVED_AT,
+      },
+    });
+
+    const result = await replayOutboxRecord(record, ctxArgs);
+    assert.equal(result.status, "FAILED");
+    assert.equal((result.detail as { code: string }).code, "INVALID_PLAYER");
+    assert.equal(await ctx.prisma.gameEvent.count({ where: { gameId: game.id } }), 0);
+  } finally {
+    await ctx.teardown();
+  }
+});
+
+test("a SCORE replayed WITHOUT clientObservedAt is still validated - incoherent arithmetic FAILS rather than moving the scoreboard", async () => {
+  const ctx = await createTestDbContext();
+  try {
+    const { org, fixture, homeSeasonClub, rosterPlayer } = await seedOrgAndFixture(ctx);
+    const game = await seedGame(ctx, org.id, fixture.id);
+    const ctxArgs = { actor: { id: ACTOR_ID, organizationId: org.id }, deviceId: "device-1", syncBatchId: "batch-15", prisma: ctx.prisma };
+
+    const record = gameEventRecord({
+      payload: {
+        gameId: game.id, seasonClubId: homeSeasonClub.id, playerId: rosterPlayer.id,
+        eventType: "SCORE", description: "no assertion, bad arithmetic", period: 1, clockSeconds: 500,
+        // 3 * 1 = 3, not 7. Before Step 7 this record was APPLIED with a 7-point swing on the
+        // scoreboard; the event used to be written and nothing else, so the incoherence was invisible.
+        basePointValue: 3, multiplier: 1, points: 7, isUltraTime: false,
+      },
+    });
+
+    const result = await replayOutboxRecord(record, ctxArgs);
+    assert.equal(result.status, "FAILED");
+    assert.equal((result.detail as { code: string }).code, "POINTS_MISMATCH");
+    assert.equal((await ctx.prisma.fixture.findUniqueOrThrow({ where: { id: fixture.id } })).homeScore, 0);
+    assert.equal(await ctx.prisma.gameEvent.count({ where: { gameId: game.id } }), 0);
   } finally {
     await ctx.teardown();
   }

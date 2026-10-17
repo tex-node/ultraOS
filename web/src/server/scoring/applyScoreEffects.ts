@@ -3,7 +3,7 @@ import "server-only";
 import type { ValidScoreConsequences } from "@/lib/scoring/compute-score-consequences";
 import { applyPlayerShotStatDeltas, applyTeamShotStatDeltas } from "./applyShotStatDeltas";
 import { createGameEvent } from "./createGameEvent";
-import type { WriteContext } from "./types";
+import type { CreateGameEventInput, WriteContext } from "./types";
 
 // A5 Step 5: the I/O half of scoring. `computeScoreConsequences` (src/lib/scoring/
 // compute-score-consequences.ts) derives WHAT changed; this applies it - the five writes that were
@@ -45,10 +45,55 @@ export interface ApplyScoreEffectsInput {
   // playerDelta.playerId because the GameEvent carries a playerId even when there is no stat delta
   // (a zero-effect correction still names the player it was entered for).
   playerId: string | null;
-  period: number;
-  clockSeconds: number;
+  // Omitted by callers that want createGameEvent to derive them from the game's own state (live:
+  // always supplied; replay: the offline client's captured period/clock when present). Undefined is
+  // passed through, not defaulted here - the one place that fallback lives is createGameEvent.
+  period?: number;
+  clockSeconds?: number;
   consequences: ValidScoreConsequences;
+  // ---- Below: event identity/provenance, supplied only by replay. Absent on the live path, where
+  // the server generates the id and resolvedBy defaults to SERVER - exactly as before extraction.
+  //
+  // The offline client's own client-generated event id, preserved rather than replaced: a later
+  // record (in this batch or a future one) referencing this event via causedByEventId /
+  // supersedesEventId must resolve to it.
+  eventId?: string;
+  resolvedBy?: "SERVER" | "CLIENT";
+  clientObservedAt?: string | null;
+  // Event fields the effects computation does NOT derive - attribution/metadata that must survive a
+  // replay (today's replay spread the whole payload into createGameEvent, so dropping these would be
+  // silent data loss). Never allowed to override the score-derived fields: the spread order below
+  // puts these first.
+  extraEventFields?: ExtraGameEventFields;
 }
+
+// Everything about a GameEvent that is EITHER derived from the shot (points, multiplier, the four
+// before/after score fields, ...) OR fixed by applyScoreEffects itself (gameId, eventType SCORE,
+// provenance). What remains is genuinely caller-supplied attribution.
+type ScoreDerivedEventFields =
+  | "id"
+  | "gameId"
+  | "fixtureId"
+  | "eventType"
+  | "seasonClubId"
+  | "playerId"
+  | "period"
+  | "clockSeconds"
+  | "description"
+  | "points"
+  | "basePointValue"
+  | "multiplier"
+  | "made"
+  | "isFourPointAttempt"
+  | "isUltraTime"
+  | "homeScoreBefore"
+  | "awayScoreBefore"
+  | "homeScoreAfter"
+  | "awayScoreAfter"
+  | "resolvedBy"
+  | "clientObservedAt";
+
+export type ExtraGameEventFields = Omit<CreateGameEventInput, ScoreDerivedEventFields>;
 
 export async function applyScoreEffects(input: ApplyScoreEffectsInput, ctx: WriteContext): Promise<{ id: string; sequenceNumber: number }> {
   const { gameId, fixtureId, seasonClubId, playerId, period, clockSeconds, consequences } = input;
@@ -63,6 +108,8 @@ export async function applyScoreEffects(input: ApplyScoreEffectsInput, ctx: Writ
 
   const created = await createGameEvent(
     {
+      ...input.extraEventFields,
+      id: input.eventId,
       gameId,
       fixtureId,
       seasonClubId,
@@ -81,6 +128,8 @@ export async function applyScoreEffects(input: ApplyScoreEffectsInput, ctx: Writ
       awayScoreBefore: eventFields.awayScoreBefore,
       homeScoreAfter: eventFields.homeScoreAfter,
       awayScoreAfter: eventFields.awayScoreAfter,
+      resolvedBy: input.resolvedBy,
+      clientObservedAt: input.clientObservedAt,
     },
     ctx,
   );

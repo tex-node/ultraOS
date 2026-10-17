@@ -25,7 +25,7 @@ export {
   type CorrectScoreEventResult,
 } from "./correctScoreEvent";
 export { applyPlayerShotStatDeltas, applyTeamShotStatDeltas } from "./applyShotStatDeltas";
-export { applyScoreEffects, type ApplyScoreEffectsInput } from "./applyScoreEffects";
+export { applyScoreEffects, type ApplyScoreEffectsInput, type ExtraGameEventFields } from "./applyScoreEffects";
 export { applyCountingStatDelta } from "./applyCountingStatDelta";
 export {
   type CountingStatField,
