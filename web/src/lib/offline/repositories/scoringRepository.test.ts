@@ -145,3 +145,52 @@ test("logEvent omits clientObservedAt from the outbox payload entirely when not 
   const record = await db.outbox.where("entityId").equals("e1").first();
   assert.equal("clientObservedAt" in (record?.payload as Record<string, unknown>), false, "the server-resolved path's payload must look identical to before this field existed");
 });
+
+// ---- A5 Step 8: attachServerGame ---------------------------------------------------------------
+
+const attachInput = (overrides: Partial<Parameters<LocalScoringRepository["attachServerGame"]>[0]> = {}) => ({
+  id: "g-server-1",
+  organizationId: "org-1",
+  fixtureId: "f-server-1",
+  status: "LIVE" as const,
+  currentPeriod: 2,
+  clockSecondsRemaining: 45,
+  clockStartedAt: null,
+  shotClockSecondsRemaining: 20,
+  shotClockStartedAt: null,
+  isUltraTimeActive: true,
+  ...overrides,
+});
+
+test("attachServerGame mirrors the game locally and enqueues NOTHING - a Game:CREATE for an existing game can only dead-letter", async () => {
+  const { db, repo } = setup();
+  const game = await repo.attachServerGame(attachInput());
+
+  assert.equal(game.nextEventSequence, 1);
+  assert.equal(game.status, "LIVE");
+  assert.equal(game.isUltraTimeActive, true);
+  assert.deepEqual(await repo.getGame("g-server-1"), game);
+  assert.equal(await db.outbox.count(), 0, "attaching a server-owned game must never queue a CREATE - Game.fixtureId is unique server-side");
+});
+
+test("attachServerGame refreshes the server-owned clock anchor on re-attach without resetting local history", async () => {
+  const { db, repo } = setup();
+  await repo.attachServerGame(attachInput());
+  await repo.logEvent(eventInput("g-server-1", "e1"));
+
+  const before = await repo.getGame("g-server-1");
+  assert.equal(before?.nextEventSequence, 2, "one queued event consumed sequence 1");
+
+  // The console re-attaches after every server render (pause/resume/period advance).
+  const refreshed = await repo.attachServerGame(
+    attachInput({ currentPeriod: 2, clockSecondsRemaining: 12, clockStartedAt: "2026-10-17T20:00:00.000Z", isUltraTimeActive: false, status: "PAUSED" }),
+  );
+
+  assert.equal(refreshed.currentPeriod, 2);
+  assert.equal(refreshed.clockSecondsRemaining, 12, "the anchor must track the server, or an offline tap resolves Ultra Time against a stale clock");
+  assert.equal(refreshed.clockStartedAt, "2026-10-17T20:00:00.000Z");
+  assert.equal(refreshed.status, "PAUSED");
+  assert.equal(refreshed.nextEventSequence, 2, "the local sequence counter is history, not server state - resetting it would renumber queued events");
+  assert.equal(refreshed.createdAt, before?.createdAt);
+  assert.equal(await db.outbox.count(), 1, "re-attaching must not add an outbox record either");
+});

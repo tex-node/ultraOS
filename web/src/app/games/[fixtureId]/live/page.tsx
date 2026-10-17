@@ -43,7 +43,9 @@ import { chaseTarget, inningsConfig, isDelivery, isLegalDelivery, oversDisplay }
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { ScoreCapturePanel } from "./score-capture-panel";
 import { SportCapturePanel } from "./sport-capture-panel";
+import { LiveScoreCapture } from "./live-score-capture";
 import { CaptureConnectivity } from "@/app/components/ui/capture-connectivity";
+import { isOfflineScoringEnabled } from "@/lib/offline/feature-flag";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -55,6 +57,9 @@ export default async function Live({ params, searchParams }: { params: Promise<{
   const canConfirmResult = await canFixturePermission("result:confirm", fixtureId);
   const query = await searchParams;
   if (!session.user.organizationId) notFound();
+  // Hoisted into a const: the narrowing above does not flow into the `.map()` callbacks below (TS
+  // cannot know when they run), and the offline capture component needs the id inside one.
+  const organizationId = session.user.organizationId;
   const fixture = await withOrganizationContext(session.user.organizationId, (tx) => tx.fixture.findUnique({
     where: { id: fixtureId },
     include: {
@@ -293,39 +298,30 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             {[homeSide, awaySide].map((team) => (
               <section key={team.id} className="rounded-lg border border-line bg-ink-800 p-5">
                 <h3 className="font-semibold">{team.name} scoring</h3>
-                <form action={recordScore.bind(null, game.id, fixtureId)} className="mt-4">
-                  <input type="hidden" name="seasonClubId" value={team.id} />
-                  <select name="playerId" className="min-h-[48px] w-full rounded-lg bg-white/[.05] p-3">
-                    <option value="">Team score / unknown player</option>
-                    {team.players.map((player) => <option key={player.id} value={player.id}>{player.athlete.firstName} {player.athlete.lastName}</option>)}
-                  </select>
-                  <div className="mt-3 grid grid-cols-4 gap-2">
-                    {[1, 2, 3].map((value) => (
-                      <SubmitButton key={value} name="points" value={value} pendingLabel="…" className={`${BIG_BTN} bg-brand-400 text-ink-900`}>
-                        +{value}{ultraTime ? <span className="block text-[10px] font-normal">→ {value * 2}</span> : null}
-                      </SubmitButton>
-                    ))}
-                    {/* 4PT is visually distinct (violet, not emerald) - it's Ultra's own custom
-                        shot type, not "just another number" next to the standard 1/2/3. Hidden when
-                        the format in play has no four-point shot. */}
-                    {fourPointEnabled ? (
-                      <SubmitButton name="points" value={4} pendingLabel="…" className={`${BIG_BTN} border-2 border-violet-300 bg-accent-purple text-white shadow-[0_0_12px_rgba(167,139,250,0.5)]`}>
-                        4PT{ultraTime ? <span className="block text-[10px] font-normal">→ 8</span> : null}
-                      </SubmitButton>
-                    ) : null}
-                  </div>
-                  <details className="mt-3">
-                    <summary className="cursor-pointer text-xs text-text-3">Manual correction (prefer Undo last event above)</summary>
-                    <div className="mt-2 grid grid-cols-4 gap-2">
-                      {[-1, -2, -3, -4].map((value) => (
-                        <SubmitButton key={value} name="points" value={value} pendingLabel="…" className={`${BIG_BTN} border border-rose-400/20 text-danger`}>
-                          {value}
-                        </SubmitButton>
-                      ))}
-                    </div>
-                    <input name="description" placeholder="Reason for manual correction" className="mt-2 min-h-[44px] w-full rounded-lg bg-white/[.05] p-3 text-sm" />
-                  </details>
-                </form>
+                {/* A5 Step 8: scoring taps go through LiveScoreCapture, which submits the same
+                    recordScore action while online and queues the tap locally (with its own
+                    client-resolved shot) when the tablet is offline. The stat-event form below is
+                    unchanged - only scoring has an offline path today. */}
+                <LiveScoreCapture
+                  gameId={game.id}
+                  fixtureId={fixtureId}
+                  organizationId={organizationId}
+                  team={{ id: team.id, name: team.name, players: team.players.map((player) => ({ id: player.id, name: `${player.athlete.firstName} ${player.athlete.lastName}` })) }}
+                  rules={effectiveRuleSnapshot(snapshot)}
+                  game={{
+                    status: game.status as "NOT_STARTED" | "LIVE" | "PAUSED" | "FINAL",
+                    currentPeriod: game.currentPeriod,
+                    clockSecondsRemaining: game.clockSecondsRemaining,
+                    clockStartedAt: game.clockStartedAt?.toISOString() ?? null,
+                    shotClockSecondsRemaining: game.shotClockSecondsRemaining,
+                    shotClockStartedAt: game.shotClockStartedAt?.toISOString() ?? null,
+                    isUltraTimeActive: game.isUltraTimeActive,
+                  }}
+                  ultraTime={ultraTime}
+                  fourPointEnabled={fourPointEnabled}
+                  offlineEnabled={isOfflineScoringEnabled()}
+                  action={recordScore.bind(null, game.id, fixtureId)}
+                />
                 <form action={recordStatEvent.bind(null, game.id, fixtureId)} className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-5">
                   <input type="hidden" name="seasonClubId" value={team.id} />
                   <select name="playerId" className="col-span-2 min-h-[48px] rounded-lg bg-white/[.05] p-3" required>

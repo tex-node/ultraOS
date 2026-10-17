@@ -30,6 +30,21 @@ export type CreateGameEventInput = Omit<
   clientObservedAt?: string;
 };
 
+// A5 Step 8: the local mirror of a game that ALREADY EXISTS on the server. Attached, never created -
+// see LocalScoringRepository.attachServerGame for why enqueueing a Game:CREATE here would be wrong.
+export interface AttachServerGameInput {
+  id: string;
+  organizationId: string;
+  fixtureId: string;
+  status: LocalGame["status"];
+  currentPeriod: number;
+  clockSecondsRemaining: number;
+  clockStartedAt: string | null;
+  shotClockSecondsRemaining: number;
+  shotClockStartedAt: string | null;
+  isUltraTimeActive: boolean;
+}
+
 // No updatePlayerStat here (removed - see docs/canonical-write-audit.md "Outbox entity
 // vocabulary"). PlayerStat is a projection, not something this repository mutates directly; the
 // local playerStats table stays in the Dexie schema for whichever shape (materialized write or
@@ -38,6 +53,7 @@ export type CreateGameEventInput = Omit<
 // removal closes.
 export interface ScoringRepository {
   createGame(input: CreateGameInput): Promise<LocalGame>;
+  attachServerGame(input: AttachServerGameInput): Promise<LocalGame>;
   getGame(id: string): Promise<LocalGame | undefined>;
   logEvent(input: CreateGameEventInput): Promise<LocalGameEvent>;
   listEvents(gameId: string): Promise<LocalGameEvent[]>;
@@ -89,6 +105,49 @@ export class LocalScoringRepository implements ScoringRepository {
 
   async getGame(id: string): Promise<LocalGame | undefined> {
     return this.db.games.get(id);
+  }
+
+  // A5 Step 8: mirrors a game the SERVER already owns into the local database, so logEvent() has the
+  // clock anchor and nextEventSequence it needs while offline. Deliberately does NOT enqueue a
+  // Game:CREATE: the game row exists on the server, and Game.fixtureId is @unique, so replaying a
+  // CREATE for it fails with FIXTURE_ALREADY_HAS_GAME (replay-outbox-record.ts's own
+  // KNOWN_P2002_CONSTRAINTS) - a record that would dead-letter after 5 attempts and take the
+  // console's sync queue with it. "Attach if absent, refresh the server-owned fields if present" is
+  // the only shape that cannot produce that record.
+  //
+  // nextEventSequence/createdAt are local history and are never reset by a refresh: attach runs on
+  // every render of the console (each time the server re-renders after a clock change), and resetting
+  // the counter would renumber events already queued on this device. Sequence numbers are advisory
+  // anyway - createGameEvent assigns the canonical one server-side and ignores the payload's.
+  async attachServerGame(input: AttachServerGameInput): Promise<LocalGame> {
+    const timestamp = now();
+    const existing = await this.db.games.get(input.id);
+    const row: LocalGame = {
+      id: input.id,
+      organizationId: input.organizationId,
+      fixtureId: input.fixtureId,
+      status: input.status,
+      currentPeriod: input.currentPeriod,
+      // The clock ANCHOR, not a running value: resolveClientShot recomputes the remaining seconds
+      // from clockStartedAt at tap time, so a tap 40s after this snapshot still resolves Ultra Time
+      // correctly. Refreshing it here (rather than freezing it at first attach) is what keeps the
+      // anchor honest after a pause/resume/period advance.
+      clockSecondsRemaining: input.clockSecondsRemaining,
+      clockStartedAt: input.clockStartedAt,
+      shotClockSecondsRemaining: input.shotClockSecondsRemaining,
+      shotClockStartedAt: input.shotClockStartedAt,
+      isUltraTimeActive: input.isUltraTimeActive,
+      nextEventSequence: existing?.nextEventSequence ?? 1,
+      startedAt: existing?.startedAt ?? null,
+      endedAt: existing?.endedAt ?? null,
+      createdAt: existing?.createdAt ?? timestamp,
+      // NOT bumped on refresh: clientUpdatedAt is the outbox's ordering key, and this row is not a
+      // queued record - moving it would make an already-synced game look newly modified locally.
+      clientUpdatedAt: existing?.clientUpdatedAt ?? timestamp,
+      updatedAt: timestamp,
+    };
+    await this.db.games.put(row);
+    return row;
   }
 
   async logEvent(input: CreateGameEventInput): Promise<LocalGameEvent> {

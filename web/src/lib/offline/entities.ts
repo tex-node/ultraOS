@@ -1,6 +1,10 @@
 export type GameStatusValue =
   | "NOT_STARTED"
   | "LIVE"
+  // Paused is a real game state (the console's Pause button) and was missing from this local model -
+  // added in A5 Step 8, where an offline tap has to record the status it resolved under. Its absence
+  // was invisible until a value typed as the Prisma Game.status union met this one.
+  | "PAUSED"
   | "FINAL"
   | "CANCELLED"
   | "POSTPONED";
