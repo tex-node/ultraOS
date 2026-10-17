@@ -1,8 +1,8 @@
 ---
 title: Product Roadmap
 status: Active
-version: product-0.7
-last_updated: 2026-09-29
+version: product-0.8
+last_updated: 2026-10-18
 ---
 
 # Product Roadmap
@@ -777,7 +777,7 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | B5 | Coach player profile, team insights, vision-evaluation nightly, model versioning | P14/B | `Not started` | B4 |
 | B6 | Rust acceleration & edge deployment (conditional — triggers only if cost/latency/on-prem demands) | P14/B | `Not started` | B5 + trigger |
 | C0 | Coaching: ADR-011 boundary, glossary, access rules, `COACHING_ASSISTANT_ENABLED` flag | P15/C | `Done` | — |
-| C1 | Player Development Engine (pure): dimensions, peer baselines, focus areas, drill registry, targets | P15/C | `In progress` (engine done and real-data checked on LBCL staging; CoachingPlan table + adopt action pending; minutes-played gate and focus-area threshold proposed, awaiting approval) | C0 |
+| C1 | Player Development Engine (pure): dimensions, peer baselines, focus areas, drill registry, targets | P15/C | `In progress` (engine done and real-data checked on LBCL staging; **remainder — `CoachingPlan` table + adopt action — tracked as I2 in `COACH_INTELLIGENCE_ROADMAP.md`**; minutes-played gate and focus-area threshold proposed, awaiting approval) | C0 |
 | C2 | Opponent Game Plan Engine: keys to the game, assignments, Ultra Time plan, post-game review | P15/C | `Done` (engine + preview script; real-data checked on LBCL staging; threshold proposals awaiting approval, see session.md 2026-10-15) | C0 |
 | C3 | Coach Hub UI (`/coaching`) + printable pre-game and training-week sheets | P15/C | `Done` on staging (flag on there only, production off; pages, viewer loader, squad setup and tests; manual visual check at 390px still to do) | C1, C2 |
 | C4 | Grounded AI briefing (validated against plan JSON; flag off) | P15/C | `Not started` | C3 |
@@ -913,6 +913,31 @@ does not weaken that test.
 (summary, files changed, test output, manual verification, blockers, proposed next phase).
 If a requirement conflicts with existing repo conventions, stop and ask. Prefer small,
 reviewable PRs; split if a phase exceeds ~800 LOC of net new code.
+
+## 7b. P15 — Coach Intelligence (Workstream C)
+
+The coaching workstream is now a program of its own: OCR scoresheet ingestion, the coaching assistant's
+completion + a selection advisor, and vision capture (match and training), ending in a unified athlete
+passport. The full brief, phase deliverables, exit criteria, risk register and the re-verified state are
+in **[`COACH_INTELLIGENCE_ROADMAP.md`](COACH_INTELLIGENCE_ROADMAP.md)** — that file is the reference for
+P15's phases; the C0–C5 rows in the phase table above remain the shipped-work ledger.
+
+| ID | Phase | Depends on | Status |
+|---|---|---|---|
+| I0 | Production migration fix (the P2022 gap) | — | `Blocked` — needs an explicit human yes; procedure in the P13 handover §0 |
+| I1 | OCR scoresheet ingestion v1 (basketball) | I0 | `Not started` |
+| I2 | Coaching completion (`CoachingPlan` + adopt) + Selection Advisor | I0 | `Not started` |
+| I3 | Training execution loop (plan → session → progress) | I2 | `Not started` |
+| I4 | Vision match capture unblock | real video | `Gated` — no real game video exists |
+| I5 | Vision training capture (drills, load) | I4 | `Gated` |
+| I6 | Unified athlete passport | I1–I5 | `Not started` |
+
+**State corrections worth carrying forward (verified 2026-10-18, detail in the program file §2.3):**
+position/height coverage is **per squad**, not league-wide — Ultra's eight Season Zero clubs and CPS
+(LBCL) are fully populated, nine other LBCL clubs are 0/N, which makes the Selection Advisor usable
+today for Ultra fixtures and scopes the data task to ~178 LBCL players. All four training tables exist
+but are **empty**, so I3 seeds every metric definition rather than extending existing ones. A5 is no
+longer "step 4 of 8" (see the P13 rows above).
 
 ## 8. Relationship to the engine roadmap
 
