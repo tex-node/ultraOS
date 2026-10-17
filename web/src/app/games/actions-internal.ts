@@ -26,6 +26,7 @@ import { z } from "zod";
 import {
   applyCountingStatDelta,
   applyPlayerShotStatDeltas,
+  applyScoreEffects,
   applyTeamShotStatDeltas,
   correctScoreEvent,
   createGameEvent,
@@ -180,61 +181,24 @@ export async function recordScoreInternal(
       // withGameWrite's callback, so the transaction rolls back) - translated back here at the
       // same point the inline `if (!shot.valid) throw new Error(shot.error)` used to sit.
       if (!consequences.valid) throw new Error(consequences.error);
-      const { fixtureDelta, eventFields, playerDelta, teamDelta, opponentUltraDelta } = consequences;
+      const { fixtureDelta } = consequences;
 
-      await tx.fixture.update({
-        where: { id: game.fixtureId },
-        data: fixtureDelta.isHome ? { homeScore: fixtureDelta.nextScore } : { awayScore: fixtureDelta.nextScore },
-      });
-      await createGameEvent(
+      // A5 Step 6: the five writes live in applyScoreEffects (I/O half of computeScoreConsequences)
+      // so the replay path can apply the identical effects - see that file's header. The audit log
+      // stays here, after them: it is a live-UI-only side effect.
+      await applyScoreEffects(
         {
           gameId,
           fixtureId,
           seasonClubId: input.seasonClubId,
           playerId: player?.id ?? null,
-          eventType: "SCORE",
-          points: eventFields.points,
-          basePointValue: eventFields.basePointValue,
-          multiplier: eventFields.multiplier,
           period: game.currentPeriod,
           clockSeconds: remainingClockSeconds(game),
-          description: eventFields.description,
-          made: eventFields.made,
-          isFourPointAttempt: eventFields.isFourPointAttempt,
-          isUltraTime: eventFields.isUltraTime,
-          homeScoreBefore: eventFields.homeScoreBefore,
-          awayScoreBefore: eventFields.awayScoreBefore,
-          homeScoreAfter: eventFields.homeScoreAfter,
-          awayScoreAfter: eventFields.awayScoreAfter,
+          consequences,
         },
         { ...writeCtx, tx },
       );
 
-      if (playerDelta) {
-        await applyPlayerShotStatDeltas(tx, organizationId, gameId, playerDelta.playerId, playerDelta.seasonClubId, playerDelta.deltas, playerDelta.pointsDelta);
-      }
-      await applyTeamShotStatDeltas(
-        tx,
-        organizationId,
-        gameId,
-        teamDelta.seasonClubId,
-        teamDelta.deltas,
-        teamDelta.ultraTimePointsForDelta,
-        teamDelta.ultraTimePointsAgainstDelta,
-        teamDelta.absolutePoints,
-      );
-      if (opponentUltraDelta) {
-        await applyTeamShotStatDeltas(
-          tx,
-          organizationId,
-          gameId,
-          opponentUltraDelta.seasonClubId,
-          { fourPointsMade: 0, fourPointsAttempted: 0, ultraTimeFieldGoalsMade: 0, ultraTimeFieldGoalsAttempted: 0 },
-          0,
-          opponentUltraDelta.ultraTimePointsAgainstDelta,
-          opponentUltraDelta.absolutePoints,
-        );
-      }
       await writeAuditLog(tx, {
         organizationId,
         userId: actorId,
