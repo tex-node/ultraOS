@@ -768,7 +768,7 @@ migration) before tennis is playable, and deeper per-sport presentation on publi
 | A3a | Canonical-write consolidation: `src/server/scoring/` services + ESLint guard + ratchet baseline; migrate inline sites | P13/A | `Done` | A2 |
 | A3b | `POST /api/sync/outbox`, LWW, SyncIdempotency + SyncConflictLog, sync dashboard | P13/A | `In progress` — Commits 1–3 shipped and verified on staging (schema, client shot resolution, server validation, replay with per-record idempotency); two-device integration test pending; Commit 4 (live-console wiring) moved to A5. | A3a |
 | A4 | Retry/backoff/DLQ, `/admin/sync-health`, load test 50×500, runbook, rollout | P13/A | `In progress` — PR 1 (trigger wiring) and PR 2 (dead-letter badge, attempt-based cutoff 5) shipped; PR 3 (admin page) deferred pending fleet-visibility evidence; PR 4 (load test) pending. | A3b |
-| A5 | Live console offline integration: actor injection into the five ledger-writing actions, `recordScore` invocation test, effects extraction, replay parity, live console UI wiring | P13/A | `Not started` | A3b |
+| A5 | Live console offline integration: actor injection into the five ledger-writing actions, `recordScore` invocation test, effects extraction, replay parity, live console UI wiring | P13/A | `In progress` — all 8 planned steps implemented and verified: steps 1-4 committed in `77a7928`; 5-7 (`applyScoreEffects`, `recordScoreInternal`, replay SCORE parity) and 8 (live-console tap conversion, `attachServerGame`, runbook `documentation/runbooks/live-console-offline.md`) 2026-10-17. Pending: logged-in staging rehearsal with a real network drop, and turning `NEXT_PUBLIC_OFFLINE_SCORING_ENABLED` on (off everywhere). | A3b |
 | B0 | Vision: project setup (flag, `/services/vision` FastAPI+Celery+Redis, Docker, storage adapter) | P14/B | `Done` | — |
 | B1 | FastAPI inference service with `/analyze` + `/health`, VisionAnalysisRun lifecycle | P14/B | `Not started` | B0 |
 | B2 | RF-DETR-Small/YOLOv11-M detector + ByteTrack, ONNX Runtime, jersey OCR, homography, VisionTrack rows | P14/B | `Not started` | B1 |
@@ -837,7 +837,16 @@ per-field LWW and additive-counter race conditions, and requires no `PlayerStat`
 
 **Fixture CREATE-CREATE collision.** Two devices offline-starting the same fixture's game collide on `Game.fixtureId` (`@unique`). The server returns `FIXTURE_ALREADY_HAS_GAME` per-record with a structured diagnostic. Reconciliation (rehoming the losing device's queued GameEvents onto the winning gameId) is deferred — it requires a response-shape addition (returning the winning gameId) plus a `drain()` state-machine change, and a product decision (silent merge vs. prompt the scorekeeper).
 
-**Effects-extraction gap.** `replayOutboxRecord` creates the `GameEvent` row but does not update `Fixture.homeScore`/`awayScore`, `PlayerStat`, or `TeamStat`. Latent today because nothing replays SCORE events. Closed by A5's extraction: `computeScoreConsequences` (pure) and `applyScoreEffects` (I/O), shared by both `recordScore` and replay, proven equivalent by a parity test.
+**Effects-extraction gap — CLOSED (2026-10-17, A5 steps 5-7).** `replayOutboxRecord` used to create the
+`GameEvent` row without updating `Fixture.homeScore`/`awayScore`, `PlayerStat`, or `TeamStat` — latent only
+because nothing replayed SCORE events. Now: `computeScoreConsequences` (pure, live resolution) and
+`computeScoreConsequencesForResolvedShot` (pure, replay's client-asserted resolution) share one derivation;
+`applyScoreEffects` (I/O, `src/server/scoring/applyScoreEffects.ts`) performs the five writes for BOTH
+`recordScoreInternal` and replay's SCORE branch; `src/server/sync/score-effects-parity.test.ts` proves the two
+paths produce identical database state for home 3PT, Ultra Time home 2PT (including the opponent's
+`ultraTimePointsAgainst`) and away 3PT. Replay also now guards `INVALID_TEAM` / `INVALID_PLAYER` /
+`INVALID_SCORE_PAYLOAD` before any effect write, and validates a SCORE payload's asserted shot even when it
+carries no `clientObservedAt`.
 
 **Cross-cutting concerns:**
 

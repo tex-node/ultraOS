@@ -8756,3 +8756,87 @@ done, gitignored the secrets file (`*DO NOT COMMIT*`). Schedule: ultraos 03:00, 
 staging 03:35, offsite 04:00, retention 04:30, freshness 09:00. Concurrency: a parallel session worked
 Steps 1-4 (12:42-15:42); a lone raivstream backup ran at 20:38 (source unknown, no active SSH session) —
 monitor for further parallel activity.
+
+## 2026-10-17 - P13 handover written; PRODUCTION SCHEMA GAP FOUND (not yet fixed)
+
+Wrote `documentation/architecture/HANDOVER_P13_OFFLINE_SCORING_2026-10-17.md`. While gathering state: production
+release `3be51dc` (deployed 2026-10-14 with the GIESM change, without `--migrate`) contains the P13 code, but the production
+DB lacks migration `20260928120000_gameevent_resolution_provenance` (`GameEvent.resolvedBy` / `clientObservedAt`). Production
+logged `GameEvent.resolvedBy does not exist` (P2022) on 2026-10-16 22:16 (reads). Only 9 old GameEvent rows exist and no live
+games, so impact so far is limited, but any GameEvent read/write will fail. Staging is fine. Fix = apply that one additive
+migration to production alone (backup first), then verify; steps are in the handover, section 0. Not applied: needs approval.
+
+## 2026-10-17/18 - A5 steps 5-8: effects extraction, replay parity, offline taps on the live console
+
+**Objective:** finish A5 (live-console offline integration) from the handover's suggested order, without touching
+production. Section 0 of the handover (the missing production migration) was left alone deliberately: it needs an explicit
+human yes, and approval prompts are disabled in this session, so a rejected action would have been the only outcome.
+
+**Commits (each step its own):** `745eb7b` (5), `4190cfd` (6), `2324247` (7), `9098ed7` (8), plus this docs commit.
+
+**Step 5 - `applyScoreEffects` extracted** to `web/src/server/scoring/applyScoreEffects.ts`: the five score writes
+(fixture score, SCORE GameEvent, PlayerStat, scoring-team TeamStat, opponent `ultraTimePointsAgainst`) in the same order and
+with the same arguments. It takes a `WriteContext` with `tx` required, exactly like `createGameEvent`. **Deviation from the
+handover's wording:** it does NOT take a separate `db` parameter. The transaction is the whole interface, and injection
+belongs one level up where the transaction is opened (`withGameWrite`'s `prisma`, `ReplayContext.prisma`) - a `db` here
+would be unused, and reading through a second connection while the caller's transaction is open is exactly what must not
+happen. Flagged in the file header; a two-line change if a reviewer still wants it. `computeScoreConsequences` also split
+into a resolution step (`scoreShot`, live) and `computeScoreConsequencesForResolvedShot` (replay), so the derivation itself
+has exactly one implementation.
+
+**Step 6 - `recordScoreInternal` calls it.** The 14-test invocation suite passed unchanged, no test edits. The audit-log
+write stayed behind in `recordScoreInternal` (replay has never written one; whether it should is a separate decision).
+
+**Step 7 - replay's SCORE branch now applies the same effects.** Consequences are derived from the client's ASSERTED shot
+(`basePointValue`/`multiplier`/`points`/`isUltraTime`), never re-resolved - the whole point of client-assert/server-validate
+for a wall-clock-derived value. Before/after score fields come from the SERVER's fixture row inside the transaction, not the
+client's possibly-hours-stale snapshot. The event keeps its client id, `resolvedBy`/`clientObservedAt`, and the attribution
+fields replay used to spread through (entrant/fouled player/foul type/caused-by/typeKey/assist/substituted-out) via a narrow
+`extraEventFields` that cannot override score-derived fields. New guards before any effect write: `INVALID_TEAM`,
+`INVALID_PLAYER`, `INVALID_SCORE_PAYLOAD`, and shot validation for a SCORE that carries no `clientObservedAt` (previously such
+a record was written unchecked; nothing produces one today, but "no assertion" must not mean "no validation" when the write
+now moves the scoreboard). Parity test `web/src/server/sync/score-effects-parity.test.ts`: three live-vs-replay comparisons
+(home 3PT, Ultra Time home 2PT incl. the opponent row, away 3PT) over every persisted field either path writes, ignoring only
+the intentional transport differences (resolvedBy, clientObservedAt, batch/device/idempotency columns, ids, timestamps,
+AuditLog).
+
+**Found: three tests were date bombs, not regressions.** `replay-outbox-record.test.ts` hardcoded
+`clientObservedAt: "2026-09-28T10:00:00.000Z"`; `isClientObservedAtPlausible` only accepts a 24h window, so from 2026-09-29
+those three tests failed with `IMPLAUSIBLE_CLIENT_OBSERVATION` before reaching the code they name. Proven pre-existing by
+running the same file against an UNPATCHED copy of the deployed staging release: identical 3 failures. Fixed with a
+computed `RECENT_CLIENT_OBSERVED_AT` and a comment explaining why a literal date is wrong here.
+
+**Step 8 - live console taps.** `live-score-capture.tsx` replaces the `recordScore` form: same server action online, local
+capture offline when `NEXT_PUBLIC_OFFLINE_SCORING_ENABLED=true`. `LocalScoringRepository.attachServerGame` mirrors a
+server-owned game into IndexedDB and **enqueues nothing** - a `Game:CREATE` for a game that already exists can only fail on
+`Game.fixtureId`'s unique constraint (`FIXTURE_ALREADY_HAS_GAME`) and dead-letter, taking the device's queue with it. Refresh
+keeps the clock anchor (so a pause/period change is reflected) and never resets `nextEventSequence` (local history).
+`lib/offline/score-capture.ts` resolves via `resolveClientShot` - the same pure functions the live server path uses - and
+sends `clientObservedAt`; before/after scores are deliberately null (the server computes them on replay). Queue
+acknowledgment is amber and counts pending; a failed capture is red, never swallowed. `GameStatusValue` gained `PAUSED`
+(the local model was missing a state the console can reach). jsdom component tests: offline tap queues the resolved shot,
+online tap calls the action and queues nothing, flag-off keeps the old behavior. Runbook:
+`documentation/runbooks/live-console-offline.md`.
+
+**Verification (all against real staging Postgres, in a `cp -a` scratch copy of the deployed release, never the live
+release):** 37/37 DB tests - `score-effects-parity` (3), `replay-outbox-record` (19), `drain-e2e` (1), `actions-internal`
+(14). Pure suite 895 (894 pass, 1 pre-existing skip), component suite 15/15, `tsc --noEmit` clean, `eslint` clean on every
+touched path, `next build` clean. Step 6's 14/14 was verified before step 7 landed; step 7's full run 37/37; step 8's full
+run 37/37 again on the complete tree.
+
+**Limitations recorded, not hidden:** the console's score does not move while offline (no local score projection); only
+scoring queues offline (stat events, clock, undo/void/correct still need the network); two offline tablets on one game are
+not reconciled; and none of this has been exercised in a browser with a real network drop yet.
+
+**Next:** logged-in staging smoke test of the console (the Server Action boundary changed - a click handler now calls
+`recordScore` instead of a form submit), then a real offline rehearsal per the runbook, then the flag decision. Production
+migration (handover section 0) still needs a human yes.
+
+**Environment notes that cost time:**
+- There IS a local PostgreSQL 17 service on this machine (`postgresql-x64-17`, running, scram-sha-256) but no password and
+  no `pgpass.conf`, so the handover's "no usable local Postgres" still holds. Docker Desktop is installed but its daemon is
+  not running. Verification therefore used the established SSH/scratch-copy/staging-Postgres path.
+- **This shell is Windows PowerShell 5.1, where `Get-Content`/`Set-Content` default to ANSI.** Round-tripping a UTF-8 source
+  file that way silently double-encodes every non-ASCII character (arrows, multiplication signs, em dashes) - it corrupted
+  `live-score-capture.tsx` and the live page mid-session. It was repaired by reversing the cp1252 mis-decode, and the page
+  was restored from git. Use the editing tools, not PowerShell text round-trips, for any file with non-ASCII content.
