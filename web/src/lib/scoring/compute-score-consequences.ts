@@ -1,16 +1,27 @@
 // Returns the complete set of pure-derivable consequences of a shot: both the fields needed to build
 // the GameEvent (`eventFields`) and the stat/fixture deltas its effects will apply (`fixtureDelta`,
 // `playerDelta`, `teamDelta`, `opponentUltraDelta`). "Consequences" is deliberate: "effects" is
-// reserved for the I/O half that actually applies the deltas (applyScoreEffects, not yet extracted).
+// reserved for the I/O half that actually applies the deltas (applyScoreEffects,
+// src/server/scoring/applyScoreEffects.ts).
+//
+// Two entry points, one computation:
+//   - computeScoreConsequences(input) resolves the shot from a raw scorer-entered value under the
+//     game's rules + wall-clock state (`scoreShot`), then derives the consequences. This is the live
+//     path (recordScoreInternal).
+//   - computeScoreConsequencesForResolvedShot(input) takes an ALREADY-resolved shot and derives the
+//     consequences from it. This is the replay path: an offline-queued tap carried its own
+//     resolution (clientObservedAt / resolvedBy CLIENT) and the server must not re-resolve it - see
+//     docs/canonical-write-audit.md's "wall-clock-derived event fields" note. Keeping both paths on
+//     this one derivation is what makes live and replay produce identical DB state.
 //
 // Lives here (no Prisma, no server-only) so it is unit-testable without a database, the same split
 // as buildGameEventCreateData vs createGameEvent and mergeShotStatDeltas vs
 // applyPlayerShotStatDeltas/applyTeamShotStatDeltas.
 //
 // This is a relocation of recordScoreInternal's (src/app/games/actions-internal.ts) inline
-// score/delta math - byte-for-byte the same computation, not a rewrite. recordScoreInternal is not
-// changed yet (that's the next commit, once this function's shape is reviewed); today it still does
-// this math inline.
+// score/delta math - byte-for-byte the same computation, not a rewrite. recordScoreInternal now
+// calls it (A5 Step 4) and still computes `remainingClockSeconds(game)` itself at the same points
+// it always did.
 //
 // Scope: this function assumes the shooting team's seasonClubId has already been validated against
 // the fixture's two sides (INVALID_TEAM), and that `player` (if a playerId was given) has already
@@ -110,6 +121,31 @@ export type ScoreConsequences =
     }
   | { valid: false; error: string };
 
+// The success branch on its own - what applyScoreEffects (the I/O half) consumes. Named so a server
+// module can type its parameter as "already validated consequences" without re-narrowing.
+export type ValidScoreConsequences = Extract<ScoreConsequences, { valid: true }>;
+
+// A shot whose resolution is already known: either `scoreShot`'s own success branch (live), or the
+// values an offline client asserted on its queued event (replay - validated separately by
+// validateClientResolvedShot, never re-resolved here).
+export interface ResolvedShotForScoring {
+  basePointValue: number | null;
+  multiplier: number | null;
+  pointsAwarded: number;
+  isUltraTime: boolean;
+}
+
+export interface ComputeResolvedScoreConsequencesInput {
+  shot: ResolvedShotForScoring;
+  seasonClubId: string;
+  opposingSeasonClubId: string;
+  isHome: boolean;
+  homeScore: number;
+  awayScore: number;
+  player: { id: string } | null;
+  description?: string;
+}
+
 export function computeScoreConsequences(input: ComputeScoreConsequencesInput): ScoreConsequences {
   const shot = scoreShot({
     rules: effectiveRuleSnapshot(input.rules),
@@ -119,7 +155,22 @@ export function computeScoreConsequences(input: ComputeScoreConsequencesInput): 
     remainingClockSeconds: input.remainingClockSeconds,
   });
   if (!shot.valid) return { valid: false, error: shot.error };
-  const { basePointValue, multiplier, pointsAwarded, isUltraTime } = shot;
+  return computeScoreConsequencesForResolvedShot({
+    shot,
+    seasonClubId: input.seasonClubId,
+    opposingSeasonClubId: input.opposingSeasonClubId,
+    isHome: input.isHome,
+    homeScore: input.homeScore,
+    awayScore: input.awayScore,
+    player: input.player,
+    description: input.description,
+  });
+}
+
+// The derivation itself, shared by both entry points - everything below the resolution step, so
+// there is exactly one implementation of the score/delta math no matter how the shot got resolved.
+export function computeScoreConsequencesForResolvedShot(input: ComputeResolvedScoreConsequencesInput): ValidScoreConsequences {
+  const { basePointValue, multiplier, pointsAwarded, isUltraTime } = input.shot;
 
   const previousScore = input.isHome ? input.homeScore : input.awayScore;
   const nextScore = Math.max(0, previousScore + pointsAwarded);
