@@ -309,7 +309,9 @@ export default async function Live({ params, searchParams }: { params: Promise<{
                   team={{ id: team.id, name: team.name, players: team.players.map((player) => ({ id: player.id, name: `${player.athlete.firstName} ${player.athlete.lastName}` })) }}
                   rules={effectiveRuleSnapshot(snapshot)}
                   game={{
-                    status: game.status as "NOT_STARTED" | "LIVE" | "PAUSED" | "FINAL",
+                    // GameStatus is exactly these four values (prisma/schema.prisma) - no cast needed;
+                    // LocalGameValue in lib/offline/entities.ts accepts them as a subset.
+                    status: game.status,
                     currentPeriod: game.currentPeriod,
                     clockSecondsRemaining: game.clockSecondsRemaining,
                     clockStartedAt: game.clockStartedAt?.toISOString() ?? null,
