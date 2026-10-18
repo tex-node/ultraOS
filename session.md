@@ -9737,6 +9737,59 @@ player's points stay as printed and the components are corrected to match:
 
 **Next step:** Prompt 2 (.xlsx support).
 
+## 2026-10-18 - Streak v4 / Prompt 2: .xlsx support on the same parser
+
+**Objective:** the UI said "CSV/Excel" but only CSV existed. Close the gap without creating a second
+table-detection path.
+
+**Completed**
+- **`lib/scoresheet/excel-extract.ts`** (SheetJS `xlsx@0.18.5`): the workbook's **first sheet** becomes a
+  string matrix and is handed to `parseBoxScoreMatrix` - the same function the CSV uses. The matrix is
+  padded to the widest row (a spreadsheet omits trailing empty cells, which would shift a row's last
+  values into the wrong columns) and every cell is a trimmed string, so a numeric `0` stays `"0"`.
+- **`csv-extract.ts`** now exposes `parseBoxScoreMatrix(rows)` with `parseBoxScoreCsv(text)` as a thin
+  `parseCsvRows` wrapper. Sharing it surfaced a real bug, now fixed: comment lines reassemble their cells
+  with commas, and for a **padded spreadsheet row** that turned `## SQUARE TEAM` into
+  `## SQUARE TEAM,,,,,` (and would have corrupted `# homeScore: 94`). Trailing empty cells are dropped
+  before joining.
+- **`ScoresheetImportFormat` gains `XLSX`** (migration `20261018180000_scoresheet_xlsx_format`), so the
+  review queue says which file arrived; the import stores the source file name and the workbook summary
+  (`{sheetName, sheetCount, rowCount, columnCount}`) with the extraction.
+- The upload form accepts `.xlsx` and decides by **bytes** (zip signature), not by the file name, so a
+  renamed file cannot change how it is read. A non-workbook gets "This file is not an .xlsx workbook"
+  instead of SheetJS's confusing downstream error.
+- **`lib/scoresheet/batch-export.ts`**: batch -> rows once, then written as CSV or XLSX, so the two
+  verification files are guaranteed to describe the same table.
+- **6 new tests** (24 scoresheet tests total), including the one that matters: a workbook produces the
+  same `csvToCorrected` object as the CSV of the same game.
+
+**Verification**
+- `npx tsx scripts/xlsx-verify.ts` -> **32/32 real LBCL games compared, 0 mismatches, "IDENTICAL batch
+  from CSV and XLSX"**.
+- End-to-end on a **scratch clone** of staging: game 19's workbook -> `parseBoxScoreXlsx` -> 72 checks
+  (0 failing) -> `ScoresheetImport` with **format=XLSX, version=xlsx-1** -> approved. The stored
+  `corrected` JSON is **IDENTICAL** to the CSV path's, the workbook summary is in `extraction`, and the
+  row reads `Square Team 33-74, 8 players`.
+- Deployed to staging (`release-d7c2779`) with the migration applied and the smoke green.
+
+**Fix found while deploying:** `npm ci` on the host refused the lock the `xlsx` install produced
+("Missing: @swc/helpers@0.5.23 from lock file") because the install had been resolved by npm 11 locally
+while the host runs npm 10.8.2. Regenerated `package-lock.json` **with the host's npm**, confirmed
+`npm ci --dry-run` passes there, then committed it - a deploy-time dependency-resolution mismatch, not an
+application bug.
+
+**Known issues**
+- Only the **first** sheet is read (documented in the UI and the code); a workbook that puts home and away
+  on separate sheets is not supported yet.
+- Old binary `.xls` (BIFF) is not accepted - the zip check rejects it deliberately.
+- `xlsx@0.18.5` has a known npm-audit advisory (prototype pollution in `sheet_to_json` on hostile input);
+  the files come from league operators, and the parser only reads the first sheet into strings. Flagged
+  rather than ignored - a switch to `exceljs` or a maintained SheetJS build is the fix if that trust
+  boundary changes.
+
+**Next step:** Prompt 3 (explicit passport publication).
+
+
 
 
 
