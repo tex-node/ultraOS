@@ -58,15 +58,17 @@ segments used different slug names (`/players/[id]` vs `/players/[playerId]`) - 
 at startup, not at build time** - and every route returned 500.
 
 ```bash
-# on the host, after deploying staging
-bash /opt/ultraos-staging/current/deploy/ops/smoke-staging.sh
+# on the host, after deploying staging (the release only contains web/, so run the installed copy)
+bash /root/smoke-staging.sh
 ```
 
 It mints a short-lived session for an existing SUPER_ADMIN and asserts, for ten representative routes,
 both `200` **and** the page's signature text (so an error boundary or a `/no-league` redirect fails),
 then reports the service state and the error count since it started. Override with `BASE`,
 `SMOKE_EMAIL`, `SMOKE_ORG`, `ENV_FILE`, `MIGRATE_ENV`. Exit code is non-zero on any failure, so it can
-be chained onto a deploy.
+be chained onto a deploy. The canonical copy lives at `deploy/ops/smoke-staging.sh`; install it with
+`cp deploy/ops/smoke-staging.sh /root/smoke-staging.sh` (the release directory contains only `web/`,
+so the script is not itself part of a release).
 
 ## Migrations
 

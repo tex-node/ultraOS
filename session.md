@@ -9407,6 +9407,37 @@ is better for turnovers.
 
 **Next step:** I1 remains the only incomplete item, with acceptance documented as failed.
 
+## 2026-10-18 - I1 second acceptance run: preprocessing was the dominant factor (0/20 -> 12/20)
+
+**Objective:** attack the documented I1 blocker instead of leaving the acceptance as a flat failure.
+
+**Completed**
+- Measured preprocessing variants on a real LBCL sheet: clean numeric tokens per page **34** with the
+  old 2.4k grey+sharpen, **127** with 3x upscale + 3x3 median + sharpen. The median filter is the part
+  that matters - it removes the JPEG ringing on the cell borders that Tesseract was fusing into the
+  digits. Player rows became readable (`5 JOCHENWORIE 20:17 5/8 62.5 4/4 100 ...`).
+- `TesseractProvider.preprocess` now does greyscale -> 3x (min 3000px) -> `median(1)` ->
+  `sharpen({sigma:1.5})`; `OCR_PREPROCESS=off` still bypasses it.
+- Re-ran the same 20 sheets: table detected **2 -> 12**, sheets with player rows **0 -> 8**, 195 rows
+  total, mean confidence ~53%, 8 sheets still "no table header", ~10 s/sheet.
+
+**Decision (documented, not tuned away):** the result is a qualitative change, but **no sheet is
+review-ready**. Row counts are unreliable in both directions (13 rows for a 12-man team on one sheet,
+30 on another -> rows are split and duplicated), most `0` cells are still lost, and with so few mapped
+cells the checksums generate almost nothing to fail - "0 failing checks" there means "nothing
+checkable". Recorded in `OCR_SCORESHEET_INGESTION.md` with both runs side by side, and the blocker
+narrowed to **grid-line detection + per-cell crop-and-OCR**, plus the standing recommendation to ask
+LBCL for the exported PDF/CSV (which removes OCR from the problem entirely).
+
+**Also:** installed the smoke check at `/root/smoke-staging.sh` (the release contains only `web/`, so
+`deploy/ops/smoke-staging.sh` is the canonical copy, not a release artefact) and fixed the README to
+say so.
+
+**Verification:** 924 tests pass (1 pre-existing skip), tsc/eslint/build clean; deployed
+`release-0d151f8`; `/root/smoke-staging.sh` -> 10/10 pages PASS with signature text, service active,
+0 errors since the release started.
+
+
 
 
 
