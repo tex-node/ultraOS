@@ -9789,6 +9789,83 @@ application bug.
 
 **Next step:** Prompt 3 (explicit passport publication).
 
+## 2026-10-18 - Streak v4 / Prompt 3: explicit passport publication
+
+**Objective:** publication was implicit ("the athlete has games"), so an operator had no way to hide a
+passport. Make it a decision.
+
+**Completed**
+- **`Athlete.passportPublished Boolean @default(true)`** (migration `20261018190000`). On Athlete rather
+  than Player because the public career page is athlete-scoped: a passport should not become
+  half-published because one season's Player row was toggled. Column on an existing tenant table -> no
+  new RLS policy or GRANT; `DEFAULT true` keeps every existing row's behaviour.
+- **`/players/[id]/passport` 404s** for an unpublished athlete unless the viewer is a coach/operator
+  (`game:operate`/`data:import`) or a platform SUPER_ADMIN. 404 rather than 403, so an unpublished
+  passport is indistinguishable from a missing one - the same reasoning ADR-011 uses. Coaches keep seeing
+  it: hiding it from the public must not blind the people working with the player.
+- **Checkbox "Publish passport to public"** on `/players/[id]/edit` (the athlete form), read from the raw
+  form value because an unchecked box sends nothing while the shared `athleteSchema`'s absent key must
+  keep meaning *true* for athletes created elsewhere.
+- The **public athlete page hides the "View passport" link** when the flag is off, so the public never
+  gets a dead link.
+
+**Verification (staging, real requests)**
+| check | result |
+| --- | --- |
+| FAN passport, published | 200 |
+| FAN passport, unpublished | **404** |
+| coach passport, unpublished | 200 |
+| FAN passport, republished | 200 |
+| public athlete page links, published / unpublished / republished | 1 / **0** / 1 |
+| admin edit form | renders "Publish passport to public" |
+
+The link check needed a **neon-ultra** athlete: the public route resolves the default public
+organization, so an LBCL athlete is not on the public site at all (pre-existing behaviour, not introduced
+here).
+
+**Known issues**
+- Plain on/off; no scheduled or per-season publication.
+- The passport route is still authenticated - "published" means visible from the public site's linked
+  pages, not an anonymous URL. A genuinely public passport page remains future work.
+
+**Next step:** Prompt 4 (vision ingestion readiness).
+
+## 2026-10-18 - Streak v4 / Prompt 4: vision ingestion readiness (one command)
+
+**Objective:** with no footage, build the pipeline so that when a video lands it is one command to ingest.
+
+**Completed**
+- **`scripts/vision-ingest.ts`**: `ffprobe` (duration/width/height/fps/codec) -> copies the file into local
+  media storage under `originals/<org>/video/<sha256>.<ext>` -> creates `MediaAsset` (purpose
+  `GAME_VIDEO`, checksum, dimensions) + `GameVideo` (`READY_FOR_ANALYSIS`, source type, camera label) + a
+  `GAME_VIDEO_INGESTED` audit row in one transaction -> `POST /analyze` on the B0 worker. Idempotent (same
+  sha256 + fixture = "already registered"), `--dry-run` stops before writing, and a worker that is down is
+  a **warning**, not a failure - the row is the durable state and the service's beat poller picks up
+  `READY_FOR_ANALYSIS` videos.
+- **`documentation/vision/VISION_INGESTION.md`**: the runbook, what succeeds today, how to bring the worker
+  up, and the limits (no model; no R2 upload path for large files; no timeline alignment).
+
+**Verified (staging, real ffmpeg clip)**
+```
+ffmpeg -f lavfi -i testsrc=size=1280x720:rate=25 -t 5 -pix_fmt yuv420p /tmp/dummy-game.mp4
+probe:     5s · 1280x720 · 25 fps · h264
+gameVideo: cmvdzfyhb0001glkkjavu3nun (READY_FOR_ANALYSIS)
+mediaAsset cmvdzfygp0000glkkr7nuxvyo purpose=GAME_VIDEO 66446 bytes
+file on disk: /opt/ultraos-staging/shared/media/originals/<org>/video/<sha256>.mp4
+audit: GAME_VIDEO_INGESTED cmvdzfyhb0001glkkjavu3nun
+re-run: "already registered as GameVideo ... - nothing to do"
+```
+
+**Finding worth keeping: port 8000 on the staging host is an unrelated Kong gateway.** The first run's
+`POST /analyze` returned **401** with `Server: kong/3.9.1`, which would have looked like a vision-service
+auth bug. The script's default is now `:8010`, a 401 is reported with that hint, and the doc spells it out.
+
+**Status:** infrastructure **proven**; inference remains **BLOCKED_NO_REAL_VIDEO** (no footage, and the B0
+analyzer emits zero observations even when it runs). No accuracy is claimed.
+
+**Next step:** Prompt 5 (roadmap + branch merge + final deploy).
+
+
 
 
 
