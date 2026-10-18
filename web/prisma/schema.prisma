@@ -4993,6 +4993,9 @@ enum DataFeedEventType {
 
 enum DataFeedDeliveryStatus {
   PENDING
+  // Claimed by a drain. The atomic PENDING -> DELIVERING update is what stops two concurrent drains from
+  // sending the same delivery twice (the verification harness caught exactly that duplicate).
+  DELIVERING
   DELIVERED
   // The subscriber answered 4xx (other than 429): the request is wrong, retrying cannot fix it.
   GAVE_UP

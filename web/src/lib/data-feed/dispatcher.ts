@@ -114,6 +114,17 @@ export async function drainFeedDeliveries(args: { organizationId: string; limit?
   if (due.length === 0) return result;
 
   for (const delivery of due as DeliveryRow[]) {
+    // CLAIM FIRST. Two drains can read the same PENDING row (the harness proved it: one delivery was
+    // posted twice). `updateMany` with `status: "PENDING"` in the WHERE is atomic in Postgres, so exactly
+    // one drain gets count 1 and the loser moves on without sending.
+    const claimed = await withOrganizationContext(args.organizationId, (tx) =>
+      tx.dataFeedDelivery.updateMany({ where: { id: delivery.id, status: "PENDING" }, data: { status: "DELIVERING" } }),
+    );
+    if (claimed.count === 0) {
+      result.skipped += 1;
+      continue;
+    }
+
     if (!delivery.subscription.isActive) {
       // The subscription was disabled after this delivery was queued: give up without pretending to send.
       await withOrganizationContext(args.organizationId, (tx) =>
@@ -254,12 +265,23 @@ export function scheduleFeedDrain(organizationId: string, options: { delayMs?: n
   timer.unref?.();
 }
 
-/** For a cron worker: drain every organization that has due deliveries. */
-export async function drainAllOrganizations(options: { limitPerOrganization?: number } = {}): Promise<Record<string, DrainResult>> {
+/** For a cron worker: reclaim crashed claims, then drain every organization that has due deliveries. */
+export async function drainAllOrganizations(options: { limitPerOrganization?: number; stuckAfterMs?: number } = {}): Promise<Record<string, DrainResult>> {
   // Organization is a global table (not RLS-scoped), so this read is legitimate.
   const organizations = await prisma.organization.findMany({ select: { id: true } });
   const results: Record<string, DrainResult> = {};
+  const stuckBefore = new Date(Date.now() - (options.stuckAfterMs ?? 10 * 60 * 1000));
   for (const organization of organizations) {
+    // Crash recovery: a process that died mid-send leaves a row in DELIVERING, which no drain would ever
+    // pick up again. Anything claimed longer ago than the timeout goes back to PENDING (it will be retried,
+    // and the subscriber may see the same delivery id twice - which is why the id is stable and documented
+    // as a dedupe key).
+    await withOrganizationContext(organization.id, (tx) =>
+      tx.dataFeedDelivery.updateMany({
+        where: { organizationId: organization.id, status: "DELIVERING", nextAttemptAt: { lt: stuckBefore } },
+        data: { status: "PENDING" },
+      }),
+    );
     const pending = await withOrganizationContext(organization.id, (tx) =>
       tx.dataFeedDelivery.count({ where: { organizationId: organization.id, status: "PENDING", nextAttemptAt: { lte: new Date() } } }),
     );
