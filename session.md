@@ -9277,6 +9277,65 @@ plan's target metric, and show the week.
 
 **Next step:** the trend chart on the player plan page, then I6 (athlete passport).
 
+## 2026-10-18 - I6 / Prompt 4: athlete passport v1
+
+**Objective:** the longitudinal athlete profile - live/imported stats, OCR history, training logs -
+with provenance badges and privacy.
+
+**Completed**
+- **`src/server/players/passport.ts`** - a read model (no writes) assembling: the player's season/club,
+  every `PlayerStat` row with its game/fixture/season, aggregates (PPG/RPG/APG + totals), the adopted
+  `CoachingPlan` history with session counts, and the player's `AthleteTrainingRecord`s with their
+  logged metrics. Opponent/home-away is resolved per fixture in one query using the player's own
+  season club.
+- **Provenance is derived, never assumed**: `ULTRA_NATIVE_LIVE_SCORER` -> LIVE, the statistician value
+  plus the derived-from-verified-events value -> LIVE STAT, `FIBA_LIVESTATS_PDF_IMPORT`/
+  `GENIUS_SPORTS_IMPORT`/`CSV_IMPORT`/`EXTERNAL_PROVIDER` -> IMPORTED, `MANUAL_ADMIN_ENTRY` -> MANUAL,
+  anything unrecognised -> **UNKNOWN** (not silently LIVE). A game is badged **OCR REVIEWED** only when
+  an INGESTED `ScoresheetImport` points at its fixture - the imported stat row alone is
+  indistinguishable from a hand-transcribed one, so the import record is the only honest signal.
+- **`/players/[playerId]/passport`** - career header, totals with a provenance breakdown, a game log
+  with a badge per row, and (only for viewers with `game:operate` or `data:import`) the training log
+  and adopted plans. Everyone else gets an explicit "visible to coaches and league operators only"
+  line - the coach-private evidence is not merely hidden by CSS, it is not queried into their page.
+- Authenticated page (no public variant in v1); `dynamic = "force-dynamic"`.
+
+**Verification (real staging data):** Salawu Korede (CPS #5, PF) -> 7 games, PPG 7 / RPG 2.1 / APG 2,
+all seven rows `IMPORTED` (correct: LBCL came from the batch import, not from OCR or a live console),
+game log with correct home/away opponents, training rows = 1 (the I3 sanity session, completed,
+`game.tov_pg=2.5`), plans = 1 (ACTIVE, 1 session). `tsc`/`eslint` clean, ratchet 4/4, `next build`
+clean with `/players/[playerId]/passport` in the manifest, pure suite unchanged.
+
+**Known issues**
+- No public variant yet (the prompt's public-safe profile), and the timeline is a single season entry
+  because `Player` is season-scoped - a true multi-season career needs a read across `Player` rows on
+  the same `athleteId`, which the model supports but the page does not yet group.
+- No trend sparklines; provenance is per game row, not per metric.
+- The passport does not yet include OCR-ingested history as a distinct surface because the OCR
+  acceptance failed (no INGESTED import exists to show).
+
+**Next step:** I4/I5 entry gate (real video check).
+
+## 2026-10-18 - I4/I5 / Prompt 5: vision entry gate - BLOCKED_NO_REAL_VIDEO
+
+**Objective:** unblock vision on a real game video, or record the block honestly.
+
+**Checked (2026-10-18):**
+- `GameVideo` rows: **0** in `ultraos_staging`, **0** in `ultraleagueos` (production).
+- Video files on the host: only broadcast/movie-render artifacts under `/tmp`
+  (`raivstream-movie-render/*/shot-00N.mp4`, `verify-end-card-*/out.mp4`, `verify-movie.mp4`) - nothing
+  that is a basketball game.
+- `services/vision/` exists in the repository (B0 skeleton) but is not part of the deployed release,
+  and it is not the blocker: without footage there is nothing to run inference on.
+
+**Verdict: `BLOCKED_NO_REAL_VIDEO`** - recorded in `documentation/COACH_INTELLIGENCE_ROADMAP.md`
+(I4/I5 stay `Gated`). No vision work was attempted, because any accuracy number produced without real
+video would be exactly the kind of claim this project's honesty rule forbids.
+
+**Next step:** finish I3's trend chart, then stop and report. Vision stays gated until the user
+supplies a real game video (and its ground-truth box score).
+
+
 
 
 
