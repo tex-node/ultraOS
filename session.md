@@ -9072,6 +9072,57 @@ mistaken for pre-game advice. Verified on the deployed release: `/coaching/cmucf
 returns 200 and contains "Rotation for the last meeting (retrospective)" plus a working
 `/coaching/selection/<fixtureId>` link.
 
+## 2026-10-18 - I0 / Prompt 1: production migration applied + deploy preflight (approved by the user)
+
+**Objective:** close the P0 schema gap on production (handover section 0) and stop it recurring.
+
+**Completed**
+- **Backup first**: `pg_dump --format=custom` -> `/var/backups/ultraleagueos-production/ultraleagueos_pre_p13_provenance_20261018T094250Z.dump`,
+  1,073,319 bytes, sha256 `b6f0931c9ee6b13839391281c987d7e07d3f37b447c4ba48b7623c0f3da54509`, `pg_restore --list` = 1570 TOC entries
+  (the same shape as the known-good dump in `documentation/runbooks/BACKUP_RESTORE.md`).
+- **Before state confirmed**: latest applied migration `20260927120001_p13_sync_idempotency_conflictlog`; **0** of the two
+  columns present; 9 `GameEvent` rows.
+- **Applied** `20260928120000_gameevent_resolution_provenance` with the privileged URL, run from `/opt/ultraleagueos/current/web`
+  (the release that contains both the code and the migrations dir). `prisma migrate deploy` reported the single migration
+  applied; `prisma migrate status` then: "Database schema is up to date!".
+- **Verified after**: `resolvedBy` exists, `NOT NULL`, enum type `GameEventResolution`, default `'SERVER'`; `clientObservedAt`
+  nullable timestamp; `GameEventResolution` type present; migration recorded at `2026-10-18 09:43:10Z`; and a production
+  read of the table returns `9|9|0` (`count(*) | count(resolvedBy) | count(clientObservedAt)`) - the read that used to
+  throw P2022 now works.
+- **5-minute watch**: `journalctl -u ultraos-web.service --since 09:43:52Z` -> **0** P2022 / missing-column hits, **0** error
+  lines; service active. (The only nearby log lines are a stale Server Action id from 05:03, before the change - a browser
+  tab left open across a deploy, unrelated.)
+- **Process fix** (`deploy/deploy.sh`, commit `0e9c37a`): a pre-flight `prisma migrate status` that runs after
+  `npm ci`/`prisma generate` and **before** the release is built or `current` is swapped. On pending migrations it prints a
+  loud box with the remedy and exits 4, having built and changed nothing. If no privileged URL is resolvable it warns loudly
+  rather than skipping silently. Installed to `/root/deploy.sh` (backup kept, `bash -n` clean).
+
+**Decisions**
+- Ran the migration **before** installing the new deploy.sh, so the first deploy made with the preflight cannot halt on the
+  very gap it is meant to prevent.
+- The preflight uses the same privileged URL resolution as `--migrate` (`--migrate-db-url` > `--migrate-env-file` >
+  `<app-root>/shared/migrate.env`) and needs no new flags or secrets.
+- A missing URL is a warning, not a hard failure: a machine without `migrate.env` must still be able to deploy, and a check
+  that cannot run should say so rather than pretend it passed.
+
+**Verification**
+- Preflight proven **both ways**: a scratch copy of the staging release with one extra never-applied migration makes
+  `migrate status` report "Following migrations have not yet been applied" and the preflight logic halt (exit 4 path); the
+  real migrations dir against staging prints "Database schema is up to date!" and passes; production with its own release's
+  migrations is also up to date.
+- Note for the next production deploy: **relative to this branch production has two pending migrations**
+  (`20261018120000_coaching_plan_adoption`, `20261018130000_coaching_plan_grants`), so a production deploy from here will
+  (correctly) halt unless run with `--migrate` - which needs the same kind of explicit approval this prompt had.
+
+**Known issues**
+- The preflight costs an `npm ci` before it can run (it needs the Prisma CLI and the migrations directory). A deploy that
+  halts still pays that cost, but nothing is built, swapped or restarted.
+- `ScoresheetTemplate`/`ScoresheetImport` (next prompt) will need the same treatment; the checklist in
+  `docs/patterns/tenant-database-migrations.md` is the reference.
+
+**Next step:** Prompt 2 - I1 OCR scoresheet ingestion.
+
+
 
 
 
