@@ -35,7 +35,7 @@ WEB="${WEB:-$APP_ROOT/current/web}"
 ENV_FILE="${ENV_FILE:-$APP_ROOT/shared/web.env}"
 MIGRATE_ENV="${MIGRATE_ENV:-/opt/ultraleagueos/shared/migrate.env}"
 SMOKE_EMAIL="${SMOKE_EMAIL:-texdevices@gmail.com}"
-SMOKE_ORG="${SMOKE_ORG:-cmucf1lo500003bkk1zyyoxmh}"
+SMOKE_ORG="${SMOKE_ORG:-}"
 AUTH_TOKEN="${AUTH_TOKEN:-}"
 
 if [ "${SKIP_SMOKE:-0}" = "1" ]; then
@@ -64,6 +64,15 @@ if [ -z "$AUTH_TOKEN" ]; then
     echo "[smoke] FAIL: no active SUPER_ADMIN '$SMOKE_EMAIL' in $DBURL" >&2
     exit 1
   fi
+  # No organization given: use the one with the most recorded stats, so the route set is built from a
+  # club that actually has data in THIS database (staging and production use different ids).
+  if [ -z "${SMOKE_ORG:-}" ]; then
+    SMOKE_ORG=$(psql "$DBURL" -Atc "select \"organizationId\" from \"PlayerStat\" group by 1 order by count(*) desc limit 1" 2>/dev/null)
+    if [ -z "${SMOKE_ORG:-}" ]; then
+      echo "[smoke] FAIL: could not determine an organization with data in $DBURL" >&2
+      exit 1
+    fi
+  fi
   AUTH_TOKEN=$(cd "$WEB" && USER_ID="$USER_ID" USER_EMAIL="$USER_EMAIL" USER_NAME="$USER_NAME" SESSION_VERSION="$SESSION_VERSION" SMOKE_ORG="$SMOKE_ORG" node --input-type=module -e '
 const { encode } = await import("next-auth/jwt");
 process.stdout.write(await encode({ secret: process.env.AUTH_SECRET, salt: "authjs.session-token",
@@ -74,7 +83,48 @@ process.stdout.write(await encode({ secret: process.env.AUTH_SECRET, salt: "auth
   case "$AUTH_TOKEN" in eyJ*) ;; *) echo "[smoke] FAIL: could not mint a session (AUTH_SECRET missing?)" >&2; exit 1;; esac
 fi
 
-# The default route set: the coaching stack, the scoresheet queue, and the athlete passport.
+# The route set is derived from the target database: a hard-coded club/player id only works in the
+# database it was copied from, and a smoke test whose routes 404 everywhere is worse than none. We pick
+# the club and player with the most stat rows in SMOKE_ORG, then build the coaching + passport routes
+# from them. A deployment with no stats falls back to the built-in list (and will then fail loudly,
+# which is correct: there is nothing to serve).
+build_routes() {
+  local row club player fixture plan_player
+  row=$(psql "$DBURL" -Atc "
+    with club as (
+      select ps.\"seasonClubId\" as id from \"PlayerStat\" ps
+      where ps.\"organizationId\"='$SMOKE_ORG' group by 1 order by count(*) desc limit 1
+    )
+    select (select id from club),
+           (select ps.\"playerId\" from \"PlayerStat\" ps where ps.\"seasonClubId\"=(select id from club) group by 1 order by count(*) desc limit 1),
+           (select f.id from \"Fixture\" f where f.\"organizationId\"='$SMOKE_ORG' and f.\"homeSeasonClubId\"=(select id from club) order by f.\"scheduledAt\" desc limit 1),
+           (select cp.\"playerId\" from \"CoachingPlan\" cp where cp.\"organizationId\"='$SMOKE_ORG' and cp.status='ACTIVE' limit 1),
+           (select cp.\"seasonClubId\" from \"CoachingPlan\" cp where cp.\"organizationId\"='$SMOKE_ORG' and cp.status='ACTIVE' limit 1)
+  " 2>/dev/null)
+  IFS='|' read -r club player fixture plan_player plan_club <<< "$row"
+  if [ -z "${club:-}" ] || [ -z "${player:-}" ]; then
+    echo "[smoke] no stats found for $SMOKE_ORG - using the built-in route list" >&2
+    return 1
+  fi
+  echo "/coaching/$club|club hub|Squad"
+  echo "/coaching/$club/training|training week|Assign an adopted plan"
+  echo "/players/$player/passport|athlete passport|Athlete passport"
+  echo "/players/$player/passport|passport provenance|IMPORTED"
+  echo "/scoresheets|scoresheets queue|Upload CSV"
+  # The trend card only renders for a player with an adopted plan; the plan page itself always has
+  # the focus-areas section, so that is the needle when no plan exists yet.
+  if [ -n "${plan_player:-}" ] && [ -n "${plan_club:-}" ]; then
+    echo "/coaching/$plan_club/players/$plan_player|player plan + trend|Training trend"
+  else
+    echo "/coaching/$club/players/$player|player plan|Focus areas"
+  fi
+  # A selection page needs a fixture; include it only when one exists.
+  if [ -n "${fixture:-}" ]; then
+    echo "/coaching/selection/$fixture|selection|Rotation"
+  fi
+  return 0
+}
+
 DEFAULT_ROUTES=$(cat <<'EOF'
 /coaching/cmucf1uc9005dl3kkn8d21rsa|club hub|Squad
 /coaching/cmucf1uc9005dl3kkn8d21rsa/opponents/cmucf1txo002pl3kkjut5me5r|opponent plan|Rotation for the last meeting
@@ -89,7 +139,11 @@ EOF
 )
 
 ROUTES="${ROUTES_FILE:+$(cat "$ROUTES_FILE")}"
-[ -z "${ROUTES:-}" ] && ROUTES="$DEFAULT_ROUTES"
+if [ -z "${ROUTES:-}" ]; then
+  ROUTES=$(build_routes) || ROUTES=""
+  # Keep the selection routes' extra coverage when the derived set has no fixture.
+  if [ -z "$ROUTES" ]; then ROUTES="$DEFAULT_ROUTES"; fi
+fi
 
 fails=0
 while IFS='|' read -r path label needle; do

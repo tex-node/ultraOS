@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # Git-based deploy for UltraLeagueOS.
 #
 # Clones/fetches the repo on the VPS, checks out a ref, builds a release with npm ci + prisma
@@ -200,7 +200,7 @@ if [[ "$RUN_SMOKE" -eq 1 ]]; then
     if [[ "$SMOKE_BASE" == http*://app.* || "$SMOKE_BASE" == https://* ]]; then
       SMOKE_BASE="http://127.0.0.1:$(systemctl cat "$SERVICE" | sed -n 's/.*--port \([0-9]*\).*/\1/p' | head -1)"
     fi
-    if ! BASE_URL="${SMOKE_BASE:-http://127.0.0.1:4120}" APP_ROOT="$APP_ROOT" SERVICE="$SERVICE" ENV_FILE="$ENV_FILE" \
+    if ! BASE_URL="${SMOKE_BASE:-http://127.0.0.1:4120}" APP_ROOT="$APP_ROOT" SERVICE="$SERVICE" ENV_FILE="$ENV_FILE" SMOKE_ORG="${SMOKE_ORG:-}" SMOKE_EMAIL="${SMOKE_EMAIL:-texdevices@gmail.com}" \
          MIGRATE_ENV="${MIGRATE_ENV_FILE:-$APP_ROOT/shared/migrate.env}" bash "$SMOKE_SCRIPT"; then
       {
         echo ""
