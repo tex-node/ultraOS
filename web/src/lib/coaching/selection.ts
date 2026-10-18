@@ -1,4 +1,4 @@
-﻿import type { GameCore, PlayerLine } from "@/lib/analytics/types";
+import type { GameCore, PlayerLine } from "@/lib/analytics/types";
 import { developmentConfig as cfg, roleImpactWeights } from "./config";
 import { positionGroup, POSITION_GROUP_LABEL } from "./positions";
 import {
@@ -49,8 +49,9 @@ import type { GamePlan } from "./game-plan";
 // 6. RECOMMENDATION IS RANK-BASED, not threshold-based: a coach starts five (Ultra's format), and a
 //    threshold ("overall >= 70 = START") would produce four starters on a weak night or seven on a
 //    good one. The top `starterCount` (default 5, capped at the squad size) are START, the next
-//    ROTATE_WINDOW (3) are ROTATE, the rest BENCH. Only players with a qualifying sample are ranked
-//    above players without one, but nobody is dropped from the list - a coach needs to see everyone.
+//    ROTATE_WINDOW (3) are ROTATE, the rest BENCH, ranked strictly by overall. Nobody is dropped from
+//    the list - a coach needs to see everyone - and a player with no form sample sinks naturally
+//    because form carries half the weight.
 //
 // 7. WHY NOT: every candidate except the last carries the case AGAINST picking them over the next
 //    ranked player - the component they trail on and the component they lead on. Last-ranked gets
@@ -99,6 +100,12 @@ export interface SelectionCandidateResult {
   availabilityScore: number;
   loadScore: number;
   overallScore: number;
+  // True when the player had enough games in the window for at least one dimension to clear its
+  // gate. The overall score of a player without a sample is computed over the components that
+  // exist, but such a player is ranked BELOW every player who does have one: availability and
+  // freshness alone must never put a two-game player above a five-game performer (found in the
+  // 4-fixture backtest, see documentation/COACH_SELECTION_ADVISOR.md).
+  hasFormSample: boolean;
   recommendation: SelectionRecommendation;
   evidence: SelectionEvidence[];
   whyNot: string | null;
@@ -156,7 +163,7 @@ function windowOf(ps: PlayerSeason, n: number): PlayerLine[] {
   return playedLines(ps).slice(-n);
 }
 
-type FormOutcome = { score: number; confidence: "HIGH" | "MEDIUM"; evidence: SelectionEvidence };
+type FormOutcome = { score: number; confidence: "HIGH" | "MEDIUM"; evidence: SelectionEvidence; measured: boolean };
 
 function scoreForm(
   ps: PlayerSeason,
@@ -224,7 +231,9 @@ function scoreForm(
     confidence,
     source: "BOX_SCORE",
   };
-  return { score, confidence, evidence };
+  // `measured` is what the overall score renormalizes on: a 0 that means "no sample" must not be
+  // counted as a real 0 (same principle as a null matchup).
+  return { score, confidence, evidence, measured: hasSample };
 }
 
 function medianOf(values: number[]): number {
@@ -367,13 +376,36 @@ function scoreLoad(
   workload: SelectionWorkload[] | null | undefined,
   now: Date,
 ): { score: number; evidence: SelectionEvidence } {
+  const appeared = (g: GameCore) => g.players.some((p) => p.playerId === candidate.playerId && !p.didNotPlay);
   const windowStart = now.getTime() - LOAD_WINDOW_DAYS * 24 * 60 * 60 * 1000;
   // Both ends of the window: a fixture scheduled for next week is not load carried this week.
   const recentGames = games.filter((g) => {
     const at = new Date(g.scheduledAt).getTime();
-    return at >= windowStart && at <= now.getTime() && g.players.some((p) => p.playerId === candidate.playerId && !p.didNotPlay);
+    return at >= windowStart && at <= now.getTime() && appeared(g);
   }).length;
   const reported = workload?.find((w) => w.playerId === candidate.playerId);
+
+  // A player who has NEVER appeared is not "perfectly fresh" - that would rank him above everyone
+  // who has actually been playing. Neutral 50, same rule availability applies to a player with no
+  // minutes, and the evidence says why. Found by the real-data backtest: in a squad with no form
+  // samples, two players who had not played a single game outranked the ones who had.
+  if (!games.some(appeared)) {
+    return {
+      score: 50,
+      evidence: {
+        metric: "Recent load",
+        playerValue: 0,
+        playerValueLabel: "no games recorded",
+        baseline: { kind: "LEAGUE", label: "Squad", peerCount: 0, median: 0, medianLabel: "n/a" },
+        percentile: 50,
+        sample: { games: 0, attempts: null, label: "no appearances this season" },
+        gate: "1+ appearance",
+        confidence: "MEDIUM",
+        source: "BOX_SCORE",
+      },
+    };
+  }
+
   const minutesPenalty = reported ? reported.minutesLast7Days / 8 : 0;
   // 10 points per game in the window, plus reported minutes / 8: 0 games = 100 (fresh), 3 = 70,
   // 6 = 40, 10 = 0. Steep enough that a tournament weekend registers, but NOT saturating at zero
@@ -461,8 +493,10 @@ export function buildSelectionAdvice(input: BuildSelectionAdviceInput): Selectio
     const availability = scoreAvailability(ps, seasons, meta);
     const load = scoreLoad(candidate, games, workload, now);
 
+    // Renormalize over the components that actually exist. Form counts only when it has a sample:
+    // otherwise it is absent, not zero - a player with no games must not be scored as a bad player.
     const present: { value: number; weight: number }[] = [
-      { value: form.score, weight: SELECTION_WEIGHTS.form },
+      ...(form.measured ? [{ value: form.score, weight: SELECTION_WEIGHTS.form }] : []),
       ...(matchup.score != null ? [{ value: matchup.score, weight: SELECTION_WEIGHTS.matchup }] : []),
       { value: availability.score, weight: SELECTION_WEIGHTS.availability },
       { value: load.score, weight: SELECTION_WEIGHTS.load },
@@ -489,16 +523,23 @@ export function buildSelectionAdvice(input: BuildSelectionAdviceInput): Selectio
       availabilityScore: availability.score,
       loadScore: load.score,
       overallScore,
+      hasFormSample: form.measured,
       recommendation: "BENCH" as SelectionRecommendation,
       evidence,
       whyNot: null,
     };
   });
 
-  // Rank: players with a real form sample first, then by overall, then by form.
+  // Sample first, then overall, then form, then jersey.
+  //
+  // An earlier version ranked STRICTLY by overall, which the 4-fixture backtest showed lifting
+  // two-game players above five-game performers: with no form sample, the overall is computed from
+  // availability and freshness alone, and both are high for someone who has barely played. Ranking
+  // sample-havers first is the honest order; the view shows a no-sample player's overall as a dash
+  // rather than a number, so the list is not read as a strict overall ranking it is not.
   const ranked = [...scored].sort(
     (a, b) =>
-      Number(b.formScore > 0) - Number(a.formScore > 0) ||
+      Number(b.hasFormSample) - Number(a.hasFormSample) ||
       b.overallScore - a.overallScore ||
       b.formScore - a.formScore ||
       (a.jerseyNumber ?? 999) - (b.jerseyNumber ?? 999),

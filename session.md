@@ -9000,5 +9000,55 @@ route) - the prompt's likely deliverable 2, cut off before it arrived; the I2 ex
 top 5 matches what the coach actually played) using the preview script; and the per-squad `INSUFFICIENT_DATA` UI rule
 above. I3's workload input is accepted but nothing writes it yet.
 
+## 2026-10-18 - I2-b completion: selection UI, real-data sanity check, grants pattern
+
+**Grants pattern (`docs/patterns/tenant-database-migrations.md`).** The checklist a new tenant table must satisfy,
+written after the second occurrence: table + indexes + composite tenant FKs + RLS (enable **and force** + policy) +
+**`GRANT ... TO ultraos_app` and `ultraos_staging` in the same migration file**. It records why the DB tests cannot
+catch it (they provision a schema as the same role that queries it), the exact 42501 symptom, and both occurrences
+(`GameControlGrant`, `CoachingPlan`). RLS is row access, the grant is table access; neither substitutes for the other.
+
+**Selection UI (`/coaching/selection/[fixtureId]`).** Guards, in order: `requireCoachingViewer()` (flag + session),
+fixture resolution inside an ACTIVE organization, the viewer must be able to view one of its two clubs, then
+`requireCoachingClub(chosen)` - the same guard every coaching page uses. A viewer's own coached club wins; an admin gets
+the home side and `?side=away` switches; anything else 404s. Linked from the opponent game-plan page's "Rotation for the
+next game" section (only when an upcoming fixture against that opponent exists).
+
+The view (`selection-view.tsx`, plain server component) enforces three rules:
+- **`INSUFFICIENT_DATA` shows no advice at all**: ranked list, scores, evidence, and a banner naming X of 4 required -
+  but no START/ROTATE/BENCH label anywhere (`data-recommendation` is absent too). A component test asserts exactly this.
+- **No-sample players display "no form sample" instead of an overall number**, because that number is computed from
+  availability and freshness alone and would read as a quality rating.
+- **`DEGRADED` names the missing fields and links to that club's squad setup**; a missing matchup shows N/A per player
+  and explains the renormalization.
+
+**Real-data sanity check (`documentation/COACH_SELECTION_ADVISOR.md`).** 3 LBCL fixtures + 1 Ultra, each rebuilt as-of
+kickoff with the fixture excluded (no leakage), compared against the five players with the most minutes:
+
+| Fixture | prior games | status | overlap |
+|---|---|---|---|
+| Campos 75-40 White Fire | 26 | OK (matchup DEGRADED) | 4/5 |
+| White Fire 55-58 Ogra | 27 | OK (matchup N/A) | 4/5 |
+| LXB Surulere 54-58 Cantonment | 31 | OK (matchup N/A) | 4/5 |
+| Ultra Surge 15-26 Vortex | 11 | INSUFFICIENT_DATA | 3/5 (meaningless) |
+
+Divergences are all "things the advisor cannot see": a player who did not play at all (Fofana, fixture 2), a bench
+player who played 37 minutes (Momoh, fixture 3), and a coach's 12-man rotation - not model error. **No weight was
+tuned.** The exercise did force three real fixes: never-played players scored load 100 ("perfectly fresh") and outranked
+players who had played; a no-sample form of 0 was counted as a real 0 in the overall (now excluded and renormalized,
+which is the same rule a null matchup already had); and the resulting sample-first ranking, with the no-sample overall
+shown as a dash so the list is not read as a strict overall order.
+
+Also: `scripts/coaching-selection-preview.ts` gained `--exclude-fixture` and `--as-of` for exactly this backtest, and
+its load window is now bounded at both ends (it used to count future fixtures as load).
+
+**Verified:** 13 advisor unit tests, 5 selection-view tests (including the "no advice in INSUFFICIENT_DATA" case), 912
+pure total (911 pass, 1 pre-existing skip), 20/20 component, `tsc`/`eslint` clean, ratchet 4/4, `next build` clean with
+the new route in the manifest.
+
+**Deploy + curl check:** committed and pushed to `ops/reconcile-backup-design`, deployed to staging
+(`release-<this commit>`), and the new route fetched with a real SUPER_ADMIN session - result recorded in the next entry.
+
+
 
 

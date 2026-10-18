@@ -1,4 +1,4 @@
-﻿// Read-only preview of the Selection / Rotation Advisor (I2-b) against real data. Writes nothing.
+// Read-only preview of the Selection / Rotation Advisor (I2-b) against real data. Writes nothing.
 //
 // Usage: npx tsx scripts/coaching-selection-preview.ts <organizationId> <seasonId> "<focus club>" ["<opponent>"] [--json] [--no-plan]
 //
@@ -17,6 +17,13 @@ async function main() {
   const [organizationId, seasonId, focusName, opponentName] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const asJson = process.argv.includes("--json");
   const noPlan = process.argv.includes("--no-plan");
+  // Sanity-check mode: rebuild the advice AS OF a fixture, using only games played before it. Without
+  // this the advisor would see the very game it is being compared against (leakage), which is the main
+  // way a backtest like this lies to you.
+  const argOf = (flag: string) => { const i = process.argv.indexOf(flag); return i >= 0 ? process.argv[i + 1] : undefined; };
+  const excludeFixture = argOf("--exclude-fixture");
+  const asOfRaw = argOf("--as-of");
+  const asOf = asOfRaw ? new Date(asOfRaw) : new Date();
   if (!organizationId || !seasonId || !focusName) {
     console.error('Usage: npx tsx scripts/coaching-selection-preview.ts <organizationId> <seasonId> "<focus club>" ["<opponent>"] [--json] [--no-plan]');
     process.exitCode = 1;
@@ -24,7 +31,9 @@ async function main() {
   }
 
   await withOrganizationContext(organizationId, async (tx) => {
-    const games = await loadSeasonGameCores(seasonId, tx);
+    const allGames = await loadSeasonGameCores(seasonId, tx);
+    const games = allGames.filter((g) => g.fixtureId !== excludeFixture && g.scheduledAt.getTime() <= asOf.getTime());
+    if (excludeFixture) console.log(`(excluding fixture ${excludeFixture}; ${games.length} of ${allGames.length} games in scope, as of ${asOf.toISOString()})`);
     const sides = games.flatMap((g) => [g.home, g.away]);
     const find = (n: string) => sides.find((s) => s.name === n || s.shortName === n);
     const focus = find(focusName);
@@ -56,7 +65,7 @@ async function main() {
     const meta = new Map<string, PlayerMeta>(roster.map((p) => [p.id, { position: p.position, heightCm: p.heightCm }]));
 
     const plan = opponent && !noPlan ? buildGamePlan(games, focus.seasonClubId, opponent.seasonClubId, meta) : null;
-    const advice = buildSelectionAdvice({ games, squad, plan, starterCount: 5 });
+    const advice = buildSelectionAdvice({ games, squad, plan, starterCount: 5, now: asOf });
 
     if (asJson) {
       console.log(JSON.stringify({ opponent: opponent?.name ?? null, ...advice }, null, 2));
@@ -69,8 +78,11 @@ async function main() {
     console.log("  #  player                     rec     overall  form  matchup  avail  load  games");
     advice.candidates.forEach((c, i) => {
       const name = `${jersey(c.jerseyNumber)}${c.name}`.padEnd(26);
+      // A no-sample player's overall is computed from availability/load alone; print a dash rather
+      // than a number that would read as a quality rating (the page does the same).
+      const overall = (c.hasFormSample ? String(c.overallScore) : "-").padStart(7);
       console.log(
-        `  ${String(i + 1).padStart(2)} ${name} ${c.recommendation.padEnd(7)} ${String(c.overallScore).padStart(7)} ${String(c.formScore).padStart(5)} ${String(c.matchupScore ?? "-").padStart(8)} ${String(c.availabilityScore).padStart(6)} ${String(c.loadScore).padStart(5)} ${String(c.gamesPlayed).padStart(6)}`,
+        `  ${String(i + 1).padStart(2)} ${name} ${c.recommendation.padEnd(7)} ${overall} ${String(c.formScore).padStart(5)} ${String(c.matchupScore ?? "-").padStart(8)} ${String(c.availabilityScore).padStart(6)} ${String(c.loadScore).padStart(5)} ${String(c.gamesPlayed).padStart(6)}`,
       );
       if (c.whyNot) console.log(`       why not the next: ${c.whyNot}`);
     });
