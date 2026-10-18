@@ -123,20 +123,26 @@ export class TesseractProvider implements OcrProvider {
     }
   }
 
-  // Preprocessing is not cosmetic: a box score is small text in a dense grid, and Tesseract on a
-  // 720px-wide screenshot garbles the header words that extraction depends on. Upscaling 2x,
-  // flattening to greyscale and sharpening measurably improves header/word recognition without
-  // changing the words' relative positions (which is what the column anchors rely on).
+  // Preprocessing is not cosmetic: these sheets are dense numeric grids photographed off a screen,
+  // and Tesseract at native resolution reads most cells as bracket soup ("oo]", "[olol]"). Measured on
+  // a real LBCL sheet (2026-10-18): clean numeric tokens per page went 34 -> 127 with a 3x upscale, a
+  // 3x3 median filter and a sharpen, and the player rows became readable ("5 JOCHENWORIE 20:17 5/8
+  // 62.5 4/4 100 ..."). The median filter is what removes the JPEG ringing around the cell borders
+  // that Tesseract otherwise fuses into the digits.
   // Disable with OCR_PREPROCESS=off when comparing provider behaviour.
   private async preprocess(path: string, dir: string): Promise<string> {
     if (process.env.OCR_PREPROCESS === "off") return path;
     try {
       const { default: sharp } = await import("sharp");
       const prepared = join(dir, "prepared.png");
+      const metadata = await sharp(path).metadata();
+      // 3x upscale for a phone screenshot, but never shrink a large scan.
+      const width = Math.max(3000, Math.round((metadata.width ?? 720) * 3));
       await sharp(path)
         .greyscale()
-        .resize({ width: 2400, withoutEnlargement: false })
-        .sharpen()
+        .resize({ width })
+        .median(1)
+        .sharpen({ sigma: 1.5 })
         .png()
         .toFile(prepared);
       return prepared;

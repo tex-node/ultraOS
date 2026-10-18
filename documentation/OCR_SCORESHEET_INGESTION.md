@@ -90,6 +90,50 @@ is recover the column grid from these images.
    same data as a PDF (or CSV) makes OCR unnecessary. Worth asking LBCL for the exported files -
    cheaper and more accurate than any OCR work.
 
+## Second acceptance run (2026-10-18, after stronger preprocessing)
+
+The first run's diagnosis said preprocessing was a prerequisite. It was the dominant factor. Measured
+on a real sheet: clean numeric tokens per page **34 -> 127** with a 3x upscale plus a 3x3 median
+filter and a sharpen, and player rows became readable (`5 JOCHENWORIE 20:17 5/8 62.5 4/4 100 ...`).
+The provider now does exactly that (greyscale, 3x upscale to at least 3000px, `median(1)`,
+`sharpen({sigma:1.5})`; `OCR_PREPROCESS=off` disables it).
+
+Same 20 sheets, same harness, LBCL layout:
+
+| Metric | First run | Second run |
+| --- | --- | --- |
+| Sheets where a table was detected | 2 | **12** |
+| Sheets with at least one player row | **0** | **8** |
+| Total player rows extracted | 0 | 195 (13-36 per sheet) |
+| Mean confidence (non-empty tables) | - | ~53% |
+| Warnings emitted | 20 | 12-49 per sheet |
+| Sheets still rejected ("no table header") | 18 | 8 |
+| Mean OCR time per sheet | 4.1 s | ~10 s |
+
+**What this does and does not mean.** The pipeline now finds real rows on real sheets - that is a
+qualitative change, not a tuning artefact. But **no sheet is review-ready**: the row counts are
+unreliable in both directions (a 12-man team yields 13 rows on one sheet and 30 on another, so rows
+are being split and duplicated), cell completeness is low (most `0` cells are still fused into
+brackets and dropped), and with so few mapped cells the checksums generate almost no checks to fail -
+so "0 failing checks" here means "nothing checkable", not "correct".
+
+## Why it still is not operator-ready
+
+1. **Row segmentation.** 30 rows for a 12-man team means the horizontal projection is splitting rows
+   at the text baselines rather than at the printed row rules. Detecting the grid lines (a
+   morphological pass over the image) and cutting rows/columns from the geometry is the fix; the
+   current approach clusters words per text row, which is a proxy.
+2. **Cell completeness.** Tesseract shatters the narrow `0` cells against the borders. Cropping each
+   cell from the detected grid and OCR-ing it in isolation (single-character mode) is the reliable
+   way, and it is only possible once the grid is detected.
+3. **Header vs data.** The grouped header is found on some sheets but its labels still do not align
+   with the columns, which is why the column model has to come from the grid, not the header.
+
+Verdict unchanged: **do not enable for operators.** The difference is that the blocker is now
+precisely "grid detection + per-cell OCR", not "the sheet design is unreadable". The cheapest path to
+operator value is still to ask LBCL for the exported PDF/CSV, which removes OCR from the problem
+entirely.
+
 ## Honest limitations of v1 as shipped
 
 - Reads only a **flat, single-row header** printed table. That is not the LBCL/FIBA sheet design.

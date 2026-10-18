@@ -121,7 +121,7 @@ depends on I2; I4 and I5 are gated on real video.
 | ID | Status |
 |---|---|
 | I0 | **Done** — production migration applied after a verified backup, verified, 5-minute log watch clean; `deploy.sh` now halts on pending migrations. |
-| I1 | **In progress, acceptance FAILED** — schema, provider, extraction, checksums, review queue and `--scoresheetImportId` ingest all shipped; the 20-sheet acceptance run read **0 usable tables**. Diagnosis and fix path in `documentation/OCR_SCORESHEET_INGESTION.md`. Not operator-ready. |
+| I1 | **In progress, acceptance partial** — schema, provider, extraction, checksums, review queue and `--scoresheetImportId` ingest all shipped. Acceptance improved from 0/20 to **12/20 sheets producing a table (8/20 with player rows)** after stronger preprocessing, but no sheet is review-ready: rows split/duplicate and most cells are lost. Blocker is now grid detection + per-cell OCR, documented in `documentation/OCR_SCORESHEET_INGESTION.md`. Not operator-ready. |
 | I2 | **Done for review** — `CoachingPlan` + adopt + Selection Advisor shipped and verified; awaiting sign-off. |
 | I3 | **In progress** — assign → complete → log metric shipped and verified on staging (the deferred `AthleteTrainingRecord.developmentFocus` stamp is now real). The metric trend/sparkline is not built. |
 | I4 | **BLOCKED_NO_REAL_VIDEO** — 0 `GameVideo` rows in staging and production; only broadcast render artifacts exist on the host (checked 2026-10-18). |
