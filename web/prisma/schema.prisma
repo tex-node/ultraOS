@@ -144,7 +144,7 @@ enum GameEventType {
   SUBSTITUTION
   NOTE
   // Additive lifecycle/ledger event types (Ultra canonical scoring model). SCORE remains the
-  // event type emitted by the existing scorer for a made shot — these are available for the
+  // event type emitted by the existing scorer for a made shot ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â these are available for the
   // native ledger to use going forward without breaking any code that already filters on SCORE.
   GAME_STARTED
   PERIOD_STARTED
@@ -160,7 +160,7 @@ enum GameEventType {
   FREE_THROW_MISSED
   SCORE_CORRECTION
   EVENT_CORRECTION
-  // Added in G.15 for the statistician console's rebound entry — split out of the coarse
+  // Added in G.15 for the statistician console's rebound entry ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â split out of the coarse
   // REBOUND type (still valid and still used by the scorer console) so OREB/DREB can be
   // distinguished at the ledger level, matching PlayerStat.offensiveRebounds/defensiveRebounds.
   OFFENSIVE_REBOUND
@@ -206,7 +206,7 @@ enum MandatorySubstitutionPolicy {
   FULL_ROTATION
 }
 
-// Coarse, per-game signal of what depth of data actually exists for that game — lets API
+// Coarse, per-game signal of what depth of data actually exists for that game ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â lets API
 // consumers and UI know what can safely be shown (e.g. don't render a shot chart for a
 // BOX_SCORE_ONLY game). Complements, not replaces, the finer null-vs-zero convention used on
 // individual stat fields (see PlayerStat/TeamStat comments).
@@ -219,7 +219,7 @@ enum GameDataCapability {
 }
 
 // The category of where a game's results/stats came from. Distinct from the free-text
-// resultSource/sourceReference fields (e.g. an exact filename) already on Game — this is the
+// resultSource/sourceReference fields (e.g. an exact filename) already on Game ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â this is the
 // queryable category those specific references fall under.
 enum StatDataSource {
   ULTRA_NATIVE_LIVE_SCORER
@@ -622,6 +622,8 @@ enum MediaAssetPurpose {
   STAFF_PROFILE_PHOTO
   SPONSOR_LOGO
   JERSEY_IMAGE
+  // P15 I1: the scanned/photo sheet an OCR import was built from.
+  SCORESHEET_IMAGE
   DRAFT_BACKGROUND
   DRAFT_VIDEO
   DRAFT_AUDIO
@@ -688,6 +690,7 @@ model User {
   draftPicksCreated            DraftPick[]              @relation("DraftPickCreatedBy")
   playersSelected              Player[]                 @relation("PlayerSelectedBy")
   coachingPlansAdopted         CoachingPlan[]           @relation("CoachingPlanAdoptedBy")
+  scoresheetImportsReviewed    ScoresheetImport[]       @relation("ScoresheetImportReviewedBy")
   draftEventsCreated           DraftEvent[]             @relation("DraftEventCreatedBy")
   draftAllocationsCreated      DraftAllocation[]        @relation("DraftAllocationCreatedBy")
   draftAllocationsConfirmed    DraftAllocation[]        @relation("DraftAllocationConfirmedBy")
@@ -1394,33 +1397,34 @@ model AthleteMedia {
 }
 
 model MediaAsset {
-  id               String               @id @default(cuid())
-  organizationId   String               @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
-  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  storageProvider  MediaStorageProvider
-  objectKey        String
-  publicUrl        String?
-  originalFilename String?
-  mimeType         String
-  byteSize         Int
-  width            Int?
-  height           Int?
-  checksumSha256   String
-  visibility       MediaVisibility      @default(PRIVATE)
-  status           MediaAssetStatus     @default(UPLOADED)
-  purpose          MediaAssetPurpose
-  title            String?
-  altText          String?
-  caption          String?
-  source           String?
-  capturedAt       DateTime?
-  uploadedById     String
-  uploadedBy       User                 @relation("MediaAssetsUploaded", fields: [uploadedById], references: [id], onDelete: Restrict)
-  usages           MediaAssetUsage[]
-  variants         MediaAssetVariant[]
-  gameVideo        GameVideo?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  id                String               @id @default(cuid())
+  organizationId    String               @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  storageProvider   MediaStorageProvider
+  objectKey         String
+  publicUrl         String?
+  originalFilename  String?
+  mimeType          String
+  byteSize          Int
+  width             Int?
+  height            Int?
+  checksumSha256    String
+  visibility        MediaVisibility      @default(PRIVATE)
+  status            MediaAssetStatus     @default(UPLOADED)
+  purpose           MediaAssetPurpose
+  title             String?
+  altText           String?
+  caption           String?
+  source            String?
+  capturedAt        DateTime?
+  uploadedById      String
+  uploadedBy        User                 @relation("MediaAssetsUploaded", fields: [uploadedById], references: [id], onDelete: Restrict)
+  usages            MediaAssetUsage[]
+  variants          MediaAssetVariant[]
+  gameVideo         GameVideo?
+  scoresheetImports ScoresheetImport[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 
   @@unique([storageProvider, objectKey])
   // Phase 1 Stage 5.2C: lets GameVideo.mediaAssetId become a composite tenant-aware FK.
@@ -1468,6 +1472,87 @@ model MediaAssetUsage {
   @@index([entityType, entityId, active])
   @@index([purpose, isPrimary, active])
   @@index([assignedById, assignedAt])
+}
+
+// P15 I1 (OCR scoresheet ingestion). Two tenant tables, both org-scoped with RLS, per
+// docs/patterns/tenant-database-migrations.md (including the runtime-role GRANTs in the migration).
+//
+// ScoresheetTemplate is the sheet LAYOUT as data, not code: which column carries which stat, where
+// the header is, where the totals row is, how a DNP is written. A new league format becomes a row,
+// not a deploy. Built-in definitions live in src/lib/scoresheet/templates.ts and are copied into an
+// organization's rows on first use.
+model ScoresheetTemplate {
+  id             String             @id @default(cuid())
+  organizationId String             @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  // Which sport's layouts this belongs to; v1 is basketball only.
+  sportSlug      String             @default("basketball")
+  // The layout JSON: header/footer rows, per-column stat bindings, DNP marker, team-total bindings.
+  layout         Json
+  active         Boolean            @default(true)
+  imports        ScoresheetImport[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@unique([organizationId, name])
+  @@unique([organizationId, id])
+  @@index([organizationId, sportSlug, active])
+}
+
+enum ScoresheetImportStatus {
+  // Uploaded, not yet sent to OCR.
+  UPLOADED
+  // OCR ran and produced an extraction. Checksums may still be failing.
+  EXTRACTED
+  // Extraction is unusable (provider unavailable, no table found, malformed sheet). failureReason says why.
+  FAILED
+  // Every extraction lands here once it has run: nothing enters the canonical pipeline without a
+  // human looking at it.
+  REVIEW_REQUIRED
+  // A human approved the corrected JSON. The only state the ingest CLI will consume.
+  APPROVED
+  // Ingested into Fixture/Game/PlayerStat/TeamStat through the existing box-score pipeline.
+  INGESTED
+  REJECTED
+}
+
+model ScoresheetImport {
+  id                String                 @id @default(cuid())
+  organizationId    String                 @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization      Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  status            ScoresheetImportStatus @default(UPLOADED)
+  // The scanned sheet itself - MediaAsset already stores the bytes for every uploaded file.
+  mediaAssetId      String
+  mediaAsset        MediaAsset             @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+  // The layout used for this sheet. Nullable: a sheet can be uploaded before a template is chosen.
+  templateId        String?
+  template          ScoresheetTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  // Which pipeline produced the extraction ("tesseract-5.3.4-lbcl-1"), so a re-run is comparable.
+  extractionVersion String                 @default("unset")
+  // Raw OCR output: words with bounding boxes, the detected table, mapped cells and confidences.
+  // Kept so a reviewer can see what the machine saw, not only what it concluded.
+  extraction        Json?
+  // The reviewed batch fragment (IngestBoxScoreInput-shaped). Written by the review action only,
+  // never by the extractor.
+  corrected         Json?
+  // Per-rule checksum results (points sum, quarter sums, FGM = 2PM + 3PM, ...). The same rules a
+  // hand-transcribed batch must pass today; shown in the review queue and re-run on approve.
+  checksums         Json?
+  sourceLabel       String
+  failureReason     String?
+  fixtureId         String?
+  fixture           Fixture?               @relation(fields: [fixtureId], references: [id], onDelete: SetNull)
+  reviewedById      String?
+  reviewedBy        User?                  @relation("ScoresheetImportReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt        DateTime?
+  ingestedAt        DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status, createdAt])
+  @@index([mediaAssetId])
 }
 
 model ParticipantDocument {
@@ -1543,12 +1628,12 @@ model Draft {
   currentRound   Int          @default(1)
   nextPickNumber Int          @default(1)
   // Optional link to the governing DraftEvent. When set, Draft/DraftPick's
-  // REHEARSAL-vs-LIVE behavior is derived from draftEvent.operatingMode —
+  // REHEARSAL-vs-LIVE behavior is derived from draftEvent.operatingMode ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
   // this is what lets Secondary Draft (Draft/DraftPick) participate in the
   // same rehearsal-isolation guarantees as the Main Draft (DraftEvent/
   // DraftAllocation) instead of being a separate, unguarded system. A Draft
   // with no linked DraftEvent is always treated as REHEARSAL (never writes
-  // official Player.seasonClubId) — the safe default.
+  // official Player.seasonClubId) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the safe default.
   draftEventId   String?
   draftEvent     DraftEvent?  @relation(fields: [draftEventId], references: [id], onDelete: SetNull)
   startedAt      DateTime?
@@ -1582,7 +1667,7 @@ model DraftPick {
   seasonClub       SeasonClub              @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
   playerId         String
   player           Player                  @relation(fields: [playerId], references: [id], onDelete: Restrict)
-  // Recorded at creation time and never changed afterward — the permanent,
+  // Recorded at creation time and never changed afterward ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the permanent,
   // immutable record of whether this specific pick was made under REHEARSAL
   // or LIVE, independent of whatever the Draft/DraftEvent's mode is later
   // changed to. Mirrors DraftAllocation.operatingMode.
@@ -2761,7 +2846,7 @@ model Application {
 
 // Participants recruited or onboarded by an administrator outside the public
 // Application workflow (e.g. offline recruitment). Never backfilled with a
-// fabricated Application — this model is the record of how they entered.
+// fabricated Application ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â this model is the record of how they entered.
 model AdminOfflineIntake {
   id                             String                         @id @default(cuid())
   organizationId                 String                         @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
@@ -2777,7 +2862,7 @@ model AdminOfflineIntake {
   coachSeasonZeroDivision        CoachSeasonZeroDivision?
   // Staged player eligibility profile (gender/dateOfBirth/dominantHand/position/heightCm/weightKg).
   // Player and Athlete both require these fields as NOT NULL, so a PLAYER-type intake stays in
-  // DRAFT/READY_FOR_PROVISIONING until every key here is present — never backfilled with guesses.
+  // DRAFT/READY_FOR_PROVISIONING until every key here is present ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â never backfilled with guesses.
   playerProfile                  Json?
   provisionedUserId              String?
   provisionedStaffId             String?
@@ -3188,40 +3273,40 @@ model SponsorCampaign {
 }
 
 model Fixture {
-  id                 String            @id @default(cuid())
-  organizationId     String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
-  organization       Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  id                 String             @id @default(cuid())
+  organizationId     String             @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   seasonId           String
-  season             Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  season             Season             @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   divisionId         String
-  division           Division          @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  division           Division           @relation(fields: [divisionId], references: [id], onDelete: Restrict)
   eventId            String?
-  event              Event?            @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  event              Event?             @relation(fields: [eventId], references: [id], onDelete: SetNull)
   // Multi-sport Entrant model (Stage B2): a fixture side is EITHER a SeasonClub (team sports) OR an
   // Entrant (individual/pair/relay sports). Both are nullable; a DB CHECK (migration
   // 20260915160000_fixture_side_entrant) requires at least one per side. Read paths resolve sides
   // through web/src/lib/sports/fixture-sides.ts rather than the raw columns.
   homeSeasonClubId   String?
-  homeSeasonClub     SeasonClub?       @relation("HomeSeasonClub", fields: [homeSeasonClubId], references: [id], onDelete: Restrict)
+  homeSeasonClub     SeasonClub?        @relation("HomeSeasonClub", fields: [homeSeasonClubId], references: [id], onDelete: Restrict)
   awaySeasonClubId   String?
-  awaySeasonClub     SeasonClub?       @relation("AwaySeasonClub", fields: [awaySeasonClubId], references: [id], onDelete: Restrict)
+  awaySeasonClub     SeasonClub?        @relation("AwaySeasonClub", fields: [awaySeasonClubId], references: [id], onDelete: Restrict)
   scheduledAt        DateTime
   venueId            String
-  venue              Venue             @relation(fields: [venueId], references: [id], onDelete: Restrict)
-  status             FixtureStatus     @default(SCHEDULED)
-  homeScore          Int               @default(0)
-  awayScore          Int               @default(0)
+  venue              Venue              @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  status             FixtureStatus      @default(SCHEDULED)
+  homeScore          Int                @default(0)
+  awayScore          Int                @default(0)
   winnerSeasonClubId String?
-  winnerSeasonClub   SeasonClub?       @relation("WinnerSeasonClub", fields: [winnerSeasonClubId], references: [id], onDelete: SetNull)
+  winnerSeasonClub   SeasonClub?        @relation("WinnerSeasonClub", fields: [winnerSeasonClubId], references: [id], onDelete: SetNull)
   // Multi-sport Stage 2: entrant-side references, populated by the SeasonClub->Entrant backfill.
   // Nullable and additive; the legacy SeasonClub columns remain the source of truth until later
   // stages migrate read paths. Simple FKs with application-level same-organization guards.
   homeEntrantId      String?
-  homeEntrant        Entrant?          @relation("HomeEntrant", fields: [homeEntrantId], references: [id], onDelete: SetNull)
+  homeEntrant        Entrant?           @relation("HomeEntrant", fields: [homeEntrantId], references: [id], onDelete: SetNull)
   awayEntrantId      String?
-  awayEntrant        Entrant?          @relation("AwayEntrant", fields: [awayEntrantId], references: [id], onDelete: SetNull)
+  awayEntrant        Entrant?           @relation("AwayEntrant", fields: [awayEntrantId], references: [id], onDelete: SetNull)
   winnerEntrantId    String?
-  winnerEntrant      Entrant?          @relation("WinnerEntrant", fields: [winnerEntrantId], references: [id], onDelete: SetNull)
+  winnerEntrant      Entrant?           @relation("WinnerEntrant", fields: [winnerEntrantId], references: [id], onDelete: SetNull)
   // Multi-sport bracket metadata. Nullable - round-robin fixtures (and pre-bracket legacy rows) have
   // no round/position. `round` is 1-based within a division; `bracketPosition` is the 1-based slot in
   // that round and drives knockout advancement (winners of positions 2k-1/2k meet at position k).
@@ -3229,12 +3314,13 @@ model Fixture {
   bracketPosition    Int?
   groupLabel         String?
   game               Game?
+  scoresheetImports  ScoresheetImport[]
   officials          FixtureOfficial[]
   media              AthleteMedia[]
   gameVideos         GameVideo[]
-  recordOrigin       RecordOrigin      @default(PRODUCTION)
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  recordOrigin       RecordOrigin       @default(PRODUCTION)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   // Phase 1 Stage 5.2C: lets GameVideo.fixtureId become a composite tenant-aware FK.
   @@unique([organizationId, id])
@@ -3275,7 +3361,7 @@ model Game {
   // scorer, not auto-reset on possession change.
   shotClockSecondsRemaining  Int                @default(20)
   shotClockStartedAt         DateTime?
-  // Explicit, persisted Ultra Time state — not re-derived from the clock alone (see
+  // Explicit, persisted Ultra Time state ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â not re-derived from the clock alone (see
   // GameRuleSnapshot / UltraScoringEngine docs). Set true when the ULTRA_TIME_STARTED
   // transition fires, false again on ULTRA_TIME_ENDED / period end.
   isUltraTimeActive          Boolean            @default(false)
@@ -3291,7 +3377,7 @@ model Game {
   mvpVotes                   MVPVote[]
   ruleSnapshot               GameRuleSnapshot?
   // Provenance for results entered via an external stats report (e.g. a FIBA/Genius Sports
-  // box score) rather than this app's own live scorer — never set alongside real GameEvents
+  // box score) rather than this app's own live scorer ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â never set alongside real GameEvents
   // from the live console. Null means the game's result came from the live scorer as usual.
   // resultSource holds the specific reference (e.g. a filename); statSource is the queryable
   // category it falls under.
@@ -3299,14 +3385,14 @@ model Game {
   resultImportedAt           DateTime?
   statSource                 StatDataSource?
   sourceImportBatchId        String?
-  // What depth of data actually exists for this game — see GameDataCapability doc comment.
+  // What depth of data actually exists for this game ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â see GameDataCapability doc comment.
   // Defaults conservatively to BOX_SCORE_ONLY; explicitly upgraded to ULTRA_NATIVE_EVENTS by
   // the live scorer's start-game path, never assumed.
   dataCapability             GameDataCapability @default(BOX_SCORE_ONLY)
   // Statistics-verification gate (G.15), separate from Fixture/Game FINAL status. Set when an
   // authorized user confirms the statistician's independently-derived score matches the
   // official score (or explicitly overrides a mismatch with a reason recorded in AuditLog).
-  // Finalizing the official game result never depends on this — an Event Director can still
+  // Finalizing the official game result never depends on this ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â an Event Director can still
   // finalize with statistics unverified; this only tracks whether the box score has been
   // cross-checked.
   statisticsVerifiedAt       DateTime?
@@ -3417,7 +3503,7 @@ model GameRuleSnapshot {
 }
 
 // Cumulative score at the end of each period, for games where only period-level (not
-// play-by-play) scoring resolution is available — e.g. an imported FIBA box score, which
+// play-by-play) scoring resolution is available ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â e.g. an imported FIBA box score, which
 // reports "Scoring by 5 Minute intervals" as one cumulative figure per half/OT period.
 model GamePeriodScore {
   id             String       @id @default(cuid())
@@ -3483,7 +3569,7 @@ model GameEvent {
   // shot; a raw uncategorized delta for manual corrections, where both are null).
   basePointValue               Int?
   multiplier                   Int?
-  // Whether the underlying shot attempt was made — null for non-shot events, or for legacy
+  // Whether the underlying shot attempt was made ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â null for non-shot events, or for legacy
   // rows recorded before this field existed (the old scorer only ever wrote made shots).
   made                         Boolean?
   isFourPointAttempt           Boolean                       @default(false)
@@ -3497,7 +3583,7 @@ model GameEvent {
   // free text. Null for every non-substitution event type.
   substitutedOutPlayerId       String?
   substitutedOutPlayer         Player?                       @relation("GameEventSubstitutedOut", fields: [substitutedOutPlayerId], references: [id], onDelete: SetNull)
-  // Shot location — all null until a scorer/AI-vision pipeline actually supplies them. Never
+  // Shot location ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â all null until a scorer/AI-vision pipeline actually supplies them. Never
   // fabricated to make an older event "look" located.
   x                            Float?
   y                            Float?
@@ -3509,7 +3595,7 @@ model GameEvent {
   awayScoreAfter  Int?
 
   // Where this event originated (native scorer vs. an import). Distinct from Game.statSource,
-  // which is the whole-game-level category — an individual event can in principle differ
+  // which is the whole-game-level category ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â an individual event can in principle differ
   // (e.g. one manually-entered correction inside an otherwise event-derived native game).
   source        StatDataSource?
   sourceEventId String?
@@ -3517,7 +3603,7 @@ model GameEvent {
 
   // P13/A3 sync provenance. All nullable: LIVE_UI writes leave them null. source above records how
   // the row FIRST came into existence and is immutable; these columns make an offline-synced row
-  // auditable. The three timestamps stay distinct — domain time is period/clockSeconds (where in
+  // auditable. The three timestamps stay distinct ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â domain time is period/clockSeconds (where in
   // the game), clientUpdatedAt is when the scorekeeper logged it on-device, and createdAt is when
   // the server received it (the sync lag is createdAt - clientUpdatedAt, expected to be hours).
   deviceId         String?
@@ -3535,7 +3621,7 @@ model GameEvent {
   correctedById     String?
   correctionReason  String?
   // Self-referential: a correcting event points back at the event it replaces. The original
-  // event is never deleted or mutated in place — its status flips to CORRECTED/VOIDED/
+  // event is never deleted or mutated in place ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â its status flips to CORRECTED/VOIDED/
   // SUPERSEDED and it stays in the ledger for a full audit trail.
   supersedesEventId String?
   supersedesEvent   GameEvent?      @relation("GameEventSupersession", fields: [supersedesEventId], references: [id], onDelete: SetNull)
@@ -3601,7 +3687,7 @@ model PlayerStat {
   turnovers            Int          @default(0)
   fouls                Int          @default(0)
   minutesPlayed        Int          @default(0)
-  // Additive detail available from a full FIBA-style box score. Nullable — never required,
+  // Additive detail available from a full FIBA-style box score. Nullable ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â never required,
   // never inferred from `points`/`rebounds` when absent. All conventional (non-Ultra) stats.
   fieldGoalsMade       Int?
   fieldGoalsAttempted  Int?
@@ -3619,10 +3705,10 @@ model PlayerStat {
   didNotPlay           Boolean      @default(false)
 
   // Ultra-specific aggregates. NULL means NOT_CAPTURED (the source this row came from doesn't
-  // support the dimension at all — e.g. every Season Zero FIBA-imported row); a real 0 means
+  // support the dimension at all ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â e.g. every Season Zero FIBA-imported row); a real 0 means
   // it was actually measured and happened to be zero. Never conflate the two. These are
-  // reproducible from the GameEvent ledger for ULTRA_NATIVE_EVENTS games — see stat-provenance
-  // docs — but persisted here too for read performance and for import-derived games where no
+  // reproducible from the GameEvent ledger for ULTRA_NATIVE_EVENTS games ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â see stat-provenance
+  // docs ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â but persisted here too for read performance and for import-derived games where no
   // ledger exists.
   fourPointsMade                Int?
   fourPointsAttempted           Int?
@@ -3670,7 +3756,7 @@ model TeamStat {
   assists                      Int          @default(0)
   turnovers                    Int          @default(0)
   fouls                        Int          @default(0)
-  // Additive advanced team metrics available from a full FIBA-style box score. Nullable —
+  // Additive advanced team metrics available from a full FIBA-style box score. Nullable ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
   // never required, never inferred when a source doesn't report them.
   pointsFromTurnovers          Int?
   pointsInPaint                Int?
@@ -4132,7 +4218,7 @@ model ContentAsset {
 }
 
 // ============================================================================
-// G.21 — AI VISION & PLAYER INTELLIGENCE FOUNDATION
+// G.21 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â AI VISION & PLAYER INTELLIGENCE FOUNDATION
 //
 // Core boundary this whole domain enforces: AI OBSERVES. HUMANS / THE CANONICAL GAME SYSTEM
 // VERIFY. Nothing in this block ever writes Fixture.homeScore/awayScore, GameEvent's canonical
@@ -4503,7 +4589,7 @@ model VisionSpatialSummary {
 }
 
 // ============================================================================
-// G.22 — EMPIRICAL AI VISION VALIDATION & ULTRA COURT INTELLIGENCE
+// G.22 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â EMPIRICAL AI VISION VALIDATION & ULTRA COURT INTELLIGENCE
 //
 // Builds on G.21's architecture. Same rule: AI observes, humans/canonical truth verify.
 // CourtSpecification/VisionTrajectoryArtifact are additive, read-only-from-canonical-truth's
@@ -4627,7 +4713,7 @@ model VisionTrajectoryArtifact {
 }
 
 // ============================================================================
-// PHASE 1 — MULTI-TENANCY FOUNDATION
+// PHASE 1 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â MULTI-TENANCY FOUNDATION
 //
 // Organization is the tenant root: one row per league this platform operates. Neon Ultra
 // Basketball League (slug "neon-ultra") is the first and, as of Stage 3, the ONLY one -
@@ -4688,6 +4774,8 @@ model Organization {
   athleteVideos             AthleteVideo[]
   trainingSessions          TrainingSession[]
   coachingPlans             CoachingPlan[]
+  scoresheetTemplates       ScoresheetTemplate[]
+  scoresheetImports         ScoresheetImport[]
   athleteTrainingRecords    AthleteTrainingRecord[]
   athleteTrainingMetrics    AthleteTrainingMetric[]
   athleteMedias             AthleteMedia[]
@@ -4803,7 +4891,7 @@ model Organization {
 }
 
 // P13/A3: dedup ledger for offline scoring sync. A unique idempotencyKey is the atomicity
-// guarantee — the sync endpoint inserts this row in the SAME transaction as the canonical write,
+// guarantee ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the sync endpoint inserts this row in the SAME transaction as the canonical write,
 // so a crash between the two cannot produce a duplicate on retry (the unique constraint rejects
 // the replay). Never referenced for anything except dedup and forensics.
 model SyncIdempotency {
