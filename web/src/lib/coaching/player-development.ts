@@ -468,3 +468,16 @@ export function buildSquadDevelopmentPlans(games: GameCore[], seasonClubId: stri
   }
   return plans.sort((a, b) => b.gamesPlayed - a.gamesPlayed || a.name.localeCompare(b.name));
 }
+
+// ---------- exports for the Selection Advisor (I2-b) ----------
+//
+// The advisor (./selection.ts) scores "how well is this player playing" by REUSING this framework
+// rather than inventing a second one: it measures the same nine dimensions with the same gates and
+// the same position-peer-else-league baseline rule, over a shorter window. A second definition of
+// form would eventually disagree with the development plan's readings about the same player, which
+// is exactly the drift this module's own header warns about.
+//
+// Additive only - nothing below changes this module's behaviour.
+export type { DimensionSpec, Measure, PlayerSeason, Qualified };
+export { DIMENSIONS as DEVELOPMENT_DIMENSIONS };
+export { measure as measureDimension, gateFor as dimensionGate, qualifiedPool as qualifiedDimensionPool };
