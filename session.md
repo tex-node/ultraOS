@@ -9512,6 +9512,67 @@ Migration applied by `--migrate` after the pre-flight fix.
 
 **Next step:** Prompt 2 (formal smoke test + production deploy).
 
+## 2026-10-18 - Streak v3 / Prompt 2: smoke test formalised + the coaching stack deployed to production
+
+**Objective:** make the smoke test a permanent, configurable part of deploying; ship I2/I3/I6 to
+production with migrations and prove it serves.
+
+**Completed**
+- **`deploy/ops/smoke-test.sh`** (from `smoke-staging.sh`): env-configurable (`BASE_URL`, `AUTH_TOKEN`,
+  `SMOKE_EMAIL`, `SMOKE_ORG`, `APP_ROOT`, `ENV_FILE`, `MIGRATE_ENV`, `ROUTES_FILE`, `SERVICE`,
+  `SKIP_SMOKE`/`--skip-smoke`). Two hardening improvements that the production run forced:
+  - **Routes and organization are derived from the target database** (org with the most `PlayerStat`
+    rows; its busiest club/player/fixture). Hard-coded ids only exist in one database - a smoke whose
+    routes 404 everywhere is worse than none.
+  - **The Auth.js cookie name is protocol-dependent** and is also the JWT **salt**. Production's
+    `AUTH_URL` is https, so the cookie is `__Secure-authjs.session-token`; a token minted with the
+    plain salt is silently unauthenticated (404 on `/coaching`, 307 to `/no-league` on the passport).
+    The script derives the name from `AUTH_URL` and uses it for both minting and sending.
+- **`deploy.sh` now runs it** after the restart: it copies the script out of the deployed ref to
+  `<app-root>/smoke-test.sh`, runs it against the new release, and **exits 5 with rollback
+  instructions** when it fails. "service: active" is no longer the last word.
+- **Production deployed** with `--migrate`: verified backup first
+  (`/var/backups/ultraleagueos-production/ultraleagueos_pre_coaching_stack_20261018T133333Z.dump`,
+  1,073,907 bytes, sha256 `a9e145a5a6e380408ec1318c9b2d52377c51e6d47ce774b8a49d6dd758828ddf`, 1571 TOC
+  entries, `pg_restore -l` readable, and it contains `TrainingSession` but none of the three new
+  tables - i.e. the backup predates the migrations).
+- `COACHING_ASSISTANT_ENABLED=true` added to `/opt/ultraleagueos/shared/web.env` (backup copy kept) -
+  without it every coaching route 404s by design (ADR-011), so the acceptance check in this prompt
+  required turning it on deliberately.
+
+**Applied to production (6 migrations):** `20261018120000_coaching_plan_adoption`,
+`…130000_coaching_plan_grants`, `…140000_scoresheet_ocr_ingestion`, `…160000_training_session_coaching_plan`,
+`…160100_training_session_completed`, `…170000_scoresheet_csv_format`.
+
+**Verification**
+- Release `release-4793f7f-20261018T135100Z`, service **active**, deploy **exit 0**.
+- Smoke against production: **7/7 PASS** (club hub, training week, athlete passport, passport
+  provenance, scoresheets queue, player plan, selection), 0 errors since the release started.
+- Prompt's acceptance check: **`/coaching/cmucgcuqp0008ylkktf3ky2ev` -> 200** with "Squad" in the body,
+  using a SUPER_ADMIN session.
+- The three new production tables are tenant-correct: `CoachingPlan`, `ScoresheetImport`,
+  `ScoresheetTemplate` all `rls=true forced=true`, 1 policy each, 7 app-role grants each.
+
+**What went wrong on the way (all fixed, all recorded)**
+1. The pre-flight refused `--migrate` (exit 4) - fixed to warn-and-continue and then re-check status
+   after migrating, halting before the swap if anything is still pending.
+2. The first production deploy failed its own smoke (exit 5) because the routes were staging ids.
+3. The second failed because of the secure-cookie salt.
+4. The third failed because the deploy **copies the smoke from the deployed ref**, overwriting the
+   locally-fixed copy - so the fix has to be committed before the deploy that needs it. Worth knowing:
+   the smoke that runs is always the one in the ref being deployed, never the one on disk.
+
+**Known issues**
+- The smoke's error check treats `no matching decryption secret` / `JWTSessionError` as noise and
+  reports it separately; a real auth outage that only manifests as that message would be masked. The
+  HTTP status checks are the primary signal.
+- Production now runs with the coaching flag ON; turning it off is just the env var + restart.
+- Staging still has the LBCL org; production has both LBCL (`cmucgcmxk…`) and neon-ultra. The smoke
+  auto-detects, so it works on both.
+
+**Next step:** Prompt 3 (I3 trend polish + component test).
+
+
 
 
 
