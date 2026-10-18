@@ -11,6 +11,7 @@ import {
 } from "@/server/scoring";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { remainingShotClockSeconds } from "@/lib/game-rules";
+import { queueGameLifecycleFeed } from "@/lib/data-feed/dispatcher";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import {
   recordScoreInternal,
@@ -63,6 +64,8 @@ export async function startGame(fixtureId: string) {
     if (fixture.status === "CANCELLED" || fixture.status === "POSTPONED" || fixture.status === "FINAL") {
       throw new Error("INVALID_FIXTURE");
     }
+    // Read before the branch below narrows the literal type: was this game already live (a reopen)?
+    const wasLiveOrPaused = (fixture.status as string) === "LIVE" || (fixture.status as string) === "PAUSED";
 
     // Resolve this competition's structure (periods, period length, shot clock, clock mode) from the
     // season rule set, then the organization override, then the sport definition.
@@ -150,6 +153,26 @@ export async function startGame(fixtureId: string) {
       where: { id: fixtureId },
       data: { status: "LIVE" },
     });
+
+    // Partner data feed (streak v6, Prompt 1): emit GAME_STARTED once, in the transaction that actually
+    // makes the game live. Guarded on the fixture's PREVIOUS status: reopening a paused/abandoned game
+    // also lands here, and "started" must not mean "started again". A subscriber that wants every
+    // transition should be reading the status field, not this event.
+    if (!wasLiveOrPaused) {
+      await queueGameLifecycleFeed(tx, {
+        organizationId,
+        gameId: game.id,
+        eventType: "GAME_STARTED",
+        event: {
+          eventId: game.id,
+          sequenceNumber: game.nextEventSequence,
+          period: game.currentPeriod,
+          clockSeconds: game.clockSecondsRemaining,
+          points: null,
+          eventType: "GAME_STARTED",
+        },
+      });
+    }
   });
   revalidatePath(`/games/${fixtureId}/live`);
   revalidatePath(`/fixtures/${fixtureId}`);
@@ -888,6 +911,21 @@ points: input.points,
         where: { id: gameId },
         data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null, isUltraTimeActive: false },
       });
+      // Partner data feed (streak v6, Prompt 1): the live path emits the same GAME_FINAL as the import
+      // path, so a subscriber does not need to know how the match was decided.
+      await queueGameLifecycleFeed(tx, {
+        organizationId,
+        gameId,
+        eventType: "GAME_FINAL",
+        event: {
+          eventId: gameId,
+          sequenceNumber: game.nextEventSequence,
+          period: result.period?.period ?? game.currentPeriod,
+          clockSeconds: 0,
+          points: null,
+          eventType: "GAME_FINAL",
+        },
+      });
       // Knockout: when this completes the round, create the next round from the winners.
       await advanceKnockoutBracket(tx, organizationId, game.fixture);
       await recalculateStandings(tx, organizationId, game.fixture.seasonId);
@@ -1006,6 +1044,21 @@ export async function recordShootoutKick(gameId: string, fixtureId: string, form
       await tx.game.update({
         where: { id: gameId },
         data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null, isUltraTimeActive: false },
+      });
+      // Partner data feed (streak v6, Prompt 1): the live path emits the same GAME_FINAL as the import
+      // path, so a subscriber does not need to know how the match was decided.
+      await queueGameLifecycleFeed(tx, {
+        organizationId,
+        gameId,
+        eventType: "GAME_FINAL",
+        event: {
+          eventId: gameId,
+          sequenceNumber: game.nextEventSequence,
+          period: game.currentPeriod,
+          clockSeconds: 0,
+          points: null,
+          eventType: "GAME_FINAL",
+        },
       });
       // Knockout: when this completes the round, create the next round from the winners.
       await advanceKnockoutBracket(tx, organizationId, game.fixture);

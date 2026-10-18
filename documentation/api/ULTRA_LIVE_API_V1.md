@@ -92,6 +92,24 @@ Implementation: `src/lib/data-feed/signature.ts` (wire format + verification, un
 `src/app/api/v1/games/[publicId]/live-feed/route.ts`, and `scripts/data-feed-subscriber.ts` (a reference
 subscriber that verifies every signature).
 
+### When each event is emitted
+
+| Event | Emitted by | Notes |
+| --- | --- | --- |
+| `GAME_STARTED` | `startGame` (`src/app/games/actions.ts`), in the transaction that flips the fixture to LIVE | **Not** re-emitted when a PAUSED/abandoned game is reopened - "started" means started once. Subscribers that want every transition should poll the `status` field instead. |
+| `SCORE_CHANGED` | `createGameEvent`, for every scoring event (points > 0) | One outbox row per interested subscription, inside the same transaction as the `GameEvent`. |
+| `GAME_FINAL` | `game-result-import` (an imported box score reaching FINAL) and the live finalisation path | Fires when the match is decided, including a tennis best-of-3. |
+
+### Delivery is not tied to new scoring
+
+A systemd timer calls `GET /api/cron/drain-feeds` every 30 seconds on each host
+(`deploy/ops/install-feed-drain-timer.sh`). The route requires the shared secret in an `x-cron-secret` header,
+answers **503 when `CRON_SECRET` is unset** (fail closed - an unconfigured deployment must not expose an
+endpoint that makes the server POST to partner URLs), and 401 on a bad secret. It swaps stuck `DELIVERING`
+rows older than 10 minutes back to `PENDING` (crash recovery) before draining, so a restart mid-send does not
+strand a delivery. The response reports `{ok, organizations, attempted, delivered, retried, gaveUp, durationMs}`,
+which is what the timer's journal shows every 30 seconds.
+
 ## Versioning policy (Part XVII)
 
 - Fields documented here are **stable** once shipped in v1.
