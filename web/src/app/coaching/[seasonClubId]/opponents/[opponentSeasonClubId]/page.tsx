@@ -23,18 +23,31 @@ export default async function CoachingGamePlanPage({ params }: { params: Promise
       return { gameId: g.gameId, scheduledAt: g.scheduledAt, focusScore: home ? g.home.score : g.away.score, opponentScore: home ? g.away.score : g.home.score };
     });
 
-  // The Selection Advisor is fixture-scoped (it needs the game, not just the opponent), so it is
-  // linked from here only when this club actually has an upcoming fixture against this opponent.
+  // The Selection Advisor is fixture-scoped (it needs the game, not just the opponent). Linked from
+  // here for the next game against this opponent; when the season has no scheduled fixture left
+  // (true of both staging seasons today - every fixture is FINAL) the most recent meeting is offered
+  // as a retrospective instead, because a link that renders nowhere is not a link.
   const upcomingVsOpponent = data.upcoming.filter((u) => u.opponent.seasonClubId === opponentSeasonClubId);
+  const meetings = data.games
+    .filter((g) => g.home.seasonClubId === opponentSeasonClubId || g.away.seasonClubId === opponentSeasonClubId)
+    .sort((a, b) => b.scheduledAt.getTime() - a.scheduledAt.getTime());
+  const lastMeeting = meetings[0];
+  const rotationTargets = upcomingVsOpponent.length
+    ? upcomingVsOpponent.map((u) => ({ fixtureId: u.fixtureId, scheduledAt: u.scheduledAt, isHome: u.isHome, retrospective: false }))
+    : lastMeeting
+      ? [{ fixtureId: lastMeeting.fixtureId, scheduledAt: lastMeeting.scheduledAt, isHome: lastMeeting.home.seasonClubId === seasonClubId, retrospective: true }]
+      : [];
   const rotationLinks =
-    upcomingVsOpponent.length > 0 ? (
+    rotationTargets.length > 0 ? (
       <section data-testid="rotation-links" className="mb-4 rounded-lg border border-line bg-ink-800 p-4 print:hidden">
-        <h2 className="text-sm font-semibold text-text-1">Rotation for the next game</h2>
+        <h2 className="text-sm font-semibold text-text-1">
+          {rotationTargets[0].retrospective ? "Rotation for the last meeting (retrospective)" : "Rotation for the next game"}
+        </h2>
         <ul className="mt-2 space-y-1">
-          {upcomingVsOpponent.map((u) => (
+          {rotationTargets.map((u) => (
             <li key={u.fixtureId} className="flex items-center justify-between gap-2 text-sm">
               <span className="text-text-2">
-                {new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(u.scheduledAt)} Â· {u.isHome ? "home" : "away"}
+                {new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(u.scheduledAt)} · {u.isHome ? "home" : "away"}
               </span>
               <a href={`/coaching/selection/${u.fixtureId}`} className="text-info underline">
                 Selection advisor
@@ -42,6 +55,9 @@ export default async function CoachingGamePlanPage({ params }: { params: Promise
             </li>
           ))}
         </ul>
+        {rotationTargets[0].retrospective ? (
+          <p className="mt-2 text-xs text-text-3">No fixture against this opponent is scheduled, so this is the most recent meeting.</p>
+        ) : null}
       </section>
     ) : null;
 
