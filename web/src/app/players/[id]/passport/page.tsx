@@ -4,6 +4,7 @@ import { OperationsShell } from "@/app/components/operations-shell";
 import { auth } from "@/auth";
 import { hasPermission } from "@/lib/permissions";
 import { MissingOrganizationContextError } from "@/lib/authorization";
+import { resolveDefaultPublicOrganization } from "@/lib/tenant-context";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { loadAthletePassport, type Provenance } from "@/server/players/passport";
 
@@ -27,9 +28,30 @@ const BADGE: Record<Provenance, { label: string; className: string }> = {
   UNKNOWN: { label: "UNKNOWN", className: "bg-danger/20 text-danger" },
 };
 
+// Every badge carries its own explanation, both as a tooltip and as aria-label: "OCR REVIEWED" is only
+// meaningful if a reader can find out what it means without leaving the page.
+const BADGE_EXPLANATION: Record<Provenance, string> = {
+  LIVE: "Recorded live by the Ultra scorer console during the game.",
+  LIVE_STATISTICIAN: "Recorded live by the independent statistician console, or derived from its verified event ledger.",
+  OCR_REVIEWED: "Data ingested from a historical scoresheet and human-verified in the review queue before it entered the league data.",
+  IMPORTED: "Imported from a hand-transcribed batch or an external provider export; not verified against a live console.",
+  MANUAL: "Entered by league staff, or a coach's training log - a person typed it, no automated capture.",
+  UNKNOWN: "The source of this figure could not be established. Treat it with caution rather than assuming it is live.",
+};
+
 function Badge({ source }: { source: Provenance }) {
   const badge = BADGE[source];
-  return <span data-provenance={source} className={`rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide ${badge.className}`}>{badge.label}</span>;
+  const explanation = BADGE_EXPLANATION[source];
+  return (
+    <span
+      data-provenance={source}
+      title={`${badge.label}: ${explanation}`}
+      aria-label={`${badge.label} - ${explanation}`}
+      className={`cursor-help rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide ${badge.className}`}
+    >
+      {badge.label}
+    </span>
+  );
 }
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -44,7 +66,22 @@ export default async function PlayerPassportPage({ params }: { params: Promise<{
   if (!session?.user) redirect(`/login?callbackUrl=/players/${playerId}/passport`);
   if (!session.user.organizationId) throw new MissingOrganizationContextError();
 
-  const passport = await withOrganizationContext(session.user.organizationId, (tx) => loadAthletePassport(tx, session.user.organizationId!, playerId));
+  // The passport belongs to the PLAYER's organization, which is not always the viewer's active one: the
+  // public athlete page resolves the default public organization, so a coach whose session org is
+  // another tenant must still be able to open the link a public page offers. Rule: read under the
+  // viewer's organization first; if the player is not there and the viewer is a platform SUPER_ADMIN,
+  // try the default public organization. A player from a tenant the viewer cannot see stays a 404 -
+  // tenant separation is not relaxed, only the org the read is scoped to.
+  const isPlatformAdmin = session.user.roles.includes("SUPER_ADMIN");
+  let scope = session.user.organizationId;
+  let passport = await withOrganizationContext(scope, (tx) => loadAthletePassport(tx, scope, playerId));
+  if (!passport && isPlatformAdmin) {
+    const publicOrganization = await resolveDefaultPublicOrganization();
+    if (publicOrganization.id !== scope) {
+      scope = publicOrganization.id;
+      passport = await withOrganizationContext(scope, (tx) => loadAthletePassport(tx, scope, playerId));
+    }
+  }
   if (!passport) notFound();
 
   // Coach-private surfaces: training logs and adopted plans.
@@ -59,7 +96,7 @@ export default async function PlayerPassportPage({ params }: { params: Promise<{
           {passport.name}
         </h1>
         <p className="mt-1 text-sm text-text-2">
-          {passport.position ?? "position not recorded"} · {passport.seasons.map((s) => `${s.clubName} (${s.seasonName})`).join(" · ")}
+          {passport.position ?? "position not recorded"} Â· {passport.seasons.map((s) => `${s.clubName} (${s.seasonName})`).join(" Â· ")}
         </p>
 
         <section aria-labelledby="totals-heading" className="mt-6 rounded-lg border border-line bg-ink-800 p-4">
@@ -69,7 +106,7 @@ export default async function PlayerPassportPage({ params }: { params: Promise<{
             {passport.provenance.length > 0 ? (
               <>
                 {" "}
-                · provenance:{" "}
+                Â· provenance:{" "}
                 {passport.provenance.map((entry) => (
                   <span key={entry.source} className="mr-2 inline-flex items-center gap-1">
                     <Badge source={entry.source} />
@@ -159,14 +196,14 @@ export default async function PlayerPassportPage({ params }: { params: Promise<{
                   {passport.training.map((row) => (
                     <li key={row.sessionId} data-training={row.sessionId} className="rounded border border-line-subtle p-2 text-xs">
                       <p className="text-sm text-text-1">
-                        {row.title} <span className="text-text-3">· {dateFormatter.format(row.occurredAt)}</span>{" "}
-                        {row.completedAt ? <span className="text-success">· complete</span> : <span className="text-warn">· not complete</span>}
+                        {row.title} <span className="text-text-3">Â· {dateFormatter.format(row.occurredAt)}</span>{" "}
+                        {row.completedAt ? <span className="text-success">Â· complete</span> : <span className="text-warn">Â· not complete</span>}
                       </p>
                       {row.focus ? <p className="mt-1 text-text-2">{row.focus}</p> : null}
                       {row.metrics.length > 0 ? (
                         <p className="mt-1 text-text-3">
                           <Badge source="MANUAL" />{" "}
-                          {row.metrics.map((metric) => `${metric.name}: ${metric.value}${metric.unit ? ` ${metric.unit}` : ""}`).join(" · ")}
+                          {row.metrics.map((metric) => `${metric.name}: ${metric.value}${metric.unit ? ` ${metric.unit}` : ""}`).join(" Â· ")}
                         </p>
                       ) : null}
                     </li>
@@ -186,10 +223,10 @@ export default async function PlayerPassportPage({ params }: { params: Promise<{
                   {passport.plans.map((plan) => (
                     <li key={plan.id} className="rounded border border-line-subtle p-2 text-xs">
                       <p className="text-sm text-text-1">
-                        {plan.status} · adopted {dateFormatter.format(plan.adoptedAt)} · {plan.sessions} session{plan.sessions === 1 ? "" : "s"}
+                        {plan.status} Â· adopted {dateFormatter.format(plan.adoptedAt)} Â· {plan.sessions} session{plan.sessions === 1 ? "" : "s"}
                       </p>
                       <p className="mt-1 text-text-2">
-                        {plan.focusAreas.map((area) => `${area.label} (target ${area.targetLabel})`).join(" · ")}
+                        {plan.focusAreas.map((area) => `${area.label} (target ${area.targetLabel})`).join(" Â· ")}
                       </p>
                     </li>
                   ))}
@@ -203,11 +240,25 @@ export default async function PlayerPassportPage({ params }: { params: Promise<{
           </p>
         )}
 
-        <p className="mt-6 text-xs text-text-3">
-          Provenance legend: LIVE = the scorer console; LIVE STAT = the statistician console; OCR REVIEWED = a scoresheet
-          that went through the review queue; IMPORTED = a hand-transcribed or external import; MANUAL = entered by
-          staff; UNKNOWN = the source cannot be established.
-        </p>
+        <section aria-labelledby="legend-heading" className="mt-6 rounded-lg border border-line bg-ink-800 p-4">
+          <h2 id="legend-heading" className="text-sm font-semibold">
+            Provenance legend
+          </h2>
+          <p className="mt-1 text-xs text-text-3">
+            Hover any badge above for the same explanation. The badge is derived from how the data was captured; it is not
+            a quality score.
+          </p>
+          <dl className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+            {(Object.keys(BADGE_EXPLANATION) as Provenance[]).map((source) => (
+              <div key={source} className="flex items-start gap-2">
+                <dt className="shrink-0 pt-0.5">
+                  <Badge source={source} />
+                </dt>
+                <dd className="text-text-2">{BADGE_EXPLANATION[source]}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
         <p className="mt-2 text-xs">
           <Link href="/" className="text-info underline">
             Back

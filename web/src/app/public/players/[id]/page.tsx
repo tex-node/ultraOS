@@ -39,6 +39,12 @@ export default async function Player({ params }: { params: Promise<{ id: string 
   if (!a) notFound();
   const organizationId = a.organizationId;
 
+  // "Published passport": a player we actually have recorded games for. Anything less and the passport
+  // would be an empty shell, so the link is not offered. The most recent registration is the one whose
+  // passport the link opens (Player rows are season-scoped).
+  const registrationsWithGames = a.registrations.filter((registration) => registration.playerStats.length > 0);
+  const passportPlayerId = registrationsWithGames[0]?.id ?? null;
+
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -47,7 +53,18 @@ export default async function Player({ params }: { params: Promise<{ id: string 
           <h1 className="mt-3 text-4xl font-bold">{a.firstName} {a.lastName}</h1>
           <p className="mt-2 text-text-2">{a.nationality ?? "Nationality not set"} · {a.dominantHand} hand</p>
         </div>
-        <Link href={`/public/share/player/${a.id}`} className="rounded-lg border border-info/30 bg-info/[.06] px-3 py-1.5 text-xs font-bold text-info">Shareable Card</Link>
+        <div className="flex flex-wrap items-center gap-2">
+          {passportPlayerId ? (
+            <Link
+              href={`/players/${passportPlayerId}/passport`}
+              title="Career totals, game log and where every figure came from"
+              className="rounded-lg border border-line bg-ink-800 px-3 py-1.5 text-xs font-bold text-text-1"
+            >
+              View passport
+            </Link>
+          ) : null}
+          <Link href={`/public/share/player/${a.id}`} className="rounded-lg border border-info/30 bg-info/[.06] px-3 py-1.5 text-xs font-bold text-info">Shareable Card</Link>
+        </div>
       </div>
       <h2 className="mt-10 text-2xl font-semibold">Season history</h2>
       <div className="mt-4 space-y-4">
