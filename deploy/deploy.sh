@@ -13,7 +13,7 @@
 #     --app-root /opt/ultraos-staging \
 #     --service ultraos-staging-web.service \
 #     --env-file /opt/ultraos-staging/shared/web.env \
-#     [--ref origin/main] [--migrate] [--migrate-env-file <path>] [--migrate-db-url <url>] [--keep 5]
+#     [--ref origin/main] [--migrate] [--skip-smoke] [--migrate-env-file <path>] [--migrate-db-url <url>] [--keep 5]
 #
 # Migrations:
 #   Pass --migrate to run `prisma migrate deploy` for this release. The privileged DATABASE_URL is
@@ -26,6 +26,7 @@ SERVICE=""
 ENV_FILE=""
 REF="origin/main"
 RUN_MIGRATE=0
+RUN_SMOKE=1
 MIGRATE_ENV_FILE=""
 MIGRATE_DB_URL=""
 KEEP=5
@@ -40,6 +41,7 @@ while [[ $# -gt 0 ]]; do
     --migrate)          RUN_MIGRATE=1; shift ;;
     --migrate-env-file) MIGRATE_ENV_FILE="$2"; shift 2 ;;
     --migrate-db-url)   MIGRATE_DB_URL="$2"; shift 2 ;;
+    --skip-smoke)       RUN_SMOKE=0; shift ;;
     --keep)             KEEP="$2"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -182,6 +184,39 @@ echo "[deploy] current: ${PREV:-none} -> $REL"
 systemctl restart "$SERVICE"
 sleep 4
 echo "[deploy] service: $(systemctl is-active "$SERVICE")"
+
+# Install the smoke test from the deployed ref (the release only contains web/, so the script cannot
+# live inside it) and run it. A release that boots but serves nothing must fail the deploy.
+if [[ -f "$SRC/deploy/ops/smoke-test.sh" ]]; then
+  cp "$SRC/deploy/ops/smoke-test.sh" "$APP_ROOT/smoke-test.sh"
+  chmod +x "$APP_ROOT/smoke-test.sh"
+fi
+if [[ "$RUN_SMOKE" -eq 1 ]]; then
+  SMOKE_SCRIPT="$APP_ROOT/smoke-test.sh"
+  if [[ -f "$SMOKE_SCRIPT" ]]; then
+    echo "[deploy] smoke test"
+    SMOKE_BASE="${SMOKE_BASE_URL:-$(grep -m1 '^AUTH_URL=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' | sed 's/ *$//')}"
+    # AUTH_URL may be the public hostname; on the box itself the app listens on loopback.
+    if [[ "$SMOKE_BASE" == http*://app.* || "$SMOKE_BASE" == https://* ]]; then
+      SMOKE_BASE="http://127.0.0.1:$(systemctl cat "$SERVICE" | sed -n 's/.*--port \([0-9]*\).*/\1/p' | head -1)"
+    fi
+    if ! BASE_URL="${SMOKE_BASE:-http://127.0.0.1:4120}" APP_ROOT="$APP_ROOT" SERVICE="$SERVICE" ENV_FILE="$ENV_FILE" \
+         MIGRATE_ENV="${MIGRATE_ENV_FILE:-$APP_ROOT/shared/migrate.env}" bash "$SMOKE_SCRIPT"; then
+      {
+        echo ""
+        echo "##########################################################################"
+        echo "# DEPLOY FAILED THE SMOKE TEST - the new release is live but is not serving."
+        echo "# Roll back now:"
+        echo "#   ln -sfn $PREV $APP_ROOT/current && systemctl restart $SERVICE"
+        echo "# (previous release: ${PREV:-none})"
+        echo "##########################################################################"
+      } >&2
+      exit 5
+    fi
+  else
+    echo "[deploy] WARNING: no smoke test found at $SMOKE_SCRIPT - NOT verifying the release" >&2
+  fi
+fi
 
 echo "[deploy] pruning old releases (keep $KEEP)"
 ls -1dt "$RELEASES"/release-* 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -rf

@@ -50,25 +50,36 @@ had updated `origin/ops/reconcile-backup-design` and said so, the checkout silen
 local branch, and the deploy still reported success. The release name carries the resolved sha - check
 it against the commit you meant to ship before believing a deploy.
 
-## After a deploy: run the smoke check
+## The smoke test runs automatically
 
-`deploy.sh` ends at "service: active", which is not proof the app can serve a page. On 2026-10-18 a
-release passed `tsc` and `next build`, then the production server refused to boot because two dynamic
-segments used different slug names (`/players/[id]` vs `/players/[playerId]`) - **Next.js rejects that
-at startup, not at build time** - and every route returned 500.
+`deploy.sh` no longer ends at "service: active", because that is not proof the app can serve a page. On
+2026-10-18 a release passed `tsc` and `next build`, then the production server refused to boot because
+two dynamic segments used different slug names (`/players/[id]` vs `/players/[playerId]`) - **Next.js
+rejects that at startup, not at build time** - and every route returned 500 while the deploy reported
+success.
+
+Every deploy now:
+
+1. copies `deploy/ops/smoke-test.sh` from the deployed ref to `<app-root>/smoke-test.sh` (a release only
+   contains `web/`, so the script cannot live inside it),
+2. runs it against the new release, and
+3. **exits 5 with rollback instructions** if any route fails - a deploy that boots but serves nothing is
+   a failed deploy.
+
+Run it by hand at any time:
 
 ```bash
-# on the host, after deploying staging (the release only contains web/, so run the installed copy)
-bash /root/smoke-staging.sh
+bash /root/smoke-test.sh                       # staging (mints a session from the DB)
+BASE_URL=https://app.neonultra.ng AUTH_TOKEN=<cookie-value> bash /root/smoke-test.sh   # any env
+bash /root/smoke-test.sh --help 2>/dev/null || true
 ```
 
-It mints a short-lived session for an existing SUPER_ADMIN and asserts, for ten representative routes,
-both `200` **and** the page's signature text (so an error boundary or a `/no-league` redirect fails),
-then reports the service state and the error count since it started. Override with `BASE`,
-`SMOKE_EMAIL`, `SMOKE_ORG`, `ENV_FILE`, `MIGRATE_ENV`. Exit code is non-zero on any failure, so it can
-be chained onto a deploy. The canonical copy lives at `deploy/ops/smoke-staging.sh`; install it with
-`cp deploy/ops/smoke-staging.sh /root/smoke-staging.sh` (the release directory contains only `web/`,
-so the script is not itself part of a release).
+It asserts, for each route, both `200` **and** the page's signature text - so an error boundary, a
+redirect to `/no-league`, or a blank shell fails the check rather than passing as "200 OK". It also
+reports the service state and the error count since the service started. Env: `BASE_URL`, `AUTH_TOKEN`
+(reuse a session cookie instead of minting), `SMOKE_EMAIL` (default `texdevices@gmail.com`), `SMOKE_ORG`,
+`APP_ROOT`, `ENV_FILE`, `MIGRATE_ENV`, `ROUTES_FILE` (replace the route set), `SERVICE`. `SKIP_SMOKE=1`
+or `--skip-smoke` bypasses it for a deliberate emergency deploy.
 
 ## Migrations
 
