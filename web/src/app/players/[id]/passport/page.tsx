@@ -87,6 +87,11 @@ export default async function PlayerPassportPage({ params }: { params: Promise<{
   // Coach-private surfaces: training logs and adopted plans.
   const canSeePrivate = hasPermission(session.user.roles, "game:operate") || hasPermission(session.user.roles, "data:import");
 
+  // Explicit publication (streak v4, Prompt 3): an unpublished passport is a 404 for everyone who is not
+  // a coach or an operator. 404 rather than 403, so an unpublished athlete is indistinguishable from one
+  // that does not exist - the same reasoning ADR-011 uses for coaching access.
+  if (!passport.published && !canSeePrivate && !isPlatformAdmin) notFound();
+
   return (
     <OperationsShell user={session.user}>
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">

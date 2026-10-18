@@ -10,6 +10,7 @@ type AthleteValue = {
   dominantHand: string; phone: string | null; email: string | null;
   emergencyContact: string | null; previousTeam: string | null;
   photoUrl: string | null; nationality: string | null;
+  passportPublished: boolean;
 };
 const field = "mt-2 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none focus:border-emerald-400";
 
@@ -39,6 +40,17 @@ export function AthleteForm({ action, athlete, label }: { action: Action; athlet
       </label>)}
       <label className="text-sm text-zinc-300">Gender<select className={field} name="gender" defaultValue={athlete?.gender ?? "MALE"}><option value="MALE">Male</option><option value="FEMALE">Female</option></select></label>
     </div>
+    {/* Streak v4, Prompt 3: explicit publication. Unchecked means the public passport route 404s for
+        everyone who is not a coach or an operator; coaches keep seeing it. */}
+    <label className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-zinc-300">
+      <input type="checkbox" name="passportPublished" value="true" defaultChecked={athlete?.passportPublished ?? true} className="mt-0.5 h-4 w-4" />
+      <span>
+        Publish passport to public
+        <span className="mt-1 block text-xs text-zinc-500">
+          When unchecked, the athlete&apos;s passport page is not available to the public. Coaches and league operators still see it.
+        </span>
+      </span>
+    </label>
     <button className="rounded-xl bg-emerald-400 px-5 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-60" disabled={pending}>{pending ? "Saving..." : label}</button>
   </form>;
 }

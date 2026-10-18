@@ -28,7 +28,7 @@ export default async function Player({ params }: { params: Promise<{ id: string 
       where: { id },
       select: {
         id: true, organizationId: true, firstName: true, lastName: true, gender: true, dateOfBirth: true,
-        dominantHand: true, photoUrl: true, nationality: true, awards: true,
+        dominantHand: true, photoUrl: true, nationality: true, awards: true, passportPublished: true,
         registrations: {
           include: { season: true, seasonClub: { include: { club: true, division: true } }, playerStats: true },
           orderBy: { season: { startDate: "desc" } },
@@ -39,10 +39,10 @@ export default async function Player({ params }: { params: Promise<{ id: string 
   if (!a) notFound();
   const organizationId = a.organizationId;
 
-  // "Published passport": a player we actually have recorded games for. Anything less and the passport
-  // would be an empty shell, so the link is not offered. The most recent registration is the one whose
-  // passport the link opens (Player rows are season-scoped).
-  const registrationsWithGames = a.registrations.filter((registration) => registration.playerStats.length > 0);
+  // "Published passport": the organization's explicit flag AND at least one registration with recorded
+  // games (a passport with no games is an empty shell). The flag is checked here as well as on the route
+  // itself so an unpublished athlete never gets a dead link from this page.
+  const registrationsWithGames = a.passportPublished ? a.registrations.filter((registration) => registration.playerStats.length > 0) : [];
   const passportPlayerId = registrationsWithGames[0]?.id ?? null;
 
   return (

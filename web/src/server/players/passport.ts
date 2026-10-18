@@ -1,4 +1,4 @@
-import "server-only";
+﻿import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 
 // P15 I6 (v1): the athlete passport as a READ MODEL. Nothing here writes. It answers one question -
@@ -66,6 +66,8 @@ export type PassportPlanRow = {
 export type AthletePassport = {
   playerId: string;
   athleteId: string;
+  // Whether the organization publishes this athlete's passport to the public site.
+  published: boolean;
   name: string;
   jerseyNumber: number | null;
   position: string | null;
@@ -102,7 +104,7 @@ export async function loadAthletePassport(tx: Prisma.TransactionClient, organiza
       seasonClubId: true,
       season: { select: { name: true, startDate: true } },
       seasonClub: { select: { club: { select: { name: true } } } },
-      athlete: { select: { firstName: true, lastName: true } },
+      athlete: { select: { firstName: true, lastName: true, passportPublished: true } },
     },
   });
   if (!player) return null;
@@ -245,6 +247,7 @@ export async function loadAthletePassport(tx: Prisma.TransactionClient, organiza
   return {
     playerId: player.id,
     athleteId: player.athleteId,
+    published: player.athlete.passportPublished,
     name: `${player.athlete.firstName} ${player.athlete.lastName}`,
     jerseyNumber: player.jerseyNumber,
     position: player.position,

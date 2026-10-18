@@ -86,6 +86,10 @@ export async function updateAthlete(
         previousTeam: parsed.data.previousTeam || null,
         photoUrl: parsed.data.photoUrl || null,
         nationality: parsed.data.nationality || null,
+        // Streak v4, Prompt 3: an unchecked checkbox sends NOTHING, so this is read from the raw form
+        // rather than through the shared athleteSchema (where an absent key must keep meaning "true" for
+        // an athlete created elsewhere). The edit form always renders the box, so absent === false here.
+        passportPublished: formData.get("passportPublished") === "true",
       },
     }));
     revalidatePath("/players");

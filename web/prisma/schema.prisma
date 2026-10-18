@@ -1115,6 +1115,11 @@ model Athlete {
   previousTeam             String?
   photoUrl                 String?
   nationality              String?
+  // Streak v4, Prompt 3: explicit publication of the athlete's PASSPORT (the public career view). The
+  // previous rule was implicit - "has games" - which gave an operator no way to hide someone. Defaults to
+  // true so every existing athlete keeps the behaviour it had; a coach/admin still sees an unpublished
+  // passport, because hiding it from the public must not blind the people working with the player.
+  passportPublished        Boolean                   @default(true)
   registrations            Player[]
   awards                   AthleteAward[]
   videos                   AthleteVideo[]
