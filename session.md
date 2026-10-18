@@ -9370,6 +9370,44 @@ null` hits. A real user whose first role assignment is another organization will
 redirect; the coaching pages are unaffected because they resolve the organization from the club in the
 URL. Worth a friendlier message, not a blocker.
 
+## 2026-10-18 - I3 trend card (the last missing I3 deliverable) + a real post-deploy smoke check
+
+**Objective:** close I3's "Coach Hub Training tab with trend" item, and make the deploy procedure
+prove the app actually serves pages.
+
+**Completed**
+- **`src/lib/coaching/training-trend.ts`** - pure trend geometry: sorted logged points -> sparkline
+  path, latest/first/delta, and a verdict that is **withheld when the metric's direction is unknown**
+  (`game.tov_pg` lower-is-better, `game.ft_pct` higher-is-better, anything else: no verdict rather
+  than an inverted one). 6 unit tests: lower-is-better on target, the same numbers on a higher-is-
+  better metric off target, unknown direction, empty series, single point (no divide-by-zero), equal
+  values stay inside the SVG box.
+- **`loadPlanTrainingTrend`** (server) returns the logged series per focus area, and the card states
+  plainly that metrics are logged per SESSION while the plan's review window is in GAMES - two clocks,
+  not one.
+- **`TrainingTrendCard`** - Server Component with an inline SVG sparkline (no chart library, no client
+  JS) and the target line; rendered on the player plan page under the adoption panel.
+- **`deploy/ops/smoke-staging.sh`** - the post-deploy check the 2026-10-18 outage earned: ten routes,
+  each asserted for `200` **and** its signature text, plus the error count since the release started.
+  Documented in `deploy/README.md` with the reason it exists.
+
+**Verification:** 924 tests pass (1 pre-existing skip), tsc/eslint/build clean, deployed as
+`release-bf54a3a`. Smoke run on the host:
+`PASS club hub / opponent plan / player plan + trend / training week / training session / athlete
+passport / passport provenance / scoresheets queue / selection (normal) / selection (insufficient)`,
+service active, **0 errors since the release started** (the 13 errors in the journal were from the
+earlier crashed release and predate this one). The trend card renders Korede's logged
+`game.tov_pg = 2.5` against the plan's target 2.0 with an "off target" verdict - correct, since lower
+is better for turnovers.
+
+**Known issues**
+- One logged session is a single point: the sparkline is a dot until a second session is completed.
+- The trend uses the most recent 12 logged sessions, not the plan's game window (documented in the
+  card and the function).
+
+**Next step:** I1 remains the only incomplete item, with acceptance documented as failed.
+
+
 
 
 

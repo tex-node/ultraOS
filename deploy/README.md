@@ -50,6 +50,24 @@ had updated `origin/ops/reconcile-backup-design` and said so, the checkout silen
 local branch, and the deploy still reported success. The release name carries the resolved sha - check
 it against the commit you meant to ship before believing a deploy.
 
+## After a deploy: run the smoke check
+
+`deploy.sh` ends at "service: active", which is not proof the app can serve a page. On 2026-10-18 a
+release passed `tsc` and `next build`, then the production server refused to boot because two dynamic
+segments used different slug names (`/players/[id]` vs `/players/[playerId]`) - **Next.js rejects that
+at startup, not at build time** - and every route returned 500.
+
+```bash
+# on the host, after deploying staging
+bash /opt/ultraos-staging/current/deploy/ops/smoke-staging.sh
+```
+
+It mints a short-lived session for an existing SUPER_ADMIN and asserts, for ten representative routes,
+both `200` **and** the page's signature text (so an error boundary or a `/no-league` redirect fails),
+then reports the service state and the error count since it started. Override with `BASE`,
+`SMOKE_EMAIL`, `SMOKE_ORG`, `ENV_FILE`, `MIGRATE_ENV`. Exit code is non-zero on any failure, so it can
+be chained onto a deploy.
+
 ## Migrations
 
 `--migrate` runs `prisma migrate deploy` using the **privileged** database URL read from
