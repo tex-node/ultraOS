@@ -9185,6 +9185,99 @@ checksum panel), upload flow storing the sheet as a `SCORESHEET_IMAGE` MediaAsse
 `--scoresheetImportId` CLI flag on `external-stats-ingest.ts`, then the 20-sheet acceptance run and
 `documentation/OCR_SCORESHEET_INGESTION.md`.
 
+## 2026-10-18 - I1 / Prompt 2 (completed as specified, acceptance FAILED and documented)
+
+**Objective:** the rest of I1 - review queue, CLI flag, 20-sheet acceptance.
+
+**Completed**
+- `/scoresheets` (upload a sheet, choose layout, list imports) and `/scoresheets/[id]/review`
+  (image on the left, every cell editable for both teams, printed-totals inputs, live checksum panel,
+  approve/reject with a required reason). Approval is refused while any checksum fails, and the action
+  re-runs the same rules server-side - a client that skips the panel gains nothing.
+- `external-stats-ingest.ts --scoresheetImportId <id> [--apply] [--gender] [--actor]`: an APPROVED
+  import becomes the same `IngestBoxScoreInput` a hand-typed batch carries and goes through
+  `ingestBoxScoreGame`; the import is then marked INGESTED with its fixtureId. No second pipeline.
+- Grouped two-row header support (FIBA/Genius sheets), image preprocessing (2-3x upscale, greyscale,
+  sharpen; `OCR_PREPROCESS=off`), and `scripts/scoresheet-ocr-batch.ts` - the acceptance harness.
+
+**Acceptance run: FAILED, and documented rather than papered over.** 20 real LBCL sheet images:
+**0 usable tables** (18 "no table header", 2 header-found-with-no-rows), ~4-8 s per sheet, human
+review time not measurable. Diagnosis (see `documentation/OCR_SCORESHEET_INGESTION.md`): the images are
+Instagram screenshots of Genius FIBA box scores; the group-label row IS detected and the Totals row
+maps, but the labels' centres do not line up with the data columns underneath them, so player rows
+produce no numeric cells. Verdict recorded: **do not enable for operators**; the fix is to derive the
+column grid from the data (a projection profile over numeric words) rather than from the header, and
+to ask LBCL for the exported PDF/CSV instead of a screenshot.
+
+**Decisions**
+- The review queue stores the reviewer's numbers as `corrected`; the extractor's output is kept
+  untouched in `extraction` so a review can always be compared against what the machine saw.
+- `external-stats-ingest.ts` resolves competition/division/season/venue from the organization's latest
+  season for sheets (a historical sheet carries no league metadata); that makes the flag right for
+  adding games to an existing league and *not* yet a way to onboard a new league from sheets.
+
+**Verification:** 918 pure tests still green (917 pass, 1 pre-existing skip), tsc/eslint clean,
+ratchet 4/4, `next build` clean with `/scoresheets` and `/scoresheets/[importId]/review` in the
+manifest. The acceptance measurement is the `scripts/scoresheet-ocr-batch.ts` output quoted in the doc.
+
+**Known issues:** the extraction does not read the real sheets (above). Everything downstream of a
+correct extraction is exercised only by unit tests and by the synthetic sheet in them.
+
+**Next step:** I3 - training execution loop.
+
+## 2026-10-18 - I3 / Prompt 3: training execution loop
+
+**Objective:** bridge an adopted `CoachingPlan` to real `TrainingSession` rows, log completion and the
+plan's target metric, and show the week.
+
+**Completed**
+- **Schema** (two additive migrations, applied to staging): `TrainingSession.coachingPlanId` (nullable
+  FK, `ON DELETE SET NULL` - deleting a plan must not delete its training history) and
+  `TrainingSession.completedAt` (null = not complete). Both are columns on an EXISTING tenant table, so
+  no new RLS policy or GRANT was needed - the one shape the tenant-migration checklist treats
+  differently, noted in the migration headers.
+- **`src/server/coaching/training.ts`**: `assignPlanToSession` (creates or reuses a session; refuses a
+  non-ACTIVE plan or a session from another club's squad), **stamps
+  `AthleteTrainingRecord.developmentFocus`** with the plan's focus areas and targets (creating the
+  participant record if the session has none - the field I2 deferred until a session existed),
+  `completeTrainingSession` (timestamp + optional attendance + `AthleteTrainingMetric` per plan target,
+  skipping metric keys the platform does not define rather than inventing them), `loadTrainingWeek`
+  (7-day window, overdue flag), `loadTrainingSession`, `loadAssignablePlans`. Both writes are audited
+  (`TRAINING_SESSION_ASSIGNED`, `TRAINING_SESSION_COMPLETED`).
+- **UI**: Coach Hub gains a "Training" section and `/coaching/[seasonClubId]/training` (assign an
+  adopted plan to a new session; this week's list with overdue/complete state) plus
+  `/coaching/[seasonClubId]/training/[sessionId]` (plan focus, participants with attendance and focus,
+  and the completion form with one numeric input per target metric). Both guarded by
+  `requireCoachingClub`.
+
+**Decisions**
+- Completion is a timestamp rather than a status enum: a session is either completed or not, and the
+  metric log is separate so a coach can tick off a session with no measurement.
+- The session's `developmentFocus` is written at ASSIGN time (that is when the plan becomes the
+  session's purpose), not at completion.
+- A targeted metric that has no `TrainingMetricDefinition` row is skipped and the audit record shows
+  what was requested - silently creating definitions would let typo'd keys into the platform catalog.
+
+**Verification (real staging data, through the same server functions the pages call):**
+- Plan `cmvd6ip580000ankk5k7m578s` (Ball security, `game.tov_pg` target 2.0) for CPS player Salawu
+  Korede -> assigned to new session `cmvdp548w0000hvkkxd5hedor` -> completed.
+- Read back: `completedAt=2026-10-18T10:42:32Z`, plan attached, participant `Korede attendance=PRESENT
+  focus="Ball security (target 2.0)"`, metric `game.tov_pg = 2.5`, week view `rows=1 completed=1
+  overdue=0`. So the I2-deferred `developmentFocus` write is now real and verified.
+- `tsc`/`eslint` clean, `next build` clean with both training routes, pure suite still green.
+
+**Known issues**
+- The week view is a 7-day window around "now" with no filtering by coach or by plan status beyond
+  ACTIVE; a season with dozens of sessions will need pagination.
+- The trend/sparkline the prompt asks for on the player page is NOT built: the metric is stored per
+  session, but charting it across the plan's 6-game window needs a small aggregation + UI, which is
+  the next increment.
+- No component test for the two training forms (they are thin wrappers over tested actions); the
+  actions themselves are covered by the staging run above.
+
+**Next step:** the trend chart on the player plan page, then I6 (athlete passport).
+
+
 
 
 

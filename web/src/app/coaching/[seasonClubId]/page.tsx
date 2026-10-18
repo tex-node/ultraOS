@@ -38,6 +38,14 @@ export default async function CoachingClubHome({ params }: { params: Promise<{ s
         </Card>
       </Link>
 
+      <SectionTitle>Training</SectionTitle>
+      <Link href={`${base}/training`}>
+        <Card>
+          <p className="text-sm text-text-1">Training week</p>
+          <p className="mt-1 text-xs text-text-3">Assign an adopted plan to a session, log completion and the target metric.</p>
+        </Card>
+      </Link>
+
       <SectionTitle>Next opponent</SectionTitle>
       {next ? (
         <Link href={`${base}/opponents/${next.opponent.seasonClubId}`}>
