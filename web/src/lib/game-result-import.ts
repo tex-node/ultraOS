@@ -1,6 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import type { StatDataSource } from "@/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit";
+import { queueGameLifecycleFeed } from "@/lib/data-feed/dispatcher";
 import { prisma } from "@/lib/prisma";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
@@ -255,6 +256,23 @@ export async function importGameResult(organizationId: string, input: GameResult
         update: { label: p.label, homeScore: p.homeScore, awayScore: p.awayScore },
       });
     }
+
+    // Partner data feed (streak v5, Prompt 2): an imported result is a game reaching FINAL, so subscribers
+    // get the same GAME_FINAL event a live game would emit. Queued inside this transaction; the drain runs
+    // after commit and cannot fail the import.
+    await queueGameLifecycleFeed(tx, {
+      organizationId,
+      gameId: game.id,
+      eventType: "GAME_FINAL",
+      event: {
+        eventId: game.id,
+        sequenceNumber: game.nextEventSequence,
+        period: finalPeriod,
+        clockSeconds: 0,
+        points: null,
+        eventType: "GAME_FINAL",
+      },
+    });
 
     const teamSides: Array<{ seasonClubId: string; line: ImportTeamLine; matches: PlayerMatch[] }> = [
       { seasonClubId: fixture.homeSeasonClubId!, line: input.home, matches: homeMatches },

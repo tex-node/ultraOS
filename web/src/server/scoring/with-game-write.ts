@@ -1,13 +1,14 @@
-import "server-only";
+﻿import "server-only";
 
 import { prisma as defaultPrisma } from "@/lib/prisma";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { scheduleFeedDrain } from "@/lib/data-feed/dispatcher";
 import { loadMutableGame, type MutableGame } from "./load-mutable-game";
 import type { AuthActor, EventSource, LedgerSourceHint, WriteContext } from "./types";
 
 // Opens a transaction, loads the game under FOR UPDATE lock, and passes the locked game to the
 // callback. This prevents the double-load pattern where the caller loads the game (without lock)
-// to compute event fields, then the service loads it again (with lock) — which can cause stale
+// to compute event fields, then the service loads it again (with lock) â€” which can cause stale
 // descriptions if two concurrent calls race.
 //
 // Callers must derive event fields (descriptions, computed values) from the locked game passed
@@ -30,7 +31,7 @@ export async function withGameWrite<T>(
   fn: (writeCtx: WriteContext & { game: MutableGame }) => Promise<T>,
 ): Promise<T> {
   const client = ctx.prisma ?? defaultPrisma;
-  return client.$transaction(async (tx) => {
+  const result = await client.$transaction(async (tx) => {
     const game = await loadMutableGame(
       tx,
       ctx.actor.organizationId,
@@ -42,4 +43,10 @@ export async function withGameWrite<T>(
     );
     return fn({ ...ctx, tx, game });
   });
+
+  // After commit, and only after commit: wake the partner data-feed drain. Fire-and-forget with a
+  // per-organization guard (see dispatcher.ts) so the caller never waits on a subscriber, and a failed
+  // webhook can never fail a scoring write. The outbox rows are already durable either way.
+  scheduleFeedDrain(ctx.actor.organizationId);
+  return result;
 }

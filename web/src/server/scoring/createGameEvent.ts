@@ -1,6 +1,7 @@
-import "server-only";
+﻿import "server-only";
 
 import { remainingClockSeconds } from "@/lib/game-clock";
+import { queueScoreChangedFeed } from "@/lib/data-feed/dispatcher";
 import { ledgerSourceFor } from "@/lib/scoring/provenance";
 import { buildGameEventCreateData } from "@/lib/scoring/build-game-event";
 import { loadMutableGame } from "./load-mutable-game";
@@ -10,7 +11,7 @@ import type { CreateGameEventInput, WriteContext } from "./types";
 // The single canonical write path for a GameEvent. Three callers, one function:
 //   - the live UI server actions (source: LIVE_UI)
 //   - the sync replay endpoint (source: OFFLINE_SYNC, tx supplied, called in a loop)
-//   - the vision promotion seam (source: VISION_PROMOTED) — B4
+//   - the vision promotion seam (source: VISION_PROMOTED) â€” B4
 //
 // The service owns the ENTIRE canonical write:
 //   1. Lock Fixture (FOR UPDATE) + load game + assert mutable/active
@@ -20,7 +21,7 @@ import type { CreateGameEventInput, WriteContext } from "./types";
 //   5. Insert GameEvent with source mapping + provenance columns
 //
 // `ctx.tx` is REQUIRED: this function never opens its own transaction. The caller owns the
-// boundary — a single statement for the live UI, or a 100-record atomic batch for sync. The
+// boundary â€” a single statement for the live UI, or a 100-record atomic batch for sync. The
 // service stays idempotency-agnostic; the SyncIdempotency insert lives in the sync endpoint,
 // inside the same transaction (see docs/canonical-write-audit.md and the rule-#6 brief).
 export async function createGameEvent(
@@ -68,6 +69,25 @@ export async function createGameEvent(
     ),
     select: { id: true, sequenceNumber: true },
   });
+
+  // 6. Partner data feed (streak v5, Prompt 2). An INSERT of one outbox row per interested subscriber, in
+  // THIS transaction - no network, no timer. The drain that signs and POSTs runs after commit, so a slow
+  // subscriber can never stall the canonical write. Only scoring events are queued here; lifecycle events
+  // (GAME_STARTED / GAME_FINAL) are queued by the status transition via queueGameLifecycleFeed.
+  if ((input.points ?? 0) > 0) {
+    await queueScoreChangedFeed(tx, {
+      organizationId: ctx.actor.organizationId,
+      gameId: input.gameId,
+      event: {
+        eventId: created.id,
+        sequenceNumber: created.sequenceNumber ?? sequenceNumber,
+        period: input.period ?? game.currentPeriod,
+        clockSeconds,
+        points: input.points ?? null,
+        eventType: input.eventType,
+      },
+    });
+  }
 
   return { id: created.id, sequenceNumber: created.sequenceNumber ?? sequenceNumber };
 }
