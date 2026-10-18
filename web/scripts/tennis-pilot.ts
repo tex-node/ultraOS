@@ -28,8 +28,9 @@ const arg = (name: string) => {
 const ORGANIZATION = arg("organization");
 const ACTOR = arg("actor");
 const KEEP = process.argv.includes("--keep");
+const KNOCKOUT = process.argv.includes("--knockout");
 if (!ORGANIZATION || !ACTOR) {
-  console.error("usage: tennis-pilot.ts --organization <id> --actor <userId> [--keep]");
+  console.error("usage: tennis-pilot.ts --organization <id> --actor <userId> [--keep] [--knockout]");
   process.exit(1);
 }
 const ORG: string = ORGANIZATION;
@@ -214,6 +215,49 @@ async function main() {
   console.log("");
   console.log(problems.length === 0 ? "PASS: 4 entrants, 6 matches, standings consistent (wins sum to 6, ordered)" : `FAIL: ${problems.join("; ")}`);
   if (problems.length > 0) process.exitCode = 1;
+
+  // Knockout bracket (streak v6, Prompt 3): two semis and a final, so the public page has a bracket to
+  // render alongside the round-robin table. Fixtures carry a `round`; scores are the semis' real outcomes.
+  if (KNOCKOUT) {
+    await withOrganizationContext(ORG, async (tx) => {
+      const semi = async (home: string, away: string, homeScore: number, awayScore: number) => {
+        const fixture = await tx.fixture.create({
+          data: {
+            organizationId: ORG,
+            seasonId: setup.season.id,
+            divisionId: setup.division.id,
+            venueId: setup.venue.id,
+            homeEntrantId: home,
+            awayEntrantId: away,
+            scheduledAt: new Date(),
+            status: "FINAL",
+            round: 1,
+            homeScore,
+            awayScore,
+            winnerEntrantId: homeScore > awayScore ? home : away,
+          },
+          select: { id: true },
+        });
+        return fixture;
+      };
+      await semi(setup.entrants[0].id, setup.entrants[1].id, 2, 0);
+      await semi(setup.entrants[2].id, setup.entrants[3].id, 2, 1);
+      await tx.fixture.create({
+        data: {
+          organizationId: ORG,
+          seasonId: setup.season.id,
+          divisionId: setup.division.id,
+          venueId: setup.venue.id,
+          homeEntrantId: setup.entrants[0].id,
+          awayEntrantId: setup.entrants[2].id,
+          scheduledAt: new Date(Date.now() + 86_400_000),
+          status: "SCHEDULED",
+          round: 2,
+        },
+      });
+    });
+    console.log("knockout added: 2 semifinals (round 1) + the final (round 2)");
+  }
 
   if (!KEEP) {
     await withOrganizationContext(ORG, async (tx) => {
