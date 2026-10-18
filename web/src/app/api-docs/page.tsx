@@ -57,10 +57,16 @@ export default function ApiDocsPage() {
       <Section id="base" title="Base URL and format">
         <p>
           Everything lives under <code className="text-text-1">/api/v1</code> on the league&apos;s host. Responses are JSON, UTF-8,
-          and every timestamp is ISO 8601 UTC. <code>publicId</code> values are the league&apos;s stable public identifiers, never
-          internal database ids.
+          and every timestamp is ISO 8601 UTC.
         </p>
-        <Code>{`GET https://<league-host>/api/v1/games/<publicId>/live-feed
+        <p>
+          The <code>publicId</code> path segment for a game is the{" "}
+          <strong className="text-text-1">fixture identifier</strong> the league publishes - the same id used in its fixture pages and
+          public links. Club and player routes take the league&apos;s own short identifiers (<code>surge</code>,{" "}
+          <code>vortex</code>, an athlete&apos;s public id). Ids are league-scoped: a valid id from another league returns 404, never a
+          hint that it exists.
+        </p>
+        <Code>{`GET https://<league-host>/api/v1/games/<fixtureId>/live-feed
 accept: application/json`}</Code>
       </Section>
 

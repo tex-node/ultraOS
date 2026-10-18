@@ -10092,6 +10092,83 @@ route (`○ /api-docs`). The page is linked from the partner-facing docs and fro
 
 **Next step:** Prompt 5 (sync, test:db, deploys).
 
+## 2026-10-18 - Streak v5 / Prompt 5: roadmaps, RLS proven as the app role, both deploys green
+
+**Objective:** final sync - roadmap statuses, prove the new tables are RLS-correct, deploy staging and
+production with smoke tests.
+
+**A bug this prompt caught: the feed tables were granted to the WRONG ROLE.**
+`20261018200000` granted only to `ultraos`. This database has three roles sharing that stem - `ultraos`,
+`ultraos_app` (production runtime) and `ultraos_staging` (staging runtime) - and every other tenant table
+grants to all three. The app runs as `ultraos_staging`, so on staging the new tables were invisible to it
+(SQLSTATE 42501). Nothing surfaced earlier because the verification scripts and `test:db` all connect with
+the **privileged** URL. Retrofit migration `20261018202000_data_feed_grants` fixes staging and production;
+the pattern doc (`docs/patterns/tenant-database-migrations.md`) records it as the third occurrence with the
+new lesson: **a GRANT is only verified when a query runs as the app role**, and the check is to compare
+against an existing tenant table and grant to every runtime role it lists.
+
+**RLS proven as the app role** (scratch clone of staging, `current_user = ultraos_staging`):
+```
+grants visible as ultraos_staging: ultraos_staging
+scoped ORG_A -> 1:rlsprobe_a        (only that tenant's row)
+scoped ORG_B -> 1:rlsprobe_b
+cross-tenant INSERT scoped to ORG_A, row for ORG_B:
+  ERROR: new row violates row-level security policy for table "DataFeedSubscription"
+after the attempt, scoped ORG_B -> 1:rlsprobe_b   (nothing leaked in)
+```
+The rejection is the **policy**, not a permission error - which is exactly what proves RLS is doing the work
+and the grant is not merely missing.
+
+**`npm run test:db` - 49/49, but only serialized.** Two parallel runs of the same suite on the same scratch
+clone produced 10 and then 12 failures with a *different* failing set each time (scoring parity, sync replay,
+coaching adoption, squad setup, games actions - no common subject). Serialized with
+`--test-concurrency=1`: **49 tests, 49 pass, 0 fail**. The files each create an isolated schema but share one
+database and one connection pool, and at least one suite depends on not running alongside another, so the npm
+script now passes `--test-concurrency=1` with that reason in the commit.
+
+One contributing cause was mine and is fixed: `scheduleFeedDrain` used to fire after **every** scoring write
+even with no subscribers, doing an async round-trip on the global client while tests were creating and
+dropping schemas. It now only runs for an organization that actually queued a delivery in this process
+(`markFeedQueued`), so an installation with no subscribers does no async work at all after a commit. That
+took the parallel failures from 10 to 4 before the serialization change.
+
+**Roadmaps updated**
+- `MULTI_SPORT_ROADMAP.md`: gate **G5 "second additional sport accepted"** moved from `Not started` to
+  `In review`, with the tennis pilot evidence and the explicit gaps (no tennis capture console, no computed
+  tennis standings page, best-of-5 default needs the SETS_TO_WIN override, no knockout bracket).
+- `COACH_INTELLIGENCE_ROADMAP.md`: production note extended - the coaching stack is live, and the partner
+  data feed (Prompt 2) plus the passport publication flag are deployed; I1 stays "pivoted to CSV/Excel, OCR
+  blocked", I4 "inference blocked, ingestion proven".
+
+**Deploys**
+| environment | release | migrations | smoke |
+| --- | --- | --- | --- |
+| staging | `release-0c6b5ad` | `20261018200000_data_feed_subscriptions`, `…201000_data_feed_delivery_claim`, `…202000_data_feed_grants` | **7/7 PASS**, 0 errors |
+| production | `release-0c6b5ad` | same three, after a verified backup `ultraleagueos_pre_data_feed_20261018T175843Z.dump` (1,096,753 bytes, sha256 `064ff608…`, 1,573 TOC entries) | **7/7 PASS**, 0 errors, exit 0 |
+
+**Production verification**
+- Both feed tables: `rls=true forced=true policies=1`; grants `ultraos, ultraos_app, ultraos_staging`; the
+  app role is `ultraos_app` and a scoped `SELECT` works (0 rows, not an error).
+- `/api-docs` -> **200** (42 KB) with the developer-portal, rate-limit, capability-tier and HMAC sections.
+- `GET /api/v1/games/<fixtureId>/live-feed` -> **200, 188 bytes**:
+  `{"v":1,"gid":"…","fid":"…","st":"FINAL","s":[15,26],"p":2,"pl":"FINAL","c":0,"cap":"BOX_SCORE_ONLY","t":"…","e":null}`
+  - and `e: null` for a BOX_SCORE_ONLY game is the honesty rule working in production.
+- While verifying, one doc claim was corrected: the `publicId` path segment is the **fixture id**, not a
+  separate public key. The `/api-docs` page now says so instead of claiming internal ids are never exposed.
+
+**Known issues**
+- `test:db` cannot run from a release directory (a release contains only the built `web/`, not `src/`) and
+  node 20's test runner does not expand the glob patterns in the npm script; both are noted here and the
+  serialized command used explicit file paths.
+- The data feed has no cron: pending deliveries drain after each scoring write to that organization, or via
+  `drainAllOrganizations()`; a subscriber that is down for hours simply accumulates PENDING rows until the
+  next write.
+- `GAME_STARTED` is selectable but not emitted yet.
+
+**Streak v5 complete.** All five prompts done; both environments on `release-0c6b5ad`, smoke green, 49/49 DB
+tests serialized, 10/10 feed unit tests, ratchet untouched.
+
+
 
 
 

@@ -40,7 +40,7 @@ Applying the engine migrations and backfills to staging is governed by `document
 | G2 | Entrant backfill parity proven (Stage 2) | `Done` | Verified on staging 2026-09-15 (8 entrants); production pending. |
 | G3 | Stat projection parity proven (Stage 3) | `Done` | Verified on staging 2026-09-15 (2,200 values, 0 mismatches); production pending. |
 | G4 | Volleyball pilot accepted (Stage 8) | `Done` | Staging pilot: 4 clubs, 6 fixtures, results + set-based standings; capture UI still basketball (S6.3). |
-| G5 | Second additional sport accepted (Stage 9) | `Not started` | Proves the engine generalizes. |
+| G5 | Second additional sport accepted (Stage 9) | `In review` | **Tennis pilot run 2026-10-18 (streak v5, Prompt 3)**: 4 INDIVIDUAL entrants, best-of-3 (SETS_TO_WIN=2 rule set), 6 round-robin matches scored point by point through `tennis-scoring.ts`, entrant-vs-entrant fixtures with `null` season clubs, one `GamePeriodScore` per set, and standings ranked by wins → set ratio → game ratio with head-to-head deciding ties. Public sub-site `/t/<slug>` renders the tennis competition and its INDIVIDUAL entrant rows (verified in the default public org). **Not done:** the capture console has no tennis mode, there is no computed tennis standings page, and best-of-3 needs the rule override because the definition defaults to best-of-5. Detail: `MULTI_SPORT_PILOT.md`. No basketball assumption broke - the gaps are missing wiring, not model conflicts. |
 | G6 | Legacy basketball columns retired (Stage 10) | `Not started` | Only after G3, G4, G5 and Season Zero sign-off. |
 
 ## 4. Phases
