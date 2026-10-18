@@ -3,6 +3,7 @@ import { withOrganizationContext } from "../src/lib/tenant-context";
 import { TENNIS } from "../src/lib/sports/tennis";
 import { awardPoint, isSetComplete, setWinner, type TennisConfig } from "../src/lib/sports/tennis-scoring";
 import { computeSeasonStandings } from "../src/lib/sports/standings";
+import { recalculateStandings } from "../src/lib/standings-recalculate";
 import { matchOutcome } from "../src/lib/sports/match-result";
 
 // Streak v5, Prompt 3: a tennis pilot, end to end through the multi-sport engine.
@@ -212,7 +213,12 @@ async function main() {
   for (let index = 1; index < table.length; index += 1) {
     if (table[index].won > table[index - 1].won) problems.push(`row ${index} has more wins than the row above`);
   }
+  // Persist the standings the way a real finalisation does, so the PUBLIC page has Standing rows to read
+  // (the in-memory table above is the engine's answer; this is the same calculation written for the site).
+  await withOrganizationContext(ORG, (tx) => recalculateStandings(tx, ORG, setup.season.id));
+  const persisted = await withOrganizationContext(ORG, (tx) => tx.standing.count({ where: { seasonId: setup.season.id } }));
   console.log("");
+  console.log(`Standing rows persisted: ${persisted}`);
   console.log(problems.length === 0 ? "PASS: 4 entrants, 6 matches, standings consistent (wins sum to 6, ordered)" : `FAIL: ${problems.join("; ")}`);
   if (problems.length > 0) process.exitCode = 1;
 
@@ -257,6 +263,8 @@ async function main() {
       });
     });
     console.log("knockout added: 2 semifinals (round 1) + the final (round 2)");
+    // The semis are FINAL, so they change the table: recalculate once more.
+    await withOrganizationContext(ORG, (tx) => recalculateStandings(tx, ORG, setup.season.id));
   }
 
   if (!KEEP) {
