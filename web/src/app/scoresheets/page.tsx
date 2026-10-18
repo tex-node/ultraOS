@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { auth } from "@/auth";
@@ -62,24 +62,26 @@ export default async function ScoresheetsPage({ searchParams }: { searchParams: 
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <section aria-labelledby="csv-upload" className="rounded-lg border border-line bg-ink-800 p-4">
             <h2 id="csv-upload" className="text-sm font-semibold">
-              1 Â· Upload CSV / Excel export
+              1 · Upload CSV / Excel export
               <span className="ml-2 rounded bg-brand-400/20 px-1.5 py-0.5 text-[10px] font-bold text-brand-300">RECOMMENDED</span>
             </h2>
             <p className="mt-1 text-xs text-text-3">
-              A Genius/FIBA box-score CSV: one row per player, a header row, optional <code>## TEAM</code> sections and{" "}
-              <code># date:</code> lines. Columns are matched by name, so no layout setup is needed.
+              A Genius/FIBA box-score export: one row per player, a header row, optional <code>## TEAM</code> sections and{" "}
+              <code># date:</code> lines. Columns are matched by name, so no layout setup is needed. A <code>.xlsx</code>{" "}
+              workbook uses its <strong>first sheet</strong> - anything a spreadsheet adds around the table (titles, merged
+              cells) becomes a warning rather than a silent miss.
             </p>
             <form action={uploadCsvScoresheet} className="mt-3 space-y-3">
               <label className="block text-xs text-text-2">
-                CSV file
-                <input name="file" type="file" accept=".csv,text/csv" required className="mt-1 block w-full text-sm text-text-1" />
+                CSV or Excel file
+                <input name="file" type="file" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required className="mt-1 block w-full text-sm text-text-1" />
               </label>
               <label className="block text-xs text-text-2">
                 Label (e.g. &quot;LBCL Game 12 - Ultra vs LXB&quot;)
                 <input name="sourceLabel" required maxLength={180} className="mt-1 min-h-[44px] w-full rounded-md border border-line bg-ink-700 px-3 text-sm" />
               </label>
               <button type="submit" className="min-h-[44px] w-full rounded-md bg-brand-400 px-4 text-sm font-bold text-ink-900">
-                Read the CSV
+                Read the file
               </button>
             </form>
           </section>

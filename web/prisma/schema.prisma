@@ -1534,6 +1534,9 @@ enum ScoresheetImportStatus {
 enum ScoresheetImportFormat {
   IMAGE
   CSV
+  // Streak v4: a workbook whose FIRST sheet is converted to the same string matrix and handed to the same
+  // parser as CSV. A separate value so the review queue can say which file arrived.
+  XLSX
 }
 
 model ScoresheetImport {

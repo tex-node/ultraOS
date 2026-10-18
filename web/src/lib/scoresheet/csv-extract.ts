@@ -143,7 +143,7 @@ function toNumber(raw: string): number | null {
 function toMinutes(raw: string): { minutes: number; didNotPlay: boolean } {
   const t = raw.trim();
   if (!t) return { minutes: 0, didNotPlay: false };
-  if (/^(dnp|dnd|did not play|inactive|-|—)$/i.test(t)) return { minutes: 0, didNotPlay: true };
+  if (/^(dnp|dnd|did not play|inactive|-|â€”)$/i.test(t)) return { minutes: 0, didNotPlay: true };
   const clock = /^(\d{1,3}):(\d{2})$/.exec(t);
   if (clock) return { minutes: Number(clock[1]) + Number(clock[2]) / 60, didNotPlay: false };
   const value = toNumber(t);
@@ -179,6 +179,13 @@ function emptyPlayer(): CorrectedPlayer {
 const META_KEYS = ["sourceLabel", "scheduledAt", "date", "competition", "league", "division", "season", "venue", "homeScore", "awayScore", "home", "away", "gender"] as const;
 
 export function parseBoxScoreCsv(text: string): ParsedCsvScoresheet {
+  return parseBoxScoreMatrix(parseCsvRows(text));
+}
+
+// The spreadsheet path (Prompt 2, streak v4) feeds this the SAME shape: a matrix of cell strings from the
+// first sheet of an .xlsx. Everything below - metadata lines, `## TEAM` sections, header aliases,
+// made-attempted pairs, the checksum input - is shared, so a workbook and a CSV cannot drift apart.
+export function parseBoxScoreMatrix(rows: string[][]): ParsedCsvScoresheet {
   const warnings: string[] = [];
   const meta: CsvMeta & { home: string | null; away: string | null } = {
     sourceLabel: null,
@@ -198,13 +205,16 @@ export function parseBoxScoreCsv(text: string): ParsedCsvScoresheet {
   let headerMap: { header: string; column: string }[] | null = null;
   let columns: { column: ScoresheetColumnKey | "team"; combined: boolean }[] = [];
 
-  const rows = parseCsvRows(text);
   for (const cells of rows) {
     const first = (cells[0] ?? "").trim();
     if (!first && cells.every((cell) => !cell.trim())) continue;
     // Metadata lines carry commas (`# period: Q1,19,2`), so the CSV field split would cut them apart:
     // reassemble the whole line for the comment branches only. A data row never starts with '#'.
-    const line = first.startsWith("#") ? cells.join(",").trim() : first;
+    // Trailing EMPTY cells are dropped first: a spreadsheet pads every row to the widest one, and joining
+    // the padding back would turn "## SQUARE TEAM" into "## SQUARE TEAM,,,,".
+    let lastFilled = cells.length - 1;
+    while (lastFilled > 0 && !cells[lastFilled].trim()) lastFilled -= 1;
+    const line = first.startsWith("#") ? cells.slice(0, lastFilled + 1).join(",").trim() : first;
 
     // `# key: value` and `# key = value` carry game metadata; `## TEAM` starts a team section.
     if (line.startsWith("##")) {

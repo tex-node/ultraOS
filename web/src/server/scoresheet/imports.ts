@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import type { ExtractedTeamTable, ScoresheetExtraction } from "@/lib/scoresheet/extract";
 import { buildChecksumReport, type ChecksumReport } from "@/lib/scoresheet/checksums";
@@ -119,9 +119,10 @@ export async function createScoresheetImport(
   return { id: created.id };
 }
 
-// I1 pivot: a CSV import has no image and no template layout - the columns come from the file's own
-// header row, so there is nothing to configure up front. It is stored as REVIEW_REQUIRED in one step:
-// parsing is instant, and a human still approves every row before anything is ingested.
+// I1 pivot: a structured import (CSV or the first sheet of an .xlsx) has no image and no template layout -
+// the columns come from the file's own header row, so there is nothing to configure up front. It is stored
+// as REVIEW_REQUIRED in one step: parsing is instant, and a human still approves every row before anything
+// is ingested.
 export async function createCsvScoresheetImport(
   tx: Prisma.TransactionClient,
   args: {
@@ -131,16 +132,22 @@ export async function createCsvScoresheetImport(
     parsed: ParsedCsvScoresheet;
     corrected: Omit<CorrectedScoresheet, "approvedAt" | "approvedById">;
     checksums: ChecksumReport;
+    /** "CSV" or "XLSX" - the same parse, but the review queue shows which file arrived. */
+    format?: "CSV" | "XLSX";
+    /** Extra detail about the source (e.g. which sheet was read), stored with the extraction. */
+    sourceInfo?: Record<string, unknown>;
   },
 ): Promise<{ id: string }> {
+  const format = args.format ?? "CSV";
+  const version = format === "XLSX" ? "xlsx-1" : "csv-1";
   const created = await tx.scoresheetImport.create({
     data: {
       organizationId: args.organizationId,
       sourceLabel: args.sourceLabel,
-      status: args.checksums.ok ? "REVIEW_REQUIRED" : "REVIEW_REQUIRED",
-      format: "CSV",
-      extractionVersion: `csv-1`,
-      extraction: { version: "csv-1", meta: args.parsed.meta, teams: args.parsed.teams, warnings: args.parsed.warnings, headerMap: args.parsed.headerMap } as unknown as Prisma.InputJsonValue,
+      status: "REVIEW_REQUIRED",
+      format,
+      extractionVersion: version,
+      extraction: { version, meta: args.parsed.meta, teams: args.parsed.teams, warnings: args.parsed.warnings, headerMap: args.parsed.headerMap, ...(args.sourceInfo ?? {}) } as unknown as Prisma.InputJsonValue,
       corrected: args.corrected as unknown as Prisma.InputJsonValue,
       checksums: args.checksums as unknown as Prisma.InputJsonValue,
       failureReason: null,

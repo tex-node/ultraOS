@@ -11,6 +11,7 @@ import { createOcrProvider } from "@/lib/ocr/tesseract";
 import { buildChecksumReport, type ChecksumReport } from "@/lib/scoresheet/checksums";
 import { correctedTeamToTable } from "@/lib/scoresheet/corrected";
 import { csvToCorrected, parseBoxScoreCsv } from "@/lib/scoresheet/csv-extract";
+import { looksLikeXlsx, parseBoxScoreXlsx } from "@/lib/scoresheet/excel-extract";
 import {
   approveScoresheetImport,
   createCsvScoresheetImport,
@@ -194,16 +195,30 @@ export async function uploadCsvScoresheet(formData: FormData): Promise<void> {
   const { session, organizationId } = await requirePermissionWithOrganization("data:import");
   const file = formData.get("file");
   const sourceLabel = String(formData.get("sourceLabel") ?? "").trim();
-  if (!(file instanceof File) || file.size === 0) redirect("/scoresheets?error=Choose+a+CSV+file.");
+  if (!(file instanceof File) || file.size === 0) redirect("/scoresheets?error=Choose+a+CSV+or+.xlsx+file.");
   if (!sourceLabel) redirect("/scoresheets?error=Add+a+label+so+the+sheet+is+identifiable+later.");
-  if (file.size > 2_000_000) redirect("/scoresheets?error=That+file+is+larger+than+2+MB+-+a+box-score+CSV+should+be+a+few+kilobytes.");
+  if (file.size > 5_000_000) redirect("/scoresheets?error=That+file+is+larger+than+5+MB+-+a+box-score+export+should+be+small.");
 
-  const text = await file.text();
+  // One upload form, two container formats: the bytes decide, not the file name (an operator renaming a
+  // file must not change how it is read). An .xlsx is a zip container; anything else is treated as CSV.
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const isWorkbook = file.name.toLowerCase().endsWith(".xlsx") || looksLikeXlsx(bytes);
+
   let parsed;
+  let format: "CSV" | "XLSX" = "CSV";
+  let sourceInfo: Record<string, unknown> | undefined;
   try {
-    parsed = parseBoxScoreCsv(text);
+    if (isWorkbook) {
+      const workbook = parseBoxScoreXlsx(bytes);
+      parsed = workbook.parsed;
+      format = "XLSX";
+      sourceInfo = { sourceFile: file.name, workbook: workbook.summary };
+    } else {
+      parsed = parseBoxScoreCsv(new TextDecoder().decode(bytes));
+      sourceInfo = { sourceFile: file.name };
+    }
   } catch (error) {
-    redirect(`/scoresheets?error=${encodeURIComponent(`Could not read that CSV: ${error instanceof Error ? error.message : String(error)}`)}`);
+    redirect(`/scoresheets?error=${encodeURIComponent(`Could not read that file: ${error instanceof Error ? error.message : String(error)}`)}`);
   }
 
   let corrected;
@@ -224,7 +239,7 @@ export async function uploadCsvScoresheet(formData: FormData): Promise<void> {
   });
 
   const created = await withOrganizationContext(organizationId, (tx) =>
-    createCsvScoresheetImport(tx, { organizationId, userId: session.user.id, sourceLabel, parsed, corrected, checksums }),
+    createCsvScoresheetImport(tx, { organizationId, userId: session.user.id, sourceLabel, parsed, corrected, checksums, format, sourceInfo }),
   );
   revalidatePath("/scoresheets");
   redirect(`/scoresheets/${created.id}/review`);
