@@ -61,8 +61,36 @@ unaffected either way, since CORS is a browser-enforced restriction, not a serve
 | GET | `/api/v1/clubs/{shortNameSlug}` | `ClubSummaryV1` |
 | GET | `/api/v1/seasons/{active\|seasonId}/standings` | `SeasonStandingsV1` |
 | GET | `/api/v1/seasons/{active\|seasonId}/leaders?category=PPG` | `SeasonLeadersV1` (categories: `PPG,RPG,APG,SPG,BPG,FG_PCT,THREE_PCT,FT_PCT,EFF`) |
+| GET | `/api/v1/games/{fixtureId}/live-feed` | `LiveFeedV1` - compressed odds/media state (see below) |
 
 Full response shapes: see [`openapi-v1.yaml`](./openapi-v1.yaml) or `src/lib/api-v1/contracts.ts`.
+
+Partner-facing summary of all of the above: the public `/api-docs` page.
+
+## Live feed (odds and media) - polling and push
+
+`GET /api/v1/games/{publicId}/live-feed` returns a deliberately small body: `{v, gid, fid, st, s, p, pl, c, cap,
+t, e}` - version, game/fixture ids, status, `[home, away]`, period, period label, clock seconds, capability
+tier, generated-at, and the last five ACTIVE events (`q` sequence, `p` period, `c` clock, `t` type, `pts`, `side`).
+`e` is `null` for `BOX_SCORE_ONLY` (never captured, not &quot;nothing happened&quot;). `q` is monotonic per game: use it
+to drop out-of-order responses.
+
+Partners who need to price quickly should not poll at all. A `DataFeedSubscription` (org-scoped, RLS-protected)
+registers a `webhookUrl`, a shared `secret`, and the event types it wants (`GAME_STARTED`, `SCORE_CHANGED`,
+`GAME_FINAL`). The canonical scoring path writes an outbox row in the same transaction as the `GameEvent`; a
+separate drain posts it afterwards, so a slow subscriber can never stall a live game.
+
+Every delivery is signed: `x-ultra-signature: t=<unix seconds>,v1=<hex HMAC-SHA256(secret, "<t>.<raw body>")>`,
+alongside `x-ultra-event`, `x-ultra-delivery-id` and `x-ultra-attempt`. Verify against the **raw** body (before
+JSON parsing), compare in constant time, and reject a timestamp older than five minutes - that tolerance is the
+replay protection. Delivery semantics: 2xx = delivered; 408/429/5xx retried with exponential backoff (30 s
+doubling to a 1 h cap, 8 attempts); any other 4xx is permanent. A retry can follow a response the sender never
+saw, so the same `id`/`x-ultra-delivery-id` may arrive twice - dedupe on it.
+
+Implementation: `src/lib/data-feed/signature.ts` (wire format + verification, unit tested),
+`src/lib/data-feed/dispatcher.ts` (queue + drain, atomic `PENDING -> DELIVERING` claim),
+`src/app/api/v1/games/[publicId]/live-feed/route.ts`, and `scripts/data-feed-subscriber.ts` (a reference
+subscriber that verifies every signature).
 
 ## Versioning policy (Part XVII)
 

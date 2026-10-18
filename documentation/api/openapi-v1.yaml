@@ -282,3 +282,52 @@ paths:
                   leaders: { type: array, items: { $ref: '#/components/schemas/LeaderV1' } }
                   generatedAt: { type: string, format: date-time }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
+
+  /games/{publicId}/live-feed:
+    get:
+      summary: Compressed live state for odds and media consumers
+      description: >
+        Short-key payload designed for polling: score, period, clock and the last five events. Event fields are
+        null for a BOX_SCORE_ONLY game (the history was never captured), never an empty array.
+      parameters:
+        - name: publicId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Live state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [v, gid, fid, st, s, p, c, cap, t]
+                properties:
+                  v: { type: integer, enum: [1] }
+                  gid: { type: string }
+                  fid: { type: string }
+                  st: { type: string, enum: [NOT_STARTED, LIVE, PAUSED, FINAL] }
+                  s:
+                    type: array
+                    minItems: 2
+                    maxItems: 2
+                    items: { type: integer }
+                  p: { type: integer }
+                  pl: { type: string, nullable: true }
+                  c: { type: integer, nullable: true }
+                  cap: { type: string, enum: [BOX_SCORE_ONLY, EVENT_LEVEL, FULL_ULTRA] }
+                  t: { type: string, format: date-time }
+                  e:
+                    type: array
+                    nullable: true
+                    items:
+                      type: object
+                      properties:
+                        q: { type: integer }
+                        p: { type: integer }
+                        c: { type: integer }
+                        t: { type: string }
+                        pts: { type: integer }
+                        side: { type: string, nullable: true, enum: [h, a] }
+        "404":
+          description: No such game (or it belongs to another league)

@@ -10058,6 +10058,41 @@ needed in this slice.
 
 **Next step:** Prompt 4 (API docs).
 
+## 2026-10-18 - Streak v5 / Prompt 4: public developer portal at /api-docs
+
+**Objective:** if we sell data, developers need somewhere to read the contract.
+
+**Completed**
+- **`/api-docs`** - a **static, public** page (no auth, no data access) styled with the app's tokens:
+  base URL and format; **authentication and the public/private boundary** (the whole /api/v1 surface is public
+  and read-only, no keys today; private surfaces - broadcast controls, reconciliation detail, contact data,
+  coach plans - are explicitly not part of it); **rate limits** (120 req/60 s per IP, the three response
+  headers, and why polling faster is pointless because the platform writes at human speed); **capability
+  tiers** (`BOX_SCORE_ONLY` / `EVENT_LEVEL` / `FULL_ULTRA`, with the rule that `null` means "never captured" and
+  a tier is data, not an error); an **endpoint table** for all ten v1 routes; the **live-feed response
+  schema** with every key explained; and a full **webhook section** - headers, body, the exact signing string,
+  a copy-paste Node verification snippet with constant-time compare and a 5-minute replay window, retry
+  semantics and the duplicate-`id` warning.
+- The webhook header names and signature scheme are **imported from `FEED_HEADERS`/the same module the
+  dispatcher signs with**, so the docs cannot drift from the implementation on the one thing partners must get
+  exactly right.
+- `openapi-v1.yaml` gained the `/games/{publicId}/live-feed` path (published at `/api-docs/openapi-v1.yaml`,
+  served from `web/public/`, and copied back into `documentation/api/` so the two stay identical).
+- `documentation/api/ULTRA_LIVE_API_V1.md` gained a "Live feed - polling and push" section covering the same
+  ground for the repo, with pointers to the implementation files.
+
+**Verification:** `tsc`/`eslint`/`next build` clean, `/api-docs` appears in the build manifest as a **static**
+route (`○ /api-docs`). The page is linked from the partner-facing docs and from the CLI reference in
+`documentation/api/`.
+
+**Known issues**
+- The page is hand-written prose rather than generated from the OpenAPI file. It states that the OpenAPI file
+  wins if they disagree, which is the honest ordering, but a generator would be better long-term.
+- There is no hosted interactive explorer (Swagger UI); the YAML is downloadable instead.
+
+**Next step:** Prompt 5 (sync, test:db, deploys).
+
+
 
 
 
