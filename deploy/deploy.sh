@@ -104,20 +104,27 @@ if [[ -n "$PREFLIGHT_URL" ]]; then
   STATUS_OUT="$(DATABASE_URL="$PREFLIGHT_URL" npx prisma migrate status 2>&1 || true)"
   echo "$STATUS_OUT" | tail -4
   if echo "$STATUS_OUT" | grep -q 'not yet been applied'; then
-    {
-      echo ""
-      echo "##########################################################################"
-      echo "# DEPLOY HALTED: this ref has migrations that are NOT applied."
-      echo "# Shipping it would run code against a schema it does not expect."
-      echo "#"
-      echo "# Re-run the same command with --migrate, after a verified backup,"
-      echo "# or apply the migration separately and re-run this deploy."
-      echo "#"
-      echo "# Nothing was built, swapped, or restarted."
-      echo "##########################################################################"
-      echo "$STATUS_OUT" | sed -n '/not yet been applied/,$p' | head -20
-    } >&2
-    exit 4
+    if [[ "$RUN_MIGRATE" -eq 1 ]]; then
+      # --migrate was passed: applying them is exactly what the caller asked for. Do not halt here
+      # (that was a bug fixed 2026-10-18: the pre-flight refused even a --migrate deploy). The
+      # migrate step below runs before the swap, and its result is re-checked afterwards.
+      echo "[deploy] pending migrations found - they will be applied by --migrate before the swap"
+    else
+      {
+        echo ""
+        echo "##########################################################################"
+        echo "# DEPLOY HALTED: this ref has migrations that are NOT applied."
+        echo "# Shipping it would run code against a schema it does not expect."
+        echo "#"
+        echo "# Re-run the same command with --migrate, after a verified backup,"
+        echo "# or apply the migration separately and re-run this deploy."
+        echo "#"
+        echo "# Nothing was built, swapped, or restarted."
+        echo "##########################################################################"
+        echo "$STATUS_OUT" | sed -n '/not yet been applied/,$p' | head -20
+      } >&2
+      exit 4
+    fi
   fi
 else
   echo "[deploy] WARNING: no privileged database URL (no --migrate-db-url and no $APP_ROOT/shared/migrate.env)" >&2
@@ -150,6 +157,19 @@ if [[ "$RUN_MIGRATE" -eq 1 ]]; then
   fi
   echo "[deploy] prisma migrate deploy"
   ( cd "$REL/web" && DATABASE_URL="$TARGET_URL" npx prisma migrate deploy )
+  # Re-check: a failed or partial deploy must not proceed to the swap. This is the guarantee the
+  # pre-flight was meant to provide, now enforced after the migration instead of before it.
+  POST_STATUS="$(cd "$REL/web" && DATABASE_URL="$TARGET_URL" npx prisma migrate status 2>&1 || true)"
+  if echo "$POST_STATUS" | grep -q 'not yet been applied'; then
+    {
+      echo ""
+      echo "# DEPLOY HALTED: migrations are STILL not applied after --migrate."
+      echo "# The release was built but NOT swapped in; the service still runs the previous release."
+    } >&2
+    echo "$POST_STATUS" | tail -10 >&2
+    exit 4
+  fi
+  echo "[deploy] migrations: up to date"
 fi
 
 OWNER="$(stat -c '%u:%g' "$APP_ROOT")"

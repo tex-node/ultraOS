@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Post-deploy smoke check for the staging app (P15 streak, 2026-10-18).
 #
 # WHY THIS EXISTS: `tsc` and `next build` both passed on a release whose production server refused to
@@ -68,13 +68,13 @@ expect "$C/training"                                     "training week"        
 expect "$C/training/cmvdp548w0000hvkkxd5hedor"           "training session"         "Complete this session"
 expect "/players/cmucf1uf80069l3kk80zbmp1n/passport"     "athlete passport"         "Athlete passport"
 expect "/players/cmucf1uf80069l3kk80zbmp1n/passport"     "passport provenance"      "IMPORTED"
-expect "/scoresheets"                                    "scoresheets queue"        "Upload a sheet"
+expect "/scoresheets"                                    "scoresheets queue"        "Upload CSV"
 expect "/coaching/selection/cmuxu4gga00afyxkk1u12rua8"   "selection (normal)"       "Rotation"
 expect "/coaching/selection/cmsp9a75d000m4pkk5achuyne"   "selection (insufficient)" "Insufficient games to generate a recommendation"
 
 echo "-- service: $(systemctl is-active ultraos-staging-web.service)"
 since=$(systemctl show -p ActiveEnterTimestamp --value ultraos-staging-web.service)
-errors=$(journalctl -u ultraos-staging-web.service --since "$since" --no-pager 2>/dev/null | grep -cE '⨯|Error:' || true)
+errors=$(journalctl -u ultraos-staging-web.service --since "$since" --no-pager 2>/dev/null | grep -cE 'â¨¯|Error:' || true)
 echo "-- errors since the service started this release: ${errors:-0}"
 if [ "${errors:-0}" != "0" ]; then fails=$((fails + 1)); fi
 if [ "$fails" -gt 0 ]; then echo "SMOKE FAILED ($fails)"; exit 1; fi

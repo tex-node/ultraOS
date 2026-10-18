@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { uploadMediaAsset } from "@/lib/media-storage";
 import { withOrganizationContext } from "@/lib/tenant-context";
+import { loadExtractionSource, recogniseScoresheet } from "@/server/scoresheet/ocr-source";
 import { createOcrProvider } from "@/lib/ocr/tesseract";
 import { buildChecksumReport, type ChecksumReport } from "@/lib/scoresheet/checksums";
 import { correctedTeamToTable } from "@/lib/scoresheet/corrected";
@@ -14,8 +15,6 @@ import {
   approveScoresheetImport,
   createCsvScoresheetImport,
   createScoresheetImport,
-  loadExtractionSource,
-  recogniseScoresheet,
   rejectScoresheetImport,
   saveExtraction,
   type CorrectedScoresheet,
