@@ -9122,6 +9122,70 @@ returns 200 and contains "Rotation for the last meeting (retrospective)" plus a 
 
 **Next step:** Prompt 2 - I1 OCR scoresheet ingestion.
 
+## 2026-10-18 - I1 / Prompt 2 (in progress): OCR scoresheet ingestion - schema + extraction core
+
+**Objective:** photograph/PDF of a basketball box score -> reviewed structured data -> the existing
+`ingestBoxScoreGame` pipeline. This entry covers the foundation; the review queue, the CLI flag and the
+20-sheet acceptance run are the next increment.
+
+**Completed**
+- **Schema** (`20261018140000_scoresheet_ocr_ingestion`, applied to staging after a verified backup):
+  `ScoresheetTemplate` (a sheet layout as data), `ScoresheetImport` (extraction, checksums, corrected JSON,
+  review state machine `UPLOADED -> EXTRACTED/FAILED -> REVIEW_REQUIRED -> APPROVED -> INGESTED`, plus REJECTED),
+  and `MediaAssetPurpose.SCORESHEET_IMAGE`. Both tables follow
+  `docs/patterns/tenant-database-migrations.md`: `organizationId`, RLS **enabled and forced**,
+  `tenant_isolation` policies, and the runtime-role **GRANTs in the same migration file**. Verified on staging:
+  RLS+force true, both policies present, the enum value present, and - the check that failed for `CoachingPlan` -
+  a `SELECT` on both tables **as the app role** returns 0 rows instead of a permission error.
+- **`src/lib/ocr/provider.ts`** - the provider seam: `OcrPage`/`OcrWord` (text, confidence, bbox, line id),
+  `isAvailable()`, and `OcrError` with `OCR_UNAVAILABLE`/`OCR_FAILED` rather than a fabricated table.
+  `src/lib/ocr/rows.ts` holds the pure row-grouping helper so the extraction module does not import the
+  process-spawning provider.
+- **`src/lib/ocr/tesseract.ts`** - the host-binary provider. Tesseract **5.3.4 + eng installed on the VPS**;
+  TSV output parsed into words with boxes and confidences; `--psm 6` (a box score is a table, not prose) and the
+  binary's version recorded on the import (`tesseract-5.3.4`) so re-runs are comparable.
+- **`src/lib/scoresheet/templates.ts`** - LBCL and FIBA layouts as DATA: columns are identified by their printed
+  header words, not pixel positions, so one definition survives different crops and scales; made-attempted pairs
+  (`6-14`) declared per column; DNP markers and totals labels as data. `parseLayout` validates a stored row.
+- **`src/lib/scoresheet/extract.ts`** - header detection (the row matching the most column headers) -> header words
+  become column anchors -> each later row's words are assigned to the nearest anchor, concatenated and parsed;
+  per-row confidence is the mean of the words actually used; unmatched/garbled cells produce **warnings**, never
+  silent zeros; a missing header yields no table plus an explicit warning.
+- **`src/lib/scoresheet/checksums.ts`** - the `verify-batch.mjs` rules in code: per-player
+  points = 2*2PM + 3*3PM + 4*4PM + FTM, FGM = 2PM + 3PM (+4PM), FGA = 2PA + 3PA, made <= attempted, team sums
+  vs the printed Totals row, OR+DR = REB, and quarter sums vs the final score. A failing check blocks approval,
+  not review.
+
+**Decisions**
+- **Geometric, not model-based extraction.** A trained detector would be better on bad photos but unexplainable
+  in a review queue; anchors derived from the printed header are reviewable line by line.
+- **Composite tenant FKs were not used** on `ScoresheetImport`: every relation there is nullable (a sheet can
+  exist before a template/fixture/reviewer) and MATCH SIMPLE does not enforce a composite FK with a NULL column.
+  The checklist's rule is "where the relation is required and non-null" - recorded in the migration header.
+- **Tesseract via the host binary**, not tesseract.js: no ~15 MB of wasm + traineddata, and the version is
+  observable. The provider seam keeps a cloud engine addable without touching extraction.
+- **Nothing is auto-approved.** Extraction always lands in `REVIEW_REQUIRED`; only `APPROVED` (a human action)
+  can be ingested.
+
+**Verification**
+- 7 new pure tests: header/column mapping on a synthetic sheet, made-attempted pairs, DNP rows, a non-numeric
+  points cell producing a warning, a missing header producing no table, checksum pass/fail for team sums and
+  quarter sums, and the per-player points identity both ways.
+- Two real bugs the tests caught: the nearest-anchor comparison used the wrong operand (player names landed in
+  the minutes column) and the header search's closure assignment defeated TypeScript's narrowing.
+- Full suite: 918 tests (917 pass, 1 pre-existing skip), `eslint` clean, canonical-write ratchet 4/4.
+
+**Known issues**
+- The extraction has only been exercised on synthetic word coordinates so far, not on real photos of LBCL sheets.
+  Real sheets will surface crop/rotation/lighting failures, which is exactly what the acceptance run is for.
+- Handwriting is out of scope for v1 (declared non-goal) and the layout has no notion of rotated pages.
+
+**Next step:** the review queue (`/scoresheets/[id]/review`: image left, editable extracted fields right,
+checksum panel), upload flow storing the sheet as a `SCORESHEET_IMAGE` MediaAsset, the
+`--scoresheetImportId` CLI flag on `external-stats-ingest.ts`, then the 20-sheet acceptance run and
+`documentation/OCR_SCORESHEET_INGESTION.md`.
+
+
 
 
 
