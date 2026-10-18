@@ -8906,3 +8906,49 @@ instance of this class of bug in the codebase; the pattern is now consistently i
 `INSUFFICIENT_DATA` per-squad guard, a logged-in render check of the adoption panel, and the LBCL position/height
 data task. I3 depends on I2's advisor being accepted.
 
+## 2026-10-18 - I2-a entry gate for I2-b: deployed, and a real 500 found by rendering it
+
+**The gate did its job.** I2-a was "migrated but not viewed". Deployed it and rendered it with real data; the page
+returned **500** on staging:
+
+`Error [DriverAdapterError]: permission denied for table CoachingPlan` (SQLSTATE 42501)
+
+The migration created the table as the privileged role and this database has **no
+`ALTER DEFAULT PRIVILEGES`**, so the runtime role had no access at all. The DB tests could not catch this - they
+provision a schema as the same role that then queries it. Fixed with
+`20261018130000_coaching_plan_grants` (same fix `GameControlGrant` needed in
+`20260921100000_fix_game_control_grant_grants`), applied to staging. RLS is unaffected: the grant is table access,
+`tenant_isolation` is row access.
+
+**Deploy state:** pushed `ops/reconcile-backup-design` (the branch this checkout has been on all along - **not**
+`main`; `git push origin main` is a no-op because there is no local `main`) and deployed staging with
+`deploy.sh --ref ops/reconcile-backup-design`, no `--migrate` (both migrations applied separately).
+Staging is now `release-10a0b2f-20261018T014949Z`, service active. Production untouched.
+
+**Rendered over real authenticated HTTP (not a browser).** Staging's `AUTH_URL` is `127.0.0.1:4120` and there are no
+credentials in this session, so a session cookie was minted on the host with the app's own `next-auth/jwt` encode
+(`AUTH_SECRET` from the staging env file, real SUPER_ADMIN `sub` + `sessionVersion`) and the pages were fetched with
+curl as that user. This proves route + guard + data + render, but it is **not** a human visual check; 390px layout
+judgement is still outstanding.
+
+Results:
+- `/coaching` 200, `/coaching/<CPS seasonClub>` 200, player page 200 (26.8 KB).
+- Unadopted state renders: "No plan adopted yet", enabled "Adopt this plan".
+- A 2-game player renders the **degraded** state correctly: button disabled, "this plan has no focus areas ... at the
+  current sample size" (the engine's minutes gate, not a bug).
+- **Adopted the plan end-to-end over HTTP** using the no-JS `useActionState` path React renders
+  (`$ACTION_REF_1` / `$ACTION_1:0` / `$ACTION_1:1` / `$ACTION_KEY` + note): POST 200, page then shows
+  "Adopted plan (c1-1, 18 Oct 2026, Ultra League Admin) - 1 focus area: Ball security - review after 6 games - <note>",
+  and the DB has one ACTIVE row (`cmvd6ip580000ankk5k7m578s`) with a `COACHING_PLAN_ADOPTED` audit entry.
+  Player: CPS `cmucf1uf80069l3kk80zbmp1n` (7 games).
+- **Gate numbers re-confirmed and recorded** (`i2b-gate.out`): 400 players, 158 unknown position (all 158 also
+  missing height), 242 fully usable; Ultra 8/8 clubs complete; CPS 23/23; the nine other LBCL clubs 0/N.
+
+**Left behind on staging on purpose:** that one adopted plan (it makes the human visual pass meaningful). Removable
+with a single DELETE on `CoachingPlan` + its two audit rows if it is in the way.
+
+**Open before I2-b code:** the human visual pass of the adoption panel (390px + desktop), and the I2-b prompt the
+user pasted is **truncated** - it ends mid-way through the candidate output type, before weights, thresholds, the
+`whyNot` definition and any page/acceptance criteria. Not writing the advisor on a guessed spec.
+
+
