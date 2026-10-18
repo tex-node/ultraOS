@@ -154,7 +154,7 @@ async function main() {
           {
             fixtureId: context.id,
             gameId: game.id,
-            eventType: "TWO_POINT_MADE",
+            eventType: "SCORE",
             description: `Verification basket ${index}`,
             seasonClubId: context.homeSeasonClubId,
             playerId: player?.id ?? null,

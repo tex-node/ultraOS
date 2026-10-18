@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { withOrganizationContext } from "@/lib/tenant-context";
@@ -244,8 +244,9 @@ export function scheduleFeedDrain(organizationId: string, options: { delayMs?: n
       })
       .finally(() => {
         inFlight.delete(organizationId);
-        // If more work arrived while draining, pick it up once.
-        void prisma.$disconnect().catch(() => {});
+        // NOTE: never call prisma.$disconnect() here. It is a process-wide singleton; disconnecting it
+        // from a fire-and-forget task tears down the client under concurrent requests and in-flight
+        // transactions (measured: "Transaction not found" in the verification script's second event).
       });
   };
   const timer = setTimeout(run, options.delayMs ?? 0);
