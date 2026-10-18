@@ -1,4 +1,4 @@
-// Streak v4, Prompt 4: one command to ingest a real game video when it arrives.
+﻿// Streak v4, Prompt 4: one command to ingest a real game video when it arrives.
 //
 // There is no footage yet (0 GameVideo rows in staging and production), so this script is the READINESS
 // work: probe the file, store it where the vision service can read it, register the MediaAsset +
@@ -16,7 +16,7 @@
 // poller picks up READY_FOR_ANALYSIS videos (services/vision/app/workers/tasks.py).
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, statSync, unlinkSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { prisma } from "../src/lib/prisma";
 import { withOrganizationContext } from "../src/lib/tenant-context";
@@ -39,6 +39,7 @@ const SOURCE = arg("source") ?? "PHONE_RECORDING";
 const WORKER = arg("worker") ?? process.env.VISION_WORKER_URL ?? "http://127.0.0.1:8010";
 const WORKER_TOKEN = arg("token") ?? process.env.VISION_WORKER_TOKEN ?? "";
 const DRY_RUN = flag("dry-run");
+const CLEANUP = flag("cleanup");
 
 const ALLOWED_SOURCES = new Set(["FULL_GAME", "CAMERA_ISO", "BROADCAST_PROGRAM", "PHONE_RECORDING", "TRAINING_CLIP", "HIGHLIGHT_CLIP"]);
 
@@ -112,8 +113,49 @@ async function notifyWorker(gameVideoId: string, organizationId: string, actorId
 }
 
 async function main() {
+  if (CLEANUP) {
+    // Removes every video registered by this script (camera label starts with "MOCK" or the row records
+    // source "vision-ingest.ts"), its runs/observations, the media asset row and the stored file. Scoped to
+    // the organization; refuses to run without --organization.
+    if (!ORGANIZATION) {
+      console.error("usage: vision-ingest.ts --cleanup --organization <id> [--actor <userId>]");
+      process.exit(1);
+    }
+    const removed = await withOrganizationContext(ORGANIZATION, async (tx) => {
+      const videos = await tx.gameVideo.findMany({
+        where: { organizationId: ORGANIZATION!, OR: [{ cameraLabel: { startsWith: "MOCK" } }, { mediaAsset: { source: "vision-ingest.ts" } }] },
+        select: { id: true, cameraLabel: true, mediaAsset: { select: { id: true, objectKey: true } } },
+      });
+      if (videos.length === 0) return { videos: 0, files: 0, objects: [] as string[] };
+      const ids = videos.map((video) => video.id);
+      await tx.visionObservation.deleteMany({ where: { gameVideoId: { in: ids } } });
+      await tx.visionAnalysisRun.deleteMany({ where: { gameVideoId: { in: ids } } });
+      await tx.gameVideo.deleteMany({ where: { id: { in: ids } } });
+      await tx.mediaAsset.deleteMany({ where: { id: { in: videos.map((video) => video.mediaAsset.id) } } });
+      return { videos: videos.length, files: 0, objects: videos.map((video) => video.mediaAsset.objectKey) };
+    });
+    // Delete the stored bytes after the rows are gone (a row pointing at a missing file is worse than an
+    // orphan file, but neither is acceptable).
+    const root = process.env.MEDIA_LOCAL_ROOT ?? (process.cwd().includes("/opt/ultraos-staging/") ? "/opt/ultraos-staging/shared/media" : join(process.cwd(), ".media"));
+    let files = 0;
+    for (const objectKey of removed.objects) {
+      const path = join(root, objectKey);
+      if (existsSync(path)) {
+        try {
+          unlinkSync(path);
+          files += 1;
+        } catch {
+          /* reported below by the count */
+        }
+      }
+    }
+    console.log(`cleanup: removed ${removed.videos} video(s), ${removed.objects.length} media asset(s), ${files} file(s) under ${root}`);
+    return;
+  }
+
   if (!FILE || !FIXTURE || !ORGANIZATION || !ACTOR) {
     console.error("usage: vision-ingest.ts --file <path> --fixture <id> --organization <id> --actor <userId> [--camera X] [--source TYPE] [--worker URL] [--dry-run]");
+    console.error("       vision-ingest.ts --cleanup --organization <id>");
     process.exit(1);
   }
   if (!existsSync(FILE)) throw new Error(`file not found: ${FILE}`);
@@ -121,7 +163,7 @@ async function main() {
 
   console.log(`file:      ${FILE} (${(statSync(FILE).size / 1024 / 1024).toFixed(1)} MB)`);
   const probe = ffprobe(FILE);
-  console.log(`probe:     ${probe.durationSeconds}s Â· ${probe.width}x${probe.height} Â· ${probe.frameRate ?? "?"} fps Â· ${probe.videoCodec ?? "?"}`);
+  console.log(`probe:     ${probe.durationSeconds}s Ã‚Â· ${probe.width}x${probe.height} Ã‚Â· ${probe.frameRate ?? "?"} fps Ã‚Â· ${probe.videoCodec ?? "?"}`);
   if (probe.durationSeconds === null || probe.width === null) throw new Error("ffprobe returned no video stream - is this really a video file?");
 
   const checksum = createHash("sha256");

@@ -9908,6 +9908,49 @@ analyzer emits zero observations even when it runs). No accuracy is claimed.
 
 **Streak v4 complete.** All five prompts done, both environments on `main` @ `98b9255`, smoke green.
 
+## 2026-10-18 - Streak v5 / Prompt 1: housekeeping, env durability, and the Nnerive flag
+
+**Objective:** remove the mock vision data, stop the feature flags from being an untracked-host secret, and
+make the one low-confidence data correction findable from the data side.
+
+**Completed**
+- **`vision-ingest.ts` gained `--cleanup`** (it only had ingest). It deletes the videos registered by the
+  script (`cameraLabel` starts with `MOCK` or the media asset's `source = "vision-ingest.ts"`), their
+  runs/observations, the media asset rows, **and the stored files** under `MEDIA_LOCAL_ROOT`. Scoped to
+  `--organization`; rows first, then bytes (a row pointing at a missing file is worse than an orphan file,
+  but neither is acceptable).
+- **`vision-mock-run.ts --cleanup` now needs only `--organization`** - it used to demand
+  `--fixture`/`--player` before reaching the cleanup branch, so it refused to clean up the very ids it was
+  about to delete. It also removes the unreferenced `MOCK-DETECTOR` registry row, and does that **before**
+  the "no videos" early return (the first run left the model behind for exactly that reason).
+- **Feature flags documented for a fresh host**: `web/.env.example` gains a FEATURE FLAGS section
+  (`COACHING_ASSISTANT_ENABLED`, `NEXT_PUBLIC_OFFLINE_SCORING_ENABLED`) and an OPTIONAL/OPERATIONAL block
+  (`MEDIA_*`, `TESSERACT_BINARY`, `OCR_PREPROCESS`, `VISION_WORKER_URL`, `VISION_WORKER_TOKEN`), each with
+  why it exists and what "missing" means. `deploy/README.md` gains the same checklist as a
+  required-vs-flags table, with the sentence that matters: **a missing flag means OFF**, which is how the
+  coaching stack shipped dark for a day.
+- **Nnerive Peter is now flagged in the data-side documentation**, not only here: a "Data corrections this
+  pipeline found" section in `OCR_SCORESHEET_INGESTION.md` records the four corrections, the anchoring rule,
+  and an explicit **medium-confidence** label on that row (points safe, shot profile unconfirmed).
+
+**Verification (staging)**
+```
+BEFORE  gameVideo 3 · analysisRun 2 · observation 4 · mediaAssets(GAME_VIDEO) 3
+vision-ingest.ts --cleanup   -> removed 3 video(s), 3 media asset(s), 1 file(s)
+vision-mock-run.ts --cleanup -> removed 0 (already gone), plus the unreferenced MOCK-DETECTOR row
+AFTER   gameVideo=0 · runs=0 · observations=0 · models=0 · files under .../originals/*/video/ = 0
+```
+Both cleanup commands are idempotent no-ops on a clean database.
+
+**Known issues**
+- The cleanup deletes files by object key under `MEDIA_LOCAL_ROOT`; a deployment on R2 would need the
+  object-storage delete instead (the rows are removed either way, so the bytes would be orphaned, not served).
+- `COACHING_ASSISTANT_ENABLED=true` remains only in `/opt/ultraleagueos/shared/web.env` on the existing host
+  (correct - secret-bearing, untracked). The checklist is what makes a new host safe.
+
+**Next step:** Prompt 2 (live data feed).
+
+
 
 
 

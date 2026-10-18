@@ -1,4 +1,4 @@
-﻿// P15 / Prompt 5: prove the VISION INFRASTRUCTURE works without any real inference.
+// P15 / Prompt 5: prove the VISION INFRASTRUCTURE works without any real inference.
 //
 // Real game video does not exist (0 GameVideo rows in staging and production, checked 2026-10-18), so the
 // inference itself stays BLOCKED_NO_REAL_VIDEO. What CAN be proven is everything around it: registering a
@@ -35,7 +35,14 @@ const CLEANUP = process.argv.includes("--cleanup");
 const NO_REVIEW = process.argv.includes("--no-review");
 const TAG = "MOCK";
 
-if (!ORG || !FIXTURE || !PLAYER || !ACTOR) {
+if (CLEANUP) {
+  // Cleanup needs ONLY --organization: it must be runnable after the fixture or player has been deleted,
+  // and requiring ids it is about to delete was a usability bug (the first cleanup run refused).
+  if (!ORG) {
+    console.error("usage: vision-mock-run.ts --cleanup --organization <id>");
+    process.exit(1);
+  }
+} else if (!ORG || !FIXTURE || !PLAYER || !ACTOR) {
   console.error("usage: vision-mock-run.ts --organization <id> --fixture <id> --player <id> --actor <user-id> [--cleanup]");
   process.exit(1);
 }
@@ -47,6 +54,10 @@ async function main() {
         where: { organizationId: ORG!, cameraLabel: { startsWith: TAG } },
         select: { id: true, mediaAssetId: true },
       });
+      // The synthetic model is registry data, not a video: remove it only when nothing references it any
+      // more, so a real model with the same key is never deleted out from under a run. Done FIRST, because
+      // an early return for "no videos" previously left the model row behind.
+      await tx.visionModel.deleteMany({ where: { organizationId: ORG!, key: "MOCK-DETECTOR", analysisRuns: { none: {} } } });
       if (videos.length === 0) return 0;
       const ids = videos.map((video) => video.id);
       // Runs and observations cascade from GameVideo; the media asset does not, so delete it explicitly.

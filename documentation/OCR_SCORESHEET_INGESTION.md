@@ -1,7 +1,35 @@
 # OCR scoresheet ingestion (P15 I1) - state, acceptance run, and why it is not finished
 
-Written 2026-10-18. Status: **extraction core shipped; acceptance FAILED on the real sheets.** This
-document exists so nobody reads the code and assumes it works on LBCL's sheets.
+Written 2026-10-18. Status: **pivoted to CSV/Excel.** The image path is shipped but measured as not
+operator-ready (0 review-ready sheets from 20 real captures); the structured path round-trips all 32 real
+LBCL games with zero field differences. This document exists so nobody reads the code and assumes OCR works
+on LBCL's sheets.
+
+## Data corrections this pipeline found (2026-10-18)
+
+The checksums are the reason this feature is worth having: running the real batch through them found
+**four arithmetic inconsistencies the hand transcription had carried into the database**. Two games, three
+players, eight field edits; applied to `scripts/data/lbcl-2026-batch1.json` **and** to the already-ingested
+`PlayerStat` rows in staging and production (`scripts/fix-lbcl-stats.ts`, audited as
+`LBCL_BOX_SCORE_CORRECTED`).
+
+The rule used, and the one to apply again if these are ever re-examined: **the printed team score and the
+period sums are the anchor** (corroborated three independent ways on the sheet - final score line, per-period
+line, team totals row), so a player's POINTS stay as printed and the COMPONENTS are corrected to match.
+
+| game | player | change | confidence |
+| --- | --- | --- | --- |
+| 19 | Creon Okwuzu | `freeThrowsMade/Attempted 1 → 0` | **high** - FG 4/7 with 2P 4/7 is legible, so 4 twos = 8 points = printed PTS |
+| 19 | Dele Ajigboye | `freeThrowsMade 2 → 1`, `threePointsAttempted 1 → 0` | **high** - 3 twos + 1 FT = 7 = printed PTS, and FGA 7 = 2PA 7 + 3PA 0 |
+| 20 | Nnerive Peter | `twoPointsMade/Attempted`, `fieldGoalsMade/Attempted` `1 → 2` | **medium - SCORE-ANCHORED, not read from the cell** |
+
+**Nnerive Peter deserves a permanent flag.** Game 20 (Campos 48 - 40 Ogra Hoop Kings), Ogra #10. The FG
+pair on the 720px capture reads `1/1` while the PTS column reads `4`, and the team total (40) only works
+with 4 points. The components were therefore raised to two two-pointers to satisfy the points identity, and
+**the source pair was never confirmed**. Consequences: this row's `2PM/2PA/FGM/FGA`, and the team's
+two-point total (which nothing else checksums), may both be one high. If the original Genius export ever
+surfaces, re-read this row before trusting its shooting splits - the points are safe, the shot profile is
+not.
 
 ## What is built
 

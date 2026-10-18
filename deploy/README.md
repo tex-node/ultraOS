@@ -14,6 +14,39 @@ swaps the `current` symlink — no tarballs, no hand-assembled overlays.
 
 The service unit runs from `<app-root>/current/web`, so a symlink swap + restart is atomic.
 
+## A fresh host needs these env values (feature flags included)
+
+`deploy.sh` reads `<app-root>/shared/web.env` (the `--env-file`) for the build and the service. That file
+is **not tracked** (it holds secrets), so a new host starts empty and every feature flag silently reads
+"off". This list is the reproducibility checklist; `web/.env.example` carries the same names with
+placeholder values and comments.
+
+**Required**
+
+| Variable | Notes |
+| --- | --- |
+| `DATABASE_URL` | app role, subject to RLS. The privileged URL for migrations lives in `shared/migrate.env`. |
+| `AUTH_SECRET` | signs session JWTs; also the JWT salt source (see the smoke test below) |
+| `AUTH_URL` | the public origin. **https** changes the session cookie to `__Secure-authjs.session-token` |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | sign-in |
+| `R2_*` | media storage (or `MEDIA_STORAGE_PROVIDER=LOCAL_PERSISTENT_STORAGE` + `MEDIA_LOCAL_ROOT`) |
+| `SMTP_*` / `EMAIL_FROM` | transactional email |
+| `BACH_API_BASE` / `BACH_IO` / `BACH_WEBHOOK` | payments |
+
+**Feature flags — a missing flag means OFF, which is how the coaching stack shipped dark for a day**
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `COACHING_ASSISTANT_ENABLED` | `false` | Every `/coaching` route (I2 selection advisor, I3 training, I6 passport entry points). **Production is `true` since 2026-10-18.** Server-side only: no `NEXT_PUBLIC_` prefix, deliberately. |
+| `NEXT_PUBLIC_OFFLINE_SCORING_ENABLED` | `false` | The offline capture UI (P13). Client-visible, so it is baked into the browser bundle at build time. |
+| `VISION_WORKER_URL` | `http://127.0.0.1:8010` | Where `scripts/vision-ingest.ts` POSTs `/analyze`. Optional: without it the `GameVideo` row is `READY_FOR_ANALYSIS` and the worker's poller collects it. Port 8000 on the staging host is an unrelated Kong gateway. |
+| `VISION_WORKER_TOKEN` | empty | Bearer token for the worker when it sits behind an authenticating proxy. |
+| `TESSERACT_BINARY` / `OCR_PREPROCESS` | `tesseract` / on | The image-scoresheet OCR path only; `OCR_PREPROCESS=off` disables the upscale/median/sharpen preprocessing. The CSV/XLSX path needs neither. |
+| `MEDIA_LOCAL_ROOT` | `<cwd>/.media` | Where local media (incl. ingested videos) is stored. Staging: `/opt/ultraos-staging/shared/media`. |
+
+**Check a new host with:** `bash /root/smoke-test.sh` after the first deploy — it fails if a coaching route
+404s, which is exactly what a missing flag looks like.
+
 ## One-time setup (already done)
 
 - A read-only **deploy key** (`/root/.ssh/ultraos_deploy` on the VPS) is registered on
