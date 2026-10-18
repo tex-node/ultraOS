@@ -10383,6 +10383,64 @@ is only safe there because the values are pre-validated.
 
 **Next step:** Prompt 5 (final sync).
 
+## 2026-10-19 - Streak v6 / Prompt 5: final sync - roadmaps, 49/49 DB serialized, both deploys green
+
+**Roadmaps updated**
+- `MULTI_SPORT_ROADMAP.md` gate **G5** now records what streak v6 added (tennis capture console, public
+  tennis standings + bracket, volleyball CSV ingestion) and, in the same cell, what is still open: no
+  rule-set override in the scoring path, the review queue is basketball-shaped, and the bracket is rendered
+  from `Fixture.round` because no `BracketNode` component exists.
+- `COACH_INTELLIGENCE_ROADMAP.md` production note extended: the coaching stack is live, the partner data
+  feed is live, and the two tenant bugs from this streak are written into the roadmap - because the next
+  tenant table written anywhere in this product will hit the same two traps unless
+  `deploy/ops/verify-tenant-table.sh` is run against it.
+
+**`npm run test:db -- --test-concurrency=1`** (scratch clone of staging, explicit cleanup via trap)
+```
+literal command: "Could not find '.../src/test-support/**/*.test.ts'"  -> node 20 on this host does not
+                 expand the globs in the npm script (unchanged behaviour from v5, not a test failure)
+fallback (same files, same flag, explicit list): # tests 49  # pass 49  # fail 0
+```
+49/49 serialized. The serialization requirement from v5 still holds: parallel runs of this suite are flaky
+in unrelated files, which is why the npm script carries `--test-concurrency=1`.
+
+**Deploys**
+| environment | release | migrations | smoke |
+| --- | --- | --- | --- |
+| staging | `release-20a4c5f` | `20261018203000_data_feed_policy_setting` | **7/7 PASS**, 0 errors |
+| production | `release-20a4c5f` | `20261018203000_data_feed_policy_setting` (after a verified backup `ultraleagueos_pre_v6_20261018T230319Z.dump`, sha256 `78d12132…`) | **7/7 PASS**, 0 errors, exit 0 |
+
+**Production hardening checked, not assumed**
+```
+drain timer:        ultraos-feed-drain-production.timer installed (30 s)
+cron route:         no header -> 401 · right secret -> {"ok":true,"organizations":0,...,"durationMs":24}
+verify-tenant-table DataFeedSubscription (db: ultraleagueos)
+  1. rls enabled + forced                  PASS
+  2. policy reads app.current_org_id       PASS
+  3. grants match CoachingPlan             PASS (ultraos,ultraos_app,ultraos_staging)
+  4a. scoped SELECT as app role            PASS
+  4b. no cross-tenant rows visible         PASS
+  RESULT: PASS
+```
+That last block is the answer to the v5 failure: the same probe that "passed" then now runs against the real
+session variable, in production, as `ultraos_app`.
+
+**Test and ratchet**: 969 unit/component tests (968 pass, 1 pre-existing skip - up from 956 with the 6
+individual-standings and 7 volleyball-parser tests), canonical-write ratchet **4/4**, `tsc` clean.
+
+**Known issues carried forward**
+- The literal `npm run test:db` command does not run on a node-20 host; the npm script's globs need quoting
+  work or a `find`-based script before it can be the documented one-liner.
+- `GAME_STARTED` is emitted from `startGame` but the verification invoked the queue function directly (a
+  server action needs a browser session), so the wiring is reviewed, not exercised end to end.
+- The scoring path still ignores the season `RuleSet` (best-of-3 plays as best-of-5), and a volleyball file
+  still cannot go through the review UI. Both are recorded in `MULTI_SPORT_PILOT.md` / the roadmap rather
+  than hidden.
+
+**Streak v6 complete.** All five prompts done; both environments on `release-20a4c5f`, smoke green, 49/49 DB
+tests serialized, 969 tests, ratchet 4/4, and one previously-false claim (the v5 RLS proof) corrected in the
+record.
+
 
 
 

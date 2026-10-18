@@ -136,6 +136,19 @@ representative route does not serve. The working branch `ops/reconcile-backup-de
 into `main`** (main was an ancestor: 0 commits behind, 51 ahead on the branch), so production runs the
 default branch.
 
+**Streak v6 note (2026-10-18): the coaching stack gained a partner data feed, not a coach feature.** The
+`DataFeedSubscription`/`DataFeedDelivery` outbox, the HMAC-signed webhook dispatcher, the
+`/api/v1/games/[fixtureId]/live-feed` endpoint and the 30-second systemd drain timer are all live in
+production. Two bugs found while hardening it are worth recording against this roadmap because they are the
+class of bug the coaching work would inherit if it ever writes a tenant table:
+1. the feed tables were granted to `ultraos` while the app runs as `ultraos_staging` / `ultraos_app` - a
+   42501 that a green test suite could not see, fixed by `20261018202000_data_feed_grants`;
+2. the RLS policies read `app.current_organization_id` while `withOrganizationContext` sets
+   `app.current_org_id` - under the app role the tables were invisible, fixed by `20261018203000`.
+`deploy/ops/verify-tenant-table.sh` now checks both (grants against a known tenant table, and a behavioural
+scoped-SELECT/cross-tenant probe **as the app role**) and is the first thing to run against any new tenant
+table. The coaching tables were re-checked with it: they pass.
+
 ### I0 — P0 production migration fix (blocking, do first)
 
 See Prompt 0. Additive migration, verified backup, human-approved.
