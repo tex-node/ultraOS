@@ -65,11 +65,23 @@ querying as the migration role.
 | --- | --- | --- |
 | 2026-09-21 | `GameControlGrant` | `20260921100000_fix_game_control_grant_grants` (retrofit migration) |
 | 2026-10-18 | `CoachingPlan` | `20261018130000_coaching_plan_grants` (retrofit migration; found by rendering `/coaching/<club>/players/<player>` on staging) |
+| 2026-10-18 | `DataFeedSubscription`, `DataFeedDelivery` | `20261018202000_data_feed_grants` (retrofit migration; found by an **RLS probe run as the app role**, not by a page) |
 
 The second one shipped without the grant because the checklist above did not exist as a single page.
 It does now. Write the GRANT in the same migration that creates the table, even when the table is
 "obviously" temporary, and even when a follow-up migration would be cheap - a failed page in
 production is not cheap.
+
+**The third one is a new failure mode: granting to the WRONG ROLE NAME.** That database has three roles whose
+names share a stem - `ultraos`, `ultraos_app` (production runtime) and `ultraos_staging` (staging runtime) -
+and the feed migration granted only to `ultraos`, which the app does not use. Nothing failed in the
+verification scripts because they connect with the **privileged** URL; the RLS probe, which deliberately
+switched to the app role, hit `permission denied for table "DataFeedSubscription"` immediately.
+
+Lesson, now part of the checklist below: **a GRANT is only verified when a query runs as the app role.**
+`information_schema.role_table_grants WHERE grantee='ultraos'` proves nothing about `ultraos_staging`.
+Compare against an existing tenant table (`CoachingPlan`) and grant to every runtime role it lists, then run
+one `SELECT` and one cross-tenant `INSERT` as that role.
 
 ## Related
 
