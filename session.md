@@ -9572,6 +9572,47 @@ production with migrations and prove it serves.
 
 **Next step:** Prompt 3 (I3 trend polish + component test).
 
+## 2026-10-18 - Streak v3 / Prompt 3: I3 polish - "Missing data", two clocks, component test
+
+**Objective:** make the training trend honest and legible: a session with no logged metric must not read
+as a zero, and the plan's game window must not be confused with per-session logs.
+
+**Completed**
+- `loadPlanTrainingTrend` now returns **one point per completed session assigned to the plan**, with
+  `value: null` when the coach logged nothing, plus `gamesSinceAdoption` (games after `adoptedAt`). It
+  previously returned only sessions that HAD a metric, which silently hid the gaps.
+- The card renders:
+  - `Review window: 0 of 6 games since adoption (6 to go)` / `(window complete)` - the plan's own clock,
+  - `sessions assigned to this plan: N` - the training clock,
+  - per session: the value, or **"Missing data"** in warn colour,
+  - `1 of 2 sessions logged · 1 missing data` per metric,
+  - the sparkline over the logged points only (a null is a gap, not a zero), the target line, and the
+    verdict (withheld for an unknown-direction metric, as before).
+- **`training-trend-card.test.tsx`** (react-dom/server, same pattern as `selection-view.test.tsx`),
+  6 tests: missing-not-zero (asserts no `0` is rendered for the unlogged session), the two clocks and
+  the countdown, a complete window, a lower-is-better verdict, an unknown-direction "no verdict", and
+  the no-sessions state.
+
+**Verification**
+- 6/6 component tests pass, `tsc`/`eslint`/`next build` clean.
+- Deployed to staging (`release-d4f4671`), smoke 7/7 PASS.
+- Real data: the staging plan had one completed session WITH a metric. I created a second session for
+  the same plan, completed it with no metric
+  (`cmvdwgdqr0000lckkjzlmkae4`), and the rendered player page now contains **"Missing data"** twice and
+  **"1 missing data"**, while still showing `2.5` / `off target` from the logged session and
+  `Review window: … 6 to go`. Nothing renders a zero for the unlogged session.
+
+**Known issues**
+- `gamesSinceAdoption` is 0 for the staging plan because it was adopted today and the season's games
+  are in the past; that is correct, and the card says "6 to go" rather than pretending otherwise.
+- The sparkline has no x-axis labels beyond the per-session list under it (deliberate: the list is the
+  accessible representation).
+- Staging now has one extra, clearly labelled session (`Prompt 3 verification - completed with no
+  metric`) that exists to exercise the missing-data path.
+
+**Next step:** Prompt 4 (passport deep link + provenance legend).
+
+
 
 
 
