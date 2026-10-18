@@ -9047,7 +9047,23 @@ pure total (911 pass, 1 pre-existing skip), 20/20 component, `tsc`/`eslint` clea
 the new route in the manifest.
 
 **Deploy + curl check:** committed and pushed to `ops/reconcile-backup-design`, deployed to staging
-(`release-<this commit>`), and the new route fetched with a real SUPER_ADMIN session - result recorded in the next entry.
+(`release-9cfb2de-20261018T080524Z`), and the new route fetched with a real SUPER_ADMIN session:
+
+| Request | Result |
+|---|---|
+| `GET /coaching/selection/<LBCL fixture>` anonymous | **404** (guard holds) |
+| `GET /coaching/selection/<LBCL fixture>` as SUPER_ADMIN | **200**, "Starters (N)", START + ROTATE labels, "no form sample" markers, no error |
+| `GET /coaching/selection/<Ultra fixture>` as SUPER_ADMIN | **200**, insufficient banner present, **no Starters section, no START/ROTATE labels**, no error |
+| `GET /coaching/<club>/opponents` | 200 (the link target still renders) |
+
+**Deploy trap found while doing this (recorded in `deploy/README.md`):** `deploy.sh --ref <branch>`
+resolves to the **local** branch in `/opt/ultraos-staging/source`. The `git fetch` updated
+`origin/ops/reconcile-backup-design` to the new commit and the checkout silently stayed on the
+five-commits-behind local branch - so the first deploy of this work built and released the OLD tree
+(`release-10a0b2f-...`), reporting success. Re-ran with `--ref origin/ops/reconcile-backup-design`,
+which produced `release-9cfb2de-...`. Always pass the remote-tracking ref (or a sha) and check the sha
+in the release name.
+
 
 
 

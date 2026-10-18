@@ -42,6 +42,14 @@ bash /root/deploy.sh \
 Omit `--migrate` when no migrations have changed. Add `--ref <sha|branch>` to deploy a specific
 revision (default `origin/main`).
 
+**Pass a remote-tracking ref (`--ref origin/<branch>`) or a sha, not a bare branch name.** The script
+runs `git fetch --all --prune` and then `git checkout --force <ref>`; a bare branch name resolves to
+the **local** branch in `<app-root>/source`, which is only as new as the last time that worktree was
+updated. On 2026-10-18 `--ref ops/reconcile-backup-design` deployed a five-commit-stale tree: the fetch
+had updated `origin/ops/reconcile-backup-design` and said so, the checkout silently stayed on the old
+local branch, and the deploy still reported success. The release name carries the resolved sha - check
+it against the commit you meant to ship before believing a deploy.
+
 ## Migrations
 
 `--migrate` runs `prisma migrate deploy` using the **privileged** database URL read from
