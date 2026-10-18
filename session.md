@@ -9950,6 +9950,69 @@ Both cleanup commands are idempotent no-ops on a clean database.
 
 **Next step:** Prompt 2 (live data feed).
 
+## 2026-10-18 - Streak v5 / Prompt 2: the partner live data feed (HMAC webhooks + odds endpoint)
+
+**Objective:** build the sportsbook/media push pipeline - the "Genius Sports" value proposition.
+
+**Schema** (migration `20261018200000`, plus `20261018201000` for the claim state)
+- `DataFeedSubscription` (webhookUrl, secret, events[], isActive) and `DataFeedDelivery` (the outbox).
+- Both tenant tables: **RLS enabled AND forced, tenant_isolation policy, runtime-role GRANTs in the same
+  file**. Verified on staging: `rls=true forced=true policies=1 grants=7` for both.
+- The delivery → subscription FK is **composite on (organizationId, subscriptionId)**, so a delivery cannot
+  reference another tenant's subscription even if a foreign id gets through.
+
+**The split that matters:** queueing is an INSERT inside the canonical scoring transaction; only the drain
+does network I/O. `createGameEvent` queues **SCORE_CHANGED** for scoring events (one row per interested
+subscriber); `game-result-import` queues **GAME_FINAL**; `withGameWrite` schedules the drain **after commit**
+(fire-and-forget, per-org in-flight guard). Retries live in the database (`attempts`, `nextAttemptAt`;
+30 s doubling to a 1 h cap, 8 attempts), not in a timer - a restart cannot lose a score change.
+
+**Wire format:** `{id, type, sentAt, game{...score after the event}, event{sequence, period, clock, points}}`
+signed as `t=<ts>,v1=HMAC-SHA256(secret, "<ts>.<body>")`, headers `x-ultra-signature/-event/-delivery-id/-attempt`.
+A ±5-minute timestamp tolerance rejects replays. 4xx (bar 408/429) gives up immediately; 5xx/timeout retries.
+**10 unit tests** cover tampering, wrong secret, replay, backoff growth/cap, status classification and the
+payload shape.
+
+**New endpoint:** `GET /api/v1/games/[publicId]/live-feed` - an odds-provider shape (short keys, score,
+period, clock, last 5 events, no names/objects), capability-honest (`e: null` for `BOX_SCORE_ONLY` rather
+than an empty history), inside the existing rate-limited/CORS envelope.
+
+**Verification:** `scripts/data-feed-subscriber.ts` is a fake sportsbook that verifies every signature.
+Against staging, on the canonical path (createGameEvent inside withGameWrite):
+```
+event 1..3: drained {attempted:1, delivered:1, retried:0, gaveUp:0}
+received 3 webhook(s)
+  VERIFIED · SCORE_CHANGED · delivery ... · attempt 1 · seq 1 (+2)
+  VERIFIED · SCORE_CHANGED · delivery ... · attempt 1 · seq 2 (+2)
+  VERIFIED · SCORE_CHANGED · delivery ... · attempt 1 · seq 3 (+2)
+PASS: every payload was HMAC-verified by the subscriber
+outbox: DELIVERED=3   (fixture + subscription cleaned up afterwards - 0 residue)
+```
+
+**Two real bugs the harness caught (both fixed):**
+1. `scheduleFeedDrain`'s `finally` called `prisma.$disconnect()` - on a process-wide singleton, from a
+   fire-and-forget task. It tore the client down under concurrent work: the harness's second event failed
+   with **"Transaction not found"**.
+2. **Duplicate delivery.** Two drains (the scheduled one + the harness's explicit one) both read the same
+   `PENDING` row and both posted it: 5 webhooks for 3 events. Fixed by claiming atomically
+   (`updateMany({where:{id,status:PENDING}, data:{status:DELIVERING}})` and sending only when `count===1`).
+   `DELIVERING` doubles as the crash marker: `drainAllOrganizations` resets rows claimed >10 min ago back to
+   `PENDING`, and the payload's stable `id` is the documented dedupe key.
+
+**Known issues**
+- The payload's score comes from `Fixture.homeScore/awayScore`, which the live scoring action updates; the
+  harness's direct `createGameEvent` calls do not recalc it, so its payloads showed `0-0` while the events
+  and sequence numbers were real. That is honest (the snapshot is what it is) but worth knowing when reading
+  a capture.
+- `GAME_STARTED` is available through `queueGameLifecycleFeed` but is not yet emitted by the live "start
+  game" action - only `GAME_FINAL` (import) and `SCORE_CHANGED` are wired. The subscription can select it;
+  nothing sends it yet.
+- No cron is installed for `drainAllOrganizations`; today the drain runs after each scoring write. A stopped
+  process with pending rows recovers on the next write to that organization, or via that function.
+
+**Next step:** Prompt 3 (multi-sport pilot).
+
+
 
 
 
