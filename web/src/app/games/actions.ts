@@ -13,6 +13,7 @@ import { remainingClockSeconds } from "@/lib/game-clock";
 import { remainingShotClockSeconds } from "@/lib/game-rules";
 import { queueGameLifecycleFeed } from "@/lib/data-feed/dispatcher";
 import { withOrganizationContext } from "@/lib/tenant-context";
+import { applyScoringDelivery } from "@/server/scoring/applyScoringDelivery";
 import {
   recordScoreInternal,
   voidScoreEventActionInternal,
@@ -25,14 +26,12 @@ import { recalculateStandings } from "@/lib/standings-recalculate";
 import { getSportDefinition } from "@/lib/sports/registry";
 import { LEGACY_STRUCTURE, structureFromRules } from "@/lib/sports/game-structure";
 import { resolveSeasonRuleValues } from "@/lib/sports/rule-set-store";
-import { isLegalDelivery } from "@/lib/sports/innings-scoring";
 import { advanceKnockoutBracket } from "@/lib/sports/knockout-bracket";
 import { matchOutcome } from "@/lib/sports/match-result";
 import { isKnockoutFormat, resolveFormat } from "@/lib/sports/format";
 import { requireSeasonClubId } from "@/lib/sports/fixture-sides";
 import { shootoutWinner, type ShootoutKick } from "@/lib/sports/shootout";
 import { resolveScoringModule } from "@/lib/sports/scoring-modules";
-import { replayTennisGamePoints } from "@/lib/sports/tennis-scoring";
 import { hasBlockingIssue, runConstraints } from "@/lib/sports/validators";
 
 function assertGameIsMutable(status: string, fixtureStatus: string) {
@@ -743,22 +742,19 @@ const scoringInput = z.object({
   description: z.string().optional(),
 });
 
-const CRICKET_DELIVERY_KEYS = new Set([
-  "RUN",
-  "FOUR",
-  "SIX",
-  "WICKET",
-  "DOT_BALL",
-  "EXTRAS_BYE",
-  "EXTRAS_LEG_BYE",
-  "EXTRAS_WIDE",
-  "EXTRAS_NO_BALL",
-]);
 
 // Unified sport scoring: resolve the scoring module for the sport's definition, apply the delivery,
 // and persist the outcome (fixture score, per-period score, ledger event). Finalizes and
 // recalculates standings when the module reports the match decided. Replaces the per-sport scoring
 // actions (set points / goals / runs) with one dispatched path.
+// Unified sport scoring: resolve the scoring module for the sport's definition, apply the delivery,
+// and persist the outcome (fixture score, per-period score, ledger event). Finalizes and
+// recalculates standings when the module reports the match decided. Replaces the per-sport scoring
+// actions (set points / goals / runs) with one dispatched path.
+//
+// The body lives in src/server/scoring/applyScoringDelivery.ts so the console and the verification
+// script drive the same code (streak v6, Prompt 2). This wrapper owns only the request concerns: the
+// permission, the row lock, and the revalidations.
 export async function recordScoringEvent(gameId: string, fixtureId: string, formData: FormData) {
   const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
   const input = scoringInput.parse(Object.fromEntries(formData.entries()));
@@ -779,180 +775,103 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
     assertGameIsMutable(game.status, game.fixture.status);
     if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
 
-    const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
-    if (!definition) throw new Error("UNKNOWN_SPORT");
-    const scoringModule = resolveScoringModule(definition);
-    if (!scoringModule) throw new Error("NO_SCORING_MODULE");
-
-    // The captured party is a SeasonClub (team sports) or an Entrant (individual sports).
-    const homePartyId = game.fixture.homeSeasonClubId ?? game.fixture.homeEntrantId;
-    const awayPartyId = game.fixture.awaySeasonClubId ?? game.fixture.awayEntrantId;
-    if (!homePartyId || !awayPartyId) throw new Error("FIXTURE_SIDES_MISSING");
-    const capturedIsEntrant =
-      input.seasonClubId === game.fixture.homeEntrantId || input.seasonClubId === game.fixture.awayEntrantId;
-
-    // Per-innings wickets/balls (cricket) derived from the ledger.
-    const periodWickets: Record<number, number> = {};
-    const periodBalls: Record<number, number> = {};
-    for (const event of game.events) {
-      if (event.period == null || !event.typeKey) continue;
-      if (event.typeKey === "WICKET") periodWickets[event.period] = (periodWickets[event.period] ?? 0) + 1;
-      if (CRICKET_DELIVERY_KEYS.has(event.typeKey) && isLegalDelivery(event.typeKey)) {
-        periodBalls[event.period] = (periodBalls[event.period] ?? 0) + 1;
-      }
-    }
-
-    // Tennis: replay this set's point events to recover the current game's point counts.
-    let tennisPoints: { home: number; away: number } | undefined;
-    if (scoringModule.kind === "TENNIS") {
-      tennisPoints = replayTennisGamePoints(game.events, game.currentPeriod, {
-        entrantId: game.fixture.homeEntrantId,
-        seasonClubId: game.fixture.homeSeasonClubId,
-      });
-    }
-
-    const result = scoringModule.apply(definition, {
-      homeSeasonClubId: homePartyId,
-      awaySeasonClubId: awayPartyId,
-      currentPeriod: game.currentPeriod,
-      homeScore: game.fixture.homeScore,
-      awayScore: game.fixture.awayScore,
-      periodScores: game.periodScores.map((score) => ({ period: score.period, home: score.homeScore, away: score.awayScore })),
-      periodWickets,
-      periodBalls,
-seasonClubId: input.seasonClubId,
-typeKey: input.typeKey,
-runs: input.runs,
-points: input.points,
-      tennisPoints,
-    });
-    if (!result.ok) throw new Error(result.reason);
-
-    const homeBefore = game.fixture.homeScore;
-    const awayBefore = game.fixture.awayScore;
-    await tx.fixture.update({
-      where: { id: fixtureId },
-      data: { homeScore: result.homeScore, awayScore: result.awayScore },
-    });
-
-    if (result.period) {
-      await tx.gamePeriodScore.upsert({
-        where: { gameId_period: { gameId, period: result.period.period } },
-        create: { organizationId, gameId, period: result.period.period, label: `P${result.period.period}`, homeScore: result.period.home, awayScore: result.period.away },
-        update: { homeScore: result.period.home, awayScore: result.period.away },
-      });
-    }
-
-    const player = !capturedIsEntrant && input.playerId
-      ? await tx.player.findFirst({ where: { id: input.playerId, seasonClubId: input.seasonClubId }, include: { athlete: true } })
-      : null;
-
-    await createGameEvent(
-      {
-        gameId,
-        fixtureId,
-        seasonClubId: capturedIsEntrant ? null : input.seasonClubId,
-        entrantId: capturedIsEntrant ? input.seasonClubId : null,
-        playerId: player?.id ?? null,
-        eventType: result.eventKind,
-        typeKey: result.typeKey,
-        points: result.points,
-        data: { sportKey: definition.key, module: scoringModule.key, note: result.note, tennisPoints: result.tennisPoints },
-        period: result.period?.period ?? game.currentPeriod,
-        clockSeconds: remainingClockSeconds(game),
-        description:
-          input.description?.trim() ||
-          `${result.typeKey.replace(/_/g, " ")}${result.points ? ` (${result.points})` : ""}${player ? ` — ${player.athlete.firstName} ${player.athlete.lastName}` : ""}`,
-        homeScoreBefore: homeBefore,
-        awayScoreBefore: awayBefore,
-        homeScoreAfter: result.homeScore,
-        awayScoreAfter: result.awayScore,
-      },
-      { actor: { id: session.user.id, organizationId }, source: "LIVE_UI", tx },
-    );
-
-    if (result.nextPeriod) {
-      await tx.game.update({ where: { id: gameId }, data: { currentPeriod: result.nextPeriod } });
-    }
-
-    if (result.finalize) {
-      const winnerSeasonClubId =
-        result.finalizeWinner === "HOME"
-          ? game.fixture.homeSeasonClubId
-          : result.finalizeWinner === "AWAY"
-            ? game.fixture.awaySeasonClubId
-            : null;
-      const winnerEntrantId =
-        result.finalizeWinner === "HOME"
-          ? game.fixture.homeEntrantId
-          : result.finalizeWinner === "AWAY"
-            ? game.fixture.awayEntrantId
-            : null;
-      // GAME_ENDED must be created before the FINAL flips below, not after (terminal event
-      // ordering - see docs/canonical-write-audit.md): createGameEvent's mutable-game gate
-      // rejects a FINAL game, and read-your-own-writes within this transaction means the flip
-      // below would already be visible to it. Every field here is already computed above, so
-      // creating it here changes nothing about what gets written - the two orderings are
-      // externally equivalent since everything commits atomically together.
-      await createGameEvent(
-        {
-          gameId,
-          fixtureId,
-          eventType: "GAME_ENDED",
-          typeKey: "GAME_ENDED",
-          period: result.period?.period ?? game.currentPeriod,
-          clockSeconds: 0,
-          description: `Final ${result.homeScore}\u2013${result.awayScore}`,
-        },
-        { actor: { id: session.user.id, organizationId }, source: "LIVE_UI", tx },
-      );
-      await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId, winnerEntrantId } });
-      await tx.game.update({
-        where: { id: gameId },
-        data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null, isUltraTimeActive: false },
-      });
-      // Partner data feed (streak v6, Prompt 1): the live path emits the same GAME_FINAL as the import
-      // path, so a subscriber does not need to know how the match was decided.
-      await queueGameLifecycleFeed(tx, {
-        organizationId,
-        gameId,
-        eventType: "GAME_FINAL",
-        event: {
-          eventId: gameId,
-          sequenceNumber: game.nextEventSequence,
-          period: result.period?.period ?? game.currentPeriod,
-          clockSeconds: 0,
-          points: null,
-          eventType: "GAME_FINAL",
-        },
-      });
-      // Knockout: when this completes the round, create the next round from the winners.
-      await advanceKnockoutBracket(tx, organizationId, game.fixture);
-      await recalculateStandings(tx, organizationId, game.fixture.seasonId);
-    }
-
-    await writeAuditLog(tx, {
-      organizationId,
-      userId: session.user.id,
-      action: "SCORING_EVENT_RECORDED",
-      entityType: "Game",
-      entityId: gameId,
-      details: {
-        fixtureId,
-        module: scoringModule.key,
-        typeKey: result.typeKey,
-        seasonClubId: input.seasonClubId,
-        homeScore: result.homeScore,
-        awayScore: result.awayScore,
-        finalize: result.finalize,
-      },
-    });
+    await applyScoringDelivery({ tx, organizationId, actorId: session.user.id, fixtureId, game, input });
   });
 
   revalidatePath(`/games/${fixtureId}/live`);
   revalidatePath(`/fixtures/${fixtureId}`);
   revalidatePath("/standings");
   revalidatePath(`/scoreboard/${gameId}`);
+}
+
+const endMatchInput = z.object({
+  mode: z.enum(["LEADER", "RETIRE_HOME", "RETIRE_AWAY"]),
+  reason: z.string().optional(),
+});
+
+// End a match before the scoring module decides it (streak v6, Prompt 2): retirement, walkover, or an
+// operator-forced close. Deliberately no "end set" - a set ends when the sport's rules say it does, and a
+// hand-forced set would produce a scoreline the engine can never reproduce. The winner is explicit rather
+// than inferred, so "who won" is never a guess: LEADER takes the current leader and refuses a level match;
+// RETIRE_* gives the match to the other side (the normal retirement convention).
+export async function endMatchEarly(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
+  const input = endMatchInput.parse(Object.fromEntries(formData.entries()));
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
+    const game = await tx.game.findUniqueOrThrow({
+      where: { id: gameId },
+      include: { fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } }, events: { orderBy: { sequenceNumber: "asc" } } },
+    });
+    assertGameIsMutable(game.status, game.fixture.status);
+    if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
+
+    const homeScore = game.fixture.homeScore;
+    const awayScore = game.fixture.awayScore;
+    let winner: "HOME" | "AWAY" | null;
+    if (input.mode === "LEADER") {
+      if (homeScore === awayScore) throw new Error("MATCH_LEVEL");
+      winner = homeScore > awayScore ? "HOME" : "AWAY";
+    } else {
+      // Retirement: the side that retired loses, so the winner is the other one.
+      const retired = input.mode === "RETIRE_HOME" ? "HOME" : "AWAY";
+      winner = retired === "HOME" ? "AWAY" : "HOME";
+    }
+
+    const winnerSeasonClubId =
+      winner === "HOME" ? game.fixture.homeSeasonClubId : winner === "AWAY" ? game.fixture.awaySeasonClubId : null;
+    const winnerEntrantId = winner === "HOME" ? game.fixture.homeEntrantId : winner === "AWAY" ? game.fixture.awayEntrantId : null;
+
+    // Terminal event first: createGameEvent's mutable-game gate rejects a FINAL game.
+    await createGameEvent(
+      {
+        gameId,
+        fixtureId,
+        eventType: "GAME_ENDED",
+        typeKey: "GAME_ENDED",
+        period: game.currentPeriod,
+        clockSeconds: remainingClockSeconds(game),
+        description:
+          input.mode === "LEADER"
+            ? `Match ended by the operator at ${homeScore}\u2013${awayScore}`
+            : `Retirement - ${input.mode === "RETIRE_HOME" ? "home" : "away"} side retired at ${homeScore}\u2013${awayScore}`,
+      },
+      { actor: { id: session.user.id, organizationId }, source: "LIVE_UI", tx },
+    );
+    await tx.fixture.update({ where: { id: fixtureId }, data: { status: "FINAL", winnerSeasonClubId, winnerEntrantId } });
+    await tx.game.update({
+      where: { id: gameId },
+      data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null, isUltraTimeActive: false, clockSecondsRemaining: remainingClockSeconds(game) },
+    });
+    await queueGameLifecycleFeed(tx, {
+      organizationId,
+      gameId,
+      eventType: "GAME_FINAL",
+      event: {
+        eventId: gameId,
+        sequenceNumber: game.nextEventSequence,
+        period: game.currentPeriod,
+        clockSeconds: 0,
+        points: null,
+        eventType: "GAME_FINAL",
+      },
+    });
+    await advanceKnockoutBracket(tx, organizationId, game.fixture);
+    await recalculateStandings(tx, organizationId, game.fixture.seasonId);
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "MATCH_ENDED_EARLY",
+      entityType: "Game",
+      entityId: gameId,
+      details: { fixtureId, mode: input.mode, winner, homeScore, awayScore, notice: input.reason?.trim() || null },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/live`);
+  revalidatePath(`/fixtures/${fixtureId}`);
+  revalidatePath("/standings");
 }
 
 const shootoutInput = z.object({

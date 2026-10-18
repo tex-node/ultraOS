@@ -3,7 +3,7 @@ import { resolveScoringModule } from "@/lib/sports/scoring-modules";
 import { pointLabel } from "@/lib/sports/tennis-scoring";
 import { type ShootoutKick, type ShootoutSide } from "@/lib/sports/shootout";
 import type { SportDefinition } from "@/lib/sports/types";
-import { recordScoringEvent, recordShootoutKick } from "../../actions";
+import { endMatchEarly, recordScoringEvent, recordShootoutKick } from "../../actions";
 
 const BIG_BTN = "min-h-[56px] min-w-[56px] rounded-md px-4 font-display text-base font-bold active:scale-95 transition";
 
@@ -55,17 +55,33 @@ export function ScoreCapturePanel({
   // set's rally score (SETS sports) or the current game's points (tennis) — otherwise every tap
   // looks like it did nothing until a full set or game completes.
   const currentRow = currentPeriod !== undefined ? periodScores.find((row) => row.period === currentPeriod) : undefined;
+  const points = tennisPoints ?? { home: 0, away: 0 };
+  // Deuce/advantage has no representation in "40–40": both sides at 3+ and level is deuce, one ahead is
+  // advantage. Derived from the same point counts the engine replays from the ledger, so the banner cannot
+  // disagree with the next point's outcome.
+  const tennisSituation =
+    points.home >= 3 && points.away >= 3
+      ? points.home === points.away
+        ? "Deuce"
+        : `Advantage — ${points.home > points.away ? teams[0]?.name ?? "home" : teams[1]?.name ?? "away"}`
+      : null;
   const progressSummary =
     scoringModule.kind === "SETS" && currentPeriod !== undefined ? (
       <p className="mt-1 text-sm font-semibold text-brand-300">
         Set {currentPeriod}: {currentRow?.home ?? 0}–{currentRow?.away ?? 0}
       </p>
     ) : scoringModule.kind === "TENNIS" && currentPeriod !== undefined ? (
-      <p className="mt-1 text-sm font-semibold text-brand-300">
-        Set {currentPeriod}: games {currentRow?.home ?? 0}–{currentRow?.away ?? 0}
-        {" · "}points {pointLabel(tennisPoints ?? { home: 0, away: 0 }, "HOME")}–
-        {pointLabel(tennisPoints ?? { home: 0, away: 0 }, "AWAY")}
-      </p>
+      <div className="mt-1">
+        <p className="text-sm font-semibold text-brand-300">
+          Set {currentPeriod}: games {currentRow?.home ?? 0}–{currentRow?.away ?? 0}
+          {" · "}points {pointLabel(points, "HOME")}–{pointLabel(points, "AWAY")}
+        </p>
+        {tennisSituation ? (
+          <p className="mt-1 inline-block rounded-md border border-warn/40 bg-warn/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-warn">
+            {tennisSituation}
+          </p>
+        ) : null}
+      </div>
     ) : null;
 
   // Handoff capture surfaces: scoring actions solid brand, in a 2 (mobile) / 4 (tablet+)
@@ -154,6 +170,12 @@ export function ScoreCapturePanel({
       <h3 className="font-semibold">{title}</h3>
       {progressSummary}
       {scoringModule.kind === "GOALS" ? <p className="mt-0.5 text-xs text-text-3">An own goal credits the other team.</p> : null}
+      {scoringModule.kind === "TENNIS" ? (
+        <p className="mt-0.5 text-xs text-text-3">
+          Every tap is one point in the ledger. Games, sets and the winner are derived from those points — the console
+          never stores a game or set score by hand.
+        </p>
+      ) : null}
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {teams.map((team) => (
           <div key={team.id} className="rounded-md border border-line p-4">
@@ -162,6 +184,30 @@ export function ScoreCapturePanel({
           </div>
         ))}
       </div>
+      {scoringModule.kind === "TENNIS" ? (
+        <section className="mt-6 rounded-lg border border-warn/20 bg-ink-900 p-4">
+          <h3 className="text-sm font-semibold">End the match early</h3>
+          <p className="mt-0.5 text-xs text-text-3">
+            For a retirement or a walkover. There is deliberately no &quot;end set&quot;: a set ends when the rules say it
+            does, and a hand-forced set would produce a scoreline the engine can never reproduce. &quot;Leader wins&quot;
+            refuses a level match.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {[
+              { mode: "LEADER" as const, label: "Leader wins" },
+              { mode: "RETIRE_HOME" as const, label: `${teams[0]?.name ?? "Home"} retires` },
+              { mode: "RETIRE_AWAY" as const, label: `${teams[1]?.name ?? "Away"} retires` },
+            ].map((option) => (
+              <form key={option.mode} action={endMatchEarly.bind(null, gameId, fixtureId)}>
+                <input type="hidden" name="mode" value={option.mode} />
+                <SubmitButton pendingLabel="…" className={`${BIG_BTN} border border-warn/40 text-xs text-warn`}>
+                  {option.label}
+                </SubmitButton>
+              </form>
+            ))}
+          </div>
+        </section>
+      ) : null}
       {shootoutSection}
     </section>
   );
