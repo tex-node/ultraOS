@@ -10230,6 +10230,109 @@ delivery comes from the installed timer, which is the point of this prompt.
 
 **Next step:** Prompt 2 (tennis capture console).
 
+## 2026-10-18 - Streak v6 / Prompt 2: tennis capture console (deuce indicator, end-match, one code path)
+
+**What already existed (worth stating):** the `TENNIS_SETS` module was registered, `recordScoringEvent`
+already dispatched by sport, the live page already passed replayed `tennisPoints` into a panel that rendered
++1 point buttons and "Set N: games X–Y · points 40–AD". An earlier streak built that; this prompt completed
+it rather than creating it.
+
+**Added**
+- **Deuce / Advantage banner** in the tennis panel, derived from the same point counts the engine replays
+  from the ledger, so the banner cannot disagree with what the next point does (a banner computed from a
+  stale prop would).
+- **End match early**: `LEADER` (refuses a level match), `RETIRE_HOME`, `RETIRE_AWAY` (retirement gives the
+  match to the other side). It writes `GAME_ENDED` **before** the FINAL flip (terminal event ordering),
+  sets the winner for a club **or** an entrant, queues partner `GAME_FINAL`, advances the knockout bracket,
+  recalculates standings, and audits as `MATCH_ENDED_EARLY`.
+- **One scoring core.** The body of `recordScoringEvent` moved to
+  `src/server/scoring/applyScoringDelivery.ts` (module resolution, tennis point replay, fixture score,
+  per-period score, ledger event, period advance, finalisation, partner event, audit). The action keeps
+  auth, the row lock and revalidations; `endMatchEarly` reuses the same ledger/finalisation rules. This is
+  what makes the verification honest - the script below drives the same function the button calls instead of
+  reimplementing the steps.
+
+**Deviation from the brief, deliberate:** there is **no "End Set" button**. A set ends when the sport's rules
+say it does (six games with a two-game lead, or a tiebreak at 6-6); a hand-forced set would write a scoreline
+the engine can never reproduce and would corrupt the match arithmetic. "End match" and retirement cover the
+real operational need (a walkover or a retirement), and the UI says so.
+
+**Verified on staging** (release `c42c674`, `scripts/tennis-console-verify.ts`, public org)
+```
+Benjamin Chibuzor v Musa Ibrahim · best of 5 sets, 3 to win, 6 games per set (sport definition)
+points captured: 72
+fixture: FINAL 3-0 winner=cmveebyff0004skkkqvwwuk8i
+game: FINAL period=3
+GamePeriodScore (sets): 1:6-0 2:6-0 3:6-0
+PASS: every set, the match winner and the ledger agree
+cleanup: competition, season, entrants and fixture removed
+residue: console competitions=0 console games=0
+```
+72 real `POINT` events through the same function the console uses, three `GamePeriodScore` rows, the right
+winner on the fixture, and a FINAL game.
+
+**Two real findings**
+1. **The scoring module ignores the season `RuleSet`.** `tennisConfig(definition)` reads the *sport
+   definition*, so a competition with `SETS_TO_WIN: 2` still plays **best-of-5**: my first run used short
+   sets and 24 points produced `1:4-2` in one unfinished set. The rule row is written and stored but never
+   consulted by the scoring path (`GameRuleSnapshot` is frozen at startGame and likewise not read here).
+   Recorded rather than papered over - a best-of-3 event cannot be scored correctly today.
+2. **Entrant standings cannot be deleted via their entrants.** `Standing.entrantId` is `ON DELETE SET NULL`
+   and the row's `seasonClubId` is already NULL, so deleting an entrant leaves a row violating
+   `Standing_party_chk` and the cleanup transaction rolls back (found by this script's own cleanup failing).
+   Standings must be deleted first; the script now does, with the reason in a comment.
+
+**Next step:** Prompt 3 (tennis public standings & bracket).
+
+## 2026-10-18 - Streak v6 / Prompt 3: tennis standings table and knockout bracket on the public sub-site
+
+**Built**
+- **Standings table** on `/t/[slug]` for individual sports: played, won, lost, **sets W–L**, set %, **games
+  W–L**, game %. Sets come from the engine's own `StandingMetric` rows (`SETS_WON`/`SETS_LOST`); games are
+  summed from `GamePeriodScore`, because a tennis set's period score *is* its games. A participant with no
+  standing row yet still appears at the bottom with zeroes - a table that hides an entrant reads as "not in
+  the tournament".
+- **Ordering is the engine's**, not a second opinion: rows sort by the stored `rank` (which the engine
+  computed with wins → set ratio → game ratio), falling back to that same order only when a season has never
+  been recalculated.
+- **`formatRatio` renders a dash for 0/0**, never `0.000` and never `Infinity` (an undefeated entrant with
+  no sets against is "no data", not a perfect ratio). **6 unit tests** in
+  `src/lib/public/individual-standings.test.ts` pin that, plus rank precedence, the fallback order and name
+  tie-breaking.
+- **Bracket view**: rounds come from `Fixture.round` and render as columns of match cards with the winner
+  emphasised. The brief asked for "the existing `BracketNode` component" - **there is none in the design
+  system** (checked: only `knockout-bracket.ts` logic exists), so this renders the same information without
+  inventing a component and pretending it was there.
+- `scripts/tennis-pilot.ts` gained `--knockout` (two semis + a final) and now **persists standings** via
+  `recalculateStandings` - it used to compute the table in memory and write nothing, which is why the first
+  public render showed everyone at 0 P/W/L.
+
+**Verified on staging** (release `bc5d97b`, pilot `--keep --knockout` in the public org)
+```
+GET /t/tennis-pilot-1792363539447 -> 200 (38,779 bytes)
+table rows as rendered (rank | athlete | P | W | L | sets | set% | games | game%):
+   1 | Tobi Adebayo   | 4 | 3 | 1 | 7–4 | 1.750 | 45–39 | 1.154
+   2 | Femi Lawal     | 4 | 3 | 1 | 7–5 | 1.400 | 45–39 | 1.154
+   3 | Seyi Balogun   | 4 | 1 | 3 | 5–7 | 0.714 | 39–45 | 0.867
+   4 | Chidi Okafor   | 4 | 1 | 3 | 4–7 | 0.571 | 39–45 | 0.867
+Standing rows in the DB: rank=1..4 with the same W/L
+"Standings", "Set %", "Game %" and the "Bracket" section all present in the HTML
+```
+P/W/L include the knockout semis (they are real matches in the season, so the engine counts them); the
+round-robin-only table printed by the pilot and the persisted table therefore differ, which is correct.
+Cleanup after the render: `tennis pilot competitions left=0`.
+
+**Known issues**
+- The bracket **section** rendered, but I confirmed its presence by text, not by asserting the "Round 1 /
+  Round 2" headings in the RSC payload - the heading extraction was unreliable. Treat the bracket as
+  "renders, not pixel-verified".
+- Games are summed per fixture from period scores, so a walkover with no `GamePeriodScore` contributes
+  nothing to games while still counting as a match. That is honest but can make games and matches disagree.
+- Still no rule-set override in the scoring path (Prompt 2's finding), so the pilot's `SETS_TO_WIN: 2` row
+  is documentation of intent, not behaviour.
+
+**Next step:** Prompt 4 (volleyball CSV/XLSX).
+
 
 
 
