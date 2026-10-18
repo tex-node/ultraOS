@@ -9064,6 +9064,15 @@ five-commits-behind local branch - so the first deploy of this work built and re
 which produced `release-9cfb2de-...`. Always pass the remote-tracking ref (or a sha) and check the sha
 in the release name.
 
+**Link visibility fix (deployed as `release-f2da752-20261018T082219Z`).** Staging's two seasons have
+**zero SCHEDULED fixtures** (all 44 are FINAL), so a "Rotation for the next game" link would have
+rendered nowhere - the deliverable would have been unlinked in practice. The opponent plan page now
+falls back to the most recent meeting against that opponent, labelled "retrospective" so it is not
+mistaken for pre-game advice. Verified on the deployed release: `/coaching/cmucf1uc9005dl3kkn8d21rsa/opponents/cmucf1txo002pl3kkjut5me5r`
+returns 200 and contains "Rotation for the last meeting (retrospective)" plus a working
+`/coaching/selection/<fixtureId>` link.
+
+
 
 
 
