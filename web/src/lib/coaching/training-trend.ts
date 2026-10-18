@@ -6,7 +6,7 @@
 // deliberately withheld when we do not know which direction is good for the metric - claiming "on
 // target" for a metric where lower is better would invert the meaning.
 
-export type TrendPoint = { occurredAt: Date; value: number };
+export type TrendPoint = { occurredAt: Date; value: number; sessionId?: string };
 
 export type MetricTrend = {
   points: TrendPoint[];

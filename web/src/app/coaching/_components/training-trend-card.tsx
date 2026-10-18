@@ -4,15 +4,21 @@ import type { PlanTrendArea } from "@/server/coaching/training";
 
 // The I3 trend card: what the coach logged against the target the plan committed to.
 //
-// A Server Component with an inline SVG sparkline - no chart library, no client JS. The verdict is
-// only shown when the metric's direction is known (see training-trend.ts); otherwise the card states
-// the target and lets the reader judge, rather than colouring a number that may mean the opposite.
+// A Server Component with an inline SVG sparkline - no chart library, no client JS. Three rules it
+// exists to keep:
+//   1. A verdict is only shown when the metric's direction is known (see training-trend.ts); otherwise
+//      the card states the target and lets the reader judge rather than colouring a number that may
+//      mean the opposite.
+//   2. A session with no logged metric reads "Missing data", never 0. A zero is a measurement.
+//   3. The plan's review window is in GAMES and the metrics are per SESSION; both counts are shown
+//      side by side so nobody mistakes one for the other.
 
 const dateFormat = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
 
 function Sparkline({ area }: { area: PlanTrendArea }) {
+  const logged = area.points.filter((point) => point.value !== null).map((point) => ({ occurredAt: point.occurredAt, value: point.value as number, sessionId: point.sessionId }));
   const trend = buildMetricTrend({
-    points: area.points,
+    points: logged,
     metricKey: area.metricKey,
     target: area.targetValue,
     targetLabel: area.targetLabel,
@@ -38,7 +44,12 @@ function Sparkline({ area }: { area: PlanTrendArea }) {
 }
 
 export function TrainingTrendCard({ areas, trainingHref }: { areas: PlanTrendArea[]; trainingHref: string }) {
-  const logged = areas.filter((area) => area.points.length > 0);
+  const loggedCount = (area: PlanTrendArea) => area.points.filter((point) => point.value !== null).length;
+  const missingCount = (area: PlanTrendArea) => area.points.filter((point) => point.value === null).length;
+  const hasSessions = areas.some((area) => area.points.length > 0);
+  const window = areas[0]?.reviewWindowGames ?? 6;
+  const games = areas[0]?.gamesSinceAdoption ?? 0;
+
   return (
     <section aria-labelledby="trend-heading" className="mt-6 rounded-lg border border-line bg-ink-800 p-4">
       <div className="flex items-baseline justify-between gap-2">
@@ -49,27 +60,44 @@ export function TrainingTrendCard({ areas, trainingHref }: { areas: PlanTrendAre
           Training week
         </Link>
       </div>
-      {logged.length === 0 ? (
-        <p data-state="no-readings" className="mt-2 text-sm text-text-2">
-          No metric logged yet. Assign this plan to a session and complete it to start the trend.
+
+      <p className="mt-1 text-xs text-text-3">
+        Review window: <span className="text-text-2">{Math.min(games, window)} of {window} games</span> since adoption
+        {games < window ? ` (${window - games} to go)` : " (window complete)"} · sessions assigned to this plan:{" "}
+        <span className="text-text-2">{areas[0]?.points.length ?? 0}</span>
+      </p>
+
+      {!hasSessions ? (
+        <p data-state="no-sessions" className="mt-2 text-sm text-text-2">
+          No completed session is assigned to this plan yet. Assign it in the training week and complete it to start the
+          trend.
         </p>
       ) : (
-        <ul className="mt-2 space-y-2">
-          {logged.map((area) => (
-            <li key={area.metricKey} data-metric={area.metricKey}>
+        <ul className="mt-2 space-y-3">
+          {areas.map((area) => (
+            <li key={area.metricKey} data-metric={area.metricKey} data-missing={missingCount(area)}>
               <p className="text-xs text-text-2">
-                {area.metricLabel} · <span className="text-text-3">{area.points.length} logged session{area.points.length === 1 ? "" : "s"}</span>
+                {area.metricLabel} ·{" "}
+                <span className="text-text-3">
+                  {loggedCount(area)} of {area.points.length} sessions logged
+                  {missingCount(area) > 0 ? ` · ${missingCount(area)} missing data` : ""}
+                </span>
               </p>
               <Sparkline area={area} />
-              <p className="mt-0.5 text-[10px] text-text-3">
-                {area.points.map((point) => `${dateFormat.format(point.occurredAt)}: ${point.value}`).join(" · ")}
-              </p>
+              <ol className="mt-1 space-y-0.5 text-[10px]">
+                {area.points.map((point) => (
+                  <li key={point.sessionId} data-session={point.sessionId} className={point.value === null ? "text-warn" : "text-text-3"}>
+                    {dateFormat.format(point.occurredAt)}:{" "}
+                    {point.value === null ? <span data-missing="true">Missing data</span> : `${point.value}${area.unit ? ` ${area.unit}` : ""}`}
+                  </li>
+                ))}
+              </ol>
             </li>
           ))}
         </ul>
       )}
       <p className="mt-2 text-[10px] text-text-3">
-        Metrics are logged per training session; the plan&apos;s own review window ({areas[0]?.reviewWindowGames ?? 6} games) is measured on games.
+        Metrics are logged per training session; the plan&apos;s own review window ({window} games) is measured on games.
       </p>
     </section>
   );
