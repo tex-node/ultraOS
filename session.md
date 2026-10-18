@@ -9335,6 +9335,42 @@ video would be exactly the kind of claim this project's honesty rule forbids.
 **Next step:** finish I3's trend chart, then stop and report. Vision stays gated until the user
 supplies a real game video (and its ground-truth box score).
 
+## 2026-10-18 - Deploy of the streak to staging + two runtime-only failures it exposed
+
+**Objective:** put the streak's work in front of the user on staging (`http://127.0.0.1:4120` via the
+SSH tunnel) after the user reported every coaching link 404-ing.
+
+**Diagnosis of the user's 404:** the app answers **404** for a request WITHOUT coaching access by
+design (ADR-011), so a signed-out browser sees exactly the page in their screenshot. Proven from this
+side: anonymous request -> 404, `/login` -> 200, and every coaching URL -> 200 with a minted
+SUPER_ADMIN session. The tunnel and the app were fine; the browser had no valid session (and the
+screenshotted address was truncated at `/opponents/c`, so a partial paste is also possible).
+
+**Two runtime-only failures found by deploying (both passed `tsc` + `next build`):**
+1. `/players/[playerId]/passport` collided with the existing `/players/[id]` segment. Next.js rejects
+   two different slug names for the same dynamic path **at startup, not at build time**: the server
+   booted and returned **500 on every route** ("You cannot use different slug names for the same
+   dynamic path"). Fixed by moving the page to `/players/[id]/passport` (`3436e62`).
+2. The first fix staged the new page but NOT the deletion of the old one (an unstaged ` D`), so the
+   build then failed with "Ambiguous app routes detected: /players/[*]/passport". Fixed by staging
+   the deletion (`3436e62`).
+
+**Lesson for the deploy checklist:** `tsc`/`next build` cannot prove an app boots. Every deploy now
+ends with real HTTP checks of representative routes (status + body size), not just "service: active".
+
+**Verification:** release `release-3436e62-20261018T111229Z` active. With an LBCL-scoped SUPER_ADMIN
+session, all nine URLs return 200: club hub (19.8 KB), opponent plan (41.9 KB), selection normal
+(228.6 KB), selection INSUFFICIENT_DATA (119.5 KB), adoption panel (45.9 KB), training week (20.2 KB),
+training session (22 KB), athlete passport (48.3 KB), scoresheets queue (26.9 KB).
+
+**Known issue found while verifying:** the pages that require `session.user.organizationId`
+(`/scoresheets`, `/players/[id]/passport`, and the pre-existing `/imports`) redirect to `/no-league`
+when the session has no active organization - which is also what a minted token with `organizationId:
+null` hits. A real user whose first role assignment is another organization will get the same
+redirect; the coaching pages are unaffected because they resolve the organization from the club in the
+URL. Worth a friendlier message, not a blocker.
+
+
 
 
 
