@@ -75,6 +75,55 @@ npm ci --no-audit --no-fund
 echo "[deploy] prisma generate"
 npx prisma generate
 
+# ---------------------------------------------------------------------------------------------
+# Pre-flight: refuse to ship code whose migrations are not applied to the target database.
+#
+# This exists because it has now happened twice: a release whose code needed a schema change
+# reached an environment without it, and the first request that touched the table returned a
+# Prisma P2022 error while every health check still said green - `GameEvent.resolvedBy` in
+# production (Oct 2026, migrated 2026-10-18) and the missing runtime-role GRANT on
+# `CoachingPlan` in staging (same week). Deploys do not run migrations by default, so without
+# this check nothing does.
+#
+# Runs after npm ci / prisma generate (it needs the CLI and the migrations directory) and before
+# the release is built or the symlink swapped, so a mismatch stops the deploy with nothing
+# changed. It uses the same privileged URL the --migrate step would use.
+#
+# A missing privileged URL is NOT fatal - a machine without migrate.env would otherwise be unable
+# to deploy at all - but it says so loudly instead of skipping silently.
+# ---------------------------------------------------------------------------------------------
+PREFLIGHT_URL="$MIGRATE_DB_URL"
+if [[ -z "$PREFLIGHT_URL" ]]; then
+  PREFLIGHT_ENV_FILE="${MIGRATE_ENV_FILE:-$APP_ROOT/shared/migrate.env}"
+  if [[ -f "$PREFLIGHT_ENV_FILE" ]]; then
+    PREFLIGHT_URL="$(grep '^DATABASE_URL=' "$PREFLIGHT_ENV_FILE" | head -1 | sed 's/^DATABASE_URL=//')"
+  fi
+fi
+if [[ -n "$PREFLIGHT_URL" ]]; then
+  echo "[deploy] prisma migrate status (pre-flight)"
+  STATUS_OUT="$(DATABASE_URL="$PREFLIGHT_URL" npx prisma migrate status 2>&1 || true)"
+  echo "$STATUS_OUT" | tail -4
+  if echo "$STATUS_OUT" | grep -q 'not yet been applied'; then
+    {
+      echo ""
+      echo "##########################################################################"
+      echo "# DEPLOY HALTED: this ref has migrations that are NOT applied."
+      echo "# Shipping it would run code against a schema it does not expect."
+      echo "#"
+      echo "# Re-run the same command with --migrate, after a verified backup,"
+      echo "# or apply the migration separately and re-run this deploy."
+      echo "#"
+      echo "# Nothing was built, swapped, or restarted."
+      echo "##########################################################################"
+      echo "$STATUS_OUT" | sed -n '/not yet been applied/,$p' | head -20
+    } >&2
+    exit 4
+  fi
+else
+  echo "[deploy] WARNING: no privileged database URL (no --migrate-db-url and no $APP_ROOT/shared/migrate.env)" >&2
+  echo "[deploy] WARNING: pending migrations were NOT checked - this deploy may ship code ahead of its schema" >&2
+fi
+
 echo "[deploy] next build"
 set -a; # shellcheck disable=SC1090
 . "$ENV_FILE"; set +a
