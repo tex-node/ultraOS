@@ -269,6 +269,63 @@ export async function loadTrainingSession(tx: Prisma.TransactionClient, organiza
   };
 }
 
+export type PlanTrendArea = {
+  metricKey: string;
+  metricLabel: string;
+  unit: string | null;
+  targetValue: number | null;
+  targetLabel: string;
+  reviewWindowGames: number;
+  points: { occurredAt: Date; value: number }[];
+};
+
+// The logged-vs-target series for an adopted plan's focus areas, used by the player page's trend card.
+//
+// NOTE on the window: the plan's review window is expressed in GAMES (it is a box-score plan). Training
+// metrics are logged per SESSION, which is a different clock, so this returns the most recent logged
+// sessions rather than pretending to fill a game window.
+export async function loadPlanTrainingTrend(tx: Prisma.TransactionClient, organizationId: string, planId: string, take = 12): Promise<PlanTrendArea[]> {
+  const plan = await tx.coachingPlan.findFirst({
+    where: { id: planId, organizationId },
+    select: { focusAreas: true, player: { select: { athleteId: true } } },
+  });
+  if (!plan) return [];
+  const snapshot = plan.focusAreas as unknown as CoachingPlanSnapshot | null;
+  const areas = snapshot?.focusAreas ?? [];
+  if (areas.length === 0) return [];
+  const athleteId = plan.player?.athleteId;
+  if (!athleteId) return areas.map((area) => ({ metricKey: area.metricKey, metricLabel: area.metricLabel, unit: null, targetValue: area.target.value ?? null, targetLabel: area.target.label, reviewWindowGames: area.target.reviewWindowGames, points: [] }));
+
+  const records = await tx.athleteTrainingRecord.findMany({
+    where: { organizationId, athleteId, trainingSession: { completedAt: { not: null } } },
+    orderBy: { trainingSession: { occurredAt: "asc" } },
+    select: {
+      trainingSession: { select: { occurredAt: true } },
+      metrics: { select: { numericValue: true, metricDefinition: { select: { key: true, unit: true } } } },
+    },
+  });
+
+  return areas.map((area) => {
+    const points: { occurredAt: Date; value: number }[] = [];
+    let unit: string | null = null;
+    for (const record of records) {
+      const metric = record.metrics.find((candidate) => candidate.metricDefinition.key === area.metricKey && candidate.numericValue !== null);
+      if (!metric) continue;
+      unit = metric.metricDefinition.unit ?? unit;
+      points.push({ occurredAt: record.trainingSession.occurredAt, value: Number(metric.numericValue) });
+    }
+    return {
+      metricKey: area.metricKey,
+      metricLabel: area.metricLabel,
+      unit,
+      targetValue: typeof area.target.value === "number" ? area.target.value : null,
+      targetLabel: area.target.label,
+      reviewWindowGames: area.target.reviewWindowGames,
+      points: points.slice(-take),
+    };
+  });
+}
+
 // Every session in the season that already carries a plan, for the "adopt → assign" picker.
 export async function loadAssignablePlans(tx: Prisma.TransactionClient, organizationId: string, seasonClubId: string) {
   const plans = await tx.coachingPlan.findMany({

@@ -4,8 +4,11 @@ import { isAdoptablePlan } from "@/lib/coaching/plan-snapshot";
 import { loadClubCoachingData } from "@/server/coaching/data";
 import { requireCoachingClub } from "@/server/coaching/guard";
 import { loadActiveCoachingPlan } from "@/server/coaching/plans";
+import { loadPlanTrainingTrend } from "@/server/coaching/training";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import { PlayerPlanView } from "../../../_components/player-plan-view";
 import { PlanAdoptionPanel } from "../../../_components/plan-adoption-panel";
+import { TrainingTrendCard } from "../../../_components/training-trend-card";
 import { adoptDevelopmentPlan } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +33,9 @@ export default async function CoachingPlayerPage({ params }: { params: Promise<{
       planGamesPlayed={plan?.gamesPlayed ?? 0}
     />
   );
+  // I3: what has actually been logged against the adopted plan's targets.
+  const trendAreas = adopted ? await withOrganizationContext(scope.organizationId, (tx) => loadPlanTrainingTrend(tx, scope.organizationId, adopted.id)) : [];
+  const trend = trendAreas.length > 0 ? <TrainingTrendCard areas={trendAreas} trainingHref={`/coaching/${seasonClubId}/training`} /> : null;
 
   if (!plan || plan.seasonClubId !== seasonClubId) {
     // On the roster but no games yet: show the same view with an empty plan rather than a 404.
@@ -40,6 +46,7 @@ export default async function CoachingPlayerPage({ params }: { params: Promise<{
           plan={{ playerId, name: p.name, jerseyNumber: p.jerseyNumber, seasonClubId, position: p.position, positionGroup: "UNKNOWN", gamesPlayed: 0, status: "INSUFFICIENT_DATA", focusAreas: [], strengths: [], readings: [] }}
         />
         {adoption}
+        {trend}
       </>
     );
   }
@@ -47,6 +54,7 @@ export default async function CoachingPlayerPage({ params }: { params: Promise<{
     <>
       <PlayerPlanView plan={plan} />
       {adoption}
+      {trend}
     </>
   );
 }
