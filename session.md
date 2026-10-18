@@ -10012,6 +10012,53 @@ outbox: DELIVERED=3   (fixture + subscription cleaned up afterwards - 0 residue)
 
 **Next step:** Prompt 3 (multi-sport pilot).
 
+## 2026-10-18 - Streak v5 / Prompt 3: tennis pilot (individual entrants, best-of-3, standings)
+
+**Objective:** prove the multi-sport architecture outside basketball.
+
+**Completed: `scripts/tennis-pilot.ts`** (idempotent, `--keep` optional)
+- Onboards a tennis `Competition` + `Division` ("Singles") + `Season` + a `RuleSet` with
+  `{SETS_TO_WIN: 2, GAMES_PER_SET: 6, TIEBREAK_ENABLED: true}` (best-of-3), and four **`Entrant`** rows of
+  type `INDIVIDUAL`, each linked to an `Athlete` via `EntrantMember` - **no Club, no SeasonClub, no roster**.
+- Scores six round-robin matches point by point through the real engine (`awardPoint` with deuce/advantage,
+  `isSetComplete`, `setWinner`), producing genuine scorelines (4-6, 7-5, 6-0, 7-6 depending on the seed).
+- Persists entrant-vs-entrant `Fixture`s (`homeEntrantId`/`awayEntrantId`, season clubs `null`), a `Game`
+  per match, and one `GamePeriodScore` per **set** - the generic period model, not a tennis special case.
+- Computes standings with `computeSeasonStandings(TENNIS, …)`.
+
+**Verified (staging)**
+```
+entrants: Tobi Adebayo, Chidi Okafor, Femi Lawal, Seyi Balogun · best-of-3 rule set
+  Tobi Adebayo  4-6 7-5 6-0  Chidi Okafor -> 2-1 (HOME)
+  ...
+standings: Femi Lawal W2 L1 · sets 5-4 · set ratio 1.250  (wins, then set ratio, then game ratio)
+PASS: 4 entrants, 6 matches, standings consistent (wins sum to 6, ordered)
+```
+- Set scores stored as `GamePeriodScore` (`1:4-6 2:7-5 3:6-0`), fixtures carry entrants and `null` clubs.
+- The **head-to-head** tiebreak decided the two players level on wins AND set ratio.
+- **Public pages**: run again in the public org (neon-ultra), `/t/<slug>` -> **200** showing "Tennis",
+  "Singles" and three **INDIVIDUAL** entrant rows, `/t/<slug>/fixtures` -> **200**. The same competition in
+  LBCL 404s, because `/t/[slug]` resolves the **default public organization** - documented, not a tennis bug.
+
+**Documented in `documentation/MULTI_SPORT_PILOT.md`**, including what does NOT work:
+1. the **capture console has no tennis mode** (the module's own header said so; this pilot drives the same
+   functions a console would, but an operator cannot click through a match);
+2. there is no computed tennis standings page (the engine output exists; basketball standings still read
+   `SeasonClub`);
+3. the sport definition defaults to best-of-5, so best-of-3 needs the `SETS_TO_WIN` override the pilot
+   writes;
+4. no knockout bracket (round-robin only).
+
+**No basketball assumption broke**: entrant fixtures, `EntrantMember`, per-set `GamePeriodScore` and the
+standings engine all accepted tennis data unchanged. The gaps are missing wiring, not model conflicts -
+which is exactly the distinction `MULTI_SPORT_ARCHITECTURE.md` promised, and why no additive fix was
+needed in this slice.
+
+**Cleanup:** all pilot competitions removed from staging (`competitions=0`, no new entrants).
+
+**Next step:** Prompt 4 (API docs).
+
+
 
 
 
