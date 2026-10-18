@@ -9682,6 +9682,62 @@ the host are broadcast render artifacts. No accuracy number is claimed or implie
 
 **Next step:** final roadmap update + commit.
 
+## 2026-10-18 - Streak v4 / Prompt 1: the four LBCL arithmetic errors, fixed and re-ingested
+
+**Objective:** correct the four inconsistencies the scoresheet checksums found, prove the batch is clean,
+and repair the already-ingested `PlayerStat` rows in staging and production.
+
+**The errors (games 19-20, from the batch's own checksums)**
+| game | player | inconsistency |
+|---|---|---|
+| 19 | Creon Okwuzu (Square Team) | points 8 vs components 9 |
+| 19 | Dele Ajigboye (LRBA) | points 7 vs components 8, and FGA 7 vs 2PA+3PA 8 |
+| 20 | Nnerive Peter (Ogra) | points 4 vs components 2 |
+
+**How each was decided (evidence, not inference).** The two source screenshots were found and re-read by
+eye: **Game 19 SQUARE TEAM 33 - 74 LAGOS RAPTORS** and **Game 20 CAMPOS 48 - 40 OGRA HOOP KINGS** (both
+Sun 27 Sep 2026), which confirm the printed PTS column and the team totals row. The rule applied is one
+rule: **the printed team score and period sums are the strongest anchor** (corroborated three ways), so a
+player's points stay as printed and the components are corrected to match:
+- Creon: FG 4/7 with 2P 4/7 means 8 points - the lone FT (1/1) was what pushed the components to 9 →
+  `freeThrowsMade/freeThrowsAttempted 1 → 0`.
+- Dele: 3 twos + 1 FT = 7 (as printed) and FGA 7 = 2PA 7 with no three attempted →
+  `freeThrowsMade 2 → 1`, `threePointsAttempted 1 → 0`.
+- Nnerive: PTS 4 is anchored by the team's 40, so the components were raised to two two-pointers →
+  `twoPointsMade/twoPointsAttempted/fieldGoalsMade/fieldGoalsAttempted 1 → 2`. **Flagged:** this is the
+  one cell whose pair (1/1) could not be read with confidence at 720px, so its correction follows the
+  score anchor rather than a legible cell - stated in the script and here rather than hidden.
+
+**Completed**
+- `scripts/fix-lbcl-batch.ts` applies exactly those 8 field changes to
+  `scripts/data/lbcl-2026-batch1.json`. It asserts each "before" value, so it cannot double-apply, and it
+  prints the reason for every edit.
+- `scripts/fix-lbcl-stats.ts` applies the same 8 values to the already-ingested `PlayerStat` rows, keyed
+  by fixture time + club **on the correct side** (an away-team correction must not match a fixture where
+  that club was at home), asserting the old value first (idempotent), and writing an
+  `LBCL_BOX_SCORE_CORRECTED` AuditLog row per PlayerStat. Dry-run by default; `--apply` writes.
+- Ran it against **staging**, verified, then against **production**.
+
+**Verification**
+- `node scripts/data/verify-batch.mjs` → **"All PTS/quarter checksums pass"** (the REB lines it prints are
+  pre-existing informational team-vs-player rebound notes, untouched by this correction).
+- `scripts/csv-export-verify.ts` → **2,523 checksum checks, 0 failing** (was 4), round-trip still 0 diffs.
+- Staging rows read back independently: Creon `pts 8 … 2pm/2pa 4/6 3pm/3pa 0/1 ftm/fta 0/0 identity OK
+  fga OK`; Dele `pts 7 … 3/7 0/0 1/4 identity OK fga OK`; Nnerive `pts 4 … 2/2 identity OK fga OK`.
+- Production identical, plus three `LBCL_BOX_SCORE_CORRECTED` audit entries naming the player, fixture,
+  batch game and the exact fields changed.
+- Every team point sum still equals the fixture score (33-74, 48-40) - the corrections did not move a
+  single point.
+
+**Known issues**
+- The Nnerive Peter cell is the one correction derived from the score anchor rather than a legible
+  source cell; if the original Genius export surfaces, that row should be re-checked.
+- The correction is a one-off script, not a general "supersede a final game" workflow - the pipeline
+  still (correctly) refuses to re-import a FINAL fixture.
+
+**Next step:** Prompt 2 (.xlsx support).
+
+
 
 
 
