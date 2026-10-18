@@ -91,3 +91,63 @@ DATABASE_URL=... node --conditions=react-server --import tsx scripts/tennis-pilo
 
 Without `--keep` it deletes the competition, division, season, rule set, entrants and fixtures it created.
 Use the public org (neon-ultra on staging) if you also want to see the `/t/<slug>` pages.
+
+## Volleyball: a box score through the I1 ingestion pipeline (2026-10-18, streak v6)
+
+The tennis sections above prove the **capture** side of a second sport. This section proves the
+**ingestion** side: a volleyball box score CSV becomes per-player metric rows and a standings table, without
+pretending it went through a review UI that cannot render it.
+
+**What was run** - `scripts/volleyball-csv-verify.ts` (staging):
+
+```
+parsed 2 teams, 4 players
+  Surge: Ada Nwosu (12K/2A/1B), Bode Ade (8K/0A/2B)
+  Vortex: Chi Obi (9K/1A/0B), Dayo Eze (6K/0A/3B)
+SportMetricDefinition rows for volleyball: 11 (10 player metrics)
+GameMetricValue rows written: 28
+totals read back: kills=35 aces=3 blocks=6 digs=19 (sheet: kills=35 aces=3)
+standings:
+  Surge  rank=1 W1 L0 sets 3-1
+  Vortex rank=2 W0 L1 sets 1-3
+PASS: parsed, catalogs, metric rows and standings all agree
+```
+
+**Pipeline, in order**
+
+1. `src/lib/scoresheet/volleyball-extract.ts` - `parseVolleyballCsv` reuses the basketball reader's RFC4180 row
+   parsing and its `## TEAM` section convention, but emits the **sport definition's own metric keys**
+   (`kills`, `errors`, `aces`, `blocks`, `digs`, `assists`, `serves`, `points`, `blockAssists`,
+   `serveReceives`). Header aliases cover both the printed abbreviations (`K`, `E`, `SA`, `BLK`, `DIG`,
+   `AST`, `SR`) and the long export names. **7 unit tests.**
+2. `SportMetricDefinition` is materialised from the registry (the same upsert
+   `scripts/sport-metric-definitions-sync.ts` performs), so `GameMetricValue` rows can reference it by id.
+3. `GameMetricValue` rows: 28 written, one per player per metric, keyed by `metricSubjectKey("PLAYER", id)`.
+4. Totals are read back and compared with the sheet (35 kills, 3 aces, 6 blocks, 19 digs).
+5. `recalculateStandings` produces the table from the sets (3-1 / 1-3) - the same engine basketball uses.
+
+**Honest failure modes, all tested:** an unrecognised column is reported in `headerMap` instead of being
+dropped; a non-numeric value becomes a per-player warning instead of a zero; a row before any `## TEAM`
+section is ignored **with a warning** rather than attributed to a guessed side; a percentage column is
+ignored rather than added to the counts. Numeric detection is strict - the first version stripped every
+non-digit, which turned `K` and `#` into `0` and made a header row look like data (the tests caught it
+immediately).
+
+**What does NOT work yet**
+
+1. **The review queue is still basketball-shaped.** `ScoresheetImport` columns are made/attempted shooting
+   stats, so a volleyball file cannot be reviewed and approved in the UI. The extraction and the metric
+   write are proven; routing it through review is the next piece, and this document says so instead of
+   writing a "reviewed" row no operator could have produced.
+2. **No volleyball scoresheet template or operator runbook** - the sample sheet used here is the fixture's
+   own format, not a scanned or vendor export.
+3. **No per-set attribution on the metric rows** - they are written with `period: 0` (match totals). A
+   per-set sheet would need the period on each row; the writer supports it, the parser does not produce it.
+
+**How to re-run**
+
+```bash
+cd /opt/ultraos-staging/source/web
+DATABASE_URL=... node --conditions=react-server --import tsx scripts/volleyball-csv-verify.ts \
+  --organization <orgId> [--keep]
+```

@@ -10333,6 +10333,56 @@ Cleanup after the render: `tennis pilot competitions left=0`.
 
 **Next step:** Prompt 4 (volleyball CSV/XLSX).
 
+## 2026-10-18 - Streak v6 / Prompt 4: a volleyball box score through the I1 pipeline
+
+**Built**
+- `src/lib/scoresheet/volleyball-extract.ts` - `parseVolleyballCsv` reuses the basketball reader's RFC4180
+  row parsing and `## TEAM` sections but emits the **sport definition's metric keys** directly
+  (`kills`, `errors`, `aces`, `blocks`, `digs`, `assists`, `serves`, `points`, `blockAssists`,
+  `serveReceives`), with aliases for the printed abbreviations (`K`, `E`, `SA`, `BLK`, `DIG`, `AST`, `SR`)
+  and the long export names. The basketball parser is untouched - bending `CorrectedPlayer` to carry kills
+  and digs would have made both formats worse.
+- **7 unit tests** covering the aliases and the four failure modes that matter: an unrecognised column is
+  reported in `headerMap` (not dropped), a non-numeric value is a per-player warning (not a zero), a row
+  before any `## TEAM` section is ignored with a warning (not attributed to a guessed side), and a percent
+  column is ignored (not added to the counts).
+- `scripts/volleyball-csv-verify.ts` runs the whole pipeline: parse → materialise the
+  `SportMetricDefinition` catalog (same upsert as `sport-metric-definitions-sync.ts`) → write
+  `GameMetricValue` rows for a real 3-1 match → read the totals back against the sheet →
+  `recalculateStandings`.
+
+**Verified on staging**
+```
+parsed 2 teams, 4 players
+  Surge: Ada Nwosu (12K/2A/1B), Bode Ade (8K/0A/2B)
+  Vortex: Chi Obi (9K/1A/0B), Dayo Eze (6K/0A/3B)
+SportMetricDefinition rows for volleyball: 11 (10 player metrics)
+GameMetricValue rows written: 28
+totals read back: kills=35 aces=3 blocks=6 digs=19 (sheet: kills=35 aces=3)
+standings:
+  Surge  rank=1 W1 L0 sets 3-1
+  Vortex rank=2 W0 L1 sets 1-3
+PASS: parsed, catalogs, metric rows and standings all agree
+```
+The volleyball catalog grew from 8 to **11** definitions during the run (the sync materialised the missing
+player metrics), which is exactly the "is the catalog populated" question the brief asked.
+
+**A bug the tests caught immediately:** the first `isNumeric` stripped every non-digit, so `K` and `#` became
+`0` and the header row looked like data - the parser returned **zero teams**. Strict numeric detection fixed
+it. Worth recording because the same regex (`replace(/[^\d.-]/g, "")`) appears elsewhere in the CSV code and
+is only safe there because the values are pre-validated.
+
+**Documented in `documentation/MULTI_SPORT_PILOT.md`**, including what does NOT work:
+1. **the review queue is still basketball-shaped** (`ScoresheetImport` columns are made/attempted shooting
+   stats), so a volleyball file cannot be reviewed and approved in the UI - the extraction and the metric
+   write are proven, the review routing is not, and no "reviewed" row was faked to hide that;
+2. no volleyball scoresheet template or operator runbook (the sample is the fixture's own format, not a
+   scanned or vendor export);
+3. metric rows are written with `period: 0` (match totals) - the writer supports per-set rows, the parser
+   does not produce them yet.
+
+**Next step:** Prompt 5 (final sync).
+
 
 
 
