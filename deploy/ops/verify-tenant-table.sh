@@ -30,8 +30,8 @@ note() { printf '%-46s %s\n' "$1" "$2"; }
 
 echo "== $TABLE (canonical: $CANONICAL, db: $DB_NAME)"
 
-rls=$(psql "$DB" -Atc "select relrowsecurity || ' ' || relforcerowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='$TABLE'")
-if [ "$rls" = "t t" ]; then note "1. rls enabled + forced" "PASS"; else note "1. rls enabled + forced" "FAIL ($rls)"; fail=1; fi
+rls=$(psql "$DB" -Atc "select case when relrowsecurity and relforcerowsecurity then 'both' when relrowsecurity then 'enabled-not-forced' else 'off' end from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='$TABLE'")
+if [ "$rls" = "both" ]; then note "1. rls enabled + forced" "PASS"; else note "1. rls enabled + forced" "FAIL ($rls)"; fail=1; fi
 
 predicate=$(psql "$DB" -Atc "select coalesce(qual,'') from pg_policies where schemaname='public' and tablename='$TABLE' and policyname='tenant_isolation'")
 if echo "$predicate" | grep -q "app.current_org_id"; then

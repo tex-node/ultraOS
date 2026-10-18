@@ -10168,6 +10168,68 @@ took the parallel failures from 10 to 4 before the serialization change.
 **Streak v5 complete.** All five prompts done; both environments on `release-0c6b5ad`, smoke green, 49/49 DB
 tests serialized, 10/10 feed unit tests, ratchet untouched.
 
+## 2026-10-18 - Streak v6 / Prompt 1: cron drain + GAME_STARTED (and a policy bug that invalidated a v5 claim)
+
+**Built**
+- **`GET /api/cron/drain-feeds`** - calls `drainAllOrganizations()` (which first returns `DELIVERING` rows
+  older than 10 minutes to `PENDING`, so a process that died mid-send does not strand a delivery). Auth is an
+  `x-cron-secret` header compared length-first then byte-by-byte. **Fails closed**: with `CRON_SECRET` unset
+  it answers 503 and refuses everything, so a host that forgets the variable cannot expose an endpoint that
+  makes the server POST to partner URLs.
+- **`deploy/ops/install-feed-drain-timer.sh`** - systemd timer, 30 s, `AccuracySec=5s`, refuses to install
+  without `CRON_SECRET` in the app env file rather than creating a timer that would 503 forever.
+- **`GAME_STARTED`** from `startGame`, inside the transaction that flips the fixture to LIVE, guarded on the
+  **previous** status so reopening a paused game does not claim it started again.
+- **`GAME_FINAL`** now also from the two live finalisation paths (the scoring module and the shootout), so a
+  subscriber does not need to know whether a match was decided live or imported.
+- Docs: `ULTRA_LIVE_API_V1.md` emission table (when each event fires + the reopen caveat) and the cron
+  section; `deploy/README.md` + `.env.example` document `CRON_SECRET` as fail-closed.
+
+**A serious bug this prompt found - my v5 "RLS proven as the app role" claim was WRONG.**
+The feed policies read `current_setting('app.current_organization_id')`. The app sets **`app.current_org_id`**
+(`withOrganizationContext`, "the one place app.current_org_id ever gets set"), and every other tenant table's
+policy reads that name with a `COALESCE(... , '<neon-ultra>')` fallback. Under the app role the setting was
+therefore always unset, the predicate was NULL, `SELECT` returned zero rows and `INSERT` would have failed the
+`WITH CHECK`. **Every verification in v5 used the privileged URL (BYPASSRLS), and my RLS probe set the same
+wrong variable it was testing - a false positive, not a proof.** Corrected by `20261018203000`, which makes
+the policies byte-for-byte the canonical shape (one tenancy rule in the database, not two).
+
+The symptom that surfaced it: the cron drain returned `{"ok":true,"organizations":0}` while a `PENDING`
+delivery existed. That is what a silent policy mismatch looks like - no error, just nothing.
+
+**New guard: `deploy/ops/verify-tenant-table.sh <table>`.** Four checks in order: RLS enabled **and forced**;
+the policy predicate reads `app.current_org_id`; grants match a known tenant table (`CoachingPlan`); and a
+behavioural scoped-`SELECT` + cross-tenant check as the **app role** using the app's own variable. That last
+check is the one that would have caught both real bugs (grant to the wrong role in v5, policy on the wrong
+setting here). Applied to both feed tables: **PASS** on all five lines each.
+
+**Verified on staging** (release `e7b070c`)
+```
+cron route:  no header -> 401  ·  wrong secret -> 401  ·  right secret -> 200
+             {"ok":true,"organizations":0,"attempted":0,...,"durationMs":91}
+timer:       active, next tick 28s, journal shows a successful run every 30s
+lifecycle:   queued GAME_STARTED + GAME_FINAL, NO explicit drain, waited for the host timer
+             received 2 webhook(s)
+               VERIFIED · GAME_STARTED · status FINAL · 21-18
+               VERIFIED · GAME_FINAL  · status FINAL · 21-18
+             PASS: both lifecycle events were delivered by the cron timer and HMAC-verified
+residue:     subscriptions=0 deliveries=0 games=0
+```
+Both payloads show `status FINAL` because the verification script queueed both events in one transaction and
+the drain ran after commit - the payload carries the game's state **at send time**, which is honest and worth
+knowing when reading a capture. The script `scripts/feed-lifecycle-verify.ts` does not drain explicitly: the
+delivery comes from the installed timer, which is the point of this prompt.
+
+**Known issues**
+- The script invokes `queueGameLifecycleFeed` the way the actions do, but cannot invoke the **server action**
+  itself (`startGame` needs a browser session); the 8-line wiring in `startGame` / `recordScoringEvent` is
+  covered by review, not by this run.
+- 503-without-secret is documented and coded but not exercised live (it would mean unsetting the variable on
+  staging, which would also stop the timer).
+- The timer posts to `127.0.0.1`; if the app ever moves off the host, the unit needs the real origin.
+
+**Next step:** Prompt 2 (tennis capture console).
+
 
 
 
