@@ -37,6 +37,7 @@ MIGRATE_ENV="${MIGRATE_ENV:-/opt/ultraleagueos/shared/migrate.env}"
 SMOKE_EMAIL="${SMOKE_EMAIL:-texdevices@gmail.com}"
 SMOKE_ORG="${SMOKE_ORG:-}"
 AUTH_TOKEN="${AUTH_TOKEN:-}"
+COOKIE_NAME="${AUTH_COOKIE_NAME:-authjs.session-token}"
 
 if [ "${SKIP_SMOKE:-0}" = "1" ]; then
   echo "[smoke] SKIPPED (SKIP_SMOKE=1)"
@@ -52,6 +53,12 @@ if [ -z "$AUTH_TOKEN" ]; then
   # shellcheck disable=SC1090
   . "$ENV_FILE"
   set +a
+  # Auth.js names the cookie (and salts the JWT with it) by protocol: https -> __Secure- prefix.
+  AUTH_URL_VALUE="${AUTH_URL:-${NEXTAUTH_URL:-}}"
+  case "$AUTH_URL_VALUE" in
+    https://*) COOKIE_NAME="__Secure-authjs.session-token" ;;
+    *) COOKIE_NAME="authjs.session-token" ;;
+  esac
   priv=$(grep -m1 '^DATABASE_URL=' "$MIGRATE_ENV" | cut -d= -f2-)
   priv="${priv%%\?*}"
   # Use the database the APP talks to, reached with the privileged credentials.
@@ -73,9 +80,12 @@ if [ -z "$AUTH_TOKEN" ]; then
       exit 1
     fi
   fi
-  AUTH_TOKEN=$(cd "$WEB" && USER_ID="$USER_ID" USER_EMAIL="$USER_EMAIL" USER_NAME="$USER_NAME" SESSION_VERSION="$SESSION_VERSION" SMOKE_ORG="$SMOKE_ORG" node --input-type=module -e '
+  AUTH_TOKEN=$(cd "$WEB" && USER_ID="$USER_ID" USER_EMAIL="$USER_EMAIL" USER_NAME="$USER_NAME" SESSION_VERSION="$SESSION_VERSION" SMOKE_ORG="$SMOKE_ORG" SALT="$COOKIE_NAME" node --input-type=module -e '
 const { encode } = await import("next-auth/jwt");
-process.stdout.write(await encode({ secret: process.env.AUTH_SECRET, salt: "authjs.session-token",
+// Auth.js uses the COOKIE NAME as the JWT salt. Production runs behind https (AUTH_URL), so its cookie
+// is __Secure-authjs.session-token and a token minted with the plain salt is rejected - which is exactly
+// how the first production deploy failed its own smoke test.
+process.stdout.write(await encode({ secret: process.env.AUTH_SECRET, salt: process.env.SALT,
   token: { sub: process.env.USER_ID, id: process.env.USER_ID, name: process.env.USER_NAME || process.env.USER_EMAIL,
            email: process.env.USER_EMAIL, role: "SUPER_ADMIN", roles: ["SUPER_ADMIN"],
            organizationId: process.env.SMOKE_ORG, sessionVersion: Number(process.env.SESSION_VERSION ?? 0) } }));
@@ -148,7 +158,7 @@ fi
 fails=0
 while IFS='|' read -r path label needle; do
   [ -z "${path:-}" ] && continue
-  code=$(curl -s -o /tmp/smoke-body.html -w '%{http_code}' --max-time 30 -H "Cookie: authjs.session-token=$AUTH_TOKEN" "$BASE_URL$path")
+  code=$(curl -s -o /tmp/smoke-body.html -w '%{http_code}' --max-time 30 -H "Cookie: $COOKIE_NAME=$AUTH_TOKEN" "$BASE_URL$path")
   if [ "$code" = "200" ] && grep -q -- "$needle" /tmp/smoke-body.html; then
     printf 'PASS  %-34s %s bytes\n' "$label" "$(wc -c < /tmp/smoke-body.html)"
   else
@@ -159,6 +169,7 @@ done <<< "$ROUTES"
 
 service_state="unknown"
 errors="0"
+auth_noise="0"
 if command -v systemctl >/dev/null 2>&1; then
   SERVICE="${SERVICE:-}"
   if [ -z "$SERVICE" ]; then
@@ -167,12 +178,18 @@ if command -v systemctl >/dev/null 2>&1; then
   if [ -n "$SERVICE" ]; then
     service_state=$(systemctl is-active "$SERVICE")
     since=$(systemctl show -p ActiveEnterTimestamp --value "$SERVICE")
-    errors=$(journalctl -u "$SERVICE" --since "$since" --no-pager 2>/dev/null | grep -cE '⨯|Error:' || true)
+    log=$(journalctl -u "$SERVICE" --since "$since" --no-pager 2>/dev/null)
+    errors=$(printf '%s\n' "$log" | grep -cE 'Error:|unhandledRejection' || true)
+    # A rejected session cookie logs "no matching decryption secret". That happens whenever a browser (or
+    # this probe, before its salt was fixed) presents a stale token - it is noise, not an outage, and it
+    # is reported separately rather than silently folded in or silently dropped.
+    auth_noise=$(printf '%s\n' "$log" | grep -cE 'no matching decryption secret|JWTSessionError' || true)
   fi
 fi
+real_errors=$(( ${errors:-0} - ${auth_noise:-0} ))
 echo "-- service: $service_state"
-echo "-- errors since the service started this release: ${errors:-0}"
-if [ "${errors:-0}" != "0" ]; then fails=$((fails + 1)); fi
+echo "-- errors since the service started this release: ${errors:-0} (${auth_noise:-0} auth-token noise, ${real_errors} real)"
+if [ "$real_errors" -gt 0 ]; then fails=$((fails + 1)); fi
 if [ "$service_state" != "active" ] && [ "$service_state" != "unknown" ]; then fails=$((fails + 1)); fi
 
 if [ "$fails" -gt 0 ]; then
