@@ -8951,4 +8951,54 @@ with a single DELETE on `CoachingPlan` + its two audit rows if it is in the way.
 user pasted is **truncated** - it ends mid-way through the candidate output type, before weights, thresholds, the
 `whyNot` definition and any page/acceptance criteria. Not writing the advisor on a guessed spec.
 
+## 2026-10-18 - I2-b deliverable 1: the pure Selection / Rotation Advisor
+
+**Gate:** the user **waived the browser pass** (the authenticated-HTTP render with real data stands as the evidence;
+390px stays outstanding) and supplied the missing tail of the output type (`whyNot: string | null`). Weights,
+thresholds, the page and acceptance criteria were never in the prompt, so they are **my decisions, documented in
+`selection.ts`'s header** and listed below.
+
+**`src/lib/coaching/selection.ts`** (pure, no Prisma): `buildSelectionAdvice({ games, squad, plan, opponentName,
+workload?, now?, starterCount? })` returns a ranked `SelectionAdvice`.
+
+Decisions that matter (each has a rationale in the file):
+1. **Form reuses C1, not a new formula** - the same nine dimensions, attempt/minutes gates and
+   position-peers-else-league baseline (`qualifiedDimensionPool`, `cfg.minPeers`), measured over the **last 5
+   games**. `player-development.ts` gained additive exports (dimension spec, `measureDimension`, `dimensionGate`,
+   `qualifiedDimensionPool`, and the `DimensionSpec`/`Measure`/`PlayerSeason`/`Qualified` types) so nothing is copied.
+   A second "form" definition would drift from the plan's readings.
+2. **Matchup is C2's assignments**, degraded in steps: `OK` (both sides' positions recorded) / `DEGRADED`
+   (assignments only) / `INSUFFICIENT_DATA` (no plan, or no squad positions). `matchupScore` is **null** in the last
+   case and the overall score is **renormalized** over the remaining components - never filled with a 0.
+3. **Availability** = fouls per 36, percentile-ranked LOWER_IS_BETTER; a player with no minutes gets a neutral 50 and
+   says so rather than scoring 0.
+4. **Load** = games in the last 14 days (+ reported minutes when I3 supplies them). Two fixes came out of writing the
+   tests: the window is bounded at **both** ends (a fixture scheduled next week is not load - the first version counted
+   future dates), and the scale is continuous at 10 points per game. The first version saturated at 0 after five
+   games, so every busy player tied; a test caught it.
+5. **Recommendation is rank-based** - five starters, then `ROTATE_WINDOW` (3), rest BENCH - not threshold-based: a
+   weak night must not produce four starters.
+6. **whyNot** names the next-ranked player and says which component they lead on and which one favours you; null for
+   the last-ranked player, as specified.
+
+**Real-data run** (`scripts/coaching-selection-preview.ts`, read-only, staging):
+- **LBCL CPS vs Lagos Raptors**: `OK`, 23/23 positions usable, matchup `DEGRADED` - the opponent's threat positions
+  are not recorded (they are one of the nine 0/N clubs), which is exactly the per-squad degradation the corrected
+  roadmap asked for. Top 5: Adesuyi Adekunle 77, Whatson Shedrack 71, Stephen Q 65, Salawu Korede 54, Uzoma Donald 48;
+  players with 1-3 games score form 0 and rank on availability/load, which the notes say out loud.
+- **Ultra Apex**: `INSUFFICIENT_DATA` - the club has 3 games and C1's `minGames` is 4, so no player has a form sample.
+  The list still renders (a coach sees the squad) but the recommendation labels must not be presented as advice; that
+  is a **page-level rule for the UI**, noted below.
+- Evidence lines look right, e.g. top candidate: form p73 (league pool, 8 of 9 dimensions, 5 of 6 games), matchup p77
+  (assigned to the Raptors' top threat), fouls 1.7/36 (Wings peers p88), 1 game in 14 days.
+
+**Verified:** 13 new unit tests (912 pure total, 911 pass, 1 pre-existing skip), `tsc`/`eslint` clean,
+canonical-write ratchet 4/4, `next build` clean, preview run against real staging data for two squads.
+
+**Not built / next:** the `/coaching/selection/[fixtureId]` page (surfacing this on the opponent plan page and a new
+route) - the prompt's likely deliverable 2, cut off before it arrived; the I2 exit criterion (3 real fixtures where the
+top 5 matches what the coach actually played) using the preview script; and the per-squad `INSUFFICIENT_DATA` UI rule
+above. I3's workload input is accepted but nothing writes it yet.
+
+
 
