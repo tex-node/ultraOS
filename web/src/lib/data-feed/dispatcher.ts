@@ -51,6 +51,7 @@ export async function queueScoreChangedFeed(
       eventData: args.event as unknown as Prisma.InputJsonValue,
     })),
   });
+  markFeedQueued(args.organizationId);
   return { queued: subscriptions.length };
 }
 
@@ -73,6 +74,7 @@ export async function queueGameLifecycleFeed(
       eventData: args.event as unknown as Prisma.InputJsonValue,
     })),
   });
+  markFeedQueued(args.organizationId);
   return { queued: subscriptions.length };
 }
 
@@ -241,12 +243,26 @@ async function loadFeedGameState(organizationId: string, gameId: string): Promis
 // The drain must not run inside the scoring transaction. `scheduleFeedDrain` is fire-and-forget with a
 // per-organization in-flight guard, so a burst of events in one request collapses into a single drain and a
 // failure can never bubble into the scoring path.
+//
+// It also only runs for an organization that actually QUEUED something in this process. Without that guard
+// every scoring write in an installation with no subscribers still started an async database round-trip
+// after commit - which, in the DB test suite, ran on the global client while the tests were creating and
+// dropping isolated schemas and produced ten spurious failures in unrelated suites (they all pass when run
+// file by file). Precision here is worth it: no subscribers, no timer, no query.
 
 const inFlight = new Set<string>();
+/** Organizations whose queue functions inserted at least one delivery in this process. */
+const queuedOrganizations = new Set<string>();
+
+export function markFeedQueued(organizationId: string): void {
+  queuedOrganizations.add(organizationId);
+}
 
 export function scheduleFeedDrain(organizationId: string, options: { delayMs?: number } = {}): void {
+  if (!queuedOrganizations.has(organizationId)) return;
   if (inFlight.has(organizationId)) return;
   inFlight.add(organizationId);
+  queuedOrganizations.delete(organizationId);
   const run = () => {
     void drainFeedDeliveries({ organizationId })
       .catch((error) => {
