@@ -116,22 +116,25 @@ depends on I2; I4 and I5 are gated on real video.
 | I5 | Vision training capture (drills, load) | I4 | 8–10 wk | Automated training logging |
 | I6 | Unified athlete passport | I1–I5 | 4–6 wk | The Genius-doc end goal |
 
-**Status after the 2026-10-18 long-run streak** (detail in `session.md`, same date):
+**Status after the 2026-10-18 long-run streaks** (v3 + v4; detail in `session.md`):
 
 | ID | Status |
 |---|---|
-| I0 | **Done, in production** — migration applied after a verified backup, verified, 5-minute log watch clean; `deploy.sh` halts on pending migrations (and now correctly continues when `--migrate` is passed, re-checking after migrating). |
-| I1 | **Image path: acceptance partial (not operator-ready). CSV path: works, measured, and is the recommended route.** The OCR path reads 12/20 real sheets with 8/20 producing player rows and 0 review-ready (the sheets are Instagram screenshots whose cell grid never survives); stronger preprocessing took it from 0/20 to that. The **CSV path round-tripped 32/32 real LBCL games with zero field differences** and drove a full import -> review -> approve -> ingest of a real game on a scratch database (INGESTED, 24 player stat lines, 79 points), and the checksums flagged **4 genuine arithmetic errors in the existing hand-transcribed batch**. Grid-line detection is shipped and tested but **refused on these screenshots** at both 720px and 3000px, so it is documented as requiring a real scan. Detail: `OCR_SCORESHEET_INGESTION.md`. |
+| I0 | **Done, in production** — migration applied after a verified backup, verified, 5-minute log watch clean; `deploy.sh` halts on pending migrations (and correctly continues when `--migrate` is passed, re-checking after migrating). A second production deploy on 2026-10-18 applied the six coaching/scoresheet migrations behind another verified backup. |
+| I1 | **Pivoted to CSV/Excel; OCR blocked.** The image path is measured and NOT operator-ready: 12/20 real sheets produce a table, 8/20 produce player rows, 0 are review-ready, and grid detection is *refused* on those screenshots at 720px and 3000px (they are Instagram captures whose cell grid does not survive). The structured path is the product: **CSV and XLSX both round-trip 32/32 real LBCL games with zero field differences**, drive import → review → approve → ingest (a real game ingested on a scratch DB: 24 stat lines, 79 points), and the checksums found and fixed **4 genuine arithmetic errors** in the hand-transcribed batch (corrected in the JSON and in the already-ingested `PlayerStat` rows in staging *and* production, audited). XLSX shares the CSV parser, so there is one table-detection implementation. OCR is dormant until a real scan or the provider's PDF export exists. Detail: `OCR_SCORESHEET_INGESTION.md`. |
 | I2 | **Done for review** — `CoachingPlan` + adopt + Selection Advisor shipped; awaiting the user's sign-off on the advisor against real fixtures. |
 | I3 | **Done, in production** — assign → complete → log metric, the deferred `AthleteTrainingRecord.developmentFocus` stamp, and the trend card (per-session logs vs the plan's game window, "Missing data" for an unlogged session, verdict withheld when a metric's direction is unknown). 6 component tests + 6 unit tests. |
-| I4 | **`BLOCKED_NO_REAL_VIDEO` for inference; infrastructure PROVEN.** 0 `GameVideo` rows in staging and production; a synthetic video + analysis run + two observations were created and reviewed through `/vision/games/[fixtureId]` (Confirm/Reject renders and the statuses/audit rows land). No inference has been run and no accuracy is claimed. |
+| I4 | **`BLOCKED_NO_REAL_VIDEO` for inference; ingestion infrastructure PROVEN.** `scripts/vision-ingest.ts` is one command: ffprobe → media storage → `MediaAsset`/`GameVideo` → worker `POST /analyze`; verified on staging with a real 5-second ffmpeg clip (rows, file, audit, idempotent re-run). The review workflow was proven separately with synthetic observations (Confirm/Reject, statuses, audit). No inference has been run and no accuracy is claimed. Runbook: `documentation/vision/VISION_INGESTION.md`. |
 | I5 | **Gated** on I4 (real footage). |
-| I6 | **Done v1, in production** — passport read model with per-row provenance (LIVE / LIVE STAT / OCR REVIEWED / IMPORTED / MANUAL / UNKNOWN), coach-only training + plans, a provenance legend with hover explanations, and a "View passport" link from the public athlete page with an organization-correct read. No public *passport* page (publication is derived from "has games"). |
+| I6 | **Done v1, in production** — passport read model with per-row provenance (LIVE / LIVE STAT / OCR REVIEWED / IMPORTED / MANUAL / UNKNOWN), coach-only training + plans, a provenance legend with hover explanations, a "View passport" link from the public athlete page with an organization-correct read, and an **explicit `passportPublished` flag** (migration `20261018190000`) with a checkbox on the athlete edit page: unpublished → 404 for everyone who is not a coach/operator, link hidden on the public page, verified both ways on staging. |
 
 **Production note:** the coaching stack (I2/I3/I6) is deployed and verified in production
-(`release-4793f7f`), with `COACHING_ASSISTANT_ENABLED=true` in `/opt/ultraleagueos/shared/web.env` and
-`/coaching` returning 200 to an admin session. Every deploy from now on runs the smoke test
-(`deploy/ops/smoke-test.sh`) and fails the deploy if a representative route does not serve.
+(`release-4793f7f`, then `release-06b8282`+ with the publication flag), with
+`COACHING_ASSISTANT_ENABLED=true` in `/opt/ultraleagueos/shared/web.env` and `/coaching` returning 200 to an
+admin session. Every deploy runs the smoke test (`deploy/ops/smoke-test.sh`) and fails the deploy if a
+representative route does not serve. The working branch `ops/reconcile-backup-design` is **fast-forwarded
+into `main`** (main was an ancestor: 0 commits behind, 51 ahead on the branch), so production runs the
+default branch.
 
 ### I0 — P0 production migration fix (blocking, do first)
 
