@@ -9865,6 +9865,50 @@ analyzer emits zero observations even when it runs). No accuracy is claimed.
 
 **Next step:** Prompt 5 (roadmap + branch merge + final deploy).
 
+## 2026-10-18 - Streak v4 / Prompt 5: roadmap finalised, branch fast-forwarded into main, production synced
+
+**Objective:** close the roadmap, get production onto the default branch, and prove it with the smoke test.
+
+**Completed**
+- **Roadmap** (`documentation/COACH_INTELLIGENCE_ROADMAP.md`) rewritten with the final status of every
+  phase. I1 is marked **"Pivoted to CSV/Excel; OCR blocked"** with the measured numbers on both halves
+  (image: 12/20 tables, 8/20 with rows, 0 review-ready, grid detection refused at 720px and 3000px;
+  structured: 32/32 round-trip with zero diffs, real ingestion proven, the 4 data errors found and fixed).
+  I4 is "inference BLOCKED_NO_REAL_VIDEO, ingestion infrastructure PROVEN". I6 records the publication flag.
+- **Branch merged into `main` — by fast-forward, not a merge commit.** `main` was an **ancestor** of
+  `ops/reconcile-backup-design` (0 commits on main that the branch lacked, 51 on the branch), so
+  `git merge --ff-only` moved `main` from `82bc2e5` to `98b9255` with no conflicts and no history rewrite.
+  Both refs now point at `98b9255` (`git ls-remote` confirms `main` and `ops/reconcile-backup-design`
+  identical).
+- **Final production deploy from `origin/main`** (not the feature branch, so this is the default branch
+  running): `release-98b9255-20261018T153356Z`, service active, exit 0, **smoke 7/7 PASS, 0 errors**.
+- **Staging also deployed from `origin/main`** so both environments run the same commit.
+
+**Production verification after the deploy**
+| check | result |
+| --- | --- |
+| release | `release-98b9255-20261018T153356Z` |
+| migrations applied by this deploy | `20261018180000_scoresheet_xlsx_format`, `20261018190000_athlete_passport_published` |
+| `Athlete.passportPublished` | `boolean`, `NOT NULL`, `default=true` |
+| `ScoresheetImportFormat` | `IMAGE,CSV,XLSX` |
+| `/coaching/<club>` (admin session) | **200** |
+| `/scoresheets` (admin session) | **200** |
+| smoke test | **7/7 PASS**, 0 real errors |
+| test suites | 946 pure tests (945 pass, 1 pre-existing skip), 26 component tests, ratchet **4/4** |
+
+**Known issues**
+- `main` now carries the whole long-run streak (51 commits). Nothing was rebased or squashed, so the
+  history is intact and reviewable.
+- Production's `COACHING_ASSISTANT_ENABLED=true` is an env-file change made during streak v3 Prompt 2
+  (backup kept at `web.env.bak-*`); it is not tracked in git, which is correct for a secret-bearing file -
+  but it means a fresh production host needs that line added.
+- The 5-second dummy video from Prompt 4 still exists in staging (`MOCK-INGEST camera`, GameVideo
+  `cmvdzfyhb0001glkkjavu3nun`) plus the synthetic mock observations from streak v3. They are clearly
+  labelled and `scripts/vision-ingest.ts`/`vision-mock-run.ts --cleanup` removes them.
+
+**Streak v4 complete.** All five prompts done, both environments on `main` @ `98b9255`, smoke green.
+
+
 
 
 
