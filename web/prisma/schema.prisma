@@ -660,7 +660,7 @@ model User {
   passwordHash                 String?
   // Session version: bumped whenever the password changes, so every other device's JWT stops
   // matching and is signed out on its next page load (see auth.ts's session version check).
-  sessionVersion               Int                    @default(0)
+  sessionVersion               Int                      @default(0)
   role                         UserRole                 @default(FAN)
   isActive                     Boolean                  @default(true)
   roles                        UserRoleAssignment[]     @relation("AssignedUserRoles")
@@ -687,6 +687,7 @@ model User {
   offlineIntakesCreated        AdminOfflineIntake[]     @relation("OfflineIntakeCreatedBy")
   draftPicksCreated            DraftPick[]              @relation("DraftPickCreatedBy")
   playersSelected              Player[]                 @relation("PlayerSelectedBy")
+  coachingPlansAdopted         CoachingPlan[]           @relation("CoachingPlanAdoptedBy")
   draftEventsCreated           DraftEvent[]             @relation("DraftEventCreatedBy")
   draftAllocationsCreated      DraftAllocation[]        @relation("DraftAllocationCreatedBy")
   draftAllocationsConfirmed    DraftAllocation[]        @relation("DraftAllocationConfirmedBy")
@@ -742,20 +743,20 @@ model UserRoleAssignment {
 }
 
 model Sport {
-  id           String        @id @default(cuid())
-  name         String        @unique
-  slug         String        @unique
-  isActive     Boolean       @default(true)
-  competitions Competition[]
-  clubs        Club[]
-  definitionOverrides SportDefinitionOverride[]
-  metricDefinitions SportMetricDefinition[]
-  eventDefinitions  SportEventDefinition[]
-  ruleSets          RuleSet[]
-  gameRuleSnapshots GameRuleSnapshot[]
+  id                            String                         @id @default(cuid())
+  name                          String                         @unique
+  slug                          String                         @unique
+  isActive                      Boolean                        @default(true)
+  competitions                  Competition[]
+  clubs                         Club[]
+  definitionOverrides           SportDefinitionOverride[]
+  metricDefinitions             SportMetricDefinition[]
+  eventDefinitions              SportEventDefinition[]
+  ruleSets                      RuleSet[]
+  gameRuleSnapshots             GameRuleSnapshot[]
   registrationParticipantSports RegistrationParticipantSport[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
 }
 
 // Multi-sport Stage 1 (S1.3): organization-scoped customization of a sport definition. The code
@@ -786,30 +787,30 @@ model SportDefinitionOverride {
 }
 
 model Competition {
-  id               String            @id @default(cuid())
-  organizationId   String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  sportId          String
-  sport            Sport             @relation(fields: [sportId], references: [id], onDelete: Restrict)
-  name             String
-  slug             String
-  description      String?
-  isActive         Boolean           @default(true)
+  id                String             @id @default(cuid())
+  organizationId    String             @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  sportId           String
+  sport             Sport              @relation(fields: [sportId], references: [id], onDelete: Restrict)
+  name              String
+  slug              String
+  description       String?
+  isActive          Boolean            @default(true)
   // Multi-sport: how fixtures in this competition are generated and whether a level score is a valid
   // final result. ROUND_ROBIN (league, draws allowed where the sport allows), KNOCKOUT (single
   // elimination; a level score must be resolved by extra time/penalties, not finalized as a draw),
   // GROUP_STAGE (seeded groups -> round-robin).
-  format           CompetitionFormat @default(ROUND_ROBIN)
+  format            CompetitionFormat  @default(ROUND_ROBIN)
   // GROUP_STAGE only: the default number of groups. A division may override it.
-  groupCount       Int               @default(2)
-  divisions        Division[]
-  seasons          Season[]
-  entrants         Entrant[]
+  groupCount        Int                @default(2)
+  divisions         Division[]
+  seasons           Season[]
+  entrants          Entrant[]
   gameControlGrants GameControlGrant[]
-  contentTemplates ContentTemplate[]
-  systemSettings   SystemSetting[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  contentTemplates  ContentTemplate[]
+  systemSettings    SystemSetting[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   // Phase 1 Stage 3b: was @@unique([sportId, name/slug]) - rewritten to organizationId so two
   // different organizations playing the same sport can each have their own "Season Zero"
@@ -979,12 +980,13 @@ model SeasonClub {
   standing         Standing?
   draftAllocations DraftAllocation[]
   trainingSessions TrainingSession[]
+  coachingPlans    CoachingPlan[]
   recordOrigin     RecordOrigin      @default(PRODUCTION)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
   // Multi-sport Stage 2: a SeasonClub is represented as exactly one TEAM Entrant.
-  entrant          Entrant?
+  entrant Entrant?
 
   @@unique([seasonId, clubId, divisionId])
   // Phase 1 Stage 5.2B-3: backs DraftAllocation.seasonClubId's and DraftPick.seasonClubId's
@@ -1026,15 +1028,15 @@ enum EntrantMemberRole {
 // @@unique([organizationId, id])); the required organizationId/competitionId/seasonId/divisionId
 // links are composite FKs so the database itself rejects a cross-organization reference.
 model Entrant {
-  id             String        @id @default(cuid())
-  organizationId String        @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  id             String            @id @default(cuid())
+  organizationId String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   competitionId  String
-  competition    Competition   @relation(fields: [organizationId, competitionId], references: [organizationId, id], onDelete: Restrict)
+  competition    Competition       @relation(fields: [organizationId, competitionId], references: [organizationId, id], onDelete: Restrict)
   seasonId       String
-  season         Season        @relation(fields: [organizationId, seasonId], references: [organizationId, id], onDelete: Cascade)
+  season         Season            @relation(fields: [organizationId, seasonId], references: [organizationId, id], onDelete: Cascade)
   divisionId     String
-  division       Division      @relation(fields: [organizationId, divisionId], references: [organizationId, id], onDelete: Restrict)
+  division       Division          @relation(fields: [organizationId, divisionId], references: [organizationId, id], onDelete: Restrict)
   type           EntrantType
   name           String
   shortName      String?
@@ -1042,19 +1044,19 @@ model Entrant {
   primaryColor   String?
   secondaryColor String?
   seasonClubId   String?
-  seasonClub     SeasonClub?   @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
-  status         EntrantStatus @default(ACTIVE)
+  seasonClub     SeasonClub?       @relation(fields: [seasonClubId], references: [id], onDelete: Restrict)
+  status         EntrantStatus     @default(ACTIVE)
   seed           Int?
   members        EntrantMember[]
-  homeFixtures   Fixture[]     @relation("HomeEntrant")
-  awayFixtures   Fixture[]     @relation("AwayEntrant")
-  wonFixtures    Fixture[]     @relation("WinnerEntrant")
+  homeFixtures   Fixture[]         @relation("HomeEntrant")
+  awayFixtures   Fixture[]         @relation("AwayEntrant")
+  wonFixtures    Fixture[]         @relation("WinnerEntrant")
   gameEvents     GameEvent[]
   standings      Standing[]
   teamStats      TeamStat[]
   metricValues   GameMetricValue[]
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   @@unique([seasonClubId])
   @@unique([organizationId, id])
@@ -1118,7 +1120,7 @@ model Athlete {
   registrationParticipants RegistrationParticipant[]
   trainingRecords          AthleteTrainingRecord[]
   scoutReports             ScoutReport[]
-  entrantMembers            EntrantMember[]
+  entrantMembers           EntrantMember[]
   recordOrigin             RecordOrigin              @default(PRODUCTION)
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
@@ -1166,6 +1168,7 @@ model Player {
   noveltyPlayerStats         NoveltyPlayerStat[]
   mvpVotes                   MVPVote[]
   trainingRecords            AthleteTrainingRecord[]
+  coachingPlans              CoachingPlan[]
   media                      AthleteMedia[]
   announcements              Announcement[]
   // G.21: candidate identity only - never player identity itself. See VisionTrack/
@@ -1277,6 +1280,58 @@ model AthleteTrainingRecord {
   @@unique([trainingSessionId, athleteId])
   @@index([athleteId, createdAt])
   @@index([playerId])
+}
+
+// P15 C1 remainder (I2 first slice, 2026-10-18): the durable record that a coach ADOPTED the
+// Player Development Engine's current plan for one player. The engine stays pure
+// (src/lib/coaching/player-development.ts); this stores the snapshot it produced plus the engine
+// version that produced it, so a later engine change cannot silently rewrite what a coach signed
+// up to. The engine's own output is the source of truth for the CONTENT; this row records the
+// DECISION.
+enum CoachingPlanStatus {
+  ACTIVE
+  SUPERSEDED
+  COMPLETED
+  ABANDONED
+}
+
+model CoachingPlan {
+  id                String             @id @default(cuid())
+  organizationId    String             @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  // Composite tenant-aware FKs (Stage 5.4B pattern): a plan can never point at another
+  // organization's player or season club, even under a role that bypasses RLS.
+  playerId          String
+  player            Player             @relation(fields: [organizationId, playerId], references: [organizationId, id], onDelete: Cascade)
+  seasonClubId      String
+  seasonClub        SeasonClub         @relation(fields: [organizationId, seasonClubId], references: [organizationId, id], onDelete: Cascade)
+  status            CoachingPlanStatus @default(ACTIVE)
+  // The engine version whose output this snapshot is (e.g. "c1-1"), not the application version.
+  planVersion       String
+  // FocusArea[] as serialized by src/lib/coaching/plan-snapshot.ts - label, dimension, priority,
+  // evidence, target, drills. JSON rather than a child table: it is a frozen snapshot read whole
+  // and never queried by field.
+  focusAreas        Json
+  reviewWindowGames Int
+  note              String?
+  adoptedById       String
+  adoptedBy         User               @relation("CoachingPlanAdoptedBy", fields: [adoptedById], references: [id], onDelete: Restrict)
+  adoptedAt         DateTime           @default(now())
+  closedAt          DateTime?
+  // A plan is superseded by at most one later plan, so this side is unique - a one-to-one chain
+  // rather than a tree.
+  supersedesId      String?            @unique
+  supersedes        CoachingPlan?      @relation("CoachingPlanSupersedes", fields: [supersedesId], references: [id], onDelete: SetNull)
+  supersededBy      CoachingPlan?      @relation("CoachingPlanSupersedes")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  // NOTE: "at most one ACTIVE plan per player" is a PARTIAL unique index
+  // (CoachingPlan_one_active_per_player), which Prisma cannot express. It is hand-authored in the
+  // migration - see prisma/migrations/20261018120000_coaching_plan_adoption/migration.sql.
+
+  @@unique([organizationId, id])
+  @@index([organizationId, playerId, status])
+  @@index([organizationId, seasonClubId, status])
 }
 
 model TrainingMetricDefinition {
@@ -2887,28 +2942,28 @@ model ImportRow {
 }
 
 model Vendor {
-  id             String              @id @default(cuid())
-  organizationId String              @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
-  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  userId         String?             @unique
-  user           User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
-  name           String
-  contactName    String?
-  email          String?
-  phone          String?
-  logoUrl        String?
-  isActive       Boolean           @default(true)
+  id                 String              @id @default(cuid())
+  organizationId     String              @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  userId             String?             @unique
+  user               User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name               String
+  contactName        String?
+  email              String?
+  phone              String?
+  logoUrl            String?
+  isActive           Boolean             @default(true)
   // F5 vendor marketplace: league commission on vendor gross, in basis points.
-  commissionBps  Int               @default(0)
+  commissionBps      Int                 @default(0)
   // Bachs Connect sub-account (F5.3): per-vendor financial identity so payouts reconcile
   // cleanly. Null until an operator connects the vendor to the gateway.
-  bachsAccountId String?
+  bachsAccountId     String?
   bachsOnboardingUrl String?
-  recordOrigin   RecordOrigin      @default(PRODUCTION)
-  products       VendorProduct[]
-  eventReviews   EventVendorReview[]
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  recordOrigin       RecordOrigin        @default(PRODUCTION)
+  products           VendorProduct[]
+  eventReviews       EventVendorReview[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   // Phase 1 Stage 3b: was a bare @unique - rewritten to organizationId-composite so two
   // organizations can each work with a vendor of the same name. No application code depended on
@@ -3083,25 +3138,25 @@ model CheckIn {
 }
 
 model PromoCode {
-  id                String           @id @default(cuid())
-  organizationId    String           @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
-  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  id                String            @id @default(cuid())
+  organizationId    String            @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   eventId           String?
-  event             Event?           @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  code              String           @unique
+  event             Event?            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  code              String            @unique
   description       String?
-  discountBps       Int              @default(0)
+  discountBps       Int               @default(0)
   maxRedemptions    Int?
-  redemptionCount   Int              @default(0)
+  redemptionCount   Int               @default(0)
   startsAt          DateTime?
   endsAt            DateTime?
   isActive          Boolean           @default(true)
   orders            Order[]
   reservations      SeatReservation[]
   sponsorCampaignId String?
-  sponsorCampaign   SponsorCampaign? @relation(fields: [sponsorCampaignId], references: [id], onDelete: SetNull)
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  sponsorCampaign   SponsorCampaign?  @relation(fields: [sponsorCampaignId], references: [id], onDelete: SetNull)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@index([eventId, isActive])
 }
@@ -3291,10 +3346,10 @@ model RuleSet {
   sport          Sport?       @relation(fields: [sportId], references: [id], onDelete: SetNull)
   config         Json?
 
-  periodCount             Int @default(2)
-  periodDurationSeconds   Int @default(600)
-  overtimeDurationSeconds Int @default(300)
-  shotClockSeconds        Int @default(20)
+  periodCount             Int       @default(2)
+  periodDurationSeconds   Int       @default(600)
+  overtimeDurationSeconds Int       @default(300)
+  shotClockSeconds        Int       @default(20)
   clockMode               ClockMode @default(RUNNING)
 
   fourPointEnabled        Boolean                 @default(true)
@@ -3322,20 +3377,20 @@ model RuleSet {
 // or even deleting the source RuleSet later can never change what an already-played game's
 // rules were. ruleSetId is kept only for traceability.
 model GameRuleSnapshot {
-  id             String       @id @default(cuid())
-  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  gameId         String       @unique
-  game           Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  ruleSetId      String?
-  ruleSet        RuleSet?     @relation(fields: [ruleSetId], references: [id], onDelete: SetNull)
-  ruleSetName    String
-  ruleSetVersion Int
+  id                String       @id @default(cuid())
+  organizationId    String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  gameId            String       @unique
+  game              Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  ruleSetId         String?
+  ruleSet           RuleSet?     @relation(fields: [ruleSetId], references: [id], onDelete: SetNull)
+  ruleSetName       String
+  ruleSetVersion    Int
   // Multi-sport Stage 4 (S4.2): the frozen sport definition version and its resolved rule values,
   // captured at snapshot time so a played game remains explicable even if the definition changes.
   // Nullable/additive; the legacy basketball columns below remain and are still authoritative.
   sportId           String?
-  sport             Sport?  @relation(fields: [sportId], references: [id], onDelete: SetNull)
+  sport             Sport?       @relation(fields: [sportId], references: [id], onDelete: SetNull)
   definitionVersion Int?
   ruleValues        Json?
 
@@ -3465,10 +3520,10 @@ model GameEvent {
   // auditable. The three timestamps stay distinct — domain time is period/clockSeconds (where in
   // the game), clientUpdatedAt is when the scorekeeper logged it on-device, and createdAt is when
   // the server received it (the sync lag is createdAt - clientUpdatedAt, expected to be hours).
-  deviceId        String?
-  idempotencyKey  String?
-  clientUpdatedAt DateTime?
-  syncBatchId     String?
+  deviceId         String?
+  idempotencyKey   String?
+  clientUpdatedAt  DateTime?
+  syncBatchId      String?
   // Defaults to SERVER for every existing and future server-resolved row - only the offline
   // scoring-tap replay path ever writes CLIENT. clientObservedAt is null unless resolvedBy is
   // CLIENT (when the client asserted the wall-clock state it saw at tap time).
@@ -3670,20 +3725,20 @@ enum StatAggregation {
 // Per-organization metric customization is intentionally not supported yet; adding it later means a
 // tenant-scoped override table, not columns here.
 model SportMetricDefinition {
-  id                   String                @id @default(cuid())
+  id                   String            @id @default(cuid())
   sportId              String
-  sport                Sport                 @relation(fields: [sportId], references: [id], onDelete: Restrict)
+  sport                Sport             @relation(fields: [sportId], references: [id], onDelete: Restrict)
   key                  String
   label                String
   valueType            StatValueType
   subject              StatSubjectType
   aggregation          StatAggregation
   category             String?
-  derivedFromEventKeys String[]              @default([])
-  sortOrder            Int                   @default(0)
+  derivedFromEventKeys String[]          @default([])
+  sortOrder            Int               @default(0)
   gameValues           GameMetricValue[]
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
   // Same key may exist for PLAYER and ENTRANT (e.g. "points"), so uniqueness is scoped by subject.
   @@unique([sportId, subject, key])
@@ -3752,35 +3807,35 @@ model GameMetricValue {
 }
 
 model Standing {
-  id              String       @id @default(cuid())
-  organizationId  String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  id              String           @id @default(cuid())
+  organizationId  String           @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   seasonId        String
-  season          Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  season          Season           @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   // Multi-sport Entrant model (Stage B4): a standing belongs to a SeasonClub (team sports) OR an
   // Entrant (individual sports). Both are nullable; a DB CHECK requires at least one. Existing rows
   // all have a SeasonClub. entrantId is unique where present (one standing per entrant).
-  seasonClubId    String?      @unique
-  seasonClub      SeasonClub?  @relation(fields: [seasonClubId], references: [id], onDelete: Cascade)
-  entrantId       String?      @unique
-  entrant         Entrant?     @relation(fields: [entrantId], references: [id], onDelete: SetNull)
-  played          Int          @default(0)
-  won             Int          @default(0)
+  seasonClubId    String?          @unique
+  seasonClub      SeasonClub?      @relation(fields: [seasonClubId], references: [id], onDelete: Cascade)
+  entrantId       String?          @unique
+  entrant         Entrant?         @relation(fields: [entrantId], references: [id], onDelete: SetNull)
+  played          Int              @default(0)
+  won             Int              @default(0)
   // Multi-sport Stage 5 (S5.1): outcomes beyond win/loss, plus a stored rank and the tiebreak key
   // that decided it. Additive/defaulted; basketball leaves drawn/ties/noResult at 0 and rank null
   // until the backfill computes it.
-  drawn           Int          @default(0)
-  ties            Int          @default(0)
-  noResult        Int          @default(0)
-  lost            Int          @default(0)
-  pointsFor       Int          @default(0)
-  pointsAgainst   Int          @default(0)
-  pointDifference Int          @default(0)
-  leaguePoints    Int          @default(0)
+  drawn           Int              @default(0)
+  ties            Int              @default(0)
+  noResult        Int              @default(0)
+  lost            Int              @default(0)
+  pointsFor       Int              @default(0)
+  pointsAgainst   Int              @default(0)
+  pointDifference Int              @default(0)
+  leaguePoints    Int              @default(0)
   rank            Int?
   rankTiebreak    String?
   metrics         StandingMetric[]
-  updatedAt       DateTime     @updatedAt
+  updatedAt       DateTime         @updatedAt
 
   @@index([seasonId, leaguePoints, won, pointDifference, pointsFor])
 }
@@ -4632,6 +4687,7 @@ model Organization {
   athleteAwards             AthleteAward[]
   athleteVideos             AthleteVideo[]
   trainingSessions          TrainingSession[]
+  coachingPlans             CoachingPlan[]
   athleteTrainingRecords    AthleteTrainingRecord[]
   athleteTrainingMetrics    AthleteTrainingMetric[]
   athleteMedias             AthleteMedia[]
@@ -4774,21 +4830,21 @@ model SyncIdempotency {
 // mechanism that makes disputes reconstructable. deviceId is deliberately the same value carried
 // on GameEvent.deviceId so "device X has been causing conflicts all week" is one query.
 model SyncConflictLog {
-  id           String       @id @default(cuid())
-  organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  entityType   String
-  entityId     String
-  field        String?
-  localValue   Json?
-  remoteValue  Json?
-  resolvedTo   Json?
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entityType      String
+  entityId        String
+  field           String?
+  localValue      Json?
+  remoteValue     Json?
+  resolvedTo      Json?
   // The clientUpdatedAt of the winning record and the losing record, so the ordering decision is
   // auditable (trust-client-clock model; skew detection is a v2 concern).
   localUpdatedAt  DateTime?
   remoteUpdatedAt DateTime?
-  deviceId     String
-  resolvedAt   DateTime     @default(now())
+  deviceId        String
+  resolvedAt      DateTime     @default(now())
 
   @@index([organizationId, resolvedAt])
   @@index([entityType, entityId])

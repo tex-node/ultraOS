@@ -162,6 +162,15 @@ discipline, ≤5 minutes of human review per game, zero silent mis-transcription
 
 ### I2 — Coaching assistant completion + Player Selection Advisor
 
+**Status 2026-10-18: first slice done** (the C1 remainder). `CoachingPlan` + adoption shipped and migrated on staging;
+the Selection Advisor is NOT started. Detail in `session.md` (2026-10-18) and §8 below.
+
+One deliberate deviation from the deliverables below: the adopt action does **not** write
+`AthleteTrainingRecord.developmentFocus`. That column is per training session
+(`@@unique([trainingSessionId, athleteId])`), and no session exists at adoption time, so writing one would mean
+fabricating a session. The durable record is `CoachingPlan`; `developmentFocus` is stamped when I3 assigns a plan to
+sessions.
+
 **Goal**: close the C1 remainder, then add the "which player to use next time" ask.
 
 **Deliverables**:
@@ -346,3 +355,4 @@ correction.
 | Date | Phase | What happened |
 |---|---|---|
 | 2026-10-18 | — | Roadmap recorded; §2.2 claims re-verified against staging (§2.3). I0 blocked on a human yes (approvals disabled). No phase started. |
+| 2026-10-18 | I2 (slice 1) | `CoachingPlan` + adopt action shipped: schema (composite tenant FKs, RLS), migration `20261018120000_coaching_plan_adoption` with the hand-authored partial unique index and 9 `TrainingMetricDefinition` seeds, `plan-snapshot.ts`, `server/coaching/plans.ts`, adoption panel on the player page. Migrated on **staging** (backup `ultraos_staging_pre_coaching_plan_20261018T004821Z.dump`), post-apply `migrate diff` shows no structural drift. 6/6 DB tests, 899 pure, ratchet 4/4, build clean. Production untouched. Next: Selection Advisor + per-squad `INSUFFICIENT_DATA` guard. |

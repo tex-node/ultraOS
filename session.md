@@ -8840,3 +8840,69 @@ migration (handover section 0) still needs a human yes.
   file that way silently double-encodes every non-ASCII character (arrows, multiplication signs, em dashes) - it corrupted
   `live-score-capture.tsx` and the live page mid-session. It was repaired by reversing the cp1252 mis-decode, and the page
   was restored from git. Use the editing tools, not PowerShell text round-trips, for any file with non-ASCII content.
+
+## 2026-10-18 - Coach Intelligence roadmap recorded; I2 first slice (CoachingPlan + adopt)
+
+**Objective:** pick up the Coach Intelligence Program brief. I0 (production migration) is blocked on a human yes and
+approvals are disabled, so the work started at I2's unblocked core: the durable plan record and its adopt action.
+
+**Roadmap recorded + re-verified first.** `documentation/COACH_INTELLIGENCE_ROADMAP.md` (the brief, with a provenance
+header and a corrections addendum) and a P15 section in `PRODUCT_ROADMAP.md`. The brief's "verified, not remembered"
+section was re-checked against staging read-only, and three claims were wrong:
+- **Positions/heights are NOT "Unknown for all 181 players".** 400 players; 158 Unknown (exactly those also have no
+  height); 242 have a real position. Ultra's eight Season Zero clubs are 100% complete on both fields, LBCL's CPS is
+  23/23, and the other nine LBCL clubs are 0/N. So I2's data guard must be **per squad**, not league-wide, the
+  Selection Advisor is usable today for Ultra fixtures, and the data-entry task is ~178 LBCL players.
+- **All four training tables are empty** (TrainingMetricDefinition 0, TrainingSession 0, AthleteTrainingRecord 0,
+  AthleteTrainingMetric 0), so I3 seeds every definition rather than extending existing ones.
+- **A5 "at Step 4 of 8" is stale**: steps 1-8 landed the day before (see the entry above).
+C1 was deliberately NOT marked complete despite the brief's closing instruction - its `CoachingPlan`/adopt remainder
+is an I2 deliverable and the table did not exist. The roadmap row now says exactly that, and the deviation is recorded
+in the addendum rather than done silently.
+
+**I2 first slice - `CoachingPlan` + adopt:**
+- Schema: `CoachingPlan` (org-scoped, RLS, status enum, engine-versioned JSON snapshot, supersede chain) with
+  **composite tenant-aware FKs** to `Player` and `SeasonClub` (Stage 5.4B pattern; `Player` already had
+  `@@unique([organizationId, id])` from 5.2B-3, so no parent change was needed).
+- Migration `20261018120000_coaching_plan_adoption`: generated via `prisma migrate diff` against staging, hand-cleaned
+  of the usual `SET DEFAULT`/`RenameIndex` noise, then extended with the RLS block, the hand-authored **partial unique
+  index** `CoachingPlan_one_active_per_player` (`WHERE status = 'ACTIVE'` - "one current plan per player" is a
+  database fact, not a convention the reading code enforces), and **9 `TrainingMetricDefinition` seeds** for the C1
+  target keys. The keys are the engine's own (`game.ts_pct`, `game.ft_pct`, ...), NOT the brief's shorthand
+  (`FT_PCT`, `TS_PCT`, ...) - `Target.metricKey` carries the former.
+- `src/lib/coaching/plan-snapshot.ts`: the serialized, frozen form of a plan + `isAdoptablePlan` + a defensive
+  `parseCoachingPlanSnapshot`. A snapshot, not a reference, because the engine is a pure function of the season's box
+  scores and would otherwise rewrite a coach's commitment as more games are played.
+- `src/server/coaching/plans.ts`: `adoptCoachingPlan` (validate roster -> close the ACTIVE row -> insert the new one ->
+  two audit entries). The order is load-bearing: inserting before closing violates the partial index.
+- Player page: adoption panel (adopted plan + supersede form, or "adopt this plan"), with the action rebuilding the
+  plan server-side - the form never carries the plan itself, only an optional note.
+
+**Deliberate deviation, recorded:** the brief says the adopt action writes `AthleteTrainingRecord.developmentFocus`.
+That column is **per training session** (`@@unique([trainingSessionId, athleteId])`), and there is no session at adopt
+time - the tables are empty. Writing a fabricated session record to satisfy the sentence would be worse than not
+writing one. The durable home is `CoachingPlan`; `developmentFocus` gets stamped when I3 assigns a plan to sessions.
+
+**Found by the DB test, not anticipated:** `loadActiveCoachingPlan` opened its transaction on the global Prisma
+singleton via `withOrganizationContext`, so against an isolated test schema it queried `public` and failed with
+`permission denied for table CoachingPlan`. Fixed at the root the same way `withGameWrite` was: `withOrganizationContext`
+now takes an optional `client` (default: the singleton), so any reader can be tested against a scoped client. Second
+instance of this class of bug in the codebase; the pattern is now consistently injectable.
+
+**Verification:**
+- Migration applied to **staging only** (backup first:
+  `/var/backups/ultraleagueos-staging/ultraos_staging_pre_coaching_plan_20261018T004821Z.dump`, sha256
+  `112428e8...a77e4`, 1457 TOC entries). Verified after apply: RLS enabled + forced, `tenant_isolation` policy, the
+  partial index with predicate `WHERE status = 'ACTIVE'`, 5 FKs (2 composite), 9 seed rows, migration recorded.
+- **Post-apply drift check**: `prisma migrate diff` staging -> schema.prisma now emits only the known `SET DEFAULT`
+  noise - no structural difference, which proves the hand-written SQL matches the datamodel.
+- 6/6 DB tests (`src/server/coaching/plans.test.ts`: first adopt, supersede + one-ACTIVE invariant, the partial index
+  rejecting a second ACTIVE row, INSUFFICIENT_DATA refusal, wrong club, plan built for another player). 4 new pure
+  tests for the snapshot. Pure suite 899 (898 pass, 1 pre-existing skip). tsc + eslint clean, canonical-write ratchet
+  4/4, `next build` clean.
+- Production untouched: no migration, no deploy. The P0 gap there is still open (handover section 0).
+
+**Not done / next:** the Selection Advisor (`src/lib/coaching/selection.ts` + `/coaching/selection/[fixtureId]`), the
+`INSUFFICIENT_DATA` per-squad guard, a logged-in render check of the adoption panel, and the LBCL position/height
+data task. I3 depends on I2's advisor being accepted.
+

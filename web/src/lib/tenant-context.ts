@@ -1,4 +1,4 @@
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 // Phase 1 Stage 5.1: real organization resolution for a signed-in user - the piece Stage 0-4b
@@ -81,11 +81,18 @@ export async function resolveDefaultPublicOrganization() {
 // any transaction and therefore outside any org context, which the RLS fallback would silently
 // resolve to Neon Ultra rather than failing loudly. That silent-fallback risk is exactly why
 // Stage 5.5 cannot remove the Neon Ultra DB default until this wrapper is used everywhere.
+// `client` is injectable for the same reason withGameWrite's `prisma` is (see
+// src/server/scoring/with-game-write.ts): a DB-integration test's isolated schema is invisible to the
+// global singleton, which is bound once at module load to DATABASE_URL's default schema with no
+// `{schema}` option. Optional and defaulting to the singleton, so every existing call site is
+// unaffected. Found by a real failure, not anticipated: loadActiveCoachingPlan could not be tested
+// at all until this parameter existed - it queried the wrong schema and returned a permission error.
 export async function withOrganizationContext<T>(
   organizationId: string,
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  client: PrismaClient = prisma,
 ): Promise<T> {
-  return prisma.$transaction(async (tx) => {
+  return client.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('app.current_org_id', ${organizationId}, true)`;
     return fn(tx);
   });
