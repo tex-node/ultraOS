@@ -1,6 +1,6 @@
 import type { OcrPage, OcrWord } from "@/lib/ocr/provider";
 import { groupIntoRows } from "@/lib/ocr/rows";
-import type { ScoresheetColumn, ScoresheetColumnKey, ScoresheetLayout } from "./templates";
+import type { ScoresheetColumn, ScoresheetColumnGroup, ScoresheetColumnKey, ScoresheetLayout } from "./templates";
 
 // Table-structure detection and cell mapping for a printed basketball box score (P15 I1).
 //
@@ -81,6 +81,45 @@ function columnForHeader(text: string, layout: ScoresheetLayout): ScoresheetColu
 }
 
 type Anchor = { column: ScoresheetColumn; x: number; index: number };
+
+// Grouped headers (FIBA/Genius sheets) print a group label above several sub-columns:
+//
+//     Field Goals | 2 Points | 3 Points | Free Throws | Rebounds | Fouls
+//         M  A  %  |  M  A  %  |  M  A  %  |   M   A   %  | OR DR TOT | PF FD
+//
+// The sub-labels repeat ("M", "%") and are frequently the first thing OCR loses, so they are not
+// usable as anchors. Instead each group label anchors a BLOCK: the block spans the midpoints between
+// neighbouring group centres, and the block is split into as many equal slices as the layout declares
+// sub-columns. That is enough to put the right number in the right stat when the group labels are
+// readable, and it degrades visibly (empty cells, failing checksums) when they are not.
+type GroupAnchor = { columns: (ScoresheetColumn | null)[]; left: number; right: number };
+
+// Assigns a row's words to the grouped slices. A word goes to the slice whose horizontal band it
+// falls in (clamped to the nearest band at the edges).
+function groupedCells(row: OcrWord[], anchors: GroupAnchor[]): { cells: Partial<Record<ScoresheetColumnKey, ExtractedCell>>; used: OcrWord[] } {
+  const cells: Partial<Record<ScoresheetColumnKey, ExtractedCell>> = {};
+  const buckets = new Map<ScoresheetColumn, OcrWord[]>();
+  for (const word of row) {
+    const x = (word.x0 + word.x1) / 2;
+    const anchor = anchors.find((a) => x >= a.left && x < a.right) ?? anchors.reduce((best, a) => (Math.abs((a.left + a.right) / 2 - x) < Math.abs((best.left + best.right) / 2 - x) ? a : best), anchors[0]);
+    if (!anchor) continue;
+    const bandWidth = (anchor.right - anchor.left) / Math.max(1, anchor.columns.length);
+    const slice = Math.min(anchor.columns.length - 1, Math.max(0, Math.floor((x - anchor.left) / bandWidth)));
+    const column = anchor.columns[slice];
+    if (!column) continue; // a "%" sub-column the layout deliberately ignores
+    const list = buckets.get(column) ?? [];
+    list.push(word);
+    buckets.set(column, list);
+  }
+  const used: OcrWord[] = [];
+  for (const [column, words] of buckets) {
+    const ordered = [...words].sort((a, b) => a.x0 - b.x0);
+    const raw = ordered.map((w) => w.text).join(" ").trim();
+    used.push(...ordered);
+    if (raw) cells[column.key] = { raw, value: parseCell(raw), confidence: Math.round(mean(ordered.map(wordConfidence))) };
+  }
+  return { cells, used };
+}
 
 function findHeader(rows: OcrWord[][], layout: ScoresheetLayout): { index: number; anchors: Anchor[] } | null {
   const best: { index: number; anchors: Anchor[]; score: number } | null = null;
@@ -171,64 +210,188 @@ export type ExtractOptions = {
   page?: number;
 };
 
+type FlatHeader = { kind: "flat"; index: number; anchors: Anchor[] };
+type GroupedHeader = { kind: "grouped"; index: number; groups: GroupAnchor[]; left: Anchor[]; right: Anchor[] };
+type HeaderHit = FlatHeader | GroupedHeader;
+
+// Collects EVERY header row on the page, in order: a grouped header (group labels) or a flat header
+// (a row of column labels). A sheet with two teams has two of them, and each table runs until the
+// next header.
+function collectHeaders(rows: OcrWord[][], layout: ScoresheetLayout): HeaderHit[] {
+  const hits: HeaderHit[] = [];
+  for (let index = 0; index < rows.length; index += 1) {
+    const grouped = groupedHeaderAt(rows, index, layout);
+    if (grouped) {
+      hits.push(grouped);
+      continue;
+    }
+    const flat = findHeader([rows[index]], layout);
+    if (flat) hits.push({ kind: "flat", index, anchors: flat.anchors });
+  }
+  return hits;
+}
+
+function groupedHeaderAt(rows: OcrWord[][], index: number, layout: ScoresheetLayout): GroupedHeader | null {
+  if (!layout.groups || layout.groups.length === 0) return null;
+  const row = rows[index];
+  const found: { group: ScoresheetColumnGroup; x: number }[] = [];
+  for (let i = 0; i < row.length; i += 1) {
+    const one = normalizeText(row[i].text);
+    const two = i + 1 < row.length ? normalizeText(`${row[i].text} ${row[i + 1].text}`) : "";
+    const group = layout.groups.find((candidate) =>
+      candidate.labels.some((label) => {
+        const l = normalizeText(label);
+        return one === l || two === l || one.startsWith(`${l} `) || two.startsWith(`${l} `);
+      }),
+    );
+    if (group && !found.some((entry) => entry.group.key === group.key)) {
+      found.push({ group, x: (row[i].x0 + row[i].x1) / 2 });
+    }
+  }
+  if (found.length < 3) return null;
+
+  const ordered = [...found].sort((a, b) => a.x - b.x);
+  const firstLeft = (() => {
+    const prev = null;
+    void prev;
+    return ordered[0].x;
+  })();
+  const lastX = ordered[ordered.length - 1].x;
+  // Words on the same header row outside the group band are ordinary column labels (No, Name, Min
+  // on the left; AS TO ST BS PF FD +/- EF PTS on the right) - they anchor those columns directly.
+  const left: Anchor[] = [];
+  const right: Anchor[] = [];
+  for (const word of row) {
+    const x = (word.x0 + word.x1) / 2;
+    if (x >= firstLeft - 120 && x <= lastX + 160) continue;
+    const column = columnForHeader(word.text, layout);
+    if (!column) continue;
+    const list = x < firstLeft ? left : right;
+    if (!list.some((anchor) => anchor.column.key === column.key)) list.push({ column, x, index: list.length });
+  }
+
+  const groups = ordered.map((entry, position) => {
+    const previous = position === 0 ? null : ordered[position - 1];
+    const next = position === ordered.length - 1 ? null : ordered[position + 1];
+    const leftEdge = previous ? (previous.x + entry.x) / 2 : entry.x - (next ? (next.x - entry.x) / 2 : 200);
+    const rightEdge = next ? (entry.x + next.x) / 2 : entry.x + (entry.x - (previous?.x ?? entry.x - 400)) / 2;
+    const columns = entry.group.columns.map((key) => (key ? layout.columns.find((c) => c.key === key) ?? null : null));
+    return { columns, left: leftEdge, right: rightEdge > leftEdge ? rightEdge : leftEdge + 1 };
+  });
+
+  // The left labels (No, Name, Min) are sometimes OCR'd onto the row above or below the group row,
+  // so look at the neighbouring rows too before giving up on them.
+  for (const neighbour of [index - 1, index + 1]) {
+    const row2 = rows[neighbour];
+    if (!row2) continue;
+    for (const word of row2) {
+      const x = (word.x0 + word.x1) / 2;
+      if (x >= firstLeft - 120 && x <= lastX + 160) continue;
+      const column = columnForHeader(word.text, layout);
+      if (!column) continue;
+      const list = x < firstLeft ? left : right;
+      if (!list.some((anchor) => anchor.column.key === column.key)) list.push({ column, x, index: list.length });
+    }
+  }
+  return { kind: "grouped", index, groups, left, right };
+}
+
+function cellsForRow(row: OcrWord[], header: HeaderHit): { cells: Partial<Record<ScoresheetColumnKey, ExtractedCell>>; used: OcrWord[] } {
+  if (header.kind === "flat") return rowCells(row, header.anchors);
+
+  const firstLeft = header.groups[0].left;
+  const lastRight = header.groups[header.groups.length - 1].right;
+  const leftSide: OcrWord[] = [];
+  const rightSide: OcrWord[] = [];
+  const middle: OcrWord[] = [];
+  for (const word of row) {
+    const x = (word.x0 + word.x1) / 2;
+    if (x < firstLeft) leftSide.push(word);
+    else if (x >= lastRight) rightSide.push(word);
+    else middle.push(word);
+  }
+  const middleCells = groupedCells(middle, header.groups);
+  const cells = middleCells.cells;
+  const used = [...middleCells.used];
+  if (header.left.length > 0) {
+    const sideCells = rowCells(leftSide, header.left);
+    Object.assign(cells, sideCells.cells);
+    used.push(...sideCells.used);
+  }
+  if (header.right.length > 0) {
+    const sideCells = rowCells(rightSide, header.right);
+    Object.assign(cells, sideCells.cells);
+    used.push(...sideCells.used);
+  }
+  return { cells, used };
+}
+
 export function extractTeamTables(page: OcrPage, options: ExtractOptions): ExtractedTeamTable[] {
   const { layout } = options;
   const rows = groupIntoRows(page.words);
-  const header = findHeader(rows, layout);
-  if (!header) return [];
+  const headers = collectHeaders(rows, layout);
+  if (headers.length === 0) return [];
 
-  const anchors = header.anchors;
   const tables: ExtractedTeamTable[] = [];
-  let current: ExtractedTeamTable = {
-    teamLabel: null,
-    headerRowIndex: header.index,
-    players: [],
-    totals: {},
-    confidence: 0,
-    warnings: [],
-  };
-
-  for (let i = header.index + 1; i < rows.length; i += 1) {
-    const row = rows[i];
-    if (row.length === 0) continue;
-    // A second header row means a second team block on the same page - start a new table.
-    if (findHeader([row], layout)) {
-      finishTable(current);
-      if (current.players.length > 0 || Object.keys(current.totals).length > 0) tables.push(current);
-      current = { teamLabel: null, headerRowIndex: i, players: [], totals: {}, confidence: 0, warnings: [] };
-      continue;
-    }
-    if (isTotalsRow(row, layout)) {
-      const { cells } = rowCells(row, anchors);
+  headers.forEach((header, headerIndex) => {
+    const end = headerIndex + 1 < headers.length ? headers[headerIndex + 1].index : rows.length;
+    const table: ExtractedTeamTable = {
+      teamLabel: teamLabelBefore(rows, header.index),
+      headerRowIndex: header.index,
+      players: [],
+      totals: {},
+      confidence: 0,
+      warnings: [],
+    };
+    for (let i = header.index + 1; i < end; i += 1) {
+      const row = rows[i];
+      if (row.length === 0) continue;
+      if (isTotalsRow(row, layout)) {
+        const { cells } = cellsForRow(row, header);
+        applyPairs(cells, layout);
+        table.totals = cells;
+        continue;
+      }
+      const { cells, used } = cellsForRow(row, header);
       applyPairs(cells, layout);
-      current.totals = cells;
-      continue;
+      const jerseyCell = cells.jersey;
+      const nameCell = cells.name;
+      const jerseyNumber = jerseyCell?.value ?? (jerseyCell ? parseCell(jerseyCell.raw) : null);
+      // A player row needs a name or a jersey number. On a grouped sheet OCR often loses the name
+      // text but keeps the row's numbers, so a row with several numeric cells is kept as a nameless
+      // player row (the reviewer fills the name in) rather than dropped - dropping it would silently
+      // delete a player's whole stat line.
+      const numericCells = Object.values(cells).filter((cell) => cell && cell.value !== null).length;
+      const looksLikePlayerRow = Boolean(nameCell) || jerseyNumber !== null || numericCells >= 4;
+      if (!looksLikePlayerRow) continue;
+      if (!nameCell && jerseyNumber === null) table.warnings.push(`Row ${i + 1}: stats found but no player name or number - fill it in.`);
+      const minutesRaw = cells.minutes?.raw ?? "";
+      const rowText = normalizeText(row.map((w) => w.text).join(" "));
+      const didNotPlay = layout.dnpMarkers.some((marker) => marker.length > 0 && (normalizeText(minutesRaw) === marker || rowText.endsWith(` ${marker}`)));
+      table.players.push({
+        rowIndex: i,
+        jerseyNumber,
+        name: nameCell?.raw ?? "",
+        minutesRaw,
+        didNotPlay,
+        cells,
+        confidence: Math.round(mean(used.map(wordConfidence))),
+      });
+      table.warnings.push(...rowWarnings(cells, i));
     }
-    const { cells, used } = rowCells(row, anchors);
-    applyPairs(cells, layout);
-    const jerseyCell = cells.jersey;
-    const nameCell = cells.name;
-    const jerseyNumber = jerseyCell?.value ?? (jerseyCell ? parseCell(jerseyCell.raw) : null);
-    // A player row needs a name or a jersey number; a stray row of numbers is not a player.
-    if (!nameCell && jerseyNumber === null) continue;
-    const minutesRaw = cells.minutes?.raw ?? "";
-    const rowText = normalizeText(row.map((w) => w.text).join(" "));
-    const didNotPlay = layout.dnpMarkers.some((marker) => marker.length > 0 && (normalizeText(minutesRaw) === marker || rowText.endsWith(` ${marker}`)));
-    const confidence = Math.round(mean(used.map(wordConfidence)));
-    current.players.push({
-      rowIndex: i,
-      jerseyNumber,
-      name: nameCell?.raw ?? "",
-      minutesRaw,
-      didNotPlay,
-      cells,
-      confidence,
-    });
-    current.warnings.push(...rowWarnings(cells, i));
-  }
-  finishTable(current);
-  if (current.players.length > 0 || Object.keys(current.totals).length > 0) tables.push(current);
+    finishTable(table);
+    if (table.players.length > 0 || Object.keys(table.totals).length > 0) tables.push(table);
+  });
   return tables;
+}
+
+// The row immediately above a header usually carries the team name ("LEO KAREEM FOUNDATION (LFK)").
+function teamLabelBefore(rows: OcrWord[][], headerIndex: number): string | null {
+  for (let i = headerIndex - 1; i >= 0 && i >= headerIndex - 3; i -= 1) {
+    const text = rows[i]?.map((word) => word.text).join(" ").trim() ?? "";
+    if (text.length >= 3 && /[a-z]/i.test(text)) return text.slice(0, 120);
+  }
+  return null;
 }
 
 function rowWarnings(cells: Partial<Record<ScoresheetColumnKey, ExtractedCell>>, rowIndex: number): string[] {

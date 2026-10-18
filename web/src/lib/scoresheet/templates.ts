@@ -1,4 +1,4 @@
-﻿// Sheet layouts as DATA (P15 I1). A layout says which stat each column carries and the header words
+// Sheet layouts as DATA (P15 I1). A layout says which stat each column carries and the header words
 // that identify it; it deliberately does NOT hard-code pixel/fraction positions, because phone
 // photos of the same template differ in crop, rotation and scale. The extractor finds the header
 // row, uses its word positions as column anchors, and maps each data row's cells to the nearest
@@ -46,11 +46,25 @@ export type ScoresheetColumn = {
   pairSeparator?: string;
 };
 
+export type ScoresheetColumnGroup = {
+  key: string;
+  /** Header words for the group, as printed ("Field Goals", "Free Throws"). */
+  labels: string[];
+  /** Sub-columns under this group, in printing order; null = a slice deliberately ignored (the % columns). */
+  columns: (ScoresheetColumnKey | null)[];
+};
+
 export type ScoresheetLayout = {
   key: string;
   name: string;
   sportSlug: string;
   columns: ScoresheetColumn[];
+  /**
+   * Grouped header definition (FIBA/Genius sheets): a group label printed above several sub-columns.
+   * The group label anchors a block of the row; the block is split into `columns.length` slices, so
+   * the ignored "%" sub-columns still occupy a slice and keep everything else aligned.
+   */
+  groups?: ScoresheetColumnGroup[];
   /** Row labels that mean "this is the team totals row", not a player. */
   totalsLabels: string[];
   /** Markers in the minutes cell (or anywhere in the row) that mean the player did not play. */
@@ -102,9 +116,25 @@ export const FIBA_LAYOUT: ScoresheetLayout = {
   name: "FIBA box score",
   sportSlug: "basketball",
   columns: BASKETBALL_BASE,
+  // The printed layout of the sheets LBCL publishes (Genius Sports FIBA export, photographed):
+  // No | Name | Min | FG M A % | 2P M A % | 3P M A % | FT M A % | OR DR TOT | AS TO ST BS | PF FD | +/- | EF | PTS.
+  // Only the groups the extractor can map are declared; the numbers after "Fouls" (+/-, EF, PTS)
+  // are reached by the flat `columns` aliases instead, and the repeated M/% sub-labels are the
+  // reason the sub-columns are positional slices rather than anchor-matched.
+  groups: [
+    { key: "fg", labels: ["field goals", "fg"], columns: ["fgm", "fga", null] },
+    { key: "2p", labels: ["2 points", "2pts", "2pt"], columns: ["fg2m", "fg2a", null] },
+    { key: "3p", labels: ["3 points", "3pts", "3pt"], columns: ["fg3m", "fg3a", null] },
+    { key: "ft", labels: ["free throws", "freethrows", "ft"], columns: ["ftm", "fta", null] },
+    { key: "reb", labels: ["rebounds", "reb"], columns: ["oreb", "dreb", "reb"] },
+    { key: "fouls", labels: ["fouls", "pf"], columns: ["fouls", "foulsDrawn"] },
+  ],
   totalsLabels: ["totals", "team totals", "team"],
   dnpMarkers: ["dnp", "dnd", "did not play", "inactive"],
-  notes: ["FIBA sheets often print made-attempted pairs (6-14) in one column; pairKey handles that."],
+  notes: [
+    "FIBA sheets often print made-attempted pairs (6-14) in one column; pairKey handles that.",
+    "The LBCL sheets also print a group header row above the M/A/% sub-columns - that grouped row is what anchors a block of the table.",
+  ],
 };
 
 export const BUILT_IN_LAYOUTS: Record<string, ScoresheetLayout> = { lbcl: LBCL_LAYOUT, fiba: FIBA_LAYOUT };
