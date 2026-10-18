@@ -1489,18 +1489,22 @@ model MediaAssetUsage {
 // not a deploy. Built-in definitions live in src/lib/scoresheet/templates.ts and are copied into an
 // organization's rows on first use.
 model ScoresheetTemplate {
-  id             String             @id @default(cuid())
-  organizationId String             @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
-  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  id             String                 @id @default(cuid())
+  organizationId String                 @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   name           String
   // Which sport's layouts this belongs to; v1 is basketball only.
-  sportSlug      String             @default("basketball")
+  sportSlug      String                 @default("basketball")
+  // P15 I1 pivot: a template describes HOW a sheet's numbers are laid out, and that differs
+  // completely between a scanned image (columns found by OCR/geometry) and a structured CSV export
+  // (columns found by header name). The format decides which reader runs.
+  format         ScoresheetImportFormat @default(IMAGE)
   // The layout JSON: header/footer rows, per-column stat bindings, DNP marker, team-total bindings.
   layout         Json
-  active         Boolean            @default(true)
+  active         Boolean                @default(true)
   imports        ScoresheetImport[]
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
 
   @@unique([organizationId, name])
   @@unique([organizationId, id])
@@ -1524,14 +1528,25 @@ enum ScoresheetImportStatus {
   REJECTED
 }
 
+// P15 I1 pivot: how a sheet arrived. IMAGE means the OCR pipeline (Tesseract + geometric extraction);
+// CSV means a structured export parsed by header name. Both converge on the same review queue and the
+// same ingest path, so the difference is only in how the rows were read.
+enum ScoresheetImportFormat {
+  IMAGE
+  CSV
+}
+
 model ScoresheetImport {
   id                String                 @id @default(cuid())
   organizationId    String                 @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
   organization      Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   status            ScoresheetImportStatus @default(UPLOADED)
-  // The scanned sheet itself - MediaAsset already stores the bytes for every uploaded file.
-  mediaAssetId      String
-  mediaAsset        MediaAsset             @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+  format            ScoresheetImportFormat @default(IMAGE)
+  // The scanned sheet itself - MediaAsset stores the bytes for every uploaded IMAGE. Null for a CSV
+  // import: the file is parsed at upload time and the reviewed result is what matters, so there is no
+  // binary to keep.
+  mediaAssetId      String?
+  mediaAsset        MediaAsset?            @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
   // The layout used for this sheet. Nullable: a sheet can be uploaded before a template is chosen.
   templateId        String?
   template          ScoresheetTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)

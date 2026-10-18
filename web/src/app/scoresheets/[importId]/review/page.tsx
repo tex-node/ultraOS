@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { auth } from "@/auth";
@@ -69,7 +69,7 @@ export default async function ScoresheetReviewPage({ params }: { params: Promise
     status: row.status,
     sourceLabel: row.sourceLabel,
     imageUrl: row.imageUrl,
-    imageName: row.mediaAsset.originalFilename,
+    imageName: row.mediaAsset?.originalFilename ?? null,
     warnings: row.extraction?.warnings ?? [],
     scheduledAt: corrected?.scheduledAt ?? new Date().toISOString().slice(0, 10),
     homeScore: corrected?.homeScore ?? sum(homePlayers, "points"),

@@ -1,9 +1,10 @@
-﻿import "server-only";
+import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { readLocalMediaObject } from "@/lib/media-storage";
 import type { OcrProvider } from "@/lib/ocr/provider";
 import { extractScoresheet, type ExtractedTeamTable, type ScoresheetExtraction } from "@/lib/scoresheet/extract";
 import { buildChecksumReport, type ChecksumReport } from "@/lib/scoresheet/checksums";
+import type { ParsedCsvScoresheet } from "@/lib/scoresheet/csv-extract";
 import { BUILT_IN_LAYOUTS, getLayout, parseLayout, type ScoresheetLayout } from "@/lib/scoresheet/templates";
 
 // Server side of the I1 pipeline (P15): upload -> extract -> review -> approve -> ingest.
@@ -114,13 +115,44 @@ export async function createScoresheetImport(
     select: { id: true },
   });
   const created = await tx.scoresheetImport.create({
-    data: { organizationId: args.organizationId, mediaAssetId: args.mediaAssetId, templateId: template.id, sourceLabel: args.sourceLabel, status: "UPLOADED" },
+    data: { organizationId: args.organizationId, mediaAssetId: args.mediaAssetId, templateId: template.id, sourceLabel: args.sourceLabel, status: "UPLOADED", format: "IMAGE" },
     select: { id: true },
   });
   return { id: created.id };
 }
 
-export type ExtractionSource = { importId: string; objectKey: string; layout: ScoresheetLayout | null };
+// I1 pivot: a CSV import has no image and no template layout - the columns come from the file's own
+// header row, so there is nothing to configure up front. It is stored as REVIEW_REQUIRED in one step:
+// parsing is instant, and a human still approves every row before anything is ingested.
+export async function createCsvScoresheetImport(
+  tx: Prisma.TransactionClient,
+  args: {
+    organizationId: string;
+    userId: string;
+    sourceLabel: string;
+    parsed: ParsedCsvScoresheet;
+    corrected: Omit<CorrectedScoresheet, "approvedAt" | "approvedById">;
+    checksums: ChecksumReport;
+  },
+): Promise<{ id: string }> {
+  const created = await tx.scoresheetImport.create({
+    data: {
+      organizationId: args.organizationId,
+      sourceLabel: args.sourceLabel,
+      status: args.checksums.ok ? "REVIEW_REQUIRED" : "REVIEW_REQUIRED",
+      format: "CSV",
+      extractionVersion: `csv-1`,
+      extraction: { version: "csv-1", meta: args.parsed.meta, teams: args.parsed.teams, warnings: args.parsed.warnings, headerMap: args.parsed.headerMap } as unknown as Prisma.InputJsonValue,
+      corrected: args.corrected as unknown as Prisma.InputJsonValue,
+      checksums: args.checksums as unknown as Prisma.InputJsonValue,
+      failureReason: null,
+    },
+    select: { id: true },
+  });
+  return { id: created.id };
+}
+
+export type ExtractionSource = { importId: string; objectKey: string | null; layout: ScoresheetLayout | null };
 
 // Phase 1 of extraction: everything the OCR call needs, read inside the org transaction.
 export async function loadExtractionSource(tx: Prisma.TransactionClient, organizationId: string, importId: string): Promise<ExtractionSource | null> {
@@ -129,7 +161,7 @@ export async function loadExtractionSource(tx: Prisma.TransactionClient, organiz
     select: { id: true, template: { select: { layout: true } }, mediaAsset: { select: { objectKey: true } } },
   });
   if (!row) return null;
-  return { importId: row.id, objectKey: row.mediaAsset.objectKey, layout: resolveLayout(row.template?.layout) };
+  return { importId: row.id, objectKey: row.mediaAsset?.objectKey ?? null, layout: resolveLayout(row.template?.layout) };
 }
 
 // Phase 2 (no transaction): run OCR + extraction over the stored image bytes.
@@ -196,12 +228,13 @@ export async function rejectScoresheetImport(tx: Prisma.TransactionClient, args:
 export type ScoresheetImportListRow = {
   id: string;
   status: string;
+  format: string;
   sourceLabel: string;
   createdAt: Date;
   extractionVersion: string;
   failureReason: string | null;
   reviewedAt: Date | null;
-  imageUrl: string;
+  imageUrl: string | null;
 };
 
 export async function listScoresheetImports(tx: Prisma.TransactionClient, organizationId: string, take = 50): Promise<ScoresheetImportListRow[]> {
@@ -209,17 +242,19 @@ export async function listScoresheetImports(tx: Prisma.TransactionClient, organi
     where: { organizationId },
     orderBy: { createdAt: "desc" },
     take,
-    select: { id: true, status: true, sourceLabel: true, createdAt: true, extractionVersion: true, failureReason: true, reviewedAt: true, mediaAsset: { select: { id: true } } },
+    select: { id: true, status: true, format: true, sourceLabel: true, createdAt: true, extractionVersion: true, failureReason: true, reviewedAt: true, mediaAsset: { select: { id: true } } },
   });
   return rows.map((row) => ({
     id: row.id,
     status: row.status,
+    format: row.format,
     sourceLabel: row.sourceLabel,
     createdAt: row.createdAt,
     extractionVersion: row.extractionVersion,
     failureReason: row.failureReason,
     reviewedAt: row.reviewedAt,
-    imageUrl: `/media/assets/${row.mediaAsset.id}/file`,
+    // A CSV import has no image: the review page shows the parsed header map instead of a photo.
+    imageUrl: row.mediaAsset ? `/media/assets/${row.mediaAsset.id}/file` : null,
   }));
 }
 
@@ -229,6 +264,7 @@ export async function loadScoresheetImportForReview(tx: Prisma.TransactionClient
     select: {
       id: true,
       status: true,
+      format: true,
       sourceLabel: true,
       extraction: true,
       checksums: true,
@@ -240,6 +276,6 @@ export async function loadScoresheetImportForReview(tx: Prisma.TransactionClient
     },
   });
   if (!row) return null;
-  const extraction = row.extraction as unknown as { teams?: ScoresheetExtraction["teams"]; warnings?: string[]; version?: string } | null;
-  return { ...row, extraction, imageUrl: `/media/assets/${row.mediaAsset.id}/file` };
+  const extraction = row.extraction as unknown as { teams?: ScoresheetExtraction["teams"]; warnings?: string[]; version?: string; headerMap?: { header: string; column: string }[] } | null;
+  return { ...row, extraction, imageUrl: row.mediaAsset ? `/media/assets/${row.mediaAsset.id}/file` : null };
 }

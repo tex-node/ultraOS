@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
@@ -20,7 +20,7 @@ export type ReviewInitial = {
   importId: string;
   status: string;
   sourceLabel: string;
-  imageUrl: string;
+  imageUrl: string | null;
   imageName: string | null;
   warnings: string[];
   scheduledAt: string;
@@ -187,13 +187,28 @@ export function ReviewForm({ initial }: { initial: ReviewInitial }) {
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
       <aside className="lg:sticky lg:top-4 lg:self-start">
-        <a href={initial.imageUrl} target="_blank" rel="noreferrer" className="block rounded-lg border border-line bg-ink-800 p-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={initial.imageUrl} alt={`Scoresheet ${initial.sourceLabel}`} className="max-h-[70vh] w-full object-contain" />
-        </a>
-        <p className="mt-1 text-xs text-text-3">
-          {initial.imageName ?? "sheet image"} - open in a new tab to zoom.
-        </p>
+        {initial.imageUrl ? (
+          <>
+            <a href={initial.imageUrl} target="_blank" rel="noreferrer" className="block rounded-lg border border-line bg-ink-800 p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={initial.imageUrl} alt={`Scoresheet ${initial.sourceLabel}`} className="max-h-[70vh] w-full object-contain" />
+            </a>
+            <p className="mt-1 text-xs text-text-3">
+              {initial.imageName ?? "sheet image"} - open in a new tab to zoom.
+            </p>
+          </>
+        ) : (
+          // A CSV import has no image. Say so plainly instead of leaving an empty pane that looks
+          // like a failed load: the checksum panel is the review surface for this import.
+          <div className="rounded-lg border border-line bg-ink-800 p-3 text-xs text-text-2">
+            <p className="font-semibold text-text-1">Structured import - no image</p>
+            <p className="mt-1">
+              The numbers below were read from a CSV export&apos;s own header row, not from a photograph. There
+              is nothing to compare against visually, so the checksum panel is the review: fix any failing
+              check, then approve.
+            </p>
+          </div>
+        )}
         {initial.warnings.length > 0 ? (
           <ul className="mt-2 list-disc space-y-1 rounded-md bg-warn/10 p-3 pl-6 text-xs text-warn">
             {initial.warnings.map((warning) => (
@@ -272,7 +287,7 @@ export function ReviewForm({ initial }: { initial: ReviewInitial }) {
             <ul className="mt-2 space-y-1 text-xs">
               {state.report.checks.map((check) => (
                 <li key={check.key} className={check.ok ? "text-text-3" : "text-danger"} data-check={check.ok ? "ok" : "fail"}>
-                  {check.ok ? "PASS" : "FAIL"} Â· {check.label}
+                  {check.ok ? "PASS" : "FAIL"} Ã‚Â· {check.label}
                   {!check.ok ? (
                     <span className="text-text-3">
                       {" "}

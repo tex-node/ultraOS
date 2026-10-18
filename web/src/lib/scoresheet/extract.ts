@@ -1,4 +1,4 @@
-import type { OcrPage, OcrWord } from "@/lib/ocr/provider";
+﻿import type { OcrPage, OcrWord } from "@/lib/ocr/provider";
 import { groupIntoRows } from "@/lib/ocr/rows";
 import type { ScoresheetColumn, ScoresheetColumnGroup, ScoresheetColumnKey, ScoresheetLayout } from "./templates";
 
@@ -59,14 +59,14 @@ function mean(values: number[]): number {
   return values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length;
 }
 
-function normalizeText(text: string): string {
+export function normalizeText(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 // Match a header word-group against a column's header aliases. Exact match first, then "starts with"
 // for things like "PTS:" or "MIN." - conservative on purpose: a wrong column mapping is worse than
 // an unmatched one, because it silently puts assists in the rebounds column.
-function columnForHeader(text: string, layout: ScoresheetLayout): ScoresheetColumn | null {
+export function columnForHeader(text: string, layout: ScoresheetLayout): ScoresheetColumn | null {
   const t = normalizeText(text).replace(/[.:]/g, "");
   if (!t) return null;
   let best: { column: ScoresheetColumn; score: number } | null = null;

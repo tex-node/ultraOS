@@ -6,7 +6,7 @@ import { hasPermission } from "@/lib/permissions";
 import { MissingOrganizationContextError } from "@/lib/authorization";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { listScoresheetImports } from "@/server/scoresheet/imports";
-import { uploadScoresheet } from "./actions";
+import { uploadCsvScoresheet, uploadScoresheet } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +48,8 @@ export default async function ScoresheetsPage({ searchParams }: { searchParams: 
           </Link>
         </div>
         <p className="mt-1 text-sm text-text-2">
-          Photograph or scan a printed box score. OCR reads the table, then a human reviews every cell before it can be
+          Bring a game&apos;s numbers in as a <strong>structured export</strong> (fastest, exact) or as a{" "}
+          <strong>photograph</strong> (OCR reads the table). Either way a human reviews every cell before anything is
           ingested - nothing enters the league data without approval.
         </p>
 
@@ -58,30 +59,78 @@ export default async function ScoresheetsPage({ searchParams }: { searchParams: 
           </p>
         ) : null}
 
-        <section className="mt-6 rounded-lg border border-line bg-ink-800 p-4">
-          <h2 className="text-sm font-semibold">Upload a sheet</h2>
-          <form action={uploadScoresheet} className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="block text-xs text-text-2">
-              Sheet image (JPG or PNG)
-              <input name="file" type="file" accept="image/png,image/jpeg" required className="mt-1 block w-full text-sm text-text-1" />
-            </label>
-            <label className="block text-xs text-text-2">
-              Label (e.g. &quot;LBCL Game 12 - Ultra vs LXB&quot;)
-              <input name="sourceLabel" required maxLength={180} className="mt-1 min-h-[44px] w-full rounded-md border border-line bg-ink-700 px-3 text-sm" />
-            </label>
-            <label className="block text-xs text-text-2">
-              Sheet layout
-              <select name="templateKey" defaultValue="lbcl" className="mt-1 min-h-[44px] w-full rounded-md border border-line bg-ink-700 px-3 text-sm">
-                <option value="lbcl">LBCL box score</option>
-                <option value="fiba">FIBA box score</option>
-              </select>
-            </label>
-            <div className="flex items-end">
-              <button type="submit" className="min-h-[44px] rounded-md bg-brand-400 px-4 text-sm font-bold text-ink-900">
-                Upload and read
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <section aria-labelledby="csv-upload" className="rounded-lg border border-line bg-ink-800 p-4">
+            <h2 id="csv-upload" className="text-sm font-semibold">
+              1 Â· Upload CSV / Excel export
+              <span className="ml-2 rounded bg-brand-400/20 px-1.5 py-0.5 text-[10px] font-bold text-brand-300">RECOMMENDED</span>
+            </h2>
+            <p className="mt-1 text-xs text-text-3">
+              A Genius/FIBA box-score CSV: one row per player, a header row, optional <code>## TEAM</code> sections and{" "}
+              <code># date:</code> lines. Columns are matched by name, so no layout setup is needed.
+            </p>
+            <form action={uploadCsvScoresheet} className="mt-3 space-y-3">
+              <label className="block text-xs text-text-2">
+                CSV file
+                <input name="file" type="file" accept=".csv,text/csv" required className="mt-1 block w-full text-sm text-text-1" />
+              </label>
+              <label className="block text-xs text-text-2">
+                Label (e.g. &quot;LBCL Game 12 - Ultra vs LXB&quot;)
+                <input name="sourceLabel" required maxLength={180} className="mt-1 min-h-[44px] w-full rounded-md border border-line bg-ink-700 px-3 text-sm" />
+              </label>
+              <button type="submit" className="min-h-[44px] w-full rounded-md bg-brand-400 px-4 text-sm font-bold text-ink-900">
+                Read the CSV
               </button>
-            </div>
-          </form>
+            </form>
+          </section>
+
+          <section aria-labelledby="image-upload" className="rounded-lg border border-line bg-ink-800 p-4">
+            <h2 id="image-upload" className="text-sm font-semibold">
+              2 Â· Upload image (OCR)
+            </h2>
+            <p className="mt-1 text-xs text-text-3">
+              A photo or scan of a printed sheet. OCR on phone screenshots of a digital export measures poorly, so prefer
+              the CSV when the provider can give you one.
+            </p>
+            <form action={uploadScoresheet} className="mt-3 space-y-3">
+              <label className="block text-xs text-text-2">
+                Sheet image (JPG or PNG)
+                <input name="file" type="file" accept="image/png,image/jpeg" required className="mt-1 block w-full text-sm text-text-1" />
+              </label>
+              <label className="block text-xs text-text-2">
+                Label
+                <input name="sourceLabel" required maxLength={180} className="mt-1 min-h-[44px] w-full rounded-md border border-line bg-ink-700 px-3 text-sm" />
+              </label>
+              <label className="block text-xs text-text-2">
+                Sheet layout
+                <select name="templateKey" defaultValue="lbcl" className="mt-1 min-h-[44px] w-full rounded-md border border-line bg-ink-700 px-3 text-sm">
+                  <option value="lbcl">LBCL box score</option>
+                  <option value="fiba">FIBA box score</option>
+                </select>
+              </label>
+              <button type="submit" className="min-h-[44px] w-full rounded-md border border-line px-4 text-sm font-semibold text-text-1">
+                Upload and read with OCR
+              </button>
+            </form>
+          </section>
+        </div>
+        <section className="mt-4 rounded-lg border border-line bg-ink-800 p-4">
+          <h2 className="text-sm font-semibold">CSV format</h2>
+          <pre className="mt-2 overflow-x-auto rounded bg-ink-900 p-3 text-[11px] leading-5 text-text-2">{`# league: Lagos Basketball Community League
+# date: 2026-09-20T16:46:00.000Z
+# homeScore: 94
+# awayScore: 16
+# period: Q1,19,2
+## LEO KAREEM FOUNDATION
+No,Player,Min,PTS,FG,2P,3P,FT,OR,DR,REB,AST,TO,STL,BLK,PF
+4,MUSA ALFA,13:51,0,0-0,0-0,0-0,0-0,0,0,0,1,0,1,0,0`}</pre>
+          <p className="mt-2 text-xs text-text-3">
+            A made-attempted pair (<code>5-8</code>) fills both columns. Columns we do not recognise are reported as
+            warnings rather than guessed at.
+          </p>
+        </section>
+        <section className="mt-6">
+          <h2 className="text-sm font-semibold">Imports</h2>
           <p className="mt-2 text-xs text-text-3">OCR runs on upload and can take a few seconds per sheet.</p>
         </section>
 
@@ -94,9 +143,13 @@ export default async function ScoresheetsPage({ searchParams }: { searchParams: 
               {rows.map((row) => (
                 <li key={row.id} className="flex items-center justify-between gap-3 p-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm text-text-1">{row.sourceLabel}</p>
+                    <p className="truncate text-sm text-text-1">
+                      <span className="mr-2 rounded bg-ink-600 px-1.5 py-0.5 text-[10px] font-bold text-text-2">{row.format}</span>
+                      {row.sourceLabel}
+                    </p>
                     <p className="mt-0.5 text-xs text-text-3">
-                      {row.createdAt.toISOString().slice(0, 16).replace("T", " ")} Â· <span className={STATUS_STYLE[row.status] ?? ""}>{row.status}</span>
+                      {row.createdAt.toISOString().slice(0, 16).replace("T", " ")} Â·{" "}
+                      <span className={STATUS_STYLE[row.status] ?? ""}>{row.status}</span>
                       {row.failureReason ? <span className="text-danger"> Â· {row.failureReason}</span> : null}
                     </p>
                   </div>

@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -8,16 +8,17 @@ import { uploadMediaAsset } from "@/lib/media-storage";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { createOcrProvider } from "@/lib/ocr/tesseract";
 import { buildChecksumReport, type ChecksumReport } from "@/lib/scoresheet/checksums";
-import type { ExtractedTeamTable } from "@/lib/scoresheet/extract";
+import { correctedTeamToTable } from "@/lib/scoresheet/corrected";
+import { csvToCorrected, parseBoxScoreCsv } from "@/lib/scoresheet/csv-extract";
 import {
   approveScoresheetImport,
+  createCsvScoresheetImport,
   createScoresheetImport,
   loadExtractionSource,
   recogniseScoresheet,
   rejectScoresheetImport,
   saveExtraction,
   type CorrectedScoresheet,
-  type CorrectedTeam,
 } from "@/server/scoresheet/imports";
 
 // I1 actions (P15): upload + extract, and the review decisions.
@@ -74,51 +75,8 @@ export type ReviewState = {
   rejected?: boolean;
 };
 
-// Converts an approved (edited) team into the same shape the extractor produces, so the checksum
-// rules run over the reviewer's numbers with exactly one implementation.
-function correctedToTable(team: CorrectedTeam): ExtractedTeamTable {
-  const cell = (value: number) => ({ raw: String(value), value, confidence: 100 });
-  return {
-    teamLabel: team.clubName,
-    headerRowIndex: 0,
-    confidence: 100,
-    warnings: [],
-    totals: {
-      points: cell(team.totals.points),
-      reb: cell(team.totals.rebounds),
-      assists: cell(team.totals.assists),
-      turnovers: cell(team.totals.turnovers),
-      fouls: cell(team.totals.fouls),
-    },
-    players: team.players.map((player, index) => ({
-      rowIndex: index,
-      jerseyNumber: player.jerseyNumber,
-      name: player.name,
-      minutesRaw: player.didNotPlay ? "DNP" : String(player.minutesPlayed),
-      didNotPlay: player.didNotPlay,
-      confidence: 100,
-      cells: {
-        points: cell(player.points),
-        fgm: cell(player.fgm),
-        fga: cell(player.fga),
-        fg2m: cell(player.fg2m),
-        fg2a: cell(player.fg2a),
-        fg3m: cell(player.fg3m),
-        fg3a: cell(player.fg3a),
-        ftm: cell(player.ftm),
-        fta: cell(player.fta),
-        oreb: cell(player.oreb),
-        dreb: cell(player.dreb),
-        reb: cell(player.reb),
-        assists: cell(player.assists),
-        turnovers: cell(player.turnovers),
-        steals: cell(player.steals),
-        blocks: cell(player.blocks),
-        fouls: cell(player.fouls),
-      },
-    })),
-  };
-}
+// The correction -> extractor-shape converter now lives in lib/scoresheet/corrected.ts so the CSV path
+// uses the same one (see csvToCorrected / correctedTeamToTable).
 
 export async function uploadScoresheet(formData: FormData): Promise<void> {
   const { session, organizationId } = await requirePermissionWithOrganization("data:import");
@@ -151,6 +109,9 @@ export async function uploadScoresheet(formData: FormData): Promise<void> {
     let failureReason: string | null = null;
     if (!source?.layout) {
       failureReason = "No scoresheet layout is configured for this organization.";
+    } else if (!source.objectKey) {
+      // An IMAGE import always has a stored file; a missing one means the asset row is inconsistent.
+      failureReason = "The uploaded sheet has no stored file, so there is nothing to read.";
     } else {
       try {
         extraction = await recogniseScoresheet(source.objectKey, source.layout, createOcrProvider());
@@ -188,8 +149,8 @@ export async function reviewScoresheet(importId: string, _state: ReviewState, fo
     return { error: `The form could not be read: ${error instanceof Error ? error.message : String(error)}` };
   }
 
-  const homeTable = correctedToTable(payload.home);
-  const awayTable = correctedToTable(payload.away);
+  const homeTable = correctedTeamToTable(payload.home);
+  const awayTable = correctedTeamToTable(payload.away);
   const checksums = buildChecksumReport({
     teams: [
       { table: homeTable, label: payload.home.clubName },
@@ -224,4 +185,48 @@ export async function reviewScoresheet(importId: string, _state: ReviewState, fo
   revalidatePath(`/scoresheets/${importId}/review`);
   revalidatePath("/scoresheets");
   return { report: checksums, approved: true };
+}
+
+// I1 pivot: the CSV path. No OCR, no image, no transaction spanning a slow call - the file is parsed
+// and validated in memory, then stored as REVIEW_REQUIRED with its checksums. A human still approves it
+// on the same review page, and the same ingest CLI consumes it, so this is a shorter road to the same
+// gate rather than a second pipeline.
+export async function uploadCsvScoresheet(formData: FormData): Promise<void> {
+  const { session, organizationId } = await requirePermissionWithOrganization("data:import");
+  const file = formData.get("file");
+  const sourceLabel = String(formData.get("sourceLabel") ?? "").trim();
+  if (!(file instanceof File) || file.size === 0) redirect("/scoresheets?error=Choose+a+CSV+file.");
+  if (!sourceLabel) redirect("/scoresheets?error=Add+a+label+so+the+sheet+is+identifiable+later.");
+  if (file.size > 2_000_000) redirect("/scoresheets?error=That+file+is+larger+than+2+MB+-+a+box-score+CSV+should+be+a+few+kilobytes.");
+
+  const text = await file.text();
+  let parsed;
+  try {
+    parsed = parseBoxScoreCsv(text);
+  } catch (error) {
+    redirect(`/scoresheets?error=${encodeURIComponent(`Could not read that CSV: ${error instanceof Error ? error.message : String(error)}`)}`);
+  }
+
+  let corrected;
+  try {
+    corrected = csvToCorrected(parsed, { sourceLabel });
+  } catch (error) {
+    redirect(`/scoresheets?error=${encodeURIComponent(error instanceof Error ? error.message : String(error))}`);
+  }
+
+  const checksums = buildChecksumReport({
+    teams: [
+      { table: correctedTeamToTable(corrected.home), label: corrected.home.clubName },
+      { table: correctedTeamToTable(corrected.away), label: corrected.away.clubName },
+    ],
+    periods: corrected.periods,
+    homeScore: corrected.homeScore,
+    awayScore: corrected.awayScore,
+  });
+
+  const created = await withOrganizationContext(organizationId, (tx) =>
+    createCsvScoresheetImport(tx, { organizationId, userId: session.user.id, sourceLabel, parsed, corrected, checksums }),
+  );
+  revalidatePath("/scoresheets");
+  redirect(`/scoresheets/${created.id}/review`);
 }
