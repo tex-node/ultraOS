@@ -9437,6 +9437,82 @@ say so.
 `release-0d151f8`; `/root/smoke-staging.sh` -> 10/10 pages PASS with signature text, service active,
 0 errors since the release started.
 
+## 2026-10-18 - Streak v3 / Prompt 1: I1 pivot - CSV ingestion + grid detection (measured)
+
+**Objective:** stop depending on OCR for LBCL. A structured export should go through the same review
+gate without Tesseract; grid detection should be a best-effort fallback.
+
+**Completed**
+- **Schema**: `ScoresheetImportFormat` enum (`IMAGE` | `CSV`) on `ScoresheetTemplate` and
+  `ScoresheetImport`; `ScoresheetImport.mediaAssetId` becomes nullable (a CSV has no image to keep).
+  Additive on existing tenant tables -> no new RLS/GRANT, migration `20261018170000_scoresheet_csv_format`
+  applied to staging by `deploy.sh --migrate`.
+- **`lib/scoresheet/csv-extract.ts`** (pure, 11 tests): RFC4180 parser (quotes, embedded commas,
+  CRLF), `## TEAM` sections OR a `team` column, `# key: value` metadata (date, home/away, home/away
+  score, `# period: Q1,19,2`), GENIUS/FIBA header aliases, made-attempted pairs (`5-8`), DNP, totals
+  rows skipped, repeated headers skipped, and a **warning for every column it does not recognise**
+  instead of guessing. Refuses a file with no player-name column or fewer than two teams.
+- **`lib/scoresheet/corrected.ts`**: the corrected -> extractor-shape converter both paths share, so
+  there is exactly one implementation of the checksum input.
+- **Server + UI**: `createCsvScoresheetImport` stores the parse as REVIEW_REQUIRED with checksums;
+  `/scoresheets` now offers **CSV/Excel (recommended)** and **Image (OCR)** side by side with the CSV
+  format documented on the page; the review page drops the image pane for a CSV and says the checksum
+  panel is the review; the import list shows the format badge.
+- **`lib/ocr/grid.ts`** (4 tests) + **`scripts/grid-probe.ts`**: a real grid-line detector (light-page
+  detection, row/column rule profiles, gap-regularity check, cell rectangles). Tested against synthetic
+  tables where the rules ARE clean.
+
+**Measured (not claimed)**
+- **32/32 real LBCL games round-trip through CSV with ZERO field differences** from the hand-transcribed
+  batch: `scripts/csv-export-verify.ts` -> `round-trip diffs 0`, 2523 checksum checks. CSV is 54,924
+  bytes vs 379,626 of JSON (7x smaller); parse+compare 85 ms for all 32 games.
+- **The checksums caught 4 genuine arithmetic errors in the source transcription** (games 19-20:
+  `points != 2x2PM + 3x3PM + FT` for Creon Okwuzu (-1) and Dele Ajigboye (-1); `FGA != 2PA + 3PA` for
+  Dele Ajigboye (+1); `points != ...` for Nnerive Peter (+2)). The CSV path is value-identical, so
+  these are data errors the JSON batch carries, not parser bugs - and the review queue blocks approval
+  on them, which is the gate working.
+- **End-to-end on a scratch clone of staging**: CSV -> parse (84 checks, 0 failing) -> import
+  REVIEW_REQUIRED -> approve -> `external-stats-ingest.ts --scoresheetImportId --apply` -> **INGESTED**,
+  fixture `cmvdv403n...` FINAL 38-41, **24 player stat lines, 79 points, 46 rebounds**. The first attempt
+  was correctly **BLOCKED** ("Fixture is already FINAL") because the game already existed - the
+  duplicate guard works and the import was left APPROVED, not INGESTED.
+- **Grid detection is REFUSED on the real sheets**: `scripts/grid-probe.ts` on a real LBCL image ->
+  "horizontal rules are not evenly spaced (variation 2.00) - probably text lines, not a grid", and the
+  same at 3000px after preprocessing (variation 3.63). The screenshots lost the table rules (candidate
+  every ~3px = text lines), so a per-cell crop cannot be built from them. It is shipped as a tested
+  building block for real scans, deliberately NOT wired into the default path.
+
+**Decisions**
+- The CSV path is the *recommended* path in the UI, not a hidden alternative: the OCR path cannot read
+  the only real sheets this project has.
+- A CSV import stores the parsed teams in `extraction` and the same shape in `corrected`, so re-opening
+  the review page shows the reviewer their own numbers, and the machine's parse stays inspectable.
+- Grid detection is not wired in. Shipping a fallback that is known to produce a wrong grid on every
+  image available would be worse than the honest FAILED state the prompt asked to preserve.
+
+**Deploy findings (fixed in the same commit)**
+- `deploy.sh --migrate` was **refused by its own pre-flight** (exit 4) because the pending-migration
+  check ignored `--migrate`. It now warns and continues when `--migrate` is set, and **re-checks
+  `prisma migrate status` after migrating**, halting before the swap if anything is still pending.
+- `server/scoresheet/imports.ts` imported `media-storage`, which pulls in `next/*`; a CLI script using
+  the DB functions crashed with "createContext is not a function". The OCR half moved to
+  `server/scoresheet/ocr-source.ts`; the DB module is now CLI-loadable.
+
+**Verification:** 22 scoresheet/OCR tests pass, `tsc`/`eslint`/`next build` clean, staging deployed as
+`release-6e5ff89` then `release-fe22a0e`, smoke 10/10 PASS, 0 errors since the release started.
+Migration applied by `--migrate` after the pre-flight fix.
+
+**Known issues**
+- Excel is named in the UI but only CSV is parsed (the prompt says "CSV/Excel"; an .xlsx would need a
+  reader dependency - not added).
+- The CSV path resolves the competition/division/season/venue from the organization's latest season, so
+  it is still not a way to onboard a new league from a file (same limitation as the image path).
+- `players_created=0` on the verification ingest because those players already exist; a first-time club
+  would create them, which is the existing batch behaviour, not something this prompt changed.
+
+**Next step:** Prompt 2 (formal smoke test + production deploy).
+
+
 
 
 
