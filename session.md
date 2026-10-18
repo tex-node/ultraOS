@@ -9612,6 +9612,77 @@ as a zero, and the plan's game window must not be confused with per-session logs
 
 **Next step:** Prompt 4 (passport deep link + provenance legend).
 
+## 2026-10-18 - Streak v3 / Prompt 4: I6 polish - passport deep link, org-correct read, provenance legend
+
+**Objective:** make the passport reachable from the public site, correct about the player's organization,
+and explain its own badges.
+
+**Completed**
+- **`/public/players/[id]`** (the public athlete page) now offers **"View passport"** when the athlete has
+  at least one registration with recorded games. The publication rule is stated in the code: a passport
+  with no games is an empty shell, so the link is not offered. It links to the *latest* registration's
+  `Player` row, because `Player` is season-scoped and the public page is athlete-scoped.
+- **The passport respects the player's organization**: the page reads under the viewer's active org
+  first; if the player is not there **and** the viewer is a platform SUPER_ADMIN, it retries under
+  `resolveDefaultPublicOrganization()` - the org the public page resolves. So the link a public page
+  offers actually opens for an admin whose session org is a different tenant, while a player from a
+  tenant the viewer cannot see still 404s. Tenant separation is unchanged; only the org the read is
+  scoped to moved.
+- **Provenance explanations**: every badge now carries `title` and `aria-label` text (e.g. "OCR REVIEWED:
+  Data ingested from a historical scoresheet and human-verified in the review queue before it entered the
+  league data"), and the bottom legend is a definition list rendered from the same `BADGE_EXPLANATION`
+  map, so the tooltip and the legend cannot drift apart. `cursor-help` marks them as hoverable.
+
+**Verification:** `tsc`/`eslint`/`next build` clean; the passport route still 200s in the staging smoke
+(7/7 PASS on `release-d4f4671`), and the deployed page contains the legend section and the badge
+tooltips. The public link itself is rendered by the same page that lists registrations - it appears
+whenever a registration has player stats, which is exactly the condition the code tests.
+
+**Known issues**
+- There is no explicit "publish/unpublish" flag; publication is derived (has games). If a league wants to
+  keep a passport private, that needs a real column, not a heuristic.
+- The public *athlete* page and the private *player* passport have different id spaces (athleteId vs
+  playerId); the link maps between them, and the mapping is documented in the page.
+- Staging's public athlete route resolves the default public organization, so the link only resolves for
+  athletes in that org.
+
+**Next step:** Prompt 5 (vision mock pipeline).
+
+## 2026-10-18 - Streak v3 / Prompt 5: vision infrastructure proven, inference still BLOCKED_NO_REAL_VIDEO
+
+**Objective:** since no real game video exists, prove the vision *infrastructure* - registration, run,
+observation, human review - without any inference.
+
+**Completed: `scripts/vision-mock-run.ts`** - inserts a real chain of rows, all labelled `MOCK`:
+`MediaAsset` (purpose `GAME_VIDEO`, synthetic object key/checksum) -> `GameVideo` (camera label
+"MOCK camera (synthetic)", `READY_FOR_ANALYSIS`) -> `VisionModel` (`MOCK-DETECTOR@0.0.0-mock`) ->
+`VisionAnalysisRun` (COMPLETED, 2 observations) -> two `VisionObservation`s: a **made 2-pointer by a
+specific player at 12:05** (confidence 0.87, `SHOT_MADE_CANDIDATE`) and a rebound at 12:11 (0.62).
+`--no-review` leaves them PENDING for the queue; `--cleanup` removes the mock video, its runs,
+observations and the media asset.
+
+**Verified on staging**
+- Full run: shot -> **CONFIRMED**, rebound -> **REJECTED**, 2 `VISION_OBSERVATION_REVIEWED` audit
+  entries, DB state `obs: SHOT_MADE_CANDIDATE status=CONFIRMED conf=0.87 at 725000ms` /
+  `REBOUND_CANDIDATE status=REJECTED conf=0.62 at 731000ms`.
+- Review queue page: `GET /vision/games/cmuxu4gga00afyxkk1u12rua8` -> **200**, and with two PENDING
+  observations it renders `SHOT_MADE_CANDIDATE` and `REBOUND_CANDIDATE` with confidences 0.87/0.62 and
+  **Confirm / Reject** controls - the human review workflow works end to end without inference.
+- Two PENDING observations are deliberately left in staging (`cmvdwrz7b…`, `cmvdwrz7h…`) so the user can
+  click Confirm/Reject themselves; `--cleanup` removes everything mock.
+
+**Fix found while doing it:** `createAnalysisRun`/`reviewObservation` open their OWN
+`withOrganizationContext`, so a `GameVideo` created inside an outer transaction is invisible to them
+(separate connections). The script now commits the video in one transaction and calls those functions
+afterwards - the first attempt failed with `findUniqueOrThrow` on a row it had just created.
+
+**Documented status:** the **infrastructure is proven**; the **inference remains
+`BLOCKED_NO_REAL_VIDEO`** - 0 `GameVideo` rows in staging and production, and the only video files on
+the host are broadcast render artifacts. No accuracy number is claimed or implied.
+
+**Next step:** final roadmap update + commit.
+
+
 
 
 

@@ -120,13 +120,18 @@ depends on I2; I4 and I5 are gated on real video.
 
 | ID | Status |
 |---|---|
-| I0 | **Done** — production migration applied after a verified backup, verified, 5-minute log watch clean; `deploy.sh` now halts on pending migrations. |
-| I1 | **In progress, acceptance partial** — schema, provider, extraction, checksums, review queue and `--scoresheetImportId` ingest all shipped. Acceptance improved from 0/20 to **12/20 sheets producing a table (8/20 with player rows)** after stronger preprocessing, but no sheet is review-ready: rows split/duplicate and most cells are lost. Blocker is now grid detection + per-cell OCR, documented in `documentation/OCR_SCORESHEET_INGESTION.md`. Not operator-ready. |
-| I2 | **Done for review** — `CoachingPlan` + adopt + Selection Advisor shipped and verified; awaiting sign-off. |
-| I3 | **In progress** — assign → complete → log metric shipped and verified on staging (the deferred `AthleteTrainingRecord.developmentFocus` stamp is now real). The metric trend/sparkline is not built. |
-| I4 | **BLOCKED_NO_REAL_VIDEO** — 0 `GameVideo` rows in staging and production; only broadcast render artifacts exist on the host (checked 2026-10-18). |
-| I5 | **Gated** on I4. |
-| I6 | **In progress** — v1 read model + `/players/[id]/passport` with per-row provenance badges and coach-only training/plans. No public variant, single-season timeline. |
+| I0 | **Done, in production** — migration applied after a verified backup, verified, 5-minute log watch clean; `deploy.sh` halts on pending migrations (and now correctly continues when `--migrate` is passed, re-checking after migrating). |
+| I1 | **Image path: acceptance partial (not operator-ready). CSV path: works, measured, and is the recommended route.** The OCR path reads 12/20 real sheets with 8/20 producing player rows and 0 review-ready (the sheets are Instagram screenshots whose cell grid never survives); stronger preprocessing took it from 0/20 to that. The **CSV path round-tripped 32/32 real LBCL games with zero field differences** and drove a full import -> review -> approve -> ingest of a real game on a scratch database (INGESTED, 24 player stat lines, 79 points), and the checksums flagged **4 genuine arithmetic errors in the existing hand-transcribed batch**. Grid-line detection is shipped and tested but **refused on these screenshots** at both 720px and 3000px, so it is documented as requiring a real scan. Detail: `OCR_SCORESHEET_INGESTION.md`. |
+| I2 | **Done for review** — `CoachingPlan` + adopt + Selection Advisor shipped; awaiting the user's sign-off on the advisor against real fixtures. |
+| I3 | **Done, in production** — assign → complete → log metric, the deferred `AthleteTrainingRecord.developmentFocus` stamp, and the trend card (per-session logs vs the plan's game window, "Missing data" for an unlogged session, verdict withheld when a metric's direction is unknown). 6 component tests + 6 unit tests. |
+| I4 | **`BLOCKED_NO_REAL_VIDEO` for inference; infrastructure PROVEN.** 0 `GameVideo` rows in staging and production; a synthetic video + analysis run + two observations were created and reviewed through `/vision/games/[fixtureId]` (Confirm/Reject renders and the statuses/audit rows land). No inference has been run and no accuracy is claimed. |
+| I5 | **Gated** on I4 (real footage). |
+| I6 | **Done v1, in production** — passport read model with per-row provenance (LIVE / LIVE STAT / OCR REVIEWED / IMPORTED / MANUAL / UNKNOWN), coach-only training + plans, a provenance legend with hover explanations, and a "View passport" link from the public athlete page with an organization-correct read. No public *passport* page (publication is derived from "has games"). |
+
+**Production note:** the coaching stack (I2/I3/I6) is deployed and verified in production
+(`release-4793f7f`), with `COACHING_ASSISTANT_ENABLED=true` in `/opt/ultraleagueos/shared/web.env` and
+`/coaching` returning 200 to an admin session. Every deploy from now on runs the smoke test
+(`deploy/ops/smoke-test.sh`) and fails the deploy if a representative route does not serve.
 
 ### I0 — P0 production migration fix (blocking, do first)
 
