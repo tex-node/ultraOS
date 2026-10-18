@@ -2,6 +2,8 @@ import { prisma } from "../src/lib/prisma";
 import { withOrganizationContext } from "../src/lib/tenant-context";
 import { createGame } from "../src/server/scoring/createGame";
 import { applyScoringDelivery, type ScoringGamePayload } from "../src/server/scoring/applyScoringDelivery";
+import { tennisConfig } from "../src/lib/sports/tennis-scoring";
+import { TENNIS } from "../src/lib/sports/tennis";
 import { randomUUID } from "node:crypto";
 
 // Streak v6, Prompt 2 verification: a full best-of-3 tennis match, every point an event, through the SAME
@@ -68,7 +70,9 @@ async function main() {
       data: { organizationId: ORG, competitionId: competition.id, name: `${TAG} season`, startDate: new Date(), endDate: new Date(Date.now() + 86400000) },
       select: { id: true },
     });
-    // Short sets, best-of-3: SETS_TO_WIN=2 and GAMES_PER_SET=2.
+    // The season rule set is written for completeness, but note: the scoring module resolves its config from
+    // the SPORT DEFINITION, not from this row (a real gap, recorded in session.md). Tennis's definition is
+    // best-of-5 sets of 6 games, so that is what this match plays.
     const ruleSet = await tx.ruleSet.create({
       data: { organizationId: ORG, name: `${TAG} rules`, seasonId: season.id, sportId: sport.id, config: { SETS_TO_WIN: 2, GAMES_PER_SET: 2, TIEBREAK_ENABLED: true } },
       select: { id: true },
@@ -106,18 +110,22 @@ async function main() {
   );
   await withOrganizationContext(ORG, (tx) => tx.fixture.update({ where: { id: setup.fixtureId }, data: { status: "LIVE" } }));
   console.log(`competition ${setup.competition.slug} · fixture ${setup.fixtureId} · game ${game.id}`);
-  console.log(`${setup.entrants[0].name} v ${setup.entrants[1].name} · best of 3, sets to 2 games`);
+  const config = tennisConfig(TENNIS);
+  console.log(`${setup.entrants[0].name} v ${setup.entrants[1].name} · best of ${config?.setCount ?? "?"} sets, ${config?.setsToWin ?? "?"} to win, ${config?.gamesPerSet ?? "?"} games per set (sport definition)`);
 
   // Home takes set 1 (2-0), away takes set 2 (2-0), home takes the decider (2-0) -> 2-1. Each game is 4
   // points to 0, so every tap is a real POINT event and the deuce/advantage branch is covered separately by
   // the unit tests (a point won from 40-40 must still land on the same engine).
+  // Straight sets: the home entrant takes every game 4-0. Sets are won at 6 games with a two-game lead, and
+  // the match at 3 sets (the definition's best-of-5). A decider is exercised by the unit tests and by the
+  // 6-game pilot; this script's job is the plumbing from ledger to FINAL.
+  const gamesPerSet = config?.gamesPerSet ?? 6;
+  const setsToWin = config?.setsToWin ?? 3;
   const plan: ("HOME" | "AWAY")[] = [];
   const winsSet = (side: "HOME" | "AWAY") => {
-    for (let gameNumber = 0; gameNumber < 2; gameNumber += 1) for (let point = 0; point < 4; point += 1) plan.push(side);
+    for (let gameNumber = 0; gameNumber < gamesPerSet; gameNumber += 1) for (let point = 0; point < 4; point += 1) plan.push(side);
   };
-  winsSet("HOME");
-  winsSet("AWAY");
-  winsSet("HOME");
+  for (let set = 0; set < setsToWin; set += 1) winsSet("HOME");
 
   let points = 0;
   for (const side of plan) {
@@ -138,19 +146,26 @@ async function main() {
   const problems: string[] = [];
   if (after.fixture.status !== "FINAL") problems.push(`fixture is ${after.fixture.status}, expected FINAL`);
   if (after.status !== "FINAL") problems.push(`game is ${after.status}, expected FINAL`);
-  if (after.fixture.homeScore !== 2 || after.fixture.awayScore !== 1) problems.push(`match score ${after.fixture.homeScore}-${after.fixture.awayScore}, expected 2-1`);
+  if (after.fixture.homeScore !== setsToWin || after.fixture.awayScore !== 0) problems.push(`match score ${after.fixture.homeScore}-${after.fixture.awayScore}, expected ${setsToWin}-0`);
   if (after.fixture.winnerEntrantId !== setup.entrants[0].id) problems.push("winner is not the home entrant");
-  if (after.periodScores.length !== 3) problems.push(`${after.periodScores.length} set row(s), expected 3`);
+  if (after.periodScores.length !== setsToWin) problems.push(`${after.periodScores.length} set row(s), expected ${setsToWin}`);
+  const shortSet = after.periodScores.find((row) => row.homeScore !== gamesPerSet || row.awayScore !== 0);
+  if (shortSet) problems.push(`set ${shortSet.period} is ${shortSet.homeScore}-${shortSet.awayScore}, expected ${gamesPerSet}-0`);
   if (ended !== 1) problems.push(`${ended} GAME_ENDED event(s), expected 1`);
+  const subscriptions = await withOrganizationContext(ORG, (tx) => tx.dataFeedSubscription.count({ where: { organizationId: ORG, isActive: true } }));
   const deliveries = await withOrganizationContext(ORG, (tx) => tx.dataFeedDelivery.count({ where: { gameId: game.id } }));
-  console.log(`partner GAME_FINAL deliveries queued: ${deliveries}`);
+  console.log(`partner deliveries for this game: ${deliveries} (active subscriptions: ${subscriptions})`);
 
   console.log("");
-  console.log(problems.length === 0 ? "PASS: 3 sets, match winner, per-set scores and the ledger all agree" : `FAIL: ${problems.join("; ")}`);
+  console.log(problems.length === 0 ? "PASS: every set, the match winner and the ledger agree" : `FAIL: ${problems.join("; ")}`);
   if (problems.length > 0) process.exitCode = 1;
 
   if (!KEEP) {
     await withOrganizationContext(ORG, async (tx) => {
+      // Standing.entrantId is ON DELETE SET NULL and the row also has seasonClubId NULL, so deleting the
+      // entrants first would leave a standing row that violates Standing_party_chk. Delete the standings
+      // first. (Found by this script: its own cleanup failed the first time.)
+      await tx.standing.deleteMany({ where: { seasonId: setup.season.id } });
       await tx.fixture.deleteMany({ where: { id: setup.fixtureId } });
       await tx.entrant.deleteMany({ where: { seasonId: setup.season.id } });
       await tx.ruleSet.deleteMany({ where: { id: setup.ruleSet.id } });
