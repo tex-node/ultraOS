@@ -10653,3 +10653,135 @@ tests on node 20, vision stack healthy, 983 tests, ratchet 4/4, main merged.
 
 
 
+
+## 2026-10-19 - GIESM: deadline extended, form rules relaxed (production)
+
+Complaints about difficulty submitting. Findings (read-only): config demanded exactly 12 active volleyball + exactly 10 flag racers
+(min 10/5 unreachable), race order required, every team had to field BOTH sports (per-sport minRoster applied even with
+requireBothSports=false), incomplete teams draft-only (service.ts:90 ignores config.requireCompleteRosters), 11 required per-player
+custom fields (email, phone, duplicate name/gender/DOB), assistant coach name required. 18 of 19 individual entries were one Ikorodu
+squad under one coach who could not pass the team form; a 1-player IVC draft stalled.
+Applied on production: closesAt -> 2026-10-22 09:00 Africa/Lagos (08:00Z); sportConfig rosters minRoster 0 / no activeCount /
+orderRequired false, requireCompleteRosters false; 11 participant/assistant fields made optional (jersey + head coach stay required).
+Both audit-logged (`REGISTRATION_FORM_CLOSES_AT_UPDATED`, `REGISTRATION_FORM_RULES_RELAXED` with full before-state). Validated locally
+with the real validator first (6 scenarios; guards for max roster, team name, >=1 player, minors' consent, age band still hold).
+Public pages 200 and show "Volleyball roster 0-20; Flag Race 0-10". NOT done (needs code deploy): duplicate-person guard as a warning.
+SQL kept at ~/Downloads/giesm-relax-rules.sql.
+
+## 2026-10-19 - Streak v8 / Prompt 1: the console header tells the truth, and a deploy restores the vision .env
+
+**Header.** The live console rendered the sport definition's default format, so a best-of-3 tennis fixture
+still read "Best of 5 sets" while the engine had been playing the season's RuleSet since v7 - a label that
+contradicted the scoreboard. The page now resolves rule values with the **same precedence the engine uses**
+(frozen `GameRuleSnapshot` first, then the season/organization rule set) and renders `matchFormatLabel()`:
+
+```
+tennis, no override     -> "3 sets to win · 6 games per set · tiebreak at 6-6"
+tennis, SETS_TO_WIN=2   -> "2 sets to win · 4 games per set"        (TIEBREAK_ENABLED=false drops the tiebreak clause)
+basketball              -> "2 × 10 min" / "4 × 10 min" with PERIOD_COUNT
+volleyball              -> "<n> sets to win · <n> points per set"
+```
+
+Pure helper, **5 tests**, including a wrong-typed override changing nothing. This is the second half of the v7
+fix: first the engine obeyed the rule set, now the label does.
+
+**Vision .env.** `services/vision/.env` is gitignored, so every deploy's `git clean -fdx` deleted it and
+`docker compose up` failed with "env file not found" - a configuration problem that reads like a broken
+service. `deploy.sh` now recreates it from `.env.example` when missing and **never overwrites an existing one**
+(it may hold real credentials); `deploy/README.md` documents it in the flags table.
+
+## 2026-10-19 - Streak v8 / Prompt 2: video upload from the browser
+
+Ingesting footage needed SSH and a path on the host, so an operator with a phone recording had no route in and
+the review queue had nothing to review.
+
+- **`POST /api/vision/upload`** - multipart, `vision:manage`, organization from the **session** (never the
+  form). A route handler rather than a server action: the browser can show real progress, and an upload is
+  reproducible with curl (which is how it was verified).
+- **`src/server/vision/ingest-upload.ts`** - validate → `ffprobe` → sha256 → dedupe by checksum → store under
+  `MEDIA_LOCAL_ROOT/vision/<org>/<sha>.mp4` → `MediaAsset` + `GameVideo` (READY_FOR_ANALYSIS) + audit → `POST
+  /analyze` best effort. A file that cannot be **probed** is refused rather than registered with null
+  dimensions: a row that looks ingested but cannot be aligned is worse than a clear error.
+- **`/vision/upload`** - fixture picker (with existing video counts), file input, camera label, and honest
+  states: "Uploading…" while the bytes are on the wire, then what the server actually did. No fake analysis
+  progress bar - the analysis happens in the worker minutes later.
+
+Verified on staging:
+```
+GET /vision/upload -> 200 (32,070 bytes)
+POST multipart (3-second synthetic mp4, 19,529 bytes)
+  -> 200 {"gameVideoId":"cmvezocwi…","mediaAssetId":"cmvezocvv…","duplicate":false,
+          "analysis":{"queued":false,"warning":"The vision worker is not reachable (fetch failed); the video is
+          queued for the poller instead."}}
+gameVideo status=READY_FOR_ANALYSIS duration=3 res=640x360
+mediaAsset vision/<org>/13d30bad…mp4 bytes=19529  · file on disk 19,529 bytes
+duplicate upload -> duplicate:true, no second row
+```
+The worker was not running, and the response says so instead of pretending the analysis started - that is the
+designed behaviour (the beat poller collects it within 5 minutes).
+
+## 2026-10-19 - Streak v8 / Prompt 3: the passport spans sports
+
+The passport was built on `PlayerStat`, which is basketball-shaped, so a volleyball player's kills/aces/blocks
+were invisible **and their games did not appear at all** (a metric-only game has no PlayerStat row). The
+passport looked like the athlete had never played.
+
+- `loadAthletePassport` aggregates `GameMetricValue` by the metric definition's sport into `sportStats` (value +
+  per-game, labels straight from `SportMetricDefinition`) and **merges metric-only games into the timeline**
+  with their sport and real opponent/side.
+- `PassportGameRow` carries `sportSlug`/`sportName`; the page renders a **By sport** section of metric cards
+  and the game log emits a sport group header (`colSpan=12`), so a volleyball match is never a row of zeroed
+  basketball columns.
+
+Verified on staging with a real athlete who has 7 LCLB basketball stat rows plus a volleyball game:
+```
+player cmucf1tic0014l3kker58ggva (Ifeanyi Udeli) · 7 basketball stat row(s)
+volleyball game cmvf2hbjy… · 5 metric row(s): kills=14 aces=3 blocks=2 digs=9 errors=5
+  not stored (not a declared volleyball metric): serves
+GET /players/<id>/passport -> 200 (69,708 bytes)
+PASS: the passport renders both sports with definition-driven stats
+```
+
+**Four failures on the way, all real:**
+1. the club `shortName` collided with an earlier run - and then **both sides of the fixture got the same short
+   name** because both are called "Passport Volley …", so the suffix has to be per side;
+2. the deploy's `git clean` reverted an **uncommitted** script fix, so a "fixed" run failed identically - the
+   fix has to be committed before the deploy that runs it;
+3. `serves` is produced by volleyball's events but is **not a declared PLAYER metric**, so it has no
+   `SportMetricDefinition` and cannot be stored - the script now reports such keys instead of throwing;
+4. the first commit added the "By sport" section but the **game-log grouping silently did not apply** (the
+   replacement string did not match and the write was a no-op). The verification's group-header assertion
+   caught it. Its follow-up assertion then failed too, because a PowerShell edit had double-escaped `\s` - the
+   page was right and the regex was wrong; React also renders `colSpan` camelCase in the HTML, which a
+   case-sensitive `colspan` grep misses.
+
+## 2026-10-19 - Streak v8 / Prompt 4: a B2B console for partner webhooks
+
+A subscription used to be a row someone inserted with SQL: the secret was chosen by whoever ran it, there was
+no rotation, and a failed delivery could only be retried by touching the database.
+
+- **`/settings/data-feed`** (`operations:manage`): subscriptions with their events, active state, masked secret
+  tail and delivered/pending/failed counts; the last five deliveries each with status, attempts, HTTP code and
+  last error; Retry on anything not DELIVERED.
+- **The secret is shown ONCE** right after creation or rotation. No read returns it - the list shows only the
+  last four characters - because a secret that can be read back leaks the day someone screenshots the page.
+- **Roll** produces a new secret and the old one stops verifying immediately (no overlap window).
+- **Retry** resets `attempts` to 0 (the backoff counter is about automatic retries, not how often a human may
+  try), audits the action, and drains immediately so the operator sees the outcome instead of waiting for the
+  timer tick.
+- Every mutation audits, and every WHERE clause carries `organizationId` rather than relying on the session
+  alone.
+
+Verified on staging:
+```
+GET /settings/data-feed -> 200 (26,333 bytes) · "Partner data feed", "Subscriptions"
+subscription cmvezzmsr… created · secret length 54
+cron drain: {"ok":true,"organizations":1,"attempted":1,"delivered":1,...}
+receiver: 1 request(s), 1 verified
+delivery: {"status":"DELIVERED","attempts":1,"lastStatusCode":200}
+secret rolled · new length 54 · old secret replaced
+audit rows for this subscription: 2
+PASS: console operations work end to end (create, deliver, verify, roll)
+```
+The first attempt at this verification used `node -e`, which cannot run top-level await - it failed silently
+and produced an empty subscription id. Rewritten as a script file.
