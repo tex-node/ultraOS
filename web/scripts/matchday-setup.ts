@@ -74,26 +74,37 @@ async function main() {
       const competition = await tx.competition.create({ data: { organizationId: ORG, sportId: sport.id, name: `${TAG} ${slug}`, slug: `matchday-${slug}-${Date.now()}` }, select: { id: true } });
       const division = await tx.division.create({ data: { organizationId: ORG, competitionId: competition.id, name: "Open", slug: "open" }, select: { id: true } });
       const season = await tx.season.create({ data: { organizationId: ORG, competitionId: competition.id, name: `${TAG} ${slug} season`, startDate: new Date(), endDate: new Date(Date.now() + 86400000) }, select: { id: true } });
-      const fixture = await tx.fixture.create({
-        data: { organizationId: ORG, seasonId: season.id, divisionId: division.id, venueId: venue.id, scheduledAt: new Date(), status: "LIVE" },
-        select: { id: true },
-      });
+      // Both sides must exist BEFORE the fixture insert: the table has a CHECK that a fixture has a consistent
+      // pair of parties, so creating a side-less fixture and filling it in afterwards violates it (the first
+      // version of this script did exactly that and rolled back).
+      let homeSeasonClubId: string | null = null;
+      let awaySeasonClubId: string | null = null;
+      let homeEntrantId: string | null = null;
+      let awayEntrantId: string | null = null;
       if (slug === "tennis") {
         // Individual sport: two entrants, no clubs.
-        for (const [index, name] of ["Court One", "Court Two"].entries()) {
+        const entrants = [];
+        for (const name of ["Court One", "Court Two"]) {
           const entrant = await tx.entrant.create({ data: { organizationId: ORG, competitionId: competition.id, seasonId: season.id, divisionId: division.id, type: "INDIVIDUAL", name: `${name} ${randomUUID().slice(0, 3)}` }, select: { id: true } });
-          await tx.fixture.update({ where: { id: fixture.id }, data: index === 0 ? { homeEntrantId: entrant.id } : { awayEntrantId: entrant.id } });
+          entrants.push(entrant.id);
         }
+        homeEntrantId = entrants[0];
+        awayEntrantId = entrants[1];
       } else {
         // Team sport: two clubs.
-        const clubs = [];
-        for (const [index, name] of ["Net Six", "Spike Seven"].entries()) {
+        const seasonClubs = [];
+        for (const name of ["Net Six", "Spike Seven"]) {
           const club = await tx.club.create({ data: { organizationId: ORG, sportId: sport.id, name: `${TAG} ${name}`, shortName: `${name.slice(0, 2)}${randomUUID().slice(0, 3)}`.toUpperCase() }, select: { id: true } });
           const seasonClub = await tx.seasonClub.create({ data: { organizationId: ORG, seasonId: season.id, clubId: club.id, divisionId: division.id }, select: { id: true } });
-          clubs.push(seasonClub.id);
+          seasonClubs.push(seasonClub.id);
         }
-        await tx.fixture.update({ where: { id: fixture.id }, data: { homeSeasonClubId: clubs[0], awaySeasonClubId: clubs[1] } });
+        homeSeasonClubId = seasonClubs[0];
+        awaySeasonClubId = seasonClubs[1];
       }
+      const fixture = await tx.fixture.create({
+        data: { organizationId: ORG, seasonId: season.id, divisionId: division.id, venueId: venue.id, scheduledAt: new Date(), status: "LIVE", homeSeasonClubId, awaySeasonClubId, homeEntrantId, awayEntrantId },
+        select: { id: true },
+      });
       await tx.game.create({ data: { organizationId: ORG, fixtureId: fixture.id, status: "LIVE", currentPeriod: 1, clockSecondsRemaining: 600 } });
       return fixture.id;
     });
