@@ -11,7 +11,7 @@ import {
 } from "@/server/scoring";
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { remainingShotClockSeconds } from "@/lib/game-rules";
-import { queueGameLifecycleFeed } from "@/lib/data-feed/dispatcher";
+import { queueCardIssuedFeed, queueGameLifecycleFeed } from "@/lib/data-feed/dispatcher";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { applyScoringDelivery } from "@/server/scoring/applyScoringDelivery";
 import {
@@ -719,6 +719,31 @@ export async function recordSportEvent(gameId: string, fixtureId: string, formDa
       },
       { actor: { id: session.user.id, organizationId }, source: "LIVE_UI", tx },
     );
+
+    // Partner feed (streak v10, Prompt 4): a card is a match-affecting event, so it is pushed as CARD_ISSUED with
+    // the player and the colour. Football cannot be priced from goals alone - a red card moves the market more.
+    if (input.typeKey === "YELLOW_CARD" || input.typeKey === "RED_CARD") {
+      const created = await tx.gameEvent.findFirst({
+        where: { gameId, typeKey: input.typeKey },
+        orderBy: { sequenceNumber: "desc" },
+        select: { id: true, sequenceNumber: true, period: true, clockSeconds: true },
+      });
+      await queueCardIssuedFeed(tx, {
+        organizationId,
+        gameId,
+        event: {
+          eventId: created?.id ?? gameId,
+          sequenceNumber: created?.sequenceNumber ?? 0,
+          period: created?.period ?? game.currentPeriod,
+          clockSeconds: created?.clockSeconds ?? remainingClockSeconds(game),
+          points: null,
+          eventType: input.typeKey,
+          playerName: player ? `${player.athlete.firstName} ${player.athlete.lastName}`.trim() : null,
+          cardColour: input.typeKey === "RED_CARD" ? "RED" : "YELLOW",
+          side: capturedIsEntrant || !input.seasonClubId ? null : input.seasonClubId === game.fixture.homeSeasonClubId ? "HOME" : "AWAY",
+        },
+      });
+    }
 
     await writeAuditLog(tx, {
       organizationId,

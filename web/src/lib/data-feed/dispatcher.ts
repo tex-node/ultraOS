@@ -55,6 +55,31 @@ export async function queueScoreChangedFeed(
   return { queued: subscriptions.length };
 }
 
+/**
+ * Queue a CARD_ISSUED delivery (streak v10, Prompt 4). Called by the catalog write path for YELLOW_CARD /
+ * RED_CARD, so a partner hears about a sending-off as it happens rather than inferring it from a metrics dump.
+ */
+export async function queueCardIssuedFeed(
+  tx: Prisma.TransactionClient,
+  args: { organizationId: string; gameId: string; event: FeedEventFacts },
+): Promise<QueueResult> {
+  const subscriptions = await tx.dataFeedSubscription.findMany({
+    where: { organizationId: args.organizationId, ...subscribeFilter("CARD_ISSUED") },
+    select: { id: true },
+  });
+  if (subscriptions.length === 0) return { queued: 0 };
+  await tx.dataFeedDelivery.createMany({
+    data: subscriptions.map((subscription) => ({
+      organizationId: args.organizationId,
+      subscriptionId: subscription.id,
+      gameId: args.gameId,
+      eventType: "CARD_ISSUED" as const,
+      eventData: args.event as unknown as Prisma.InputJsonValue,
+    })),
+  });
+  markFeedQueued(args.organizationId);
+  return { queued: subscriptions.length };
+}
 /** Queue a lifecycle event (GAME_STARTED / GAME_FINAL). Call from the status transition, in its transaction. */
 export async function queueGameLifecycleFeed(
   tx: Prisma.TransactionClient,
@@ -146,12 +171,16 @@ export async function drainFeedDeliveries(args: { organizationId: string; limit?
     }
 
     const sentAt = new Date();
+    const rawEvent = delivery.eventData as unknown as FeedEventFacts;
+    // A scorer is named for the partner (streak v10): the enqueue only carried the player id, so the name is
+    // resolved here, once per delivery, rather than joining players on every scoring write.
+    const event = rawEvent.playerId && !rawEvent.playerName ? { ...rawEvent, playerName: await playerNameFor(args.organizationId, rawEvent.playerId) } : rawEvent;
     const payload = buildFeedPayload({
       deliveryId: delivery.id,
       type: delivery.eventType,
       sentAt,
       game: state,
-      event: delivery.eventData as unknown as FeedEventFacts,
+      event,
     });
     const body = JSON.stringify(payload);
     const timestamp = String(Math.floor(sentAt.getTime() / 1000));
@@ -209,6 +238,13 @@ export async function drainFeedDeliveries(args: { organizationId: string; limit?
   }
 
   return result;
+}
+
+async function playerNameFor(organizationId: string, playerId: string): Promise<string | null> {
+  const player = await withOrganizationContext(organizationId, (tx) =>
+    tx.player.findFirst({ where: { id: playerId, organizationId }, select: { athlete: { select: { firstName: true, lastName: true } } } }),
+  );
+  return player ? `${player.athlete.firstName} ${player.athlete.lastName}`.trim() : null;
 }
 
 async function loadFeedGameState(organizationId: string, gameId: string): Promise<FeedGameState | null> {

@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { remainingClockSeconds } from "@/lib/game-clock";
 import { queueScoreChangedFeed } from "@/lib/data-feed/dispatcher";
@@ -85,6 +85,8 @@ export async function createGameEvent(
         clockSeconds,
         points: input.points ?? null,
         eventType: input.eventType,
+        // The drain resolves this to a name when it builds the payload - no join on the scoring path.
+        playerId: input.playerId ?? null,
       },
     });
   }

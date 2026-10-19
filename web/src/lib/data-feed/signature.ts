@@ -6,7 +6,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 // script that pretends to be a sportsbook, and by the API docs' example - so a partner copying the docs
 // verifies exactly what the server signs.
 
-export type DataFeedEventTypeName = "GAME_STARTED" | "SCORE_CHANGED" | "GAME_FINAL";
+export type DataFeedEventTypeName = "GAME_STARTED" | "SCORE_CHANGED" | "GAME_FINAL" | "CARD_ISSUED";
 
 export type FeedEventFacts = {
   eventId: string;
@@ -15,6 +15,14 @@ export type FeedEventFacts = {
   clockSeconds: number;
   points: number | null;
   eventType: string;
+  /** The player involved (scorer, or the player shown a card). Null when the event has no player attribution. */
+  playerName?: string | null;
+  /** Resolved to `playerName` by the drain when only the id is known at enqueue time (no join on the hot path). */
+  playerId?: string | null;
+  /** CARD_ISSUED only: YELLOW or RED. */
+  cardColour?: "YELLOW" | "RED" | null;
+  /** Which side the event belongs to, derived by the producer (the feed does not guess from ids). */
+  side?: "HOME" | "AWAY" | null;
 };
 
 export type FeedGameState = {

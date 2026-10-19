@@ -100,7 +100,9 @@ to drop out-of-order responses.
 
 Partners who need to price quickly should not poll at all. A `DataFeedSubscription` (org-scoped, RLS-protected)
 registers a `webhookUrl`, a shared `secret`, and the event types it wants (`GAME_STARTED`, `SCORE_CHANGED`,
-`GAME_FINAL`). The canonical scoring path writes an outbox row in the same transaction as the `GameEvent`; a
+`GAME_FINAL`, `CARD_ISSUED`). `SCORE_CHANGED` names the scorer when the event has a player; `CARD_ISSUED` carries
+`playerName`, `cardColour` (`YELLOW`/`RED`) and `side` (`HOME`/`AWAY`) - a football match cannot be priced from
+goals alone. The canonical scoring path writes an outbox row in the same transaction as the `GameEvent`; a
 separate drain posts it afterwards, so a slow subscriber can never stall a live game.
 
 Every delivery is signed: `x-ultra-signature: t=<unix seconds>,v1=<hex HMAC-SHA256(secret, "<t>.<raw body>")>`,

@@ -4992,6 +4992,9 @@ enum DataFeedEventType {
   GAME_STARTED
   SCORE_CHANGED
   GAME_FINAL
+  // Streak v10: discipline events carry a player and a card colour. Football needs them (yellow/red), and so does
+  // any sport with cards; a score-only feed cannot price a match with a man sent off.
+  CARD_ISSUED
 }
 
 enum DataFeedDeliveryStatus {

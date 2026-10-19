@@ -205,7 +205,13 @@ retry-after: <seconds>   (only on 429)`}</Code>
         <p>
           Instead of polling, a partner can subscribe to signed webhooks. The league registers a URL and a shared secret per
           subscriber, and chooses the events it wants: <code>GAME_STARTED</code>, <code>SCORE_CHANGED</code>,{" "}
-          <code>GAME_FINAL</code>.
+          <code>GAME_FINAL</code>, <code>CARD_ISSUED</code>.
+        </p>
+        <p>
+          A <code>SCORE_CHANGED</code> payload names the scorer when the event has a player. A{" "}
+          <code>CARD_ISSUED</code> payload carries <code>playerName</code>, <code>cardColour</code> (<code>YELLOW</code>/
+          <code>RED</code>) and <code>side</code> (<code>HOME</code>/<code>AWAY</code>): a football match cannot be priced
+          from goals alone.
         </p>
         <p>Each delivery is an HTTP POST with these headers:</p>
         <Code>{`${FEED_HEADERS.contentType === "application/json" ? "content-type: application/json" : ""}
