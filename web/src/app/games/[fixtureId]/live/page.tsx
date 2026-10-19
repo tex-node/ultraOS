@@ -36,6 +36,9 @@ import {
 } from "@/lib/sports/game-structure";
 import { effectiveRuleSnapshot, isUltraTimeUnderRules } from "@/lib/ultra-scoring-engine";
 import { getSportDefinition } from "@/lib/sports/registry";
+import { matchFormatLabel } from "@/lib/sports/format-label";
+import { parseRuleConfig, type RuleValue } from "@/lib/sports/rule-values";
+import { resolveSeasonRuleValues } from "@/lib/sports/rule-set-store";
 import { resolveScoringModule } from "@/lib/sports/scoring-modules";
 import { replayTennisGamePoints } from "@/lib/sports/tennis-scoring";
 import { isKnockoutFormat, resolveFormat } from "@/lib/sports/format";
@@ -102,6 +105,29 @@ export default async function Live({ params, searchParams }: { params: Promise<{
       : LEGACY_STRUCTURE;
   // Sports with no clock (tennis, table tennis, volleyball) show the period and status only.
   const hasClock = structure.periodSeconds > 0;
+  // The match's own rules for the header (streak v8, Prompt 1): frozen snapshot first, then the season rule
+  // set - the same precedence the scoring engine uses, so the label cannot contradict the engine.
+  const ruleValues: Record<string, RuleValue> = definition
+    ? await withOrganizationContext(session.user.organizationId, async (tx) => {
+        const frozen = snapshot?.ruleValues;
+        if (frozen && typeof frozen === "object") {
+          try {
+            return parseRuleConfig(frozen);
+          } catch {
+            // A malformed snapshot falls through to the season rule set rather than breaking the console.
+          }
+        }
+        if (!fixture) return {};
+        const resolved = await resolveSeasonRuleValues(tx, {
+          organizationId,
+          seasonId: fixture.seasonId,
+          sportId: fixture.division.competition.sport.id,
+          definition,
+        });
+        return resolved.values;
+      })
+    : {};
+  const formatLabel = definition ? matchFormatLabel(definition, ruleValues) : null;
   const remainingSeconds = game ? remainingClockSeconds(game) : structure.periodSeconds;
   const ultraTime = game
     ? isUltraTimeUnderRules(effectiveRuleSnapshot(snapshot), game.status, game.currentPeriod, remainingSeconds)
@@ -211,6 +237,10 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             <TeamScore name={homeSide.label} score={fixture.homeScore} />
             <div>
               <p className="text-xs text-text-3">{game ? periodLabelFor(game.currentPeriod, game.status, structure) : "Q1"}</p>
+              {/* The match's OWN rules, not the sport's defaults (streak v8, Prompt 1): a best-of-3 tennis
+                  fixture used to read "Best of 5" here because the label came from the definition, while the
+                  scoring engine was already playing the season's RuleSet. */}
+              {formatLabel ? <p className="mt-0.5 text-[11px] uppercase tracking-wider text-brand-400">{formatLabel}</p> : null}
               {game ? (
                 hasClock ? (
                   <p className="mt-1 font-mono text-3xl font-bold tabular-nums sm:text-4xl">

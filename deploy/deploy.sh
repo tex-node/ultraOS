@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Git-based deploy for UltraLeagueOS.
 #
 # Clones/fetches the repo on the VPS, checks out a ref, builds a release with npm ci + prisma
@@ -70,6 +70,19 @@ git checkout --force "$REF"
 git clean -fdx
 SHA="$(git rev-parse --short HEAD)"
 echo "[deploy] source at $SHA"
+
+# The vision service's .env is gitignored (it holds DATABASE_URL/storage credentials), so `git clean -fdx`
+# above removes it on every deploy and `docker compose up` in services/vision then fails with "env file not
+# found" - which looks like the vision stack is broken rather than unconfigured. Recreate it from the example
+# when it is missing; never overwrite an existing one, since it may hold hand-edited credentials.
+if [[ -d "$SRC/services/vision" ]]; then
+  if [[ ! -f "$SRC/services/vision/.env" ]]; then
+    cp "$SRC/services/vision/.env.example" "$SRC/services/vision/.env"
+    echo "[deploy] services/vision/.env recreated from .env.example (review its DATABASE_URL before starting the stack)"
+  else
+    echo "[deploy] services/vision/.env kept"
+  fi
+fi
 
 cd "$SRC/web"
 echo "[deploy] npm ci"

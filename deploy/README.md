@@ -43,6 +43,7 @@ placeholder values and comments.
 | `VISION_WORKER_TOKEN` | empty | Bearer token for the worker when it sits behind an authenticating proxy. |
 | `TESSERACT_BINARY` / `OCR_PREPROCESS` | `tesseract` / on | The image-scoresheet OCR path only; `OCR_PREPROCESS=off` disables the upscale/median/sharpen preprocessing. The CSV/XLSX path needs neither. |
 | `MEDIA_LOCAL_ROOT` | `<cwd>/.media` | Where local media (incl. ingested videos) is stored. Staging: `/opt/ultraos-staging/shared/media`. |
+| `VISION_*` (`services/vision/.env`) | from `.env.example` | The vision stack reads its own `.env`, which is **gitignored** and therefore wiped by every deploy's `git clean`. The deploy script now recreates it from `.env.example` when missing (it never overwrites an existing one, because it may hold real credentials). Starting the stack without checking `DATABASE_URL` there will fail with "env file not found" or a connection error, which is configuration, not a broken service. |
 | `CRON_SECRET` | empty (**endpoint disabled**) | Shared secret for `GET /api/cron/drain-feeds`, the partner data-feed drain. **Fails closed:** with it unset the route answers 503 and refuses everything, so a host that forgets the variable cannot expose an endpoint that makes the server POST to partner webhook URLs. Generate with `openssl rand -hex 32` and install the timer with `deploy/ops/install-feed-drain-timer.sh <app-root> <port> <env>`. |
 
 **Check a new host with:** `bash /root/smoke-test.sh` after the first deploy — it fails if a coaching route
