@@ -136,7 +136,7 @@ representative route does not serve. The working branch `ops/reconcile-backup-de
 into `main`** (main was an ancestor: 0 commits behind, 51 ahead on the branch), so production runs the
 default branch.
 
-**Streak v6 note (2026-10-18): the coaching stack gained a partner data feed, not a coach feature.** The
+**Streak v9 note (2026-10-19): the partner API is now commercial.** `/api/v1` requires a developer API key (hashed at rest, tiered quotas, revocation, one documented public exception: `/api/v1/live`), a keyed tournament export serves historical JSON and `scripts/export-league-data.ts` writes a full organization export to disk. All three entrant-side crashes the key work exposed (the public `/live` route, the snapshot model, four API routes) were the same basketball assumption and are now one `apiTeam()` helper.`n`n**Original (streak v6): the coaching stack gained a partner data feed, not a coach feature.** The
 `DataFeedSubscription`/`DataFeedDelivery` outbox, the HMAC-signed webhook dispatcher, the
 `/api/v1/games/[fixtureId]/live-feed` endpoint and the 30-second systemd drain timer are all live in
 production. Two bugs found while hardening it are worth recording against this roadmap because they are the
