@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 
 // P15 I6 (v1): the athlete passport as a READ MODEL. Nothing here writes. It answers one question -
@@ -18,6 +18,9 @@ export type PassportGameRow = {
   gameId: string;
   playedAt: Date;
   seasonName: string;
+  /** The sport this game belongs to (streak v8, Prompt 3): a passport can span basketball and volleyball. */
+  sportSlug: string;
+  sportName: string;
   opponentName: string;
   isHome: boolean;
   minutes: number;
@@ -29,6 +32,13 @@ export type PassportGameRow = {
   turnovers: number;
   fouls: number;
   provenance: Provenance;
+};
+
+export type PassportSportStats = {
+  sportSlug: string;
+  sportName: string;
+  games: number;
+  metrics: { key: string; label: string; value: number; perGame: number }[];
 };
 
 export type PassportTotals = {
@@ -76,6 +86,8 @@ export type AthletePassport = {
   totals: PassportTotals;
   provenance: { source: Provenance; games: number }[];
   training: PassportTrainingRow[];
+  /** Definition-driven stats per sport (streak v8, Prompt 3). Empty until metric rows exist. */
+  sportStats: PassportSportStats[];
   plans: PassportPlanRow[];
 };
 
@@ -134,7 +146,7 @@ export async function loadAthletePassport(tx: Prisma.TransactionClient, organiza
               awaySeasonClubId: true,
               homeSeasonClub: { select: { club: { select: { name: true } } } },
               awaySeasonClub: { select: { club: { select: { name: true } } } },
-              season: { select: { name: true } },
+              season: { select: { name: true, competition: { select: { sport: { select: { slug: true, name: true } } } } } },
             },
           },
         },
@@ -158,6 +170,8 @@ export async function loadAthletePassport(tx: Prisma.TransactionClient, organiza
       gameId: stat.gameId,
       playedAt: fixture.scheduledAt,
       seasonName: fixture.season.name,
+      sportSlug: fixture.season.competition.sport.slug,
+      sportName: fixture.season.competition.sport.name,
       opponentName: "unknown",
       isHome: false,
       minutes: stat.minutesPlayed,
@@ -202,6 +216,67 @@ export async function loadAthletePassport(tx: Prisma.TransactionClient, organiza
     assistsPerGame: games.length ? round1(sum(games.map((g) => g.assists)) / games.length) : 0,
   };
 
+  // Definition-driven stats per sport (streak v8, Prompt 3). PlayerStat rows are basketball-shaped, so a
+  // volleyball player's kills/aces/blocks live only in GameMetricValue. Those rows also give the passport
+  // games that PlayerStat has no row for (a metric-ingested volleyball match), which is why they are merged
+  // into the timeline below instead of being shown as a disconnected panel.
+  const metricRows = await tx.gameMetricValue.findMany({
+    where: { organizationId, playerId },
+    select: {
+      value: true,
+      gameId: true,
+      metricDefinition: { select: { key: true, label: true, sport: { select: { slug: true, name: true } } } },
+      game: { select: { fixture: { select: { scheduledAt: true, season: { select: { name: true } }, homeSeasonClubId: true, awaySeasonClubId: true, homeSeasonClub: { select: { club: { select: { name: true } } } }, awaySeasonClub: { select: { club: { select: { name: true } } } } } } } },
+    },
+  });
+  const sportAggregates = new Map<string, { sportName: string; games: Set<string>; metrics: Map<string, { label: string; value: number }> }>();
+  for (const row of metricRows) {
+    const sport = row.metricDefinition.sport;
+    const aggregate = sportAggregates.get(sport.slug) ?? { sportName: sport.name, games: new Set<string>(), metrics: new Map<string, { label: string; value: number }>() };
+    aggregate.games.add(row.gameId);
+    const metric = aggregate.metrics.get(row.metricDefinition.key) ?? { label: row.metricDefinition.label, value: 0 };
+    metric.value += Number(row.value);
+    aggregate.metrics.set(row.metricDefinition.key, metric);
+    sportAggregates.set(sport.slug, aggregate);
+  }
+  const sportStats: PassportSportStats[] = [...sportAggregates.entries()].map(([sportSlug, aggregate]) => ({
+    sportSlug,
+    sportName: aggregate.sportName,
+    games: aggregate.games.size,
+    metrics: [...aggregate.metrics.entries()]
+      .map(([key, metric]) => ({ key, label: metric.label, value: round1(metric.value), perGame: aggregate.games.size ? round1(metric.value / aggregate.games.size) : 0 }))
+      .sort((a, b) => b.value - a.value),
+  }));
+
+  // A metric-backed game with no PlayerStat row still belongs on the timeline; it is a game the athlete
+  // played, and hiding it would make the passport look like they sat it out.
+  const statGameIds = new Set(games.map((game) => game.gameId));
+  for (const row of metricRows) {
+    if (statGameIds.has(row.gameId)) continue;
+    statGameIds.add(row.gameId);
+    const fixture = row.game.fixture;
+    const isHome = fixture.homeSeasonClubId === player.seasonClubId;
+    games.push({
+      fixtureId: "",
+      gameId: row.gameId,
+      playedAt: fixture.scheduledAt,
+      seasonName: fixture.season.name,
+      sportSlug: row.metricDefinition.sport.slug,
+      sportName: row.metricDefinition.sport.name,
+      opponentName: (isHome ? fixture.awaySeasonClub?.club.name : fixture.homeSeasonClub?.club.name) ?? "Opponent",
+      isHome,
+      minutes: 0,
+      points: 0,
+      rebounds: 0,
+      assists: 0,
+      steals: 0,
+      blocks: 0,
+      turnovers: 0,
+      fouls: 0,
+      provenance: "UNKNOWN",
+    });
+  }
+  games.sort((a, b) => b.playedAt.getTime() - a.playedAt.getTime());
   const provenanceCounts = new Map<Provenance, number>();
   for (const game of games) provenanceCounts.set(game.provenance, (provenanceCounts.get(game.provenance) ?? 0) + 1);
 
@@ -254,6 +329,7 @@ export async function loadAthletePassport(tx: Prisma.TransactionClient, organiza
     seasons: [{ seasonName: player.season.name, clubName: player.seasonClub?.club.name ?? "Unattached", startDate: player.season.startDate }],
     games,
     totals,
+    sportStats,
     provenance: [...provenanceCounts.entries()].map(([source, count]) => ({ source, games: count })),
     training,
     plans: planRows,

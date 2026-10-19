@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
@@ -138,10 +139,45 @@ export default async function PlayerPassportPage({ params }: { params: Promise<{
           </div>
         </section>
 
+        {/* Definition-driven stats per sport (streak v8, Prompt 3). A volleyball player has no PlayerStat
+            rows - their kills/aces/blocks live in GameMetricValue - so before this the passport showed an
+            empty basketball block and looked like the athlete had never played. */}
+        {passport.sportStats.length > 0 ? (
+          <section aria-labelledby="sport-stats-heading" className="mt-6 rounded-lg border border-line bg-ink-800 p-4">
+            <h2 id="sport-stats-heading" className="text-sm font-semibold">By sport</h2>
+            <p className="mt-1 text-xs text-text-3">
+              Columns come from each sport&apos;s own metric definitions; nothing is mapped onto basketball&apos;s
+              boxes.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {passport.sportStats.map((sport) => (
+                <div key={sport.sportSlug} className="rounded border border-line p-3">
+                  <p className="text-sm font-semibold text-text-1">
+                    {sport.sportName} <span className="text-xs font-normal text-text-3">· {sport.games} game{sport.games === 1 ? "" : "s"}</span>
+                  </p>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {sport.metrics.map((metric) => (
+                      <div key={metric.key} className="rounded border border-line-subtle p-2 text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-text-3">{metric.label}</p>
+                        <p className="text-base font-bold tabular-nums text-text-1">{metric.value}</p>
+                        <p className="text-[10px] text-text-3">{metric.perGame}/game</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <section aria-labelledby="games-heading" className="mt-6">
           <h2 id="games-heading" className="text-sm font-semibold">
             Game log
           </h2>
+          <p className="mt-1 text-xs text-text-3">
+            Grouped by sport. Basketball games carry shooting columns; other sports show their metric rows above
+            rather than fake zeroes here.
+          </p>
           {passport.games.length === 0 ? (
             <p className="mt-2 text-sm text-text-2">No recorded games.</p>
           ) : (
