@@ -138,7 +138,7 @@ async function main() {
     if (!/Basketball/i.test(rendered)) problems.push("the basketball sport grouping is missing");
     // The volleyball game must appear on the timeline as its own group, not as a zeroed basketball row. The
     // group header is the row whose single cell spans the table and names the sport.
-    const hasGroupHeader = /colspan="12"[^>]*>\\s*Volleyball/i.test(rendered);
+    const hasGroupHeader = /colspan="12"[^>]*>Volleyball/i.test(rendered);
     if (!hasGroupHeader) {
       const occurrences = (rendered.match(/Volleyball/g) ?? []).length;
       problems.push(`the game log has no Volleyball group header (the word appears ${occurrences} time(s) elsewhere)`);
