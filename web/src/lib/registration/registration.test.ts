@@ -5,6 +5,7 @@ import { normalizeName, normalizeDateOfBirth, participantMatchKey } from "@/lib/
 import { generateRegistrationReference, createWithReference, isReferenceConflict } from "@/lib/registration/reference";
 import { parseSportConfig, SportConfigError, ageInYears } from "@/lib/registration/sport-config";
 import {
+  duplicateReviewNote,
   validateFieldAnswers,
   validateTeamSubmission,
   validateIndividualSubmission,
@@ -143,14 +144,23 @@ test("guardian consent is required for every child", () => {
   assert.ok(result.errors.some((issue) => issue.code === "GUARDIAN_REQUIRED"));
 });
 
-test("duplicates within a submission and across the event are flagged", () => {
+test("a duplicate within one submission is an error; a duplicate already in the event is only a warning", () => {
   const participants = validTeam();
   const clone = { ...child(99, [{ sport: RegistrationSport.VOLLEYBALL }]), fullName: "child number1", dateOfBirth: "2016-01-01" };
   participants.push(clone);
   const existing = new Set([participantMatchKey("Child Number2", "2016-01-01")!]);
   const result = validateTeamSubmission({ teamName: "Falcons", participants }, { config: config(), now: NOW, requireCompleteRosters: true, existingMatchKeys: existing });
   assert.ok(result.errors.some((issue) => issue.code === "DUPLICATE_IN_SUBMISSION"));
-  assert.ok(result.errors.some((issue) => issue.code === "DUPLICATE_IN_EVENT"));
+  assert.ok(!result.errors.some((issue) => issue.code === "DUPLICATE_IN_EVENT"), "cross-entry duplicate must not block submission");
+  assert.ok(result.warnings.some((issue) => issue.code === "DUPLICATE_IN_EVENT"));
+});
+
+test("a team whose only problem is a player already registered elsewhere in the event is still valid, with a warning", () => {
+  const participants = validTeam();
+  const existing = new Set([participantMatchKey("Child Number2", "2016-01-01")!]);
+  const result = validateTeamSubmission({ teamName: "Falcons", participants }, { config: config(), now: NOW, requireCompleteRosters: true, existingMatchKeys: existing });
+  assert.equal(result.valid, true, JSON.stringify(result.errors));
+  assert.equal(result.warnings.filter((issue) => issue.code === "DUPLICATE_IN_EVENT").length, 1);
 });
 
 test("flag race substitutes are rejected when disallowed", () => {
@@ -231,12 +241,25 @@ test("individual registration rejects a sport not opened to individuals", () => 
   assert.ok(result.errors.some((issue) => issue.code === "INDIVIDUAL_NOT_ALLOWED"));
 });
 
-test("individual registration flags a duplicate already registered in the event", () => {
+test("individual registration warns (does not block) on a duplicate already registered in the event", () => {
   const cfg = config({ individualSports: [RegistrationSport.FLAG_RACE] });
   const existing = new Set([participantMatchKey("Ada Obi", "2016-01-01")!]);
   const result = validateIndividualSubmission(
     { fullName: "Ada Obi", dateOfBirth: "2016-01-01", gender: "FEMALE", sport: RegistrationSport.FLAG_RACE },
     { config: cfg, now: NOW, requireCompleteRosters: false, existingMatchKeys: existing },
   );
-  assert.ok(result.errors.some((issue) => issue.code === "DUPLICATE_IN_EVENT"));
+  assert.equal(result.valid, true, JSON.stringify(result.errors));
+  assert.ok(result.warnings.some((issue) => issue.code === "DUPLICATE_IN_EVENT"));
+});
+
+test("duplicateReviewNote names the flagged people for team and individual warnings, and is null otherwise", () => {
+  const people = [{ clientId: "a1", fullName: "Ada Obi " }, { clientId: "b2", fullName: "Bola Eze" }];
+  const team = [
+    { path: "participants.b2.fullName", code: "DUPLICATE_IN_EVENT", message: "x" },
+    { path: "participants.a1.guardianName", code: "GUARDIAN_REQUIRED", message: "y" },
+  ];
+  assert.equal(duplicateReviewNote(team, people), "Auto-flag: possible duplicate of an existing registration in this event (Bola Eze). Check before approving.");
+  assert.match(duplicateReviewNote([{ path: "fullName", code: "DUPLICATE_IN_EVENT", message: "x" }], [people[0]])!, /\(Ada Obi\)/);
+  assert.equal(duplicateReviewNote([{ path: "participants.a1.guardianName", code: "GUARDIAN_REQUIRED", message: "y" }], people), null);
+  assert.equal(duplicateReviewNote([], people), null);
 });

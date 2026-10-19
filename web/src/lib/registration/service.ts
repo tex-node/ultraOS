@@ -6,7 +6,7 @@ import { assertSameOrganization } from "@/lib/authorization";
 import { participantMatchKey } from "./normalization";
 import { createWithReference } from "./reference";
 import { parseSportConfig, type SportConfig } from "./sport-config";
-import { validateTeamSubmission, validateIndividualSubmission, type ParticipantInput, type TeamSubmissionInput, type ValidationIssue, type ValidationResult } from "./validation";
+import { duplicateReviewNote, validateTeamSubmission, validateIndividualSubmission, type ParticipantInput, type TeamSubmissionInput, type ValidationIssue, type ValidationResult } from "./validation";
 
 export class RegistrationNotFoundError extends Error {
   constructor() {
@@ -116,6 +116,9 @@ export async function createTeamRegistration(input: CreateRegistrationInput) {
       result = validateTeamSubmission(input.team, { config, requireCompleteRosters, existingMatchKeys });
     }
     if (!result.valid) throw new RegistrationValidationError(result.errors);
+    // Non-blocking duplicate flag: surfaced to the reviewer via reviewNotes (shown prefilled on the
+    // admin review page), since validation warnings are otherwise not persisted.
+    const duplicateFlag = duplicateReviewNote(result.warnings, input.team.participants);
 
     const now = new Date();
     const status = input.mode === "DRAFT" ? RegistrationSubmissionStatus.DRAFT : RegistrationSubmissionStatus.PENDING;
@@ -133,6 +136,7 @@ export async function createTeamRegistration(input: CreateRegistrationInput) {
           teamClubOrSchool: input.team.teamClubOrSchool?.trim() || null,
           teamCategory: input.team.teamCategory?.trim() || null,
           answers: (input.submissionAnswers ?? {}) as Prisma.InputJsonValue,
+          reviewNotes: duplicateFlag,
           submittedAt: input.mode === "DRAFT" ? null : now,
         },
       }),

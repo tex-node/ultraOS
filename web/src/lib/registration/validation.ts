@@ -218,7 +218,10 @@ export function validateTeamSubmission(input: TeamSubmissionInput, options: Vali
       const prior = seenInSubmission.get(matchKey);
       if (prior) errors.push({ path: `${base}.fullName`, code: "DUPLICATE_IN_SUBMISSION", message: `Possible duplicate of participant "${prior}" in this submission.` });
       else seenInSubmission.set(matchKey, participant.fullName);
-      if (options.existingMatchKeys?.has(matchKey)) errors.push({ path: `${base}.fullName`, code: "DUPLICATE_IN_EVENT", message: "A participant with this name and date of birth is already registered to another team in this event. Manual review required." });
+      // A warning, not an error: the same child can legitimately appear in a team and in an individual
+      // entry, and a hard block just stops a coach from submitting. The service records it in the
+      // submission's review notes so an admin checks it before approving.
+      if (options.existingMatchKeys?.has(matchKey)) warnings.push({ path: `${base}.fullName`, code: "DUPLICATE_IN_EVENT", message: "A participant with this name and date of birth is already registered in this event. Flagged for manual review." });
     }
   }
 
@@ -285,8 +288,27 @@ export function validateIndividualSubmission(
 
   const matchKey = participantMatchKey(input.fullName, input.dateOfBirth);
   if (matchKey && options.existingMatchKeys?.has(matchKey)) {
-    errors.push({ path: "fullName", code: "DUPLICATE_IN_EVENT", message: "An athlete with this name and date of birth is already registered in this event. Manual review required." });
+    warnings.push({ path: "fullName", code: "DUPLICATE_IN_EVENT", message: "An athlete with this name and date of birth is already registered in this event. Flagged for manual review." });
   }
 
   return { valid: errors.length === 0, errors, warnings };
+}
+
+// Review note for a submission that passed validation but matched someone already registered in the
+// event (a DUPLICATE_IN_EVENT warning). Null when there is nothing to flag. Individual submissions
+// report the warning at path "fullName"; team submissions at "participants.<clientId>.fullName".
+export function duplicateReviewNote(
+  warnings: ValidationIssue[],
+  participants: { clientId: string; fullName: string }[],
+): string | null {
+  const names = new Set<string>();
+  for (const warning of warnings) {
+    if (warning.code !== "DUPLICATE_IN_EVENT") continue;
+    const match = /^participants\.([^.]+)\.fullName$/.exec(warning.path);
+    const person = match ? participants.find((participant) => participant.clientId === match[1]) : participants[0];
+    const name = person?.fullName.trim();
+    if (name) names.add(name);
+  }
+  if (names.size === 0) return null;
+  return `Auto-flag: possible duplicate of an existing registration in this event (${[...names].join(", ")}). Check before approving.`;
 }
