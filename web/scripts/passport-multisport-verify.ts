@@ -27,6 +27,9 @@ if (!ORGANIZATION) {
 }
 const ORG: string = ORGANIZATION;
 const TAG = `PASSPORT MULTISPORT ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
+// Club names AND short names are unique per organization, so a run suffix keeps repeated runs from colliding
+// (the first attempt died on shortName = "PASSP").
+const RUN = Math.random().toString(36).slice(2, 6).toUpperCase();
 
 async function main() {
   // 1. an athlete who already has basketball stats (so the passport's basketball half is real data).
@@ -58,7 +61,7 @@ async function main() {
     const venue = await tx.venue.findFirstOrThrow({ where: { organizationId: ORG }, select: { id: true } });
     const sides = [];
     for (const name of ["Passport Volley A", "Passport Volley B"]) {
-      const club = await tx.club.create({ data: { organizationId: ORG, sportId: sport.id, name: `${name} ${Date.now()}`, shortName: name.slice(0, 5).toUpperCase() }, select: { id: true } });
+      const club = await tx.club.create({ data: { organizationId: ORG, sportId: sport.id, name: `${name} ${RUN}`, shortName: `${name.slice(0, 2)}${RUN}`.toUpperCase() }, select: { id: true } });
       const seasonClub = await tx.seasonClub.create({ data: { organizationId: ORG, seasonId: season.id, clubId: club.id, divisionId: division.id }, select: { id: true } });
       sides.push(seasonClub.id);
     }
