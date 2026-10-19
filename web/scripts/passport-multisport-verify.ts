@@ -86,9 +86,15 @@ async function main() {
     const game = await tx.game.create({ data: { organizationId: ORG, fixtureId: fixture.id, status: "FINAL", currentPeriod: 4, clockSecondsRemaining: 0, endedAt: new Date() }, select: { id: true } });
     const values: Record<string, number> = { kills: 14, aces: 3, blocks: 2, digs: 9, errors: 5, serves: 18 };
     let written = 0;
+    const missing: string[] = [];
     for (const [key, value] of Object.entries(values)) {
       const metric = byKey.get(key);
-      if (!metric) throw new Error(`no volleyball metric definition for "${key}" — run scripts/sport-metric-definitions-sync.ts --apply`);
+      // A metric the sport definition does not declare cannot be stored (GameMetricValue needs a definition id).
+      // Skipped and reported rather than invented - the catalog is the authority.
+      if (!metric) {
+        missing.push(key);
+        continue;
+      }
       await tx.gameMetricValue.create({
         data: {
           organizationId: ORG,
@@ -104,9 +110,10 @@ async function main() {
       });
       written += 1;
     }
-    return { competitionId: competition.id, divisionId: division.id, seasonId: season.id, fixtureId: fixture.id, gameId: game.id, written, values };
+    return { competitionId: competition.id, divisionId: division.id, seasonId: season.id, fixtureId: fixture.id, gameId: game.id, written, values, missing };
   });
-  console.log(`volleyball game ${setup.gameId} · ${setup.written} metric row(s): ${Object.entries(setup.values).map(([key, value]) => `${key}=${value}`).join(" ")}`);
+  console.log(`volleyball game ${setup.gameId} · ${setup.written} metric row(s): ${Object.values(setup.values).length > 0 ? Object.entries(setup.values).filter(([key]) => !setup.missing.includes(key)).map(([key, value]) => `${key}=${value}`).join(" ") : "none"}`);
+  if (setup.missing.length > 0) console.log(`  not stored (not a declared volleyball metric): ${setup.missing.join(", ")}`);
 
   // 3. the passport page itself.
   let rendered = "";
