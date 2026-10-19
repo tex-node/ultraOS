@@ -17,6 +17,14 @@ services:
     depends_on:
       - vision-redis
     restart: unless-stopped
+    # Only the API serves HTTP, so only the API gets a healthcheck. The worker and beat are alive or not -
+    # their liveness is the container state plus their logs, not a port probe.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
   vision-worker:
     build:

@@ -21,7 +21,7 @@ COPY app ./app
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -fsS http://localhost:8000/health || exit 1
-
+# The healthcheck lives in docker-compose.yml, on the API service only. In the image it ran in EVERY
+# container built from it - including the Celery worker and beat, which serve no HTTP - so they reported
+# "unhealthy" while running perfectly and `docker compose up --wait` could never settle.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

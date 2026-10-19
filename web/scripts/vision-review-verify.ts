@@ -21,13 +21,15 @@ if (!ORGANIZATION || !ACTOR) {
   process.exit(1);
 }
 const ORG: string = ORGANIZATION;
+const ACTOR_ID: string = ACTOR;
 
 async function main() {
   const observations = await prisma.visionObservation.findMany({
-    where: { organizationId: ORG, ...(FIXTURE ? { fixtureId: FIXTURE } : {}) },
+    // VisionObservation hangs off the video, not the fixture (a video belongs to a fixture).
+    where: { organizationId: ORG, ...(FIXTURE ? { gameVideo: { fixtureId: FIXTURE } } : {}) },
     orderBy: { createdAt: "desc" },
     take: 2,
-    select: { id: true, status: true, fixtureId: true, eventType: true },
+    select: { id: true, status: true, observationType: true, gameVideo: { select: { fixtureId: true } } },
   });
   if (observations.length < 2) {
     console.log(`FAIL: need two mock observations to confirm and reject, found ${observations.length}`);
@@ -35,18 +37,22 @@ async function main() {
     return;
   }
   const [toConfirm, toReject] = observations;
-  console.log(`confirming ${toConfirm.id} (${toConfirm.eventType}, was ${toConfirm.status})`);
-  const confirmed = await reviewObservation(ORG, toConfirm.id, "CONFIRMED", ACTOR, "verification: mock observation confirmed");
-  console.log(`rejecting  ${toReject.id} (${toReject.eventType}, was ${toReject.status})`);
-  const rejected = await reviewObservation(ORG, toReject.id, "REJECTED", ACTOR, "verification: mock observation rejected");
+  // A delta, not an absolute: the mock-run script already reviews its own observations, so the table has audit
+  // rows before this script touches anything (the absolute count made the first run look like a failure).
+  const auditsBefore = await prisma.auditLog.count({ where: { organizationId: ORG, action: "VISION_OBSERVATION_REVIEWED" } });
+  console.log(`confirming ${toConfirm.id} (${toConfirm.observationType}, was ${toConfirm.status})`);
+  const confirmed = await reviewObservation(ORG, toConfirm.id, "CONFIRMED", ACTOR_ID, "verification: mock observation confirmed");
+  console.log(`rejecting  ${toReject.id} (${toReject.observationType}, was ${toReject.status})`);
+  const rejected = await reviewObservation(ORG, toReject.id, "REJECTED", ACTOR_ID, "verification: mock observation rejected");
 
   const audits = await prisma.auditLog.count({ where: { organizationId: ORG, action: "VISION_OBSERVATION_REVIEWED", entityId: { in: [toConfirm.id, toReject.id] } } });
-  console.log(`statuses now: ${confirmed.status} / ${rejected.status} · audit rows: ${audits}`);
+  const auditsAfter = await prisma.auditLog.count({ where: { organizationId: ORG, action: "VISION_OBSERVATION_REVIEWED" } });
+  console.log(`statuses now: ${confirmed.status} / ${rejected.status} · audit rows for these two: ${audits} · new overall: ${auditsAfter - auditsBefore}`);
 
   const problems: string[] = [];
   if (confirmed.status !== "CONFIRMED") problems.push(`confirmed status is ${confirmed.status}`);
   if (rejected.status !== "REJECTED") problems.push(`rejected status is ${rejected.status}`);
-  if (audits !== 2) problems.push(`${audits} audit row(s), expected 2`);
+  if (auditsAfter - auditsBefore !== 2) problems.push(`${auditsAfter - auditsBefore} new audit row(s), expected 2`);
   console.log("");
   console.log(problems.length === 0 ? "PASS: confirm and reject both work through the page's own service" : `FAIL: ${problems.join("; ")}`);
   if (problems.length > 0) process.exitCode = 1;
