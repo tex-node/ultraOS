@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withPublicApiV1 } from "@/lib/api-v1/respond";
 import { apiError } from "@/lib/api-v1/errors";
 import { loadPublicGame } from "@/lib/api-v1/game-loader";
+import { apiTeam } from "@/lib/api-v1/teams";
 import { resolvePlayerNames } from "@/lib/api-v1/identifiers";
 import type { BoxScoreV1 } from "@/lib/api-v1/contracts";
 import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
@@ -19,8 +20,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
     const organization = await resolveDefaultPublicOrganization();
     const names = await withOrganizationContext(organization.id, (tx) => resolvePlayerNames(model.players.map((p) => p.playerId), tx));
     const clubFor = (seasonClubId: string) => seasonClubId === model.teams.home.seasonClubId
-      ? { publicId: fixture.homeSeasonClub!.club.shortName.toLowerCase(), name: fixture.homeSeasonClub!.club.name, shortName: fixture.homeSeasonClub!.club.shortName }
-      : { publicId: fixture.awaySeasonClub!.club.shortName.toLowerCase(), name: fixture.awaySeasonClub!.club.name, shortName: fixture.awaySeasonClub!.club.shortName };
+      ? apiTeam({ seasonClub: fixture.homeSeasonClub, entrant: fixture.homeEntrant })
+      : apiTeam({ seasonClub: fixture.awaySeasonClub, entrant: fixture.awayEntrant });
 
     const generatedAt = new Date().toISOString();
     const boxScore: BoxScoreV1 = {

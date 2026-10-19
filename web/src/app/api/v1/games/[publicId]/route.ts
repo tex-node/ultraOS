@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withPublicApiV1 } from "@/lib/api-v1/respond";
 import { apiError } from "@/lib/api-v1/errors";
 import { loadPublicGame } from "@/lib/api-v1/game-loader";
+import { apiTeam } from "@/lib/api-v1/teams";
 import { honestClock, type LiveGameV1 } from "@/lib/api-v1/contracts";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +19,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
     const generatedAt = new Date().toISOString();
     const game: LiveGameV1 = {
       fixtureId: fixture.id, gameId: fixture.game!.id, status: model.status,
-      home: { publicId: fixture.homeSeasonClub!.club.shortName.toLowerCase(), name: fixture.homeSeasonClub!.club.name, shortName: fixture.homeSeasonClub!.club.shortName },
-      away: { publicId: fixture.awaySeasonClub!.club.shortName.toLowerCase(), name: fixture.awaySeasonClub!.club.name, shortName: fixture.awaySeasonClub!.club.shortName },
+      home: apiTeam({ seasonClub: fixture.homeSeasonClub, entrant: fixture.homeEntrant }),
+      away: apiTeam({ seasonClub: fixture.awaySeasonClub, entrant: fixture.awayEntrant }),
       score: model.score, period: model.period, periodLabel: model.periodLabel,
       clock: honestClock(model.status, model.clock), shotClock: honestClock(model.status, model.shotClock),
       ultraTime: {

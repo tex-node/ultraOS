@@ -10,8 +10,12 @@ import type { LivePresentationModel } from "@/lib/live-presentation-model";
 
 export type PublicGameFixture = {
   id: string;
-  homeSeasonClub: { club: { name: string; shortName: string } };
-  awaySeasonClub: { club: { name: string; shortName: string } };
+  // Either a club (team sports) or an entrant (individual sports). Nullable on purpose: the API used to assume a
+  // club and crashed with "Cannot read properties of null (reading club)" on a tennis fixture (streak v9).
+  homeSeasonClub: { club: { name: string; shortName: string } } | null;
+  awaySeasonClub: { club: { name: string; shortName: string } } | null;
+  homeEntrant: { id: string; name: string } | null;
+  awayEntrant: { id: string; name: string } | null;
   game: { id: string } | null;
 };
 
@@ -20,10 +24,16 @@ export async function loadPublicGame(fixturePublicId: string): Promise<{ fixture
   return withOrganizationContext(organization.id, async (tx) => {
     const fixture = await tx.fixture.findUnique({
       where: { id: fixturePublicId },
-      include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
+      include: {
+        homeSeasonClub: { include: { club: true } },
+        awaySeasonClub: { include: { club: true } },
+        homeEntrant: { select: { id: true, name: true } },
+        awayEntrant: { select: { id: true, name: true } },
+        game: true,
+      },
     });
     if (!fixture || !isProductionPresentationFixture(fixture) || !fixture.game) return null;
     const model = await buildLivePresentationModelForGame(fixture.game.id, tx);
-    return { fixture: { ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }, model };
+    return { fixture, model };
   });
 }
