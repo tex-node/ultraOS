@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadSeasonGameCores } from "@/lib/analytics/game-analytics";
 import { formatPercent } from "@/lib/analytics/normalization";
+import { GAME_DATA_CAPABILITY_LEVELS, getGameAnalyticsCapability, type GameAnalyticsCapability } from "@/lib/game-data-capability";
 import { SAMPLE_CONFIDENCE_LABEL } from "@/lib/analytics/qualification";
 import { computeTeamRanks, topRankBadges } from "@/lib/analytics/rank-context";
 import { teamBelowAverage, teamStatisticalIdentity, teamStrengths } from "@/lib/analytics/team-statistical-identity";
@@ -160,7 +161,15 @@ async function TeamDnaSection({
   const identity = teamStatisticalIdentity(dna);
   const strengths = teamStrengths(dna);
   const belowAverage = teamBelowAverage(dna);
-  const dnaCard = buildTeamDnaCard(dna, teamName, logoUrl, "BOX_SCORE_ONLY");
+  // The card's provenance badge was hardcoded to BOX_SCORE_ONLY (streak v9, Prompt 4): a club whose season was
+  // captured at a higher capability was still labelled as a box score. Use the HIGHEST capability actually present
+  // in the games, which is the honest description of what the DNA was computed from.
+  const cardCapability: GameAnalyticsCapability = [...games]
+    .map((game) => game.dataCapability)
+    .sort((a, b) => GAME_DATA_CAPABILITY_LEVELS.indexOf(a) - GAME_DATA_CAPABILITY_LEVELS.indexOf(b))
+    .map((capability) => getGameAnalyticsCapability(capability))
+    .at(-1) ?? "BOX_SCORE_ONLY";
+  const dnaCard = buildTeamDnaCard(dna, teamName, logoUrl, cardCapability);
 
   const byKey = (key: (typeof dna.dimensions)[number]["key"]) => dna.dimensions.find((d) => d.key === key)?.teamValue ?? "—";
   const summary = [
