@@ -136,9 +136,19 @@ async function main() {
     if (!/Kills/i.test(rendered)) problems.push("the Kills metric label is missing");
     if (!/Aces/i.test(rendered)) problems.push("the Aces metric label is missing");
     if (!/Basketball/i.test(rendered)) problems.push("the basketball sport grouping is missing");
-    // The volleyball game must appear on the timeline as its own group, not as a zeroed basketball row.
-    const volleyballGroups = rendered.match(/uppercase tracking-wider text-brand-400[^>]*>Volleyball/g)?.length ?? 0;
-    if (volleyballGroups === 0) problems.push("the game log has no Volleyball group header");
+    // The volleyball game must appear on the timeline as its own group, not as a zeroed basketball row. The
+    // group header is the row whose single cell spans the table and names the sport.
+    const hasGroupHeader = /colspan="12"[^>]*>\\s*Volleyball/i.test(rendered);
+    if (!hasGroupHeader) {
+      const occurrences = (rendered.match(/Volleyball/g) ?? []).length;
+      problems.push(`the game log has no Volleyball group header (the word appears ${occurrences} time(s) elsewhere)`);
+    }
+    try {
+      const { writeFileSync } = await import("node:fs");
+      writeFileSync("/tmp/passport-render.html", rendered);
+    } catch {
+      /* diagnostics only */
+    }
   }
 
   console.log("");
