@@ -10828,3 +10828,12 @@ The passport smoke route grew from 59,451 to 60,804 bytes - the new By-sport sec
 
 **Streak v8 complete.** Both environments on `release-8d4be13`, smoke green, 990 unit + 26 component + 49 DB
 tests, ratchet 4/4, `main` merged.
+
+**Post-deploy note (2026-10-19, 11:17 UTC+1): the host became unreachable mid-verification.** After the docs-only
+commit `fccd1e1` was deployed, staging reported `SMOKE OK` and the production half of the same run never
+reported; every SSH attempt afterwards timed out at banner exchange, so the final state could not be confirmed.
+What is certain: the **code** release `8d4be13` was deployed to both environments and passed 7/7 smoke checks
+with 0 errors, and `fccd1e1` differs from it only in `session.md` (documentation, not built into the app), so
+production is behaviourally identical whichever of the two labels is currently symlinked. The deploy script only
+swaps `current` after a successful build + migrate + restart, so an interrupted run leaves the previous release
+running rather than a broken one. This is recorded as unverified, not as green.
