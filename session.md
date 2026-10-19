@@ -11312,3 +11312,44 @@ the console:
 ```
 The refresher used to return `null`, which made "is the poll loop running?" unverifiable — it now renders a hidden
 `data-embed-refresher` marker so the check proves the component mounted instead of inferring it.
+
+## 2026-10-20 - Streak v11 / Prompt 5: final sync - the sport set is complete
+
+**Roadmaps**: `MULTI_SPORT_ARCHITECTURE.md` now carries Baseball (implemented) and Flag Race (registered, explicitly
+not scorable) in the standings/capability table and credits Cricket as verified; `MULTI_SPORT_ROADMAP.md` records
+the generic scorebug and the embed widget as the distribution half of the multi-sport work;
+`COACH_INTELLIGENCE_ROADMAP.md` records the same in one paragraph.
+
+**Suites**
+```
+npm test               996 tests, 995 pass, 0 fail  (1 pre-existing skip)
+npm run test:component  26 tests, 26 pass
+npm run test:db         49 tests, 49 pass (339 s, serialized, scratch clone)
+canonical-write ratchet 4 suppressions (ceiling 4)
+```
+
+**Deploys**
+| environment | release | migration | smoke |
+| --- | --- | --- | --- |
+| staging | `1a4e2ed` | none pending (no schema change this streak) | 7/7 PASS, 0 errors |
+| production | `release-1a4e2ed` | none pending, behind a verified backup `…pre_v11_20261019T235025Z.dump` (sha256 `96f8583a…`) | 7/7 PASS, 0 errors |
+
+**Production contract, verified on a real fixture**
+```
+GET /api/v1/live                                  -> 200
+GET /embed/live/neon-ultra/<fixture>              -> 200 (12,772 bytes) · "American Football · LIVE · ZZAFA 0 – 0"
+GET /broadcast/game/<id>/generic-scorebug         -> 200 (12,653 bytes) · "American Football · LIVE · 15:00 · Q 1"
+```
+
+**A false alarm worth recording.** My first production check used "the most recently updated game" and both routes
+404'd. That looked like a broken deploy; it was the **presentation-scope gate** doing its job — `isProductionPresentationFixture`
+requires `recordOrigin = PRODUCTION`, and the newest game was a test fixture outside that scope. The second attempt
+with a production-scope fixture returned 200 for both. The lesson is the v10 one repeated: a 404 on a public route
+needs the fixture's scope checked before the route is blamed.
+
+**Known gaps carried forward**
+- Flag race is registered but not scorable (no timing-result import). Documented in the architecture table and
+  asserted in a test rather than papered over.
+- Cricket's chase/innings rules are verified by unit tests, not by a full match on staging this streak.
+- The generic scorebug reads `Fixture.homeScore/awayScore`, so it is only as current as the canonical write path —
+  it does not recompute from events.
