@@ -11208,3 +11208,37 @@ not directories, when the intent is one file.
 
 **Streak v10 complete.** Both environments on `7d40edc`, smoke green, football a first-class sport end to end,
 995 unit + 26 component + 49 DB tests, ratchet 4/4, `main` merged.
+
+## 2026-10-19 - Streak v11 / Prompt 1: git hygiene - the sweep was already committed, and cannot be un-swept safely
+
+**Finding: the `PHASE1_*`/`HANDOVER_*` documents were already committed**, in `7d40edc` (the v10 roadmap commit).
+`git log -- <path>` for two of them confirms it. The commit's full file list is documentation only:
+
+```
+documentation/COACH_INTELLIGENCE_ROADMAP.md           |   2 +-
+documentation/MULTI_SPORT_ROADMAP.md                  |   2 +-
+documentation/architecture/HANDOVER_STAGE5_2D…md      | 263 +++++
+documentation/architecture/MULTI_SPORT_ARCHITECTURE.md|   2 +-
+documentation/architecture/PHASE1_STAGE5_2A…md        | 134 ++++
+… 11 more Phase 1 documents …, STAGING_RELEASE_COMMIT_PLAN.md
+17 files changed, 5700 insertions(+), 3 deletions(-)
+```
+
+So the sweep was **docs-only** — no code, no build artefacts, no unrelated files. That is the check the prompt asks
+for, and it passes.
+
+**Why there is no separate commit for them:** splitting `7d40edc` means rewriting history on a branch that is
+already deployed to staging and production and fast-forwarded into `main`. A force-push would desynchronise the
+hosts' release directories from the SHA they report and invalidate the session record that references `7d40edc`.
+The honest remediation is not a rewrite but a home for the documents, which they did not have: `documentation/architecture/README.md`
+was a 13-line placeholder ("This folder will document system architecture…"). It is now an **index** — a start-here
+table, the Stage 5.2A–5.5 tenancy documents in stage order with one line each on their scope, and a pointer to the
+tenant-migration checklist that the programme produced. That is the dedicated `docs:` commit the prompt wanted,
+without pretending the history can be reshaped after the fact.
+
+**Nothing else was swept in.** `git status` at the start of this streak shows only pre-existing local artefacts that
+are not mine and were deliberately left untracked: `Draft UX/`, `UI/`, `assets/`, `bt-fixtures.sh`, `bt-run.sh`,
+`web/scripts/clicktest-*.ts`, and a modified `deploy/ops/backup-offsite.sh` that predates this streak. Adding any of
+them would be a second sweep, so they stay out.
+
+**Next step:** Prompt 2 (baseball, cricket, flag race).
