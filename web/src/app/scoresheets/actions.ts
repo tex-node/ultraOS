@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -11,6 +11,10 @@ import { createOcrProvider } from "@/lib/ocr/tesseract";
 import { buildChecksumReport, type ChecksumReport } from "@/lib/scoresheet/checksums";
 import { correctedTeamToTable } from "@/lib/scoresheet/corrected";
 import { csvToCorrected, parseBoxScoreCsv } from "@/lib/scoresheet/csv-extract";
+import { parseVolleyballCsv } from "@/lib/scoresheet/volleyball-extract";
+import { metricChecksums, type MetricScoresheet } from "@/lib/scoresheet/metric-scoresheet";
+import { getSportDefinition } from "@/lib/sports/registry";
+import { approveMetricScoresheet, createMetricScoresheetImport, ingestMetricScoresheet } from "@/server/scoresheet/metric-imports";
 import { looksLikeXlsx, parseBoxScoreXlsx } from "@/lib/scoresheet/excel-extract";
 import {
   approveScoresheetImport,
@@ -243,4 +247,115 @@ export async function uploadCsvScoresheet(formData: FormData): Promise<void> {
   );
   revalidatePath("/scoresheets");
   redirect(`/scoresheets/${created.id}/review`);
+}
+
+// ---- multi-sport review (streak v7, Prompt 2) ------------------------------------------------------
+//
+// A second upload path for sheets whose columns come from the sport definition instead of basketball's fixed
+// shooting columns. The basketball path above is untouched: this one is chosen by the operator's explicit
+// sport selection, and the review page branches on the extraction's `sportSlug`.
+
+export type MetricReviewState = {
+  error?: string;
+  approved?: boolean;
+  rejected?: boolean;
+  ingested?: { written: number; skipped: number };
+  report?: import("@/lib/scoresheet/metric-scoresheet").MetricChecksumReport;
+};
+
+const metricPlayerSchema = z.object({
+  name: z.string().min(1),
+  jersey: z.string().nullable().optional(),
+  metrics: z.record(z.string(), z.number().int().min(0).max(500)),
+});
+
+const metricSheetSchema = z.object({
+  sportSlug: z.string().min(1),
+  teams: z.array(z.object({ clubName: z.string().min(1), players: z.array(metricPlayerSchema) })).length(2),
+  warnings: z.array(z.string()).default([]),
+});
+
+export async function uploadSportScoresheet(formData: FormData): Promise<void> {
+  const { session, organizationId } = await requirePermissionWithOrganization("data:import");
+  const file = formData.get("file");
+  const sourceLabel = String(formData.get("sourceLabel") ?? "").trim();
+  const sportSlug = String(formData.get("sport") ?? "volleyball");
+  if (!(file instanceof File) || file.size === 0) redirect("/scoresheets?error=Choose+a+CSV+file.");
+  if (!sourceLabel) redirect("/scoresheets?error=Add+a+label+so+the+sheet+is+identifiable+later.");
+  if (sportSlug !== "volleyball") redirect("/scoresheets?error=Only+volleyball+has+a+metric+template+today.");
+
+  const text = new TextDecoder().decode(new Uint8Array(await file.arrayBuffer()));
+  const parsed = parseVolleyballCsv(text);
+  if (parsed.teams.length !== 2) {
+    redirect(`/scoresheets?error=${encodeURIComponent(`A volleyball sheet needs two "## TEAM" sections; found ${parsed.teams.length}.`)}`);
+  }
+  const sheet: MetricScoresheet = {
+    sportSlug: "volleyball",
+    warnings: parsed.warnings,
+    teams: parsed.teams.map((team) => ({
+      clubName: team.clubName,
+      players: team.players.map((player) => ({ name: player.name, jersey: player.jersey, metrics: player.metrics, warnings: player.warnings })),
+    })),
+  };
+
+  const created = await withOrganizationContext(organizationId, (tx) =>
+    createMetricScoresheetImport(tx, { organizationId, userId: session.user.id, sourceLabel, sheet, format: "CSV", sourceInfo: { sourceFile: file.name } }),
+  );
+  revalidatePath("/scoresheets");
+  redirect(`/scoresheets/${created.id}/review`);
+}
+
+export async function reviewMetricScoresheet(importId: string, _state: MetricReviewState, formData: FormData): Promise<MetricReviewState> {
+  const { session, organizationId } = await requirePermissionWithOrganization("data:import");
+  const intent = String(formData.get("intent") ?? "check");
+
+  if (intent === "reject") {
+    const reason = String(formData.get("rejectReason") ?? "").trim();
+    if (reason.length < 5) return { error: "Give a reason of at least 5 characters so the rejection is traceable." };
+    await withOrganizationContext(organizationId, (tx) => rejectScoresheetImport(tx, { organizationId, importId, userId: session.user.id, reason }));
+    revalidatePath(`/scoresheets/${importId}/review`);
+    revalidatePath("/scoresheets");
+    return { rejected: true };
+  }
+
+  const sheet = (() => {
+    try {
+      return metricSheetSchema.parse(JSON.parse(String(formData.get("payload") ?? "{}"))) as MetricScoresheet;
+    } catch {
+      return null;
+    }
+  })();
+  if (!sheet) return { error: "The form could not be read." };
+
+  const definition = getSportDefinition(sheet.sportSlug);
+  if (!definition) return { error: `Unknown sport "${sheet.sportSlug}".` };
+  const report = metricChecksums(sheet, definition);
+
+  if (intent === "check") return { report };
+  if (!report.ok) {
+    return { report, error: "Checksums are failing - fix the highlighted rows before approving. Nothing was saved." };
+  }
+
+  if (intent === "approve") {
+    const result = await withOrganizationContext(organizationId, (tx) => approveMetricScoresheet(tx, { organizationId, importId, userId: session.user.id, sheet }));
+    if (!result.ok) return { report: result.report, error: result.error };
+    revalidatePath(`/scoresheets/${importId}/review`);
+    revalidatePath("/scoresheets");
+    return { report, approved: true };
+  }
+
+  if (intent === "ingest") {
+    const fixtureId = String(formData.get("fixtureId") ?? "").trim();
+    if (!fixtureId) return { report, error: "Pick the fixture this sheet belongs to before ingesting." };
+    try {
+      const result = await withOrganizationContext(organizationId, (tx) => ingestMetricScoresheet(tx, { organizationId, importId, fixtureId, userId: session.user.id }));
+      revalidatePath(`/scoresheets/${importId}/review`);
+      revalidatePath("/scoresheets");
+      return { report, ingested: { written: result.written, skipped: result.skipped.length }, approved: true };
+    } catch (error) {
+      return { report, error: `Ingest failed: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  }
+
+  return { report };
 }

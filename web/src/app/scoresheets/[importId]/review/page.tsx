@@ -5,9 +5,12 @@ import { auth } from "@/auth";
 import { hasPermission } from "@/lib/permissions";
 import { MissingOrganizationContextError } from "@/lib/authorization";
 import { withOrganizationContext } from "@/lib/tenant-context";
+import { getSportDefinition } from "@/lib/sports/registry";
+import { describeDerivation, metricChecksums, metricColumns, type MetricScoresheet } from "@/lib/scoresheet/metric-scoresheet";
 import { correctedPlayerFromRow, loadScoresheetImportForReview, type CorrectedPlayer, type CorrectedScoresheet } from "@/server/scoresheet/imports";
 import type { ChecksumReport } from "@/lib/scoresheet/checksums";
 import { ReviewForm, type ReviewInitial } from "./review-form";
+import { MetricReviewForm, type MetricReviewInitial } from "./metric-review-form";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +51,62 @@ export default async function ScoresheetReviewPage({ params }: { params: Promise
     loadScoresheetImportForReview(tx, session.user.organizationId!, importId),
   );
   if (!row) notFound();
+
+  // Multi-sport branch (streak v7, Prompt 2): a sheet whose extraction declares a sport other than basketball
+  // has definition-driven columns instead of the fixed shooting columns. The basketball path below is
+  // unchanged; this one never looks for "points" or "rebounds".
+  const extractionSport = (row.extraction as unknown as { sportSlug?: string } | null)?.sportSlug;
+  if (extractionSport && extractionSport !== "basketball") {
+    const definition = getSportDefinition(extractionSport);
+    if (!definition) notFound();
+    const sheet = (row.corrected as unknown as MetricScoresheet | null) ?? (row.extraction as unknown as MetricScoresheet);
+    const fixtures = await withOrganizationContext(session.user.organizationId, (tx) =>
+      tx.fixture.findMany({
+        where: { game: { isNot: null }, season: { competition: { sport: { slug: extractionSport } } } },
+        orderBy: { scheduledAt: "desc" },
+        take: 25,
+        select: {
+          id: true,
+          scheduledAt: true,
+          status: true,
+          homeSeasonClub: { select: { club: { select: { name: true } } } },
+          awaySeasonClub: { select: { club: { select: { name: true } } } },
+          homeEntrant: { select: { name: true } },
+          awayEntrant: { select: { name: true } },
+        },
+      }),
+    );
+    const initial: MetricReviewInitial = {
+      importId: row.id,
+      status: row.status,
+      sourceLabel: row.sourceLabel,
+      sportName: definition.name,
+      columns: metricColumns(definition),
+      sheet,
+      report: metricChecksums(sheet, definition),
+      derivation: describeDerivation(definition),
+      fixtures: fixtures.map((fixture) => ({
+        id: fixture.id,
+        label: `${fixture.homeSeasonClub?.club.name ?? fixture.homeEntrant?.name ?? "?"} v ${fixture.awaySeasonClub?.club.name ?? fixture.awayEntrant?.name ?? "?"} · ${fixture.status} · ${fixture.scheduledAt.toISOString().slice(0, 10)}`,
+      })),
+    };
+    return (
+      <OperationsShell user={session.user}>
+        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+          <div className="flex items-baseline justify-between gap-3">
+            <h1 className="text-2xl font-bold">Review scoresheet</h1>
+            <Link href="/scoresheets" className="text-sm text-info underline">
+              All scoresheets
+            </Link>
+          </div>
+          <p className="mt-1 text-sm text-text-2">
+            {row.sourceLabel} · {row.status} · {definition.name}
+          </p>
+          <MetricReviewForm initial={initial} />
+        </main>
+      </OperationsShell>
+    );
+  }
 
   const teams = row.extraction?.teams ?? [];
   const homePlayers = (teams[0]?.players ?? []).map(correctedPlayerFromRow);

@@ -80,6 +80,17 @@ export default async function ScoresheetsPage({ searchParams }: { searchParams: 
                 Label (e.g. &quot;LBCL Game 12 - Ultra vs LXB&quot;)
                 <input name="sourceLabel" required maxLength={180} className="mt-1 min-h-[44px] w-full rounded-md border border-line bg-ink-700 px-3 text-sm" />
               </label>
+              <label className="block text-xs text-text-2">
+                Sport
+                <select name="sport" defaultValue="basketball" className="mt-1 min-h-[44px] w-full rounded-md border border-line bg-ink-700 px-3 text-sm">
+                  <option value="basketball">Basketball (shooting columns)</option>
+                  <option value="volleyball">Volleyball (kills, aces, blocks, digs)</option>
+                </select>
+                <span className="mt-1 block text-[11px] text-text-3">
+                  The sport decides the review columns: basketball uses the fixed box score, volleyball uses the columns its sport
+                  definition declares. A volleyball sheet needs two <code>## TEAM</code> sections.
+                </span>
+              </label>
               <button type="submit" className="min-h-[44px] w-full rounded-md bg-brand-400 px-4 text-sm font-bold text-ink-900">
                 Read the file
               </button>
