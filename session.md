@@ -10785,3 +10785,46 @@ PASS: console operations work end to end (create, deliver, verify, roll)
 ```
 The first attempt at this verification used `node -e`, which cannot run top-level await - it failed silently
 and produced an empty subscription id. Rewritten as a script file.
+
+## 2026-10-19 - Streak v8 / Prompt 5: final sync - 49/49 DB, both suites green, both deploys, main merged
+
+**Suites**
+```
+npm test            990 tests, 989 pass, 0 fail   (1 pre-existing skip)
+npm run test:component  26 tests, 26 pass
+npm run test:db     49 tests, 49 pass (430 s, serialized, scratch clone of staging)
+canonical-write ratchet: 4 suppressions (ceiling 4)
+```
+The DB suite ran through the v7 runner on node 20 - the fix still holds a streak later.
+
+**Roadmaps**
+- `MULTI_SPORT_ROADMAP.md` gate **G5**: the rule-set work is now complete on both halves (engine AND the console
+  label), and the athlete passport is multi-sport (definition-driven `sportStats`, games grouped by sport,
+  metric-only games merged into the timeline).
+- `COACH_INTELLIGENCE_ROADMAP.md` **I4**: ingestion is self-serve from the browser; inference is still
+  `BLOCKED_NO_REAL_VIDEO` and no accuracy is claimed. **I6**: the passport is multi-sport.
+
+**Housekeeping**
+- The Prompt 2 upload test was removed: 1 GameVideo, its MediaAsset row and the 19,529-byte file. `videos left=0`.
+- No migrations were pending this streak (no schema change: the data-feed console, the upload route and the
+  passport all use existing tables), so `--migrate` reported "up to date" on both hosts - it was still passed, so
+  a future migration cannot be missed by copy-pasting this command.
+
+**Deploys**
+| environment | release | migrations | smoke |
+| --- | --- | --- | --- |
+| staging | `release-8d4be13` | none pending | **7/7 PASS**, 0 errors |
+| production | `release-8d4be13` | none pending, after a verified backup `ultraleagueos_pre_v8_20261019T095928Z.dump` (sha256 `5a1f455c...`) | **7/7 PASS**, 0 errors |
+
+The passport smoke route grew from 59,451 to 60,804 bytes - the new By-sport section is in the deployed page.
+
+**Known issues carried forward**
+- The passport's **career totals** are still basketball-only (points/rebounds/assists). A volleyball-only athlete
+  has totals of zero while the By-sport cards carry their real numbers; merging them into one "career totals"
+  block would mean mixing units, so it was left explicit rather than faked.
+- The vision worker is not running on the host by default; an upload succeeds and says the analysis is queued for
+  the 5-minute poller. Starting it is a deliberate operational step (`docker compose up` in `services/vision`).
+- `/settings/data-feed` uses `operations:manage`; there is no finer-grained integration permission yet.
+
+**Streak v8 complete.** Both environments on `release-8d4be13`, smoke green, 990 unit + 26 component + 49 DB
+tests, ratchet 4/4, `main` merged.
