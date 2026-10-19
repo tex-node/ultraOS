@@ -10,7 +10,7 @@
     "lint:canonical-writes": "node scripts/check-canonical-write-baseline.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"src/lib/*.test.ts\" \"src/lib/**/*.test.ts\"",
-    "test:db": "node --conditions=react-server --import tsx --test --test-concurrency=1 \"src/test-support/**/*.test.ts\" \"src/server/**/*.test.ts\" \"src/app/**/*.test.ts\"",
+    "test:db": "node scripts/run-db-tests.mjs",
     "test:component": "tsx --test --test-force-exit \"src/app/**/*.test.tsx\"",
     "test:e2e": "playwright test",
     "db:generate": "prisma generate",
