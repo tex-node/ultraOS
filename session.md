@@ -11008,3 +11008,42 @@ found no problems in the checks it never ran. I created a locator for one club (
 afterwards), re-ran, and only then did it actually fetch and compare a page.
 
 **Next step:** Prompt 5 (final sync).
+
+## 2026-10-19 - Streak v9 / Prompt 5: final sync - 49/49 DB, 995 tests, both deploys, main merged
+
+**Suites**
+```
+npm test               995 tests, 994 pass, 0 fail   (1 pre-existing skip)
+npm run test:component  26 tests, 26 pass
+npm run test:db         49 tests, 49 pass (357 s, serialized, scratch clone of staging)
+canonical-write ratchet 4 suppressions (ceiling 4)
+```
+
+**Roadmaps**: `COACH_INTELLIGENCE_ROADMAP.md` records that the partner API is now commercial (keys, tiers,
+exports) and that the entrant-side crashes are one helper now; `MULTI_SPORT_ROADMAP.md` records that the API and
+the public surfaces are sport-agnostic end to end.
+
+**Deploys**
+| environment | release | migration | smoke |
+| --- | --- | --- | --- |
+| staging | `5552a27` | `20261019190000_api_keys` applied earlier in the streak | 7/7 PASS, 0 errors |
+| production | `release-5552a27-20261019T201842Z` | `20261019190000_api_keys` behind a verified backup (`…pre_v9_20261019T201535Z.dump`, sha256 `e1a3984d…`) | 7/7 PASS, 0 errors, re-run standalone: **SMOKE OK** |
+
+**Production verified after the fact, not inferred**
+```
+readlink -f /opt/ultraleagueos/current -> release-5552a27-20261019T201842Z
+_prisma_migrations: 20261019190000_api_keys (applied)
+ApiKey rls=true forced=true · resolve_api_key exists
+GET /api/v1/live                     -> 200   (the documented public exception)
+GET /api/v1/games/<id>/snapshot      -> 401   (a key is required)
+```
+
+**Two connection resets, recorded because they nearly hid a bad state.** The first production deploy of this
+streak was cut off mid-run; the host was still on the previous release **and the ApiKey migration had not been
+applied**, while the app served normally - exactly the kind of half-deployed state that a green page can hide. I
+checked the release symlink, `_prisma_migrations` and `pg_proc` rather than trusting the deploy's exit, re-ran
+the deploy, and only then got a clean smoke. The second reset landed on the final `SMOKE OK` line, which is why
+the smoke was run once more standalone. The lesson is the same as streak v6's: **a deploy is not done when the
+command returns - it is done when the release, the migrations and the API contract all say so.**
+
+**Next step:** none - streak v9 complete.
