@@ -11242,3 +11242,73 @@ are not mine and were deliberately left untracked: `Draft UX/`, `UI/`, `assets/`
 them would be a second sweep, so they stay out.
 
 **Next step:** Prompt 2 (baseball, cricket, flag race).
+
+## 2026-10-20 - Streak v11 / Prompt 1: git hygiene
+
+Covered at the top of this streak: the Phase 1 / handover documents were already committed in `7d40edc`, that
+commit is documentation-only (17 files, everything under `documentation/`), and splitting it would rewrite history
+that staging and production are deployed from. `documentation/architecture/README.md` was a 13-line placeholder and
+is now the index those documents never had. `git status` shows only pre-existing local artefacts, which stay
+untracked.
+
+## 2026-10-20 - Streak v11 / Prompt 2: the last three sports - one existed, one works, one refuses
+
+**Cricket already existed** and was verified rather than rebuilt: 2 innings × 20 overs, `CRICKET_RUNS` over the
+innings engine, and the ball-by-ball ledger the architecture doc asks for (RUN / FOUR / SIX / DOT_BALL / WICKET /
+EXTRAS_WIDE / EXTRAS_NO_BALL / EXTRAS_BYE / EXTRAS_LEG_BYE / OVER_COMPLETE).
+
+**Baseball** (`baseball.ts`, `BASEBALL_RUNS`): 9 innings, no clock, and SINGLE/DOUBLE/TRIPLE/HOME_RUN/WALK/RUN
+scoring with STRIKEOUT/OUT/STOLEN_BASE/ERROR on the ledger. Two decisions worth naming:
+- it is **not** cricket. Both score in runs, so the cricket module's `supports` used to be `unit === "run"` — which
+  would have given baseball overs and wickets it does not have. It now requires `inningsConfig() !== null` and
+  baseball has its own module.
+- runs come **from the definition, never the client**, so a forged value cannot turn a single into a home run; and a
+  level game after regulation goes to extra innings, because baseball does not draw.
+
+**Flag race** (`flag-race.ts`) is registered — heats then a final, stopwatch, START/FINISH/FALSE_START/DISQUALIFICATION
+— and deliberately **has no scoring module**: races are timed, not scored, and there is no timing-result import in
+this codebase. The console offers the catalog events and no score button, because inventing one would be a lie. A
+test asserts `resolveScoringModule(flagRace) === null` so adding a module later is a deliberate act.
+
+The registry work had two honest knock-on effects: registration identity for `FLAG_RACE` used to assert *no*
+definition (it now resolves one), and the social/scoring-module list test now expects two RUNS modules.
+
+**Verified**: `/competitions/new` (data-driven from the registry) lists Baseball, Cricket, Flag Race, Football,
+Basketball and Tennis. `npm test` 996 tests, 995 pass, 0 fail.
+
+## 2026-10-20 - Streak v11 / Prompt 3: a scorebug that does not assume basketball
+
+`/broadcast/game/[gameId]/generic-scorebug`. Sides through `fixtureSide()` (club or entrant), the period vocabulary
+from the sport definition (Q / Half / Set / Inn / P), and a clock **only** when the sport has one — a cricket or
+baseball scorebug showing "0:00" would be a lie about how the game is timed. The middle of the bug carries status
+and clock, not a third copy of the score.
+
+```
+football  -> 200 · "Football"  · LIVE · 16:10
+tennis    -> 200 · "Tennis"    · LIVE          (no clock, correct)
+basketball-> 200 · "Basketball"· FINAL          (a finished game shows no clock)
+```
+The first run printed `FINAL · 0s`, which reads like a stoppage rather than an end — fixed by suppressing the clock
+for a final game.
+
+## 2026-10-20 - Streak v11 / Prompt 4: the embed everyone asks for first
+
+`/embed/live/[orgSlug]/[fixtureId]`: public, no shell, no navigation, dark, 420×128. It reads the same
+production-scoped data as the public site (a rehearsal fixture is a 404 here too) and refreshes with
+`router.refresh()` every 15s — no second public API endpoint to secure, no websocket, no full-page reload flicker.
+The capture console gained an **Embed code** button that builds the snippet from `window.location.origin` (so
+staging embeds point at staging) and falls back to a selectable textarea when the Clipboard API is unavailable.
+
+**Verified on staging**
+```
+the iframe, loaded from a standalone HTML page with no cookie, no key:
+  GET /embed/live/neon-ultra/<fixture> -> 200 (12,658 bytes)
+  renders: Table Tennis · FINAL · CTTPA 0 – 0 CTTPB · Set 1
+  shell leakage (Sign out / Organizer workspace / sidebar): 0
+  refresher mounted (hidden marker): 1
+  unknown org -> 404 · unknown fixture -> 404 · TypeErrors: 0
+the console:
+  GET /games/<fixture>/live -> 200 · "Embed code" button present
+```
+The refresher used to return `null`, which made "is the poll loop running?" unverifiable — it now renders a hidden
+`data-embed-refresher` marker so the check proves the component mounted instead of inferring it.

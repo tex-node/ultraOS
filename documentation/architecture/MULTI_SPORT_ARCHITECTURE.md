@@ -240,6 +240,8 @@ Examples:
 | Volleyball | W/L | W=3, L=0 (or set-based) | set ratio | points ratio |
 | Cricket | W/L/D/NR | W=2, D/NR=1 | net run rate | — |
 | Tennis | W/L | table or bracket | sets/games ratio | head-to-head |
+| Baseball | W/L | W=1, L=0 | run difference | runs for | **IMPLEMENTED (streak v11)** - `baseball.ts` (9 innings, no clock, SINGLE/DOUBLE/TRIPLE/HOME_RUN/WALK/RUN scoring; STRIKEOUT/OUT/STOLEN_BASE/ERROR ledger), its own `BASEBALL_RUNS` module (runs from the definition, extra innings when level after regulation - baseball does not draw), registered and in the wizard. |
+| Flag Race | W/L | W=1 | recorded time | — | **REGISTERED, NOT YET SCORABLE (streak v11)** - `flag-race.ts` (heats then final, stopwatch/COUNT_UP clock, START/FINISH/FALSE_START/DISQUALIFICATION) is in the registry and the wizard, and `resolveScoringModule()` deliberately returns null for it: races are timed, not scored, and there is no timing-result import yet. The console records events to the ledger and offers no score button, because inventing one would be a lie. A test asserts the null so adding a module later is deliberate. |
 
 Implementation: outcomes (`drawn`/`ties`/`noResult`), `rank`, and `rankTiebreak` on `Standing`; sport-specific values in `StandingMetric`. The engine is `web/src/lib/sports/standings.ts` (`computeStandings`/`rankStandingRows`/`computeSeasonStandings`), verified against the legacy basketball engine in `standings.test.ts`; runtime recalculation is sport-aware (`web/src/lib/standings-recalculate.ts`, called on game finalization); backfill in `scripts/standings-generalize-backfill.ts` and verification in `scripts/standings-parity-check.ts`.
 
