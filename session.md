@@ -10566,6 +10566,66 @@ where each class of error shows up (CLI exit + reason, a one-line warning, `FAIL
 `docker compose logs vision-worker`, and the review queue for review errors). **No accuracy is claimed**: the
 B0 analyzer is a stub that emits zero real detections by design.
 
+
+## 2026-10-19 - Streak v7 / Prompt 5: final sync - 49/49 on node 20, vision stack healthy, both deploys green, main merged
+
+**Roadmaps updated**
+- `MULTI_SPORT_ROADMAP.md` gate **G5** now says what streak v7 closed: the rule-set resolution (frozen
+  snapshot -> season RuleSet -> definition, so `SETS_TO_WIN=2` really ends at two sets, and `GAMES_PER_SET` is
+  a declared rule rather than a silently ignored structure field) and the **definition-driven review queue**
+  (volleyball reviewed, approved and ingested). It keeps the remaining gap visible: the bracket is rendered
+  from `Fixture.round` because no `BracketNode` component exists, and only basketball + volleyball templates
+  exist.
+- `COACH_INTELLIGENCE_ROADMAP.md` **I4** now records that the worker stack actually starts: both readiness
+  bugs (image healthcheck inherited by worker/beat; port 8000 taken by Kong) are fixed, `vision-api` is
+  healthy, `/health` returns 200, and the doc explains the post-ingest lifecycle. Inference is still
+  `BLOCKED_NO_REAL_VIDEO` - unchanged, and no accuracy is claimed.
+
+**`npm run test:db` on the VPS (node 20), through the new runner**
+```
+# tests 49  # pass 49  # fail 0  (441 s, serialized)
+```
+That is Prompt 3's fix proven on the runtime that was failing, not just locally. Two incidental findings from
+the same run:
+- the scratch clone had to switch from `CREATE DATABASE ... TEMPLATE` to `pg_dump | psql` because the live app
+  holds connections ("source database is being accessed by other users") - recorded so the next person does
+  not read it as a failure;
+- `services/vision/.env` is **gitignored**, so a deploy removes it and `docker compose up` fails until it is
+  recreated from `.env.example`. Worth knowing before wondering why the stack "suddenly" will not start.
+
+**Vision stack after the deploy** (the fix only lands once the host's source checkout syncs)
+```
+vision-api: running (healthy) · vision-beat: running · vision-redis: running · vision-worker: running
+GET /health -> 200 {"status":"ok","analyzer":"stub","database_configured":true,"storage_configured":false}
+image Healthcheck: null   (the image no longer carries one; vision-api gets it from compose)
+```
+So `docker compose up -d --wait` now settles instead of waiting on a worker that can never answer an HTTP
+probe - the readiness bug is actually closed, not just patched in the file.
+
+**Deploys**
+| environment | release | migrations | smoke |
+| --- | --- | --- | --- |
+| staging | `release-dffe312` | none pending (no schema change this streak) | **7/7 PASS**, 0 errors |
+| production | `release-dffe312` | `--migrate` run, "up to date" (no schema change) | **7/7 PASS**, 0 errors, after a verified backup `ultraleagueos_pre_v7_20261019T072547Z.dump` (sha256 `c699ee79...`) |
+
+**Merged to main**: `ops/reconcile-backup-design` fast-forwarded into `main` at `dffe312` (main was an
+ancestor), so production runs the default branch.
+
+**Test and ratchet**: 983 unit/component tests (982 pass, 1 pre-existing skip - up from 969 with the 6
+rule-value tests and the 8 metric-scoresheet tests), canonical-write ratchet **4/4**, `tsc`/`eslint`/`next
+build` clean.
+
+**Known issues carried forward**
+- The rule-set override is honoured by the **scoring path** and by `GameRuleSnapshot`; the console's *header*
+  still describes the sport's default format ("Best of 5 sets") because it reads the definition, not the
+  season rule set. Cosmetic, but it can contradict what the match is actually played as.
+- The review UI supports basketball and volleyball; a third sport needs a small parser plus its definition
+  metrics - the table, checks and ingest are already generic.
+- The vision worker/beat have no healthcheck by design; their liveness is the container state plus
+  `docker compose logs vision-worker`.
+
+**Streak v7 complete.** All five prompts done; both environments on `release-dffe312`, smoke green, 49/49 DB
+tests on node 20, vision stack healthy, 983 tests, ratchet 4/4, main merged.
 **Next step:** Prompt 5 (final sync).
 
 
