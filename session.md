@@ -10887,3 +10887,62 @@ question from the last streak is closed.
 deliveries were still in the outbox, and the smoke test shows the app serving normally. No migration was pending.
 
 **Next step:** Prompt 2 (developer API keys).
+
+## 2026-10-19 - Streak v9 / Prompt 2: developer API keys, and three crash bugs they exposed
+
+**Schema.** `ApiKey` with the 5-step tenant checklist - tenant column, composite unique `(organizationId, id)`,
+RLS **enabled and forced**, `tenant_isolation` policy on `app.current_org_id`, and GRANTs to all three runtime
+roles in the same migration. The raw key is never stored: `keyHash` is its SHA-256 and `prefix` is the display
+fragment. Verified on staging:
+
+```
+rls=true forced=true
+policy: ("organizationId" = COALESCE(NULLIF(current_setting('app.current_org_id', true), ''), '<neon-ultra>'))
+grants: ultraos,ultraos_app,ultraos_staging
+resolve_api_key secdef=true  execute=ultraos,ultraos_app,ultraos_staging
+verify-tenant-table ApiKey -> 1..4b all PASS · RESULT: PASS
+```
+
+**The lookup is the interesting part.** Authentication has to find a key *before* the organization is known, so
+a plain RLS policy cannot do it (the policy compares against `app.current_org_id`, which is not set yet). Instead
+of weakening the policy, the migration adds a **SECURITY DEFINER** function `resolve_api_key(hash)` that returns
+only `(id, organization_id, tier)` and is executable by the runtime roles. The table itself stays fully isolated
+for every normal read and write, and `listApiKeys` does not even select `keyHash`.
+
+**Routes.** `withPublicApiV1` now **requires a key by default** - a new endpoint cannot accidentally ship public,
+because forgetting the option fails closed. Quotas are per key by tier (BASIC 60 / PRO 600 / ENTERPRISE 6,000 per
+minute) instead of per IP, and every authenticated response carries `X-API-Tier`. **`/api/v1/live` opts out
+explicitly** - it is the free scoreboard widget - with the reason at its call site.
+
+**UI.** `/settings/api-keys` (`operations:manage`): create (name + tier), the raw key shown **once**, then a list
+of prefix, tier, `lastUsedAt` and status, with Revoke. Docs updated on `/api-docs` and in
+`ULTRA_LIVE_API_V1.md`.
+
+**Verified on staging**
+```
+GET /api/v1/live (no key)            -> 200 (3,156 bytes)      ← the documented public exception
+GET /api/v1/games/<id>/snapshot      -> 401 UNAUTHORIZED
+  (bearer)                           -> 200 (921 bytes) · x-api-tier: BASIC · x-ratelimit-limit: 60
+  (x-api-key)                        -> 200
+  (bogus key)                        -> 401
+  (revoked key)                      -> 401
+lastUsedAt                           -> recorded on every authenticated request
+audit                                -> API_KEY_CREATED x4
+```
+
+**Three real bugs this verification exposed - all the same basketball assumption, in three places.**
+1. `GET /api/v1/live` threw `TypeError: Cannot read properties of null (reading 'club')` and returned a **500 on
+   the league's free scoreboard** the moment a live fixture had entrant sides (a table-tennis fixture was live on
+   staging). The route assumed `homeSeasonClub` always exists.
+2. Fixing the route was **not enough**: `buildLiveGameSnapshotV2` did the same thing, so `/snapshot` still 500ed
+   with zero bytes.
+3. The same expression lived in **four** API routes (`/games/[id]`, `/snapshot`, `/box-score`, `/events`). It is
+   now one shared `apiTeam()` helper, and `loadPublicGame` carries `homeEntrant`/`awayEntrant` with nullable
+   season clubs. Three files, one assumption, one fix each time it surfaced - which is exactly why it is now a
+   single helper.
+
+Also: `scripts/create-api-key.ts` used top-level `await` and tsx failed with a `TransformError` before running a
+line, so the first verification run "created" no key and then tested an **empty** Bearer token. Rewritten as
+`main().then()` with the raw key as the only stdout.
+
+**Next step:** Prompt 3 (league data export).
