@@ -153,7 +153,9 @@ async function main() {
   if (after.status !== "FINAL") problems.push(`game is ${after.status}, expected FINAL`);
   if (after.fixture.homeScore !== setsToWin || after.fixture.awayScore !== 1) problems.push(`match score ${after.fixture.homeScore}-${after.fixture.awayScore}, expected ${setsToWin}-1`);
   if (after.fixture.winnerEntrantId !== setup.entrants[0].id) problems.push("winner is not the home entrant");
-  if (after.periodScores.length !== setsToWin) problems.push(`${after.periodScores.length} set row(s), expected ${setsToWin}`);
+  // A best-of-3 that is split after two sets legitimately has THREE set rows (the decider); the point of the
+  // assertion above is that the match ENDED at two sets won, not that only two sets were played.
+  if (after.periodScores.length !== 3) problems.push(`${after.periodScores.length} set row(s), expected 3 (a split 1-1 goes to a decider)`);
   const shortSet = after.periodScores.find((row) => Math.max(row.homeScore, row.awayScore) !== gamesPerSet);
   if (shortSet) problems.push(`set ${shortSet.period} is ${shortSet.homeScore}-${shortSet.awayScore}: the winner should have ${gamesPerSet} games`);
   if (ended !== 1) problems.push(`${ended} GAME_ENDED event(s), expected 1`);
