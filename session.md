@@ -11047,3 +11047,119 @@ the smoke was run once more standalone. The lesson is the same as streak v6's: *
 command returns - it is done when the release, the migrations and the API contract all say so.**
 
 **Next step:** none - streak v9 complete.
+
+## 2026-10-19 - Streak v10 / Prompt 1: the `club of null` class, swept
+
+The API had a helper since v9; the **UI did not**. The sweep found the remaining non-null club assertions:
+
+- **`/live` (the public live centre)** rendered the next game and the latest result as
+  `upcoming[0].homeSeasonClub!.club.name`. With nothing live in basketball and a tennis fixture upcoming, that page
+  would throw. It now includes entrants in its query and renders every side through `fixtureSide()`, and
+  `LiveGameHero` takes resolved sides instead of a fixture with non-null clubs (which also fixed the rehearsal view).
+- **`lib/fixture-side.ts`** is the UI counterpart to `apiTeam()`: a club OR an entrant, with a five-character label
+  an entrant does not otherwise have.
+- The **broadcast API route** and the legacy **per-game box-score route** format sides through it and include
+  entrants.
+- The seven **basketball-only broadcast graphics** (scorebug, ultra-time, four-point-moment, team-comparison,
+  leader, record-watch, final) now `notFound()` for an individual-sport fixture. They render Ultra Time and
+  four-point moments, which no entrant fixture has: a 404 is honest, a crash is not.
+- The **broadcast control board** lists every live game, so it uses the helper and includes entrants.
+
+**Verified on staging**
+```
+GET /public/fixtures/<tennis>   -> 200 (18,102 bytes)
+GET /live                       -> 200 (21,075 bytes) · the live TABLE-TENNIS fixture is on the page
+                                   ("CT Table Tennis Player A"), rendered through fixtureSide()
+GET /broadcast/game/<game>/scorebug (individual sport) -> 404   (gated)
+TypeErrors in the service log during the run: 0
+```
+The authenticated console check 404'd on an **organization mismatch** (the token carried the LBCL org while the
+tennis fixture belonged to the public org) - an auth artifact, not a crash; the entrant rendering path itself is
+proven by the public match centre and `/live` above.
+
+## 2026-10-19 - Streak v10 / Prompt 2: football - the definition existed, the DRAW did not
+
+**Finding: football was already first-class.** `src/lib/sports/football.ts` has 2×45 halves, GOAL/OWN_GOAL/
+PENALTY_GOAL, YELLOW_CARD, RED_CARD, SUBSTITUTION, `drawsAllowed: true` and `WIN_DRAW_LOSS 3/1/0`; the
+`FOOTBALL_GOALS` module is registered; and the competition wizard is data-driven, so Football appears without
+work (verified: `/competitions/new` lists Football, Tennis, Volleyball and Basketball).
+
+**What was actually missing: a draw could not be finalised.** `endMatchEarly` offered `LEADER` (which refuses a
+level match) and `RETIRE_HOME/AWAY` (which hands the match to one side). A 1-1 football match had no way to end,
+and the standings could therefore never pay the point each side earns.
+
+- `endMatchEarly` gains `mode: DRAW`: only for a sport whose definition allows draws, only when the score IS
+  level, finalised with `winnerSeasonClubId: null` - which is exactly what makes `computeStandings` record a draw
+  and pay `primaryPoints.draw`.
+- The capture panel shows **End as a draw** for draws-allowed sports and only when the passed score is level, so
+  the server check is a backstop rather than the only guard.
+
+**Verified on staging** (`scripts/football-verify.ts`)
+```
+football: 2 halves of 45 min · goals · draws allowed=true · module=FOOTBALL_GOALS
+standings: WIN_DRAW_LOSS win=3 draw=1 loss=0
+  GOAL -> 1-0 (finalize=false)
+  GOAL -> 1-1 (finalize=false)
+  YELLOW_CARD recorded
+fixture: FINAL 1-1 winner=none · game FINAL period=2 · yellow card events=1
+  Football Verify A  W0 D1 L0 pts=1
+  Football Verify B  W0 D1 L0 pts=1
+PASS
+```
+
+## 2026-10-19 - Streak v10 / Prompt 3: a match-day board for a venue, not a sport
+
+`/operations/matchday` (permission `operations:view` OR `game:operate`): every LIVE/PAUSED fixture in the
+organization regardless of sport, each card carrying the sport (icon + name), the sides through `fixtureSide()`,
+the score, the clock/period, the venue and a link to `/games/<fixtureId>/live` - the same console route for every
+sport, because the console dispatches by definition. Below it, **Start next match** groups today's SCHEDULED
+fixtures by sport.
+
+**Verified on staging with three sports live at once** (`scripts/matchday-setup.ts` created a tennis and a
+volleyball competition in the LBCL organization, since it only had basketball):
+```
+GET /operations/matchday -> 200 (31,871 bytes) · header "4 live · 0 scheduled today"
+  🏀 Basketball  SSH 52–75 LAR     6:52 · P3 · Venue TBC   Open capture console →
+  🎾 Tennis      CO0 0–0 CTC     10:00 · P1                Open capture console →
+  🏐 Volleyball  NEF59 0–0 SP593 10:00 · P1                Open capture console →
+```
+The tennis card is the proof of the whole prompt: an individual-sport fixture rendered without a club anywhere.
+
+**Two self-inflicted failures on the way, both mine:** the setup's first SQL used an unquoted `dataCapability`
+column, and the first fixture creation inserted a side-less row before filling home/away - which violates
+`Fixture_away_side_party_chk` and rolled the whole setup back, so the board showed one sport. Sides are now
+created first and passed into the insert. Cleanup removed the created competitions and restored the reused
+basketball fixtures; the remaining LIVE games on staging are the pre-existing CT demo league, which is
+intentionally live.
+
+## 2026-10-19 - Streak v10 / Prompt 4: football on the wire
+
+- `DataFeedEventType` gains **`CARD_ISSUED`** (added with `ADD VALUE IF NOT EXISTS` in its own migration; a value
+  cannot be removed and a re-run must not fail), offered in the subscription UI as well as the enum.
+- The catalog write path emits it for YELLOW_CARD/RED_CARD with **playerName, cardColour and side**. A red card
+  moves a market more than a goal does, and a score-only feed cannot express it.
+- **`SCORE_CHANGED` names the scorer**: the enqueue carries only `playerId` (no join on the scoring path) and the
+  drain resolves the name once per delivery.
+- `/api-docs` and `ULTRA_LIVE_API_V1.md` document both payloads.
+
+**Verified on staging against a local HMAC listener**
+```
+VERIFIED · CARD_ISSUED  · {"eventType":"YELLOW_CARD","cardColour":"YELLOW","playerName":"Sunday Joshua","side":"HOME",...}
+VERIFIED · SCORE_CHANGED · {"eventType":"GOAL","points":1,"playerName":"Sunday Joshua",...}
+cron drain: attempted 2, delivered 2 · PASS
+```
+**And the first run of this check passed dishonestly**, which is worth recording: it picked the most recent FINAL
+game, which was the bare football fixture with **no players**, so `playerName` was null on both sides and the
+assertion compared null to null. The script now requires a game whose side has a roster (or takes `--game`), which
+is what produced the payloads above.
+
+**Export**: `scripts/export-league-data.ts` over the organization after a football match shows the draw as a
+result and pays it correctly:
+```
+football fixtures in the export: 1
+  Football Verify A 1-1 Football Verify B  status=FINAL
+  standing: Football Verify A P1 W0 D1 L0 pts=1
+  standing: Football Verify B P1 W0 D1 L0 pts=1
+```
+
+**Next step:** Prompt 5 (final sync).
