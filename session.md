@@ -10441,6 +10441,133 @@ individual-standings and 7 volleyball-parser tests), canonical-write ratchet **4
 tests serialized, 969 tests, ratchet 4/4, and one previously-false claim (the v5 RLS proof) corrected in the
 record.
 
+## 2026-10-19 - Streak v7 / Prompt 1: the rule set finally reaches the scoring engine (best-of-3 works)
+
+**The gap:** the scoring modules read their config off the `SportDefinition`, and `applyScoringDelivery`
+passed the raw definition. A season `RuleSet` with `SETS_TO_WIN: 2` was stored, displayed, and **ignored** -
+every tennis match played the definition's best-of-5.
+
+**The fix:** `applyScoringDelivery` now resolves rule values in precedence order - the game's **frozen
+`GameRuleSnapshot`** (a played game must stay explicable after a rule change), then the season/organization
+rule set, then the definition default - and folds them into the definition it hands the module
+(`applyRuleValues`, pure, **6 tests**: no mutation, unknown keys cannot invent rules, wrong-typed values are
+ignored rather than coerced).
+
+**A second silent ignore fell out of the tests:** `GAMES_PER_SET` was never a declared **rule**, only a
+structure field, so a RuleSet entry for it did nothing at all. It is now a declared rule and `tennisConfig`
+prefers it - which is what makes a short-set tournament possible in the first place.
+
+**Verified on staging** (`release-4582cdc`, the console's own code path):
+```
+Benjamin Chibuzor v Musa Ibrahim · season RuleSet says 2 sets to win, 2 games per set
+                                   (definition default: 3 / 6)
+points captured: 24
+fixture: FINAL 2-1 winner=…
+GamePeriodScore (sets): 1:2-0 2:0-2 3:2-0
+PASS: every set, the match winner and the ledger agree
+```
+The match **stopped at two sets won** (2-1), not at three, and the sets were two games because the rule said
+so. The 24 points were real `POINT` events through `applyScoringDelivery`.
+
+**Note on the assertion I had to fix:** my first run "failed" because I asserted two set *rows*; a best-of-3
+split 1-1 correctly goes to a decider and therefore has three. The engine was right and the test was wrong -
+recorded here because the distinction (match ended at two sets won vs. only two sets played) is exactly the
+kind of thing a careless assertion hides.
+
+**Next step:** Prompt 2 (multi-sport review queue).
+
+## 2026-10-19 - Streak v7 / Prompt 2: the review queue is no longer a basketball form
+
+**The problem:** the review page was built around `CorrectedPlayer` - eighteen fixed shooting columns and a
+Q1-Q4 grid. A volleyball sheet has kills/aces/blocks/digs, so the page either crashed looking for "points"
+and "rebounds" or wrote zeroes.
+
+**Built (additive - the basketball path is untouched)**
+- `src/lib/scoresheet/metric-scoresheet.ts`: columns come from the **sport definition's PLAYER metrics**; a
+  sheet is teams of name + metric map; checks are declaration-driven. **8 tests**, including the
+  sport-specific derivation (volleyball `points` = kills + aces + blocks + dumps, reported with **both**
+  numbers when it disagrees), duplicate names inside a team, an empty team, and "a missing column is not
+  checked" (absent ≠ wrong).
+- `src/server/scoresheet/metric-imports.ts`: **create → approve → ingest**. The ingest matches players by
+  name **on the fixture's own side** and **skips** anything it cannot match, with a reason - it never creates
+  an athlete from a scoresheet. Metric rows are replaced per `(game, definition, player)`, so a re-run after a
+  correction updates instead of duplicating.
+- The review page branches on the extraction's `sportSlug` and renders `MetricReviewForm`: the definition's
+  columns, an editable table with team totals per column, the checksum panel (with the failing rows named),
+  approve/reject, and an ingest step that requires the fixture to be chosen explicitly.
+- The upload form gained a **Sport** selector; `uploadCsvScoresheet` delegates to the metric path for
+  anything that is not basketball.
+
+**Verified end to end on staging** (`release-0cd38cc`), including a real authenticated page render:
+```
+columns from the definition: Points, Aces, Kills, Blocks, Digs, Assists, Errors, Dumps, Block assists, Serve receives
+GET /scoresheets/<id>/review -> 200 (45,057 bytes)   [Kills + Aces present, no REB column, checksum panel present]
+approve: OK
+ingest: 28 row(s) written, 0 skipped
+read back: 28 metric row(s), kills total 35
+PASS: volleyball sheet reviewed, approved and ingested with definition-driven columns
+cleanup: import, metric rows, fixture, players and competition removed
+```
+
+**Three failures on the way there, all real and all fixed rather than worked around:**
+1. the token mint for the page render needed `AUTH_SECRET` **exported** from the app env file (`ikm must be a
+   string` was the symptom);
+2. `(organizationId, name)` on `Club` is unique and the first two failed runs left "Surge"/"Vortex" behind,
+   so the third died on a unique constraint before verifying anything - club names now carry a run id;
+3. leftovers from those runs had to be cleaned before the successful pass (imports, clubs, competitions).
+
+**Next step:** Prompt 3 (test:db on node 20).
+
+## 2026-10-19 - Streak v7 / Prompt 3: test:db runs on node 20
+
+`npm run test:db` passed glob patterns to `node --test`, which only expands them on **node 21+**. The VPS runs
+node 20, so the pattern was a literal path and the run died with `Could not find
+'.../src/test-support/**/*.test.ts'` - exit 1, zero tests executed. The documented command had only ever
+worked via a hand-written file list.
+
+`scripts/run-db-tests.mjs` walks the same three trees, spawns the runner with **real paths** and
+`--test-concurrency=1` (serialization is not optional: these suites share one database and are measurably
+flaky in parallel), and forwards any extra flags while keeping ownership of `--test-concurrency`. Verified on
+the VPS later in this streak: **49/49**.
+
+**Next step:** Prompt 4 (vision readiness).
+
+## 2026-10-19 - Streak v7 / Prompt 4: vision is ready - and starting the stack found two bugs
+
+**Review queue verified with mock data** (`scripts/vision-mock-run.ts`, then a real HTTP render with a minted
+session):
+```
+fixture cmuxu4gga00afyxkk1u12rua8 · video cmvewv1cp00011nkkxpw7glu3 · run cmvewv1eu00031nkkuphd3gwf
+model MOCK-DETECTOR@0.0.0-mock · 2 observations
+GET /vision/games/<fixtureId> -> 200 (33,240 bytes), run listed with "2 observation(s)"
+confirm/reject through the page's own reviewObservation service:
+  statuses now CONFIRMED / REJECTED · 2 new audit rows · PASS
+cleanup: videos=0 runs=0 observations=0
+```
+
+**`docker compose up` actually run** (not just read):
+- **Bug 1 - healthcheck in the wrong place.** The `HEALTHCHECK` lived in the Dockerfile, so it ran in **every**
+  container built from the image, including the Celery worker and beat which serve no HTTP. Both reported
+  *unhealthy* while running perfectly, and `docker compose up --wait` could never settle. Moved to
+  `docker-compose.yml` on `vision-api` only.
+- **Bug 2 - the API port was taken.** `.env.example` bound `VISION_API_PORT=8000`, which on this host is the
+  unrelated Kong gateway: `Bind for 127.0.0.1:8000 failed: port is already allocated`. Default is now **8010**,
+  the same port the app's `VISION_WORKER_URL` already uses.
+- After the fix: `vision-api` **healthy**, `GET /health -> 200`
+  `{"status":"ok","analyzer":"stub","database_configured":true,"storage_configured":false}`. Note the
+  worker/beat still show *unhealthy* in the run above because the **host's source checkout** only syncs on
+  deploy - the fix is committed and the next deploy carries it.
+
+**Documented in `documentation/vision/VISION_INGESTION.md`** - the four stages after `vision-ingest.ts`, in a
+table: the file/rows are synchronous, `POST /analyze` is best-effort, **the beat poller picks up
+`READY_FOR_ANALYSIS` videos every 5 minutes** (so an unreachable worker is a delay, not a loss), and the run
+moves `QUEUED → PROCESSING → COMPLETED|FAILED` with observations appearing for review. It also says exactly
+where each class of error shows up (CLI exit + reason, a one-line warning, `FAILED` on the run row plus
+`docker compose logs vision-worker`, and the review queue for review errors). **No accuracy is claimed**: the
+B0 analyzer is a stub that emits zero real detections by design.
+
+**Next step:** Prompt 5 (final sync).
+
 
 
 

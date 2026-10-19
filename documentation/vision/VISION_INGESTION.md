@@ -78,6 +78,69 @@ curl -s -X POST localhost:8000/analyze -H 'content-type: application/json' \
   -d '{"game_video_id":"<id>","organization_id":"<org>","requested_by_id":"<user>"}'
 ```
 
+## What happens after `vision-ingest.ts` runs, exactly (2026-10-19)
+
+The most common question about this pipeline is "I ran it - what now?". The answer has four stages, and only
+the first is synchronous.
+
+| stage | who does it | when | where it shows |
+| --- | --- | --- | --- |
+| 1. file + rows | `vision-ingest.ts` (same process) | immediately | `MediaAsset`, `GameVideo` (`READY_FOR_ANALYSIS`), an audit row; the CLI prints the ids |
+| 2. `POST /analyze` | the CLI, best effort | immediately, **optional** | a `VisionAnalysisRun` row in `QUEUED` (the worker creates it) |
+| 3. run the analysis | Celery worker | **within 5 minutes** if the stack is up | run goes `QUEUED → PROCESSING → COMPLETED`/`FAILED`, `VisionObservation` rows appear |
+| 4. human review | an operator | whenever they look | `/vision/games/<fixtureId>` → Confirm/Reject per observation |
+
+**Does it poll automatically?** Yes - `vision-beat` runs `poll_ready_videos` **every 5 minutes**
+(`crontab(minute="*/5")`), which finds `READY_FOR_ANALYSIS` `GameVideo` rows and enqueues one `analyze_video`
+per video. So `vision-ingest.ts` does **not** need a reachable worker: if `POST /analyze` fails it prints a
+warning, leaves the row at `READY_FOR_ANALYSIS`, and the next beat tick picks it up (at most 5 minutes later,
+plus however long the analysis takes).
+
+**How long does it take?** The poll is the 5-minute ceiling on *discovery*; the analysis itself is bounded by
+the video length and the analyzer. The B0 analyzer is the deterministic stub (`VISION_ANALYZER=stub`), so it
+returns in seconds and emits **zero real detections by design** - it proves the plumbing, not accuracy. The
+`docker compose` stack starts in well under a minute (the image has no torch).
+
+**Where do errors show up?**
+- **Upload/probe errors**: `vision-ingest.ts` exits non-zero and prints the ffprobe/media-storage reason; no
+  rows are written (it validates before creating anything).
+- **`POST /analyze` unreachable**: a one-line `WARNING: worker not reachable at ...` - the ingest still
+  succeeds, and the row is picked up by the poller later.
+- **Analysis failure**: the run becomes `FAILED` with the exception text on the run row, and the worker logs
+  `analyze failed` with the `run_id` (`docker compose logs vision-worker`). The web UI shows the run as
+  `FAILED` on `/vision/games/<fixtureId>`; there is no retry - re-queue it.
+- **Review errors** (unmatchable player, wrong sport): the review queue is where they surface, as a
+  `SKIPPED`-style report or a rejected observation, never as a silent write.
+
+**Starting the stack** (verified on staging 2026-10-19):
+
+```bash
+cd services/vision
+cp .env.example .env        # DATABASE_URL at minimum; VISION_API_PORT defaults to 8010
+docker compose up -d --wait
+curl -s localhost:8010/health   # {"status":"ok","analyzer":"stub",...}
+docker compose logs -f vision-worker
+```
+
+Two readiness bugs were found by doing this rather than assuming it:
+1. the image's `HEALTHCHECK` ran in the worker and beat containers too (they serve no HTTP), so they reported
+   **unhealthy** while working and `up --wait` never settled - the check now lives on `vision-api` only;
+2. `VISION_API_PORT=8000` collided with the Kong gateway on this host, so the API never started - the default
+   is now **8010**, the same port the app's `VISION_WORKER_URL` already uses.
+
+## Verification performed (2026-10-19, staging): review queue with mock observations
+
+```
+fixture cmuxu4gga00afyxkk1u12rua8 · video cmvewv1cp00011nkkxpw7glu3 · run cmvewv1eu00031nkkuphd3gwf
+model MOCK-DETECTOR@0.0.0-mock · observations: shot=…, rebound=…
+GET /vision/games/<fixtureId> -> 200 (33,240 bytes): the run lists "2 observation(s)" and the analysis section
+confirm/reject through the page's own reviewObservation service:
+  statuses now CONFIRMED / REJECTED · 2 new audit rows
+PASS
+```
+
+The mock data was then removed with `vision-mock-run.ts --cleanup`: `videos=0 runs=0 observations=0`.
+
 ## Verification performed (2026-10-18, staging)
 
 A 5-second synthetic clip was created with `ffmpeg` and ingested end to end:
