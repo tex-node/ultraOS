@@ -236,7 +236,7 @@ Examples:
 | Sport | Outcomes | Points | Primary tiebreak | Secondary metrics |
 | --- | --- | --- | --- | --- |
 | Basketball | W/L | W=2, L=1 | head-to-head, diff | — |
-| Football | W/D/L | W=3, D=1 | goal difference | goals for |
+| Football | W/D/L | W=3, D=1 | goal difference | goals for | **IMPLEMENTED (streak v10)** - definition, FOOTBALL_GOALS module, capture console (goal/penalty/own goal + cards via the catalog panel), W/D/L standings at 3/1/0, `DRAW` finalisation (a level match is a result and pays 1 point each), `CARD_ISSUED` on the partner feed and football in the export. Verified with a 90-minute 1-1 draw on staging. |
 | Volleyball | W/L | W=3, L=0 (or set-based) | set ratio | points ratio |
 | Cricket | W/L/D/NR | W=2, D/NR=1 | net run rate | — |
 | Tennis | W/L | table or bracket | sets/games ratio | head-to-head |

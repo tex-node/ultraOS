@@ -1,0 +1,378 @@
+# Staging Release Commit Plan (proposal, pre-commit)
+
+Status: PROPOSAL - no files staged or committed by this document. Generated from `git status --short -uall`.
+
+## Summary
+
+| Group | Count | Action |
+| --- | ---: | --- |
+| Release runtime (web/src/**) | 231 | **Include** in release commit |
+| Tenancy tooling (web/scripts/**) | 80 | Exclude from release (optional separate commit) |
+| Architecture docs (documentation/**) | 17 | Exclude from release (optional separate commit) |
+| Seed script (web/prisma/seed.ts) | 1 | Exclude (not runtime; does not run on build) |
+| Migrations (web/prisma/migrations/**) | 0 | Already committed; unchanged |
+| Schema (web/prisma/schema.prisma) | 0 | Already committed; unchanged |
+| Personal/experimental/generated (assets/ data/ fans/ tmp/ docs/ UI/ Draft UX/ PROJECT_REPORT.md tmp_cert.md) | 349 | **Exclude permanently** |
+| **Total dirty (with -uall)** | 678 | |
+
+## Required for the staging release (`web/src/**`)
+
+- [M] web/src/app/announcements/actions.ts
+- [M] web/src/app/announcements/page.tsx
+- [M] web/src/app/api/broadcast/games/[gameId]/route.ts
+- [M] web/src/app/api/broadcast/program/route.ts
+- [M] web/src/app/api/content/[kind]/[id]/route.ts
+- [M] web/src/app/api/draft-events/[draftEventId]/state/route.ts
+- [M] web/src/app/api/games/[id]/box-score/route.ts
+- [M] web/src/app/api/games/[id]/data-capabilities/route.ts
+- [M] web/src/app/api/games/[id]/route.ts
+- [M] web/src/app/api/games/[id]/snapshot/route.ts
+- [M] web/src/app/api/games/[id]/snapshot-v2/route.ts
+- [M] web/src/app/api/public/coaches/[ultraStaffId]/route.ts
+- [M] web/src/app/api/share/game/[id]/route.ts
+- [M] web/src/app/api/share/player/[id]/route.ts
+- [M] web/src/app/api/share/record/[key]/route.ts
+- [M] web/src/app/api/share/team/[id]/route.ts
+- [M] web/src/app/api/sponsor-impressions/[id]/route.ts
+- [M] web/src/app/api/v1/broadcast/games/[id]/route.ts
+- [M] web/src/app/api/v1/clubs/[publicId]/route.ts
+- [M] web/src/app/api/v1/games/[publicId]/box-score/route.ts
+- [M] web/src/app/api/v1/games/[publicId]/events/route.ts
+- [M] web/src/app/api/v1/games/[publicId]/snapshot/route.ts
+- [M] web/src/app/api/v1/live/route.ts
+- [M] web/src/app/api/v1/players/[publicId]/route.ts
+- [M] web/src/app/api/v1/seasons/[publicId]/leaders/route.ts
+- [M] web/src/app/api/v1/seasons/[publicId]/standings/route.ts
+- [M] web/src/app/api/vision/games/[gameVideoId]/export/route.ts
+- [M] web/src/app/applications/[category]/page.tsx
+- [M] web/src/app/applications/actions.ts
+- [M] web/src/app/applications/application-data.ts
+- [M] web/src/app/applications/export/route.ts
+- [M] web/src/app/applications/internalization/page.tsx
+- [M] web/src/app/applications/page.tsx
+- [??] web/src/app/apply/[organizationSlug]/[role]/page.tsx
+- [??] web/src/app/apply/[organizationSlug]/actions.ts
+- [??] web/src/app/apply/[organizationSlug]/page.tsx
+- [D] web/src/app/apply/[role]/page.tsx
+- [D] web/src/app/apply/actions.ts
+- [M] web/src/app/apply/application-config.ts
+- [M] web/src/app/apply/application-form.tsx
+- [M] web/src/app/apply/page.tsx
+- [M] web/src/app/athletes/[athleteId]/training/page.tsx
+- [M] web/src/app/broadcast/control/actions.ts
+- [M] web/src/app/broadcast/control/page.tsx
+- [M] web/src/app/broadcast/diagnostics/page.tsx
+- [M] web/src/app/broadcast/game/[gameId]/scorebug/page.tsx
+- [M] web/src/app/broadcast/graphics/page.tsx
+- [M] web/src/app/broadcast/graphics/preview/page.tsx
+- [M] web/src/app/broadcast/page.tsx
+- [M] web/src/app/broadcast/stats/page.tsx
+- [M] web/src/app/check-in/[code]/page.tsx
+- [M] web/src/app/check-in/actions.ts
+- [M] web/src/app/check-in/page.tsx
+- [M] web/src/app/clubs/[id]/edit/page.tsx
+- [M] web/src/app/clubs/[id]/page.tsx
+- [M] web/src/app/clubs/[id]/seasons/new/page.tsx
+- [M] web/src/app/clubs/actions.ts
+- [M] web/src/app/clubs/page.tsx
+- [M] web/src/app/coaches/[ultraStaffId]/page.tsx
+- [M] web/src/app/coaches/actions.ts
+- [M] web/src/app/coaches/assignments/page.tsx
+- [M] web/src/app/coaches/season-zero-selection/page.tsx
+- [M] web/src/app/content/actions.ts
+- [M] web/src/app/content/assets/[slug]/export/[format]/route.ts
+- [M] web/src/app/content/assets/[slug]/page.tsx
+- [M] web/src/app/content/page.tsx
+- [M] web/src/app/content/templates/page.tsx
+- [M] web/src/app/dashboard/page.tsx
+- [M] web/src/app/data-quality/duplicates/[groupId]/page.tsx
+- [M] web/src/app/data-quality/duplicates/actions.ts
+- [M] web/src/app/data-quality/duplicates/page.tsx
+- [M] web/src/app/data-readiness/export/route.ts
+- [M] web/src/app/data-readiness/page.tsx
+- [M] web/src/app/display/game/[gameId]/clock/page.tsx
+- [M] web/src/app/draft-cohort/actions.ts
+- [M] web/src/app/draft-cohort/page.tsx
+- [M] web/src/app/draft-events/[draftEventId]/coaches/page.tsx
+- [M] web/src/app/draft-events/[draftEventId]/control/page.tsx
+- [M] web/src/app/draft-events/[draftEventId]/page.tsx
+- [M] web/src/app/draft-events/[draftEventId]/player-pool/page.tsx
+- [M] web/src/app/draft-events/[draftEventId]/readiness/page.tsx
+- [M] web/src/app/draft-events/[draftEventId]/squads/[squadId]/page.tsx
+- [M] web/src/app/draft-events/[draftEventId]/squads/new/page.tsx
+- [M] web/src/app/draft-events/[draftEventId]/squads/page.tsx
+- [M] web/src/app/draft-events/actions.ts
+- [M] web/src/app/draft-events/new/page.tsx
+- [M] web/src/app/draft-events/page.tsx
+- [M] web/src/app/draft-readiness/page.tsx
+- [M] web/src/app/drafts/[id]/display/page.tsx
+- [M] web/src/app/drafts/[id]/page.tsx
+- [M] web/src/app/drafts/actions.ts
+- [M] web/src/app/drafts/new/page.tsx
+- [M] web/src/app/drafts/page.tsx
+- [M] web/src/app/events/[id]/debrief/actions.ts
+- [M] web/src/app/events/[id]/debrief/page.tsx
+- [M] web/src/app/events/[id]/page.tsx
+- [M] web/src/app/events/actions.ts
+- [M] web/src/app/events/new/page.tsx
+- [M] web/src/app/events/page.tsx
+- [M] web/src/app/fixtures/[id]/edit/page.tsx
+- [M] web/src/app/fixtures/[id]/page.tsx
+- [M] web/src/app/fixtures/actions.ts
+- [M] web/src/app/fixtures/new/page.tsx
+- [M] web/src/app/fixtures/page.tsx
+- [M] web/src/app/gameday/checkin/actions.ts
+- [M] web/src/app/gameday/checkin/page.tsx
+- [M] web/src/app/gameday/page.tsx
+- [M] web/src/app/games/[fixtureId]/live/page.tsx
+- [M] web/src/app/games/[fixtureId]/stats/page.tsx
+- [M] web/src/app/games/[fixtureId]/stats/reconciliation/page.tsx
+- [M] web/src/app/games/[fixtureId]/video/actions.ts
+- [M] web/src/app/games/[fixtureId]/video/page.tsx
+- [M] web/src/app/games/actions.ts
+- [M] web/src/app/games/stats-actions.ts
+- [M] web/src/app/imports/[importJobId]/page.tsx
+- [M] web/src/app/imports/[importJobId]/report/route.ts
+- [M] web/src/app/imports/actions.ts
+- [M] web/src/app/imports/page.tsx
+- [M] web/src/app/launch-readiness/page.tsx
+- [M] web/src/app/launch-readiness/report/route.ts
+- [M] web/src/app/live/page.tsx
+- [M] web/src/app/media/[assetId]/page.tsx
+- [M] web/src/app/media/actions.ts
+- [M] web/src/app/media/assets/[assetId]/file/route.ts
+- [M] web/src/app/media/page.tsx
+- [M] web/src/app/novelty-matches/[matchId]/live/page.tsx
+- [M] web/src/app/novelty-matches/actions.ts
+- [M] web/src/app/novelty-matches/page.tsx
+- [M] web/src/app/operations/actions.ts
+- [M] web/src/app/operations/page.tsx
+- [M] web/src/app/orders/actions.ts
+- [M] web/src/app/orders/page.tsx
+- [M] web/src/app/participants/offline-intake/actions.ts
+- [M] web/src/app/participants/offline-intake/page.tsx
+- [M] web/src/app/participants/search/page.tsx
+- [M] web/src/app/player-registrations/[id]/edit/page.tsx
+- [M] web/src/app/players/[id]/edit/page.tsx
+- [M] web/src/app/players/[id]/page.tsx
+- [M] web/src/app/players/[id]/seasons/new/page.tsx
+- [M] web/src/app/players/actions.ts
+- [M] web/src/app/players/page.tsx
+- [M] web/src/app/public/celebrations/page.tsx
+- [M] web/src/app/public/clubs/[id]/page.tsx
+- [M] web/src/app/public/clubs/page.tsx
+- [M] web/src/app/public/events/[id]/page.tsx
+- [M] web/src/app/public/events/actions.ts
+- [M] web/src/app/public/events/page.tsx
+- [M] web/src/app/public/fixtures/[id]/page.tsx
+- [M] web/src/app/public/fixtures/page.tsx
+- [M] web/src/app/public/orders/[code]/page.tsx
+- [M] web/src/app/public/page.tsx
+- [M] web/src/app/public/players/[id]/page.tsx
+- [M] web/src/app/public/players/page.tsx
+- [M] web/src/app/public/share/game/[id]/page.tsx
+- [M] web/src/app/public/share/player/[id]/page.tsx
+- [M] web/src/app/public/share/record/[key]/page.tsx
+- [M] web/src/app/public/share/team/[id]/page.tsx
+- [M] web/src/app/public/standings/page.tsx
+- [M] web/src/app/public/stats/compare/players/page.tsx
+- [M] web/src/app/public/stats/compare/teams/page.tsx
+- [M] web/src/app/public/stats/page.tsx
+- [M] web/src/app/public/stats/players/page.tsx
+- [M] web/src/app/public/stats/records/page.tsx
+- [M] web/src/app/public/tickets/[code]/page.tsx
+- [M] web/src/app/public/tickets/actions.ts
+- [M] web/src/app/qr-operations/page.tsx
+- [M] web/src/app/scoreboard/[gameId]/page.tsx
+- [M] web/src/app/season-clubs/[id]/edit/page.tsx
+- [M] web/src/app/season-clubs/[id]/roster/page.tsx
+- [M] web/src/app/signup/support-club/actions.ts
+- [M] web/src/app/signup/support-club/page.tsx
+- [M] web/src/app/staff-planner/page.tsx
+- [M] web/src/app/training/[sessionId]/page.tsx
+- [M] web/src/app/training/actions.ts
+- [M] web/src/app/training/new/page.tsx
+- [M] web/src/app/training/page.tsx
+- [M] web/src/app/tryouts/[group]/page.tsx
+- [M] web/src/app/tryouts/actions.ts
+- [M] web/src/app/tryouts/export/route.ts
+- [M] web/src/app/tryouts/page.tsx
+- [M] web/src/app/tryouts/reconciliation/page.tsx
+- [M] web/src/app/vendors/[id]/page.tsx
+- [M] web/src/app/vendors/actions.ts
+- [M] web/src/app/vendors/page.tsx
+- [M] web/src/app/venue-map/page.tsx
+- [M] web/src/app/vision/failures/page.tsx
+- [M] web/src/app/vision/games/[fixtureId]/actions.ts
+- [M] web/src/app/vision/games/[fixtureId]/page.tsx
+- [M] web/src/app/vision/page.tsx
+- [M] web/src/app/vision/videos/actions.ts
+- [M] web/src/app/vision/videos/page.tsx
+- [M] web/src/auth.ts
+- [M] web/src/lib/admin-offline-intake.ts
+- [M] web/src/lib/analytics/game-analytics.ts
+- [M] web/src/lib/announcements.ts
+- [M] web/src/lib/api-v1/game-loader.ts
+- [M] web/src/lib/api-v1/identifiers.ts
+- [M] web/src/lib/application-intake.ts
+- [M] web/src/lib/audit.ts
+- [??] web/src/lib/authorization.test.ts
+- [M] web/src/lib/authorization.ts
+- [M] web/src/lib/broadcast-graphic-loader.ts
+- [M] web/src/lib/broadcast-presentation-state.ts
+- [M] web/src/lib/content-engine.ts
+- [M] web/src/lib/data-quality.ts
+- [M] web/src/lib/draft-cohort.ts
+- [M] web/src/lib/draft-events.ts
+- [M] web/src/lib/draft-personnel-readiness.ts
+- [M] web/src/lib/draft-squad-capacity.ts
+- [M] web/src/lib/game-day-checkin.ts
+- [M] web/src/lib/imports.ts
+- [M] web/src/lib/live-game-snapshot-v2.ts
+- [M] web/src/lib/media-storage.ts
+- [M] web/src/lib/operations.ts
+- [M] web/src/lib/participant-internalization.ts
+- [M] web/src/lib/participant-profiles.test.ts
+- [M] web/src/lib/participant-profiles.ts
+- [M] web/src/lib/permissions.ts
+- [??] web/src/lib/platform-permissions.ts
+- [M] web/src/lib/public-ids.ts
+- [??] web/src/lib/public-locators.test.ts
+- [??] web/src/lib/public-locators.ts
+- [M] web/src/lib/r2.ts
+- [M] web/src/lib/season-zero-preflight.ts
+- [M] web/src/lib/season-zero-readiness.ts
+- [M] web/src/lib/standings.ts
+- [M] web/src/lib/system-health-loader.ts
+- [??] web/src/lib/tenant-context.ts
+- [??] web/src/lib/user-roles.ts
+- [M] web/src/lib/vision/vision-loader.ts
+- [M] web/src/types/next-auth.d.ts
+
+## Tenancy tooling (intentionally uncommitted from the release; optional separate commit)
+
+- [??] web/scripts/analytics-vision-tenancy-isolation-integration-test.ts
+- [??] web/scripts/draft-tenancy-isolation-integration-test.ts
+- [M] web/scripts/g10-onboard-players-batch1.ts
+- [M] web/scripts/g11-onboard-okoro-naomi.ts
+- [M] web/scripts/g13-update-okoro-email.ts
+- [M] web/scripts/g14-draft-favour-franklin-halo.ts
+- [M] web/scripts/g14-onboard-players-batch.ts
+- [M] web/scripts/g16-correct-halo-olutosoye.ts
+- [M] web/scripts/g16-rehearsal.ts
+- [M] web/scripts/g17-flip-grace-and-draft.ts
+- [M] web/scripts/g17-rehearsal-part2.ts
+- [M] web/scripts/g18-rehearsal.ts
+- [M] web/scripts/g19-rehearsal.ts
+- [M] web/scripts/g20-rehearsal.ts
+- [M] web/scripts/g24-update-and-provision-3players.ts
+- [M] web/scripts/g25-onboard-ginika-ezeogu.ts
+- [M] web/scripts/g26-provision-ginika-and-roli.ts
+- [M] web/scripts/g28-onboard-emmanuel-jacob.ts
+- [M] web/scripts/g29-approve-internalize-emmanuel-jacob.ts
+- [M] web/scripts/g30-provision-okoro-naomi.ts
+- [M] web/scripts/g32-provision-emmanuel-amarachi.ts
+- [M] web/scripts/g33-update-godwin-kemepade-omolola.ts
+- [M] web/scripts/g34-draft-4-men-to-clubs.ts
+- [M] web/scripts/g35-update-eric-divine.ts
+- [M] web/scripts/g36-provision-eric-divine.ts
+- [M] web/scripts/g37-draft-11-women.ts
+- [M] web/scripts/g38-update-imole.ts
+- [M] web/scripts/g39-onboard-emmanuel-boluwatife.ts
+- [M] web/scripts/g3-correction-test.ts
+- [M] web/scripts/g3-imomoh-intake.ts
+- [M] web/scripts/g3-reset-main-rehearsal.ts
+- [M] web/scripts/g3-resolve-duplicates.ts
+- [M] web/scripts/g3-run-rehearsal.ts
+- [M] web/scripts/g3-secondary-draft-rehearsal.ts
+- [M] web/scripts/g3-split-akingbade.ts
+- [M] web/scripts/g3-split-akingbade-oyekan-v2.ts
+- [M] web/scripts/g3-split-bakare.ts
+- [M] web/scripts/g3-upload-akpan-photo.ts
+- [M] web/scripts/g3-upload-club-logos.ts
+- [M] web/scripts/g3-upload-coach-photos.ts
+- [M] web/scripts/g40-provision-imole.ts
+- [M] web/scripts/g41-onboard-ewohon-adaeze.ts
+- [M] web/scripts/g42-draft-final-3-women.ts
+- [M] web/scripts/g43-swap-imole-vanessa.ts
+- [M] web/scripts/g48-internalize-igwebuike.ts
+- [M] web/scripts/g49-draft-igwebuike-ember.ts
+- [M] web/scripts/g4-official-reset.ts
+- [M] web/scripts/g4-verify-cancel-button.ts
+- [M] web/scripts/g4-verify-constraint-fix.ts
+- [M] web/scripts/g4-verify-control-fix.ts
+- [M] web/scripts/g53-migrate-allstar-teams.ts
+- [M] web/scripts/g54-onboard-adeshina-funmilayo.ts
+- [M] web/scripts/g58-onboard-iwajoba-rofiat.ts
+- [M] web/scripts/g5-verify-display-refresh.ts
+- [M] web/scripts/g5-verify-readiness-fix.ts
+- [M] web/scripts/g62-onboard-onitolo-yinka.ts
+- [M] web/scripts/g63-onboard-egbayelo-peter.ts
+- [M] web/scripts/g65-draft-three-reserves.ts
+- [M] web/scripts/g66-halo-ember-roster-changes.ts
+- [M] web/scripts/g6-revert-to-rehearsal.ts
+- [M] web/scripts/g84-import-season-zero-results.ts
+- [M] web/scripts/participants-internalize.ts
+- [??] web/scripts/phase1-stage2-backfill-organization.ts
+- [??] web/scripts/phase1-stage5-backfill-role-organization.ts
+- [??] web/scripts/public-locators-backfill.ts
+- [M] web/scripts/rehearsal-isolation-integration-test.ts
+- [M] web/scripts/season-zero-club-onboarding.ts
+- [M] web/scripts/secondary-draft-isolation-integration-test.ts
+- [??] web/scripts/stage55a-full-gate-proof.ts
+- [??] web/scripts/stage55a-neon-media-fixture-proof.ts
+- [??] web/scripts/stage55a-staging-proof.ts
+- [??] web/scripts/stage55b-coaches-training-participants-players-proof.ts
+- [??] web/scripts/stage55b-content-media-broadcast-mutation-proof.ts
+- [??] web/scripts/stage55b-content-media-broadcast-proof.ts
+- [??] web/scripts/stage55b-events-tenant-proof.ts
+- [??] web/scripts/vendor-event-reservation-tenancy-isolation-integration-test.ts
+- [??] web/scripts/verify-5-2b3-privileged-fk.ts
+- [??] web/scripts/verify-5-2b4-privileged-fk.ts
+- [??] web/scripts/verify-5-2c-privileged-fk.ts
+- [M] web/scripts/vision-analyze.ts
+
+## Architecture docs (optional separate commit)
+
+- [??] documentation/architecture/HANDOVER_STAGE5_2D_IN_PROGRESS.md
+- [??] documentation/architecture/PHASE1_STAGE5_2A_TENANCY_SCAN.md
+- [??] documentation/architecture/PHASE1_STAGE5_2B1_PUBLIC_TENANT_ACQUISITION.md
+- [??] documentation/architecture/PHASE1_STAGE5_2B2_LEAGUE_STRUCTURE_ADMINISTRATION.md
+- [??] documentation/architecture/PHASE1_STAGE5_2B3_DRAFT_TRYOUT_COACH_TENANCY.md
+- [??] documentation/architecture/PHASE1_STAGE5_2B4_VENDOR_EVENT_RESERVATION_TENANCY.md
+- [??] documentation/architecture/PHASE1_STAGE5_2C_ANALYTICS_VISION_DATA_READ_TENANCY.md
+- [??] documentation/architecture/PHASE1_STAGE5_2D_PUBLIC_API_READ_TENANCY.md
+- [??] documentation/architecture/PHASE1_STAGE5_4A_TENANT_SCOPED_PUBLIC_IDS.md
+- [??] documentation/architecture/PHASE1_STAGE5_4B_RELATIONAL_INTEGRITY.md
+- [??] documentation/architecture/PHASE1_STAGE5_5_TENANT_BOOTSTRAP_RLS_FALLBACK_ELIMINATION.md
+- [??] documentation/architecture/PHASE1_STAGE5_5A_GLOBAL_TENANT_BOOTSTRAP_LOCATOR.md
+- [??] documentation/architecture/PHASE1_STAGE5_5B_EXPLICIT_CONTEXT_CERTIFICATION.md
+- [??] documentation/reference/PRODUCTION_PLANNER_FEATURE_REFERENCE.md
+- [??] documentation/reference/RUNDOWN_STUDIO_FEATURE_REFERENCE.md
+- [??] documentation/reference/SHWSYNC_PRODUCT_PLAN.md
+- [??] documentation/reference/UNIFIED_PRODUCT_SPEC.md
+
+## Excluded personal/experimental/generated (top-level breakdown)
+
+- assets/ : 27 files
+- data/ : 9 files
+- docs/ : 79 files
+- Draft UX/ : 12 files
+- fans/ : 9 files
+- PROJECT_REPORT.md/ : 1 files
+- tmp/ : 85 files
+- tmp_cert.md/ : 1 files
+- UI/ : 126 files
+
+## Proposed commit sequence
+
+1. `phase1: commit tenancy runtime (explicit organization context)` - all `web/src/**` (231 files). Combined with already-committed schema (`5766a05`), migrations (`14023ca`), and R2 registration (`acdab7b`, `20331d`, `7c23d08`, `c20b31d`, `d1dfb1d`, `1b6de9f`), this yields a complete buildable staging release.
+2. (optional) `phase1: commit tenancy tooling and scripts` - `web/scripts/**` + `web/prisma/seed.ts`.
+3. (optional) `docs: commit tenancy and registration architecture reports` - `documentation/**`.
+
+## Confirmations
+
+- No migration files are dirty or staged (migration count dirty: 0).
+- No production files referenced; no deploy/push performed.
+- No seed data is changed or executed; committing `seed.ts` (optional) changes only code, never data.
+- Generated build output (`node_modules`, `.next`, `src/generated`) is gitignored and not in status.
