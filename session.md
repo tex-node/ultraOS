@@ -11163,3 +11163,48 @@ football fixtures in the export: 1
 ```
 
 **Next step:** Prompt 5 (final sync).
+
+## 2026-10-19 - Streak v10 / Prompt 5: final sync - football shipped, 49/49 DB, both deploys, main merged
+
+**Roadmaps**: `MULTI_SPORT_ARCHITECTURE.md` marks **Football as IMPLEMENTED** (definition, module, console,
+W/D/L 3/1/0, `DRAW` finalisation, `CARD_ISSUED`, export); `MULTI_SPORT_ROADMAP.md` G5 records football end to end
+plus the match-day board and the `fixtureSide()` sweep; `COACH_INTELLIGENCE_ROADMAP.md` records the football feed
+work.
+
+**Suites**
+```
+npm test               995 tests, 994 pass, 0 fail  (1 pre-existing skip)
+npm run test:component  26 tests, 26 pass
+npm run test:db         49 tests, 49 pass (354 s, serialized, scratch clone)
+canonical-write ratchet 4 suppressions (ceiling 4)
+```
+
+**Deploys**
+| environment | release | migration | smoke |
+| --- | --- | --- | --- |
+| staging | `7d40edc` | `20261019210000_feed_card_issued` (applied earlier this streak) | 7/7 PASS, 0 errors |
+| production | `release-7d40edc` | `20261019210000_feed_card_issued` applied, behind a verified backup `…pre_v10_20261019T223927Z.dump` (sha256 `09b9b192…`) | 7/7 PASS, 0 errors |
+
+**Production verified after the deploy**
+```
+GET /api/v1/live -> 200
+DataFeedEventType has CARD_ISSUED: 1
+```
+
+**One mistake to record:** `git add documentation/` in the roadmap commit also added the long-untracked
+`documentation/architecture/PHASE1_*` and `HANDOVER_*` files. They are real project documents and belong in the
+repo, but they were not part of this prompt and the commit message does not mention them - a reminder to add paths,
+not directories, when the intent is one file.
+
+**Known issues carried forward**
+- The tennis console is still best-of-5 by default unless the season RuleSet overrides it; the header now says which
+  (v8), but the *default* has not changed.
+- The remaining `homeSeasonClub!` assertions all live inside the seven basketball-only broadcast graphics, which now
+  404 for an individual-sport fixture instead of crashing. They are unreachable with a null club, not fixed to
+  render one.
+- The broadcast graphics and `/gameday` are still basketball surfaces; `/operations/matchday` is the multi-sport
+  board.
+- Staging keeps the CT demo league deliberately live (6 games), which is why its match-day board is never empty.
+
+**Streak v10 complete.** Both environments on `7d40edc`, smoke green, football a first-class sport end to end,
+995 unit + 26 component + 49 DB tests, ratchet 4/4, `main` merged.
