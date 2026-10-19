@@ -10946,3 +10946,65 @@ line, so the first verification run "created" no key and then tested an **empty*
 `main().then()` with the raw key as the only stdout.
 
 **Next step:** Prompt 3 (league data export).
+
+## 2026-10-19 - Streak v9 / Prompt 3: league data export - one tournament over HTTP, the whole league on disk
+
+**`GET /api/v1/exports/tournament/[id]`** (keyed; statistics only on PRO/ENTERPRISE):
+```
+no key                     -> 401
+BASIC  -> 200 · 7,692 bytes   seasons 2 · fixtures 12 · participants 16
+          stats.included: false · "Player statistics require the PRO or ENTERPRISE tier."
+PRO    -> 200 · 47,152 bytes  stats.included: true · 130 stat lines
+unknown tournament         -> 404
+```
+`stats.included` and `stats.reason` exist so an empty `players` array can never be mistaken for "this league has
+no stats" - a BASIC partner is told the data exists but is not in their tier. Fixtures carry both sides through
+the same `apiTeam()` helper as the rest of the API (clubs *and* entrants), their final score, `round`, and the
+game's `dataCapability` plus per-period scores.
+
+**`scripts/export-league-data.ts`** writes a directory for cold storage or a partner hand-off:
+```
+manifest.json · competitions.json · seasons.json · clubs.json · entrants.json
+fixtures.csv (5.4 KB) · standings.csv (0.7 KB) · player-stats.csv (93.6 KB) · README.txt
+done: 32 fixtures, 10 standing rows, 713 stat lines
+```
+CSVs rather than a zip because that is what a partner loads; the README carries the one-line `zip -r` command.
+Each file is written after its own query, so a partial export is visibly partial.
+
+**Two schema mistakes caught by `tsc`:** divisions belong to the **competition**, not the season - the first
+select put them on `Season` and made the entire query untypeable, which also hid the `sport`/`seasons` errors
+behind it.
+
+## 2026-10-19 - Streak v9 / Prompt 4: Team DNA - already there, but one number was a lie
+
+**Finding: the public club page already rendered Team DNA.** `/public/clubs/[id]` computes
+`computeLeagueTeamDna`, and renders tags, rank badges, the identity sentence, "Category Strengths",
+"Below Season Zero Average", a per-dimension bar list, the broadcast card and similar teams. The prompt's premise
+("the public UI doesn't surface them well") was not accurate, so instead of rebuilding it I looked for what was
+wrong in it:
+
+**`buildTeamDnaCard(dna, teamName, logoUrl, "BOX_SCORE_ONLY")`** - the capability was a **hardcoded literal**, so
+every club's DNA card claimed "Official box score data" even when its season was captured at a higher capability.
+It now takes the highest capability actually present in the season's games, mapped through
+`getGameAnalyticsCapability`.
+
+**Verified against real data** (`scripts/team-dna-verify.ts` computes the DNA exactly as the page does, fetches the
+rendered page, and compares):
+```
+Campos Basketballers (2026 Season) · 7 games · QUALIFIED
+  computed tags: Ball Movement, High-Pace Scoring
+  top dimensions: Playmaking 1.53×, Scoring 1.28×, Defense 1.17×
+  GET /public/clubs/<key> -> 200 (127,567 bytes)
+  every computed tag is on the page (2 shown)
+PASS
+```
+The rendered page shows "Team DNA", "Ball Movement", "High-Pace Scoring", the identity sentence and Category
+Strengths (Playmaking, Scoring). The tags match the indices that produced them: 1.53× and 1.28× are both above
+the 1.15 threshold in `team-dna.ts`.
+
+**The first attempt "passed" dishonestly** and that is worth recording: no LBCL club had a
+`PublicResourceLocator`, so the script skipped the render check on every club and still printed PASS because it
+found no problems in the checks it never ran. I created a locator for one club (real plumbing, removed
+afterwards), re-ran, and only then did it actually fetch and compare a page.
+
+**Next step:** Prompt 5 (final sync).
