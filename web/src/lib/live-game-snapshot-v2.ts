@@ -59,6 +59,19 @@ export type LiveGameSnapshotEventV2 = {
 // judgment call G.16 made deferring public/broadcast live surfaces. The fields that ARE here
 // (box score, leaders, lineups, minutes, reconciliation, verification) are all backed by
 // primitives already proven against real production data and the G.17 rehearsal.
+/**
+ * One side of a fixture for the public snapshot: a club for team sports, an entrant for individual sports.
+ * `seasonClubId` keeps its name for contract compatibility and carries the entrant id when there is no club.
+ */
+function sideFor(
+  seasonClub: { club: { name: string; shortName: string } } | null,
+  entrant: { id: string; name: string } | null,
+  fallbackId: string,
+): { seasonClubId: string; shortName: string; name: string } {
+  if (seasonClub) return { seasonClubId: fallbackId, shortName: seasonClub.club.shortName, name: seasonClub.club.name };
+  const name = entrant?.name ?? "TBD";
+  return { seasonClubId: fallbackId, shortName: name.slice(0, 5).toUpperCase(), name };
+}
 export type LiveGameSnapshotV2 = {
   gameId: string;
   fixtureId: string;
@@ -107,7 +120,18 @@ function computeLeaders(players: DerivedPlayerStats[]): LiveLeader[] {
 export async function buildLiveGameSnapshotV2(gameId: string, db: Db = prisma): Promise<LiveGameSnapshotV2> {
   const game = await db.game.findUniqueOrThrow({
     where: { id: gameId },
-    include: { fixture: { include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } } } }, ruleSnapshot: true },
+    include: {
+        fixture: {
+          include: {
+            homeSeasonClub: { include: { club: true } },
+            awaySeasonClub: { include: { club: true } },
+            // Individual sports: the side is an entrant, and the snapshot must render it instead of crashing.
+            homeEntrant: { select: { id: true, name: true } },
+            awayEntrant: { select: { id: true, name: true } },
+          },
+        },
+        ruleSnapshot: true,
+      },
   });
 
   const [statisticianEvents, latestEvents, starters, substitutionRows, scoringChronologyRows] = await Promise.all([
@@ -223,8 +247,12 @@ export async function buildLiveGameSnapshotV2(gameId: string, db: Db = prisma): 
     dataCapability: capability,
     score: { home: game.fixture.homeScore, away: game.fixture.awayScore },
     teams: {
-      home: { seasonClubId: homeId, shortName: game.fixture.homeSeasonClub!.club.shortName, name: game.fixture.homeSeasonClub!.club.name },
-      away: { seasonClubId: awayId, shortName: game.fixture.awaySeasonClub!.club.shortName, name: game.fixture.awaySeasonClub!.club.name },
+      // A side is a SeasonClub (team sports) or an Entrant (individual sports). This used to dereference
+      // `homeSeasonClub!.club` unconditionally, which crashed the snapshot - and therefore /api/v1/live and every
+      // snapshot route - the moment a live fixture had entrant sides (streak v9). An entrant has no club and no
+      // short name, so its name is used and shortened for the scorebug.
+      home: sideFor(game.fixture.homeSeasonClub, game.fixture.homeEntrant, homeId),
+      away: sideFor(game.fixture.awaySeasonClub, game.fixture.awayEntrant, awayId),
     },
     liveBoxScore,
     leaders: computeLeaders(liveBoxScore.players),
