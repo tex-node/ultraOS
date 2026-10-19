@@ -15,5 +15,7 @@ export function EmbedRefresher({ intervalSeconds = 15 }: { intervalSeconds?: num
     const timer = setInterval(() => router.refresh(), intervalSeconds * 1000);
     return () => clearInterval(timer);
   }, [router, intervalSeconds]);
-  return null;
+  // A marker element rather than null: it lets a verification check prove the client component mounted, which an
+  // empty render would not.
+  return <span data-embed-refresher={intervalSeconds} hidden />;
 }

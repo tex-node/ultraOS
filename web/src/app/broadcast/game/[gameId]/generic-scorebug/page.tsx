@@ -70,7 +70,8 @@ export default async function GenericScorebug({ params }: { params: Promise<{ ga
   if (!definition) notFound();
   const home = fixtureSide(loaded.fixture.homeSeasonClub, loaded.fixture.homeEntrant);
   const away = fixtureSide(loaded.fixture.awaySeasonClub, loaded.fixture.awayEntrant);
-  // A finished game has no clock to show: "FINAL · 0s" reads like a stoppage, not an end.\n  const clock = definition.structure.clock === "NONE" || loaded.status === "FINAL" ? "" : clockText(loaded.clockSecondsRemaining);
+  // A finished game has no clock to show: "FINAL · 0s" reads like a stoppage, not an end.
+  const clock = definition.structure.clock === "NONE" || loaded.status === "FINAL" ? "" : clockText(loaded.clockSecondsRemaining);
   const period = periodLabel(definition, loaded.currentPeriod);
   const statusText = loaded.status === "LIVE" ? "LIVE" : loaded.status === "PAUSED" ? "PAUSED" : loaded.status === "FINAL" ? "FINAL" : "";
 
