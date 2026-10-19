@@ -1,6 +1,7 @@
 import { prisma } from "../src/lib/prisma";
 import { withOrganizationContext } from "../src/lib/tenant-context";
 import { parseVolleyballCsv } from "../src/lib/scoresheet/volleyball-extract";
+import { randomUUID } from "node:crypto";
 import { approveMetricScoresheet, createMetricScoresheetImport, ingestMetricScoresheet } from "../src/server/scoresheet/metric-imports";
 import { metricChecksums, metricColumns, type MetricScoresheet } from "../src/lib/scoresheet/metric-scoresheet";
 import { getSportDefinition } from "../src/lib/sports/registry";
@@ -32,6 +33,10 @@ if (!ORGANIZATION) {
 }
 const ORG: string = ORGANIZATION;
 const TAG = `VOLLEYBALL REVIEW ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
+// Club names carry a run id: (organizationId, name) is unique, and a previous failed run must not poison this
+// one. The sheet keeps the plain names - the ingest maps sheet teams to fixture sides positionally.
+const RUN = randomUUID().slice(0, 4).toUpperCase();
+const clubNameFor = (name: string) => `${name} ${RUN}`;
 
 const SHEET = `## Surge
 #,Player,K,E,SA,BLK,DIG,AST,PTS
@@ -71,7 +76,7 @@ async function main() {
     const venue = await tx.venue.findFirstOrThrow({ where: { organizationId: ORG }, select: { id: true } });
     const sides = [];
     for (const team of sheet.teams) {
-      const club = await tx.club.create({ data: { organizationId: ORG, sportId: sport.id, name: `${team.clubName}`, shortName: team.clubName.slice(0, 5).toUpperCase() }, select: { id: true } });
+      const club = await tx.club.create({ data: { organizationId: ORG, sportId: sport.id, name: clubNameFor(team.clubName), shortName: team.clubName.slice(0, 5).toUpperCase() }, select: { id: true } });
       const seasonClub = await tx.seasonClub.create({ data: { organizationId: ORG, seasonId: season.id, clubId: club.id, divisionId: division.id }, select: { id: true } });
       for (const player of team.players) {
         const [firstName, ...rest] = player.name.split(" ");
@@ -159,7 +164,7 @@ async function main() {
       await tx.season.deleteMany({ where: { id: setup.seasonId } });
       await tx.division.deleteMany({ where: { id: setup.divisionId } });
       await tx.competition.deleteMany({ where: { id: setup.competitionId } });
-      await tx.club.deleteMany({ where: { organizationId: ORG, name: { in: sheet.teams.map((team) => team.clubName) }, seasonClubs: { none: {} } } });
+      await tx.club.deleteMany({ where: { organizationId: ORG, name: { in: sheet.teams.map((team) => clubNameFor(team.clubName)) } } });
     });
     console.log("cleanup: import, metric rows, fixture, players and competition removed (use --keep to inspect)");
   } else {
