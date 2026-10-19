@@ -13,6 +13,9 @@ export default async function LeaderGraphic({ params }: { params: Promise<{ game
   const { gameId } = await params;
   const loaded = await loadProductionGraphicModel(gameId);
   if (!loaded) notFound();
+  // Basketball-only graphic (streak v10): it renders Ultra Time, four-point moments and shot clocks, which no
+  // individual-sport fixture has. Returning 404 is honest; dereferencing a null club would be a crash.
+  if (!loaded.fixture.homeSeasonClub || !loaded.fixture.awaySeasonClub) notFound();
   const { fixture, model } = loaded;
 
   const categories = model.leaders.filter((l) => ["POINTS", "REBOUNDS", "ASSISTS"].includes(l.category));

@@ -12,6 +12,9 @@ export default async function UltraTimeGraphic({ params }: { params: Promise<{ g
   const { gameId } = await params;
   const loaded = await loadProductionGraphicModel(gameId);
   if (!loaded) notFound();
+  // Basketball-only graphic (streak v10): it renders Ultra Time, four-point moments and shot clocks, which no
+  // individual-sport fixture has. Returning 404 is honest; dereferencing a null club would be a crash.
+  if (!loaded.fixture.homeSeasonClub || !loaded.fixture.awaySeasonClub) notFound();
   const { fixture, model } = loaded;
   if (model.ultraTime.phase === "INACTIVE") notFound();
 

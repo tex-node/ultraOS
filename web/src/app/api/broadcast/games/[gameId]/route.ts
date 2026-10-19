@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fixtureSide } from "@/lib/fixture-side";
 import { buildLivePresentationModelForGame } from "@/lib/live-game-snapshot-v2";
 import { isProductionPresentationFixture } from "@/lib/presentation-scope";
 import { effectiveRuleSnapshot } from "@/lib/ultra-scoring-engine";
@@ -21,7 +22,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ gam
     const game = await tx.game.findUnique({
       where: { id: gameId },
       include: {
-        fixture: { include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } } } },
+        fixture: {
+          include: {
+            homeSeasonClub: { include: { club: true } },
+            awaySeasonClub: { include: { club: true } },
+            homeEntrant: { select: { id: true, name: true } },
+            awayEntrant: { select: { id: true, name: true } },
+          },
+        },
         ruleSnapshot: true,
       },
     });
@@ -37,13 +45,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ gam
   return NextResponse.json({
     gameId: game.id,
     fixtureId: game.fixtureId,
-    homeClub: game.fixture.homeSeasonClub!.club.name,
-    homeShortName: game.fixture.homeSeasonClub!.club.shortName,
-    homeLogo: game.fixture.homeSeasonClub!.club.logoUrl,
+    // Sides are a club OR an entrant (streak v10): the broadcast API used non-null club assertions and crashed
+    // on an individual-sport fixture.
+    homeClub: fixtureSide(game.fixture.homeSeasonClub, game.fixture.homeEntrant).name,
+    homeShortName: fixtureSide(game.fixture.homeSeasonClub, game.fixture.homeEntrant).shortName,
+    homeLogo: fixtureSide(game.fixture.homeSeasonClub, game.fixture.homeEntrant).logoUrl,
     homeScore: model.score.home,
-    awayClub: game.fixture.awaySeasonClub!.club.name,
-    awayShortName: game.fixture.awaySeasonClub!.club.shortName,
-    awayLogo: game.fixture.awaySeasonClub!.club.logoUrl,
+    awayClub: fixtureSide(game.fixture.awaySeasonClub, game.fixture.awayEntrant).name,
+    awayShortName: fixtureSide(game.fixture.awaySeasonClub, game.fixture.awayEntrant).shortName,
+    awayLogo: fixtureSide(game.fixture.awaySeasonClub, game.fixture.awayEntrant).logoUrl,
     awayScore: model.score.away,
     half: model.periodLabel,
     gameClockSeconds: model.clock.remainingSeconds,

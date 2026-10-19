@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { GameClock } from "@/app/games/game-clock";
 import type { LivePresentationModel } from "@/lib/live-presentation-model";
+import type { UiFixtureSide } from "@/lib/fixture-side";
 import type { computeSnapshotHealth } from "@/lib/system-health";
 
 // The one live-game card, shared by the public `/live` route and the authenticated
@@ -9,13 +10,17 @@ import type { computeSnapshotHealth } from "@/lib/system-health";
 // Mobile hierarchy per G.19 Part XLV: score -> clock -> Ultra Time -> leaders -> story -> pulse
 // -> team comparison -> moments, so the page doesn't grow tall before the essentials appear.
 export function LiveGameHero({
-  fixture,
+  home,
+  away,
   model,
   href,
   rehearsal = false,
   staleness,
 }: {
-  fixture: { id: string; homeSeasonClub: { club: { name: string; shortName: string; logoUrl: string | null } }; awaySeasonClub: { club: { name: string; shortName: string; logoUrl: string | null } } };
+  // Sides are resolved by the caller through fixtureSide(): a club OR an entrant. This component used to take a
+  // fixture with non-null season clubs and dereference them, which crashed for individual sports (streak v10).
+  home: UiFixtureSide;
+  away: UiFixtureSide;
   model: LivePresentationModel;
   href: string;
   rehearsal?: boolean;
@@ -39,9 +44,9 @@ export function LiveGameHero({
         ) : null}
 
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
-          <p className="text-lg font-semibold">{fixture.homeSeasonClub!.club.name}</p>
+          <p className="text-lg font-semibold">{home.name}</p>
           <p className="font-mono text-5xl font-black tabular-nums">{model.score.home} — {model.score.away}</p>
-          <p className="text-lg font-semibold">{fixture.awaySeasonClub!.club.name}</p>
+          <p className="text-lg font-semibold">{away.name}</p>
         </div>
         <p className="mt-3 text-center text-sm text-text-3">
           {model.periodLabel} · <GameClock seconds={model.clock.remainingSeconds} status={model.clock.running ? "LIVE" : "PAUSED"} startedAt={null} />
@@ -74,18 +79,18 @@ export function LiveGameHero({
           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 border-t border-line pt-3 text-xs text-text-3">
             <span>{model.gamePulse.leadChanges} lead changes</span>
             {model.gamePulse.largestLead ? (
-              <span>Largest lead: {model.gamePulse.largestLead.team === "HOME" ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName} by {model.gamePulse.largestLead.margin}</span>
+              <span>Largest lead: {model.gamePulse.largestLead.team === "HOME" ? home.shortName : away.shortName} by {model.gamePulse.largestLead.margin}</span>
             ) : null}
             {model.gamePulse.currentRun && model.gamePulse.currentRun.points >= 4 ? (
-              <span className="text-warn">{model.gamePulse.currentRun.team === "HOME" ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName} on a {model.gamePulse.currentRun.points}–0 run</span>
+              <span className="text-warn">{model.gamePulse.currentRun.team === "HOME" ? home.shortName : away.shortName} on a {model.gamePulse.currentRun.points}–0 run</span>
             ) : null}
           </div>
         ) : null}
 
         {model.fourPoint.home || model.fourPoint.away ? (
           <div className="mt-4 flex justify-center gap-6 text-xs text-accent-purple">
-            <span>4PT {fixture.homeSeasonClub!.club.shortName} {model.fourPoint.home?.made ?? 0}</span>
-            <span>4PT {fixture.awaySeasonClub!.club.shortName} {model.fourPoint.away?.made ?? 0}</span>
+            <span>4PT {home.shortName} {model.fourPoint.home?.made ?? 0}</span>
+            <span>4PT {away.shortName} {model.fourPoint.away?.made ?? 0}</span>
           </div>
         ) : null}
 

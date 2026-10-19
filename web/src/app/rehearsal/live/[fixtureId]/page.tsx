@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { LiveGameHero } from "@/app/live/live-game-hero";
+import { fixtureSide } from "@/lib/fixture-side";
 import { buildLivePresentationModelForGame } from "@/lib/live-game-snapshot-v2";
 import { withOrganizationContext } from "@/lib/tenant-context";
 
@@ -22,7 +23,14 @@ export default async function RehearsalLive({ params }: { params: Promise<{ fixt
   const data = await withOrganizationContext(session.user.organizationId, async (tx) => {
     const fixture = await tx.fixture.findUnique({
       where: { id: fixtureId },
-      include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
+      include: {
+        homeSeasonClub: { include: { club: true } },
+        awaySeasonClub: { include: { club: true } },
+        // Individual sports: the side is an entrant, so the rehearsal card renders it instead of crashing.
+        homeEntrant: { select: { id: true, name: true } },
+        awayEntrant: { select: { id: true, name: true } },
+        game: true,
+      },
     });
     if (!fixture || fixture.recordOrigin !== "REHEARSAL" || !fixture.game || !["LIVE", "PAUSED"].includes(fixture.game.status)) return null;
     const model = await buildLivePresentationModelForGame(fixture.game.id, tx);
@@ -38,7 +46,13 @@ export default async function RehearsalLive({ params }: { params: Promise<{ fixt
         <h1 className="mt-2 text-3xl font-bold">Rehearsal live view</h1>
         <p className="mt-2 text-sm text-text-3">This exact card is what a spectator will see once this fixture is real. Never linked from public navigation.</p>
         <div className="mt-8">
-          <LiveGameHero fixture={{ ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }} model={model} href={`/rehearsal/live/${fixtureId}`} rehearsal />
+          <LiveGameHero
+            home={fixtureSide(fixture.homeSeasonClub, fixture.homeEntrant)}
+            away={fixtureSide(fixture.awaySeasonClub, fixture.awayEntrant)}
+            model={model}
+            href={`/rehearsal/live/${fixtureId}`}
+            rehearsal
+          />
         </div>
       </main>
     </OperationsShell>

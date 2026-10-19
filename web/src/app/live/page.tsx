@@ -3,6 +3,7 @@ import { PortalShell } from "@/app/components/portal-shell";
 import { LiveRefresher } from "./live-refresher";
 import { LiveGameHero } from "./live-game-hero";
 import { buildLivePresentationModelForGame } from "@/lib/live-game-snapshot-v2";
+import { fixtureSide } from "@/lib/fixture-side";
 import { formatLagosTime } from "@/lib/format-datetime";
 import { productionPresentationFixtureWhere } from "@/lib/presentation-scope";
 import { computeSnapshotHealth } from "@/lib/system-health";
@@ -27,6 +28,9 @@ export default async function PublicLive() {
         include: {
           homeSeasonClub: { include: { club: true } },
           awaySeasonClub: { include: { club: true } },
+          // Individual sports: the side is an entrant (streak v10 - this page used non-null club assertions).
+          homeEntrant: { select: { id: true, name: true } },
+          awayEntrant: { select: { id: true, name: true } },
           game: true,
         },
       })
@@ -62,7 +66,7 @@ export default async function PublicLive() {
         {upcoming[0] ? (
           <section className="mt-8 rounded-lg border border-line bg-ink-800 p-6">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-text-3">Next game</h2>
-            <p className="mt-3 text-lg">{upcoming[0].homeSeasonClub!.club.name} vs {upcoming[0].awaySeasonClub!.club.name}</p>
+            <p className="mt-3 text-lg">{fixtureSide(upcoming[0].homeSeasonClub, upcoming[0].homeEntrant).name} vs {fixtureSide(upcoming[0].awaySeasonClub, upcoming[0].awayEntrant).name}</p>
             <p className="mt-1 text-sm text-text-3">{formatLagosTime(upcoming[0].scheduledAt)}</p>
           </section>
         ) : null}
@@ -139,7 +143,14 @@ export default async function PublicLive() {
         <LiveRefresher />
         <div className="mt-8 grid gap-6 md:grid-cols-2">
           {live.map((fixture, i) => (
-            <LiveGameHero key={fixture.id} fixture={{ ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }} model={models[i]} href={`/public/fixtures/${fixture.id}`} staleness={freshness[i]} />
+            <LiveGameHero
+              key={fixture.id}
+              home={fixtureSide(fixture.homeSeasonClub, fixture.homeEntrant)}
+              away={fixtureSide(fixture.awaySeasonClub, fixture.awayEntrant)}
+              model={models[i]}
+              href={`/public/fixtures/${fixture.id}`}
+              staleness={freshness[i]}
+            />
           ))}
         </div>
       </main>

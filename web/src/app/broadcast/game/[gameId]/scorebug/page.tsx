@@ -34,6 +34,9 @@ export default async function Scorebug({ params }: { params: Promise<{ gameId: s
     return { game, model };
   });
   if (!loaded) notFound();
+  // Basketball-only graphic (streak v10): it renders Ultra Time, four-point moments and shot clocks, which no
+  // individual-sport fixture has. Returning 404 is honest; dereferencing a null club would be a crash.
+  if (!loaded.game.fixture.homeSeasonClub || !loaded.game.fixture.awaySeasonClub) notFound();
   const { game, model } = loaded;
   const shotClockRunning = model.shotClock.running;
 

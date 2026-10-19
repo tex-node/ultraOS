@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fixtureSide } from "@/lib/fixture-side";
 import { hasUltraStatDerivation, type GameDataCapability } from "@/lib/game-data-capability";
 import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
@@ -73,6 +74,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         fixture: {
           include: {
             homeSeasonClub: { include: { club: true } },
+        homeEntrant: { select: { id: true, name: true } },
+        awayEntrant: { select: { id: true, name: true } },
             awaySeasonClub: { include: { club: true } },
           },
         },
@@ -111,7 +114,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   return NextResponse.json({
     gameId: game.id,
     dataCapability: capability,
-    home: { club: game.fixture.homeSeasonClub!.club.shortName, ...teamLine(game.fixture.homeSeasonClubId!) },
-    away: { club: game.fixture.awaySeasonClub!.club.shortName, ...teamLine(game.fixture.awaySeasonClubId!) },
+    // A side is a club OR an entrant (streak v10). This route is the legacy per-game box score; it keeps its
+    // `club` key for compatibility and carries the entrant name when there is no club.
+    home: { club: fixtureSide(game.fixture.homeSeasonClub, game.fixture.homeEntrant).shortName, ...teamLine(game.fixture.homeSeasonClubId!) },
+    away: { club: fixtureSide(game.fixture.awaySeasonClub, game.fixture.awayEntrant).shortName, ...teamLine(game.fixture.awaySeasonClubId!) },
   });
 }

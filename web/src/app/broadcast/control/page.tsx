@@ -1,3 +1,4 @@
+import { fixtureSide } from "@/lib/fixture-side";
 import { requirePermissionOrRedirect } from "@/lib/authorization";
 import { OperationsShell } from "@/app/components/operations-shell";
 import { GRAPHIC_TYPES, graphicLabel, graphicRoute, type GraphicType } from "@/lib/broadcast-graphics";
@@ -31,11 +32,23 @@ export default async function BroadcastControl({ searchParams }: { searchParams:
     const fixtures = rehearsalFixtureId
       ? await tx.fixture.findMany({
           where: { id: rehearsalFixtureId, recordOrigin: "REHEARSAL", game: { status: { in: ["LIVE", "PAUSED"] } } },
-          include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
+          include: {
+        homeSeasonClub: { include: { club: true } },
+        awaySeasonClub: { include: { club: true } },
+        homeEntrant: { select: { id: true, name: true } },
+        awayEntrant: { select: { id: true, name: true } },
+        game: true,
+      },
         })
       : await tx.fixture.findMany({
           where: { game: { status: { in: ["LIVE", "PAUSED"] } }, ...productionPresentationFixtureWhere() },
-          include: { homeSeasonClub: { include: { club: true } }, awaySeasonClub: { include: { club: true } }, game: true },
+          include: {
+        homeSeasonClub: { include: { club: true } },
+        awaySeasonClub: { include: { club: true } },
+        homeEntrant: { select: { id: true, name: true } },
+        awayEntrant: { select: { id: true, name: true } },
+        game: true,
+      },
         });
     const games = await Promise.all(fixtures.map(async (f) => ({ fixture: f, model: await buildLivePresentationModelForGame(f.game!.id, tx) })));
     return { fixtures, games, state };
@@ -75,7 +88,7 @@ export default async function BroadcastControl({ searchParams }: { searchParams:
         ) : (
           games.map(({ fixture, model }) => (
             <section key={fixture.id} className="mt-8 rounded-lg border border-line bg-ink-800 p-5">
-              <p className="text-sm font-bold">{fixture.homeSeasonClub!.club.shortName} {model.score.home} — {model.score.away} {fixture.awaySeasonClub!.club.shortName}</p>
+              <p className="text-sm font-bold">{fixtureSide(fixture.homeSeasonClub, fixture.homeEntrant).shortName} {model.score.home} — {model.score.away} {fixtureSide(fixture.awaySeasonClub, fixture.awayEntrant).shortName}</p>
 
               <Suggestions gameId={fixture.game!.id} model={model} />
 
@@ -94,7 +107,7 @@ export default async function BroadcastControl({ searchParams }: { searchParams:
                   <div className="mt-2 flex flex-wrap gap-2">
                     {model.players.slice(0, 10).map((p) => (
                       <form key={p.playerId} action={setPreviewAction.bind(null, fixture.game!.id, "PLAYER_SPOTLIGHT" as GraphicType, p.playerId)}>
-                        <button className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-text-1 hover:border-white/40">{p.points} PTS · {p.seasonClubId === model.teams.home.seasonClubId ? fixture.homeSeasonClub!.club.shortName : fixture.awaySeasonClub!.club.shortName}</button>
+                        <button className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-text-1 hover:border-white/40">{p.points} PTS · {p.seasonClubId === model.teams.home.seasonClubId ? fixtureSide(fixture.homeSeasonClub, fixture.homeEntrant).shortName : fixtureSide(fixture.awaySeasonClub, fixture.awayEntrant).shortName}</button>
                       </form>
                     ))}
                   </div>
