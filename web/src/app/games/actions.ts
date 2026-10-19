@@ -766,6 +766,7 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
       include: {
         fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } },
         periodScores: { orderBy: { period: "asc" } },
+      ruleSnapshot: true,
         events: {
           select: { period: true, typeKey: true, seasonClubId: true, entrantId: true, sequenceNumber: true },
           orderBy: { sequenceNumber: "asc" },

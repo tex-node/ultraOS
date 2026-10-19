@@ -25,9 +25,12 @@ export function tennisConfig(definition: SportDefinition): TennisConfig | null {
   if (structure.periodType !== "SET" || structure.gamesPerSet === undefined) return null;
   const ruleSets = definition.rules?.find((rule) => rule.key === "SETS_TO_WIN")?.value;
   const ruleTiebreak = definition.rules?.find((rule) => rule.key === "TIEBREAK_ENABLED")?.value;
+  // GAMES_PER_SET is also a declared rule (streak v7): a competition can play short sets, and before this a
+  // RuleSet entry for it was silently ignored because only the structure field was read.
+  const ruleGames = definition.rules?.find((rule) => rule.key === "GAMES_PER_SET")?.value;
   return {
     setsToWin: typeof ruleSets === "number" ? ruleSets : structure.periodsToWin ?? 2,
-    gamesPerSet: structure.gamesPerSet,
+    gamesPerSet: typeof ruleGames === "number" ? ruleGames : structure.gamesPerSet,
     tiebreakEnabled: ruleTiebreak !== false,
     setCount: structure.periodCount,
   };

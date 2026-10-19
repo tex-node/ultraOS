@@ -49,6 +49,27 @@ export function resolveRuleValues(definition: SportDefinition, config?: RuleConf
   return values;
 }
 
+/**
+ * A definition with resolved rule values folded into it (streak v7, Prompt 1).
+ *
+ * The scoring modules read their config from the DEFINITION (`tennisConfig(definition)` looks up
+ * `SETS_TO_WIN` on `definition.rules`), so an override only takes effect if it is applied to the definition
+ * object the module receives. Only declared keys with a matching type are replaced - an unknown key in a
+ * stored config cannot invent a rule the sport does not have - and the definition itself is not mutated.
+ */
+export function applyRuleValues(definition: SportDefinition, values: Record<string, RuleValue>): SportDefinition {
+  if (!definition.rules || definition.rules.length === 0) return definition;
+  let changed = false;
+  const rules = definition.rules.map((rule) => {
+    if (!(rule.key in values)) return rule;
+    const value = values[rule.key];
+    if (typeof value !== typeof rule.value) return rule;
+    changed = true;
+    return { ...rule, value };
+  });
+  return changed ? { ...definition, rules } : definition;
+}
+
 export type FrozenRules = {
   sportKey: string;
   definitionVersion: number;

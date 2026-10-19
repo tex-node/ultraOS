@@ -38,6 +38,7 @@ async function loadGame(gameId: string): Promise<ScoringGamePayload> {
     include: {
       fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } },
       periodScores: { orderBy: { period: "asc" } },
+      ruleSnapshot: true,
       events: { select: { period: true, typeKey: true, seasonClubId: true, entrantId: true, sequenceNumber: true }, orderBy: { sequenceNumber: "asc" } },
     },
   });
@@ -51,6 +52,7 @@ async function playPoint(gameId: string, fixtureId: string, entrantId: string) {
       include: {
         fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } },
         periodScores: { orderBy: { period: "asc" } },
+        ruleSnapshot: true,
         events: { select: { period: true, typeKey: true, seasonClubId: true, entrantId: true, sequenceNumber: true }, orderBy: { sequenceNumber: "asc" } },
       },
     });
@@ -110,22 +112,25 @@ async function main() {
   );
   await withOrganizationContext(ORG, (tx) => tx.fixture.update({ where: { id: setup.fixtureId }, data: { status: "LIVE" } }));
   console.log(`competition ${setup.competition.slug} · fixture ${setup.fixtureId} · game ${game.id}`);
-  const config = tennisConfig(TENNIS);
-  console.log(`${setup.entrants[0].name} v ${setup.entrants[1].name} · best of ${config?.setCount ?? "?"} sets, ${config?.setsToWin ?? "?"} to win, ${config?.gamesPerSet ?? "?"} games per set (sport definition)`);
+  const definitionConfig = tennisConfig(TENNIS);
+  const SETS_TO_WIN = 2;
+  const GAMES_PER_SET = 2;
+  console.log(
+    `${setup.entrants[0].name} v ${setup.entrants[1].name} · season RuleSet says ${SETS_TO_WIN} sets to win, ${GAMES_PER_SET} games per set ` +
+      `(definition default: ${definitionConfig?.setsToWin} / ${definitionConfig?.gamesPerSet})`,
+  );
 
-  // Home takes set 1 (2-0), away takes set 2 (2-0), home takes the decider (2-0) -> 2-1. Each game is 4
-  // points to 0, so every tap is a real POINT event and the deuce/advantage branch is covered separately by
-  // the unit tests (a point won from 40-40 must still land on the same engine).
-  // Straight sets: the home entrant takes every game 4-0. Sets are won at 6 games with a two-game lead, and
-  // the match at 3 sets (the definition's best-of-5). A decider is exercised by the unit tests and by the
-  // 6-game pilot; this script's job is the plumbing from ledger to FINAL.
-  const gamesPerSet = config?.gamesPerSet ?? 6;
-  const setsToWin = config?.setsToWin ?? 3;
+  // Home takes set 1, away set 2, home the decider -> 2-1. Every point is a real POINT event, and the match
+  // must stop as soon as one side has two sets (the RuleSet value), not carry on to the definition's three.
   const plan: ("HOME" | "AWAY")[] = [];
   const winsSet = (side: "HOME" | "AWAY") => {
-    for (let gameNumber = 0; gameNumber < gamesPerSet; gameNumber += 1) for (let point = 0; point < 4; point += 1) plan.push(side);
+    for (let gameNumber = 0; gameNumber < GAMES_PER_SET; gameNumber += 1) for (let point = 0; point < 4; point += 1) plan.push(side);
   };
-  for (let set = 0; set < setsToWin; set += 1) winsSet("HOME");
+  winsSet("HOME");
+  winsSet("AWAY");
+  winsSet("HOME");
+  const setsToWin = SETS_TO_WIN;
+  const gamesPerSet = GAMES_PER_SET;
 
   let points = 0;
   for (const side of plan) {
@@ -146,11 +151,11 @@ async function main() {
   const problems: string[] = [];
   if (after.fixture.status !== "FINAL") problems.push(`fixture is ${after.fixture.status}, expected FINAL`);
   if (after.status !== "FINAL") problems.push(`game is ${after.status}, expected FINAL`);
-  if (after.fixture.homeScore !== setsToWin || after.fixture.awayScore !== 0) problems.push(`match score ${after.fixture.homeScore}-${after.fixture.awayScore}, expected ${setsToWin}-0`);
+  if (after.fixture.homeScore !== setsToWin || after.fixture.awayScore !== 1) problems.push(`match score ${after.fixture.homeScore}-${after.fixture.awayScore}, expected ${setsToWin}-1`);
   if (after.fixture.winnerEntrantId !== setup.entrants[0].id) problems.push("winner is not the home entrant");
   if (after.periodScores.length !== setsToWin) problems.push(`${after.periodScores.length} set row(s), expected ${setsToWin}`);
-  const shortSet = after.periodScores.find((row) => row.homeScore !== gamesPerSet || row.awayScore !== 0);
-  if (shortSet) problems.push(`set ${shortSet.period} is ${shortSet.homeScore}-${shortSet.awayScore}, expected ${gamesPerSet}-0`);
+  const shortSet = after.periodScores.find((row) => Math.max(row.homeScore, row.awayScore) !== gamesPerSet);
+  if (shortSet) problems.push(`set ${shortSet.period} is ${shortSet.homeScore}-${shortSet.awayScore}: the winner should have ${gamesPerSet} games`);
   if (ended !== 1) problems.push(`${ended} GAME_ENDED event(s), expected 1`);
   const subscriptions = await withOrganizationContext(ORG, (tx) => tx.dataFeedSubscription.count({ where: { organizationId: ORG, isActive: true } }));
   const deliveries = await withOrganizationContext(ORG, (tx) => tx.dataFeedDelivery.count({ where: { gameId: game.id } }));

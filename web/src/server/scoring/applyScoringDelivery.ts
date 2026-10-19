@@ -4,6 +4,8 @@ import type { Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { queueGameLifecycleFeed } from "@/lib/data-feed/dispatcher";
 import { getSportDefinition } from "@/lib/sports/registry";
+import { applyRuleValues, parseRuleConfig, type RuleValue } from "@/lib/sports/rule-values";
+import { resolveSeasonRuleValues } from "@/lib/sports/rule-set-store";
 import { resolveScoringModule } from "@/lib/sports/scoring-modules";
 import { replayTennisGamePoints } from "@/lib/sports/tennis-scoring";
 import { remainingClockSeconds } from "@/lib/game-clock";
@@ -25,6 +27,7 @@ export type ScoringGamePayload = Prisma.GameGetPayload<{
   include: {
     fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } };
     periodScores: true;
+    ruleSnapshot: true;
     events: { select: { period: true; typeKey: true; seasonClubId: true; entrantId: true; sequenceNumber: true } };
   };
 }>;
@@ -46,6 +49,33 @@ export type ScoringDeliveryResult = {
   finalized: boolean;
   tennisPoints?: { home: number; away: number };
 };
+
+/**
+ * The rule values in force for this game, in precedence order: the frozen snapshot, then the season rule set
+ * (which itself falls back to an organization override and then the definition).
+ */
+async function resolveGameRuleValues(args: {
+  tx: Prisma.TransactionClient;
+  organizationId: string;
+  game: ScoringGamePayload;
+  definition: ReturnType<typeof getSportDefinition> & object;
+}): Promise<Record<string, RuleValue>> {
+  const frozen = args.game.ruleSnapshot?.ruleValues;
+  if (frozen && typeof frozen === "object") {
+    try {
+      return parseRuleConfig(frozen);
+    } catch {
+      // A malformed snapshot must not stop a live game; fall through to the season rule set.
+    }
+  }
+  const resolved = await resolveSeasonRuleValues(args.tx, {
+    organizationId: args.organizationId,
+    seasonId: args.game.fixture.seasonId,
+    sportId: args.game.fixture.division.competition.sport.id,
+    definition: args.definition,
+  });
+  return resolved.values;
+}
 
 const CRICKET_DELIVERY_KEYS = new Set([
   "RUN",
@@ -72,7 +102,12 @@ export async function applyScoringDelivery(args: {
 
   const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
   if (!definition) throw new Error("UNKNOWN_SPORT");
-  const scoringModule = resolveScoringModule(definition);
+  // Rule-set resolution (streak v7, Prompt 1). The scoring modules read their config from the DEFINITION, so
+  // a season RuleSet could never turn a best-of-5 into a best-of-3 - the row was stored and ignored.
+  // Precedence: the game's FROZEN snapshot (a played game must stay explicable after a rule change), then
+  // the season/organization rule set, then the definition default.
+  const effectiveDefinition = applyRuleValues(definition, await resolveGameRuleValues({ tx, organizationId, game, definition }));
+  const scoringModule = resolveScoringModule(effectiveDefinition);
   if (!scoringModule) throw new Error("NO_SCORING_MODULE");
 
   // The captured party is a SeasonClub (team sports) or an Entrant (individual sports).
@@ -103,7 +138,7 @@ export async function applyScoringDelivery(args: {
     });
   }
 
-  const result = scoringModule.apply(definition, {
+  const result = scoringModule.apply(effectiveDefinition, {
     homeSeasonClubId: homePartyId,
     awaySeasonClubId: awayPartyId,
     currentPeriod: game.currentPeriod,
@@ -146,7 +181,7 @@ export async function applyScoringDelivery(args: {
       eventType: result.eventKind,
       typeKey: result.typeKey,
       points: result.points,
-      data: { sportKey: definition.key, module: scoringModule.key, note: result.note, tennisPoints: result.tennisPoints },
+      data: { sportKey: effectiveDefinition.key, module: scoringModule.key, note: result.note, tennisPoints: result.tennisPoints },
       period: result.period?.period ?? game.currentPeriod,
       clockSeconds: remainingClockSeconds(game),
       description:
