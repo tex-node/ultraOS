@@ -72,15 +72,39 @@ accept: application/json`}</Code>
 
       <Section id="auth" title="Authentication and the public/private boundary">
         <p>
-          <strong className="text-text-1">/api/v1 is public and read-only.</strong> No key is required to read it today: the data it
-          exposes is the same data the public site shows (scores, box scores, standings, leaders). There is no write endpoint anywhere
-          in /api/v1.
+          <strong className="text-text-1">/api/v1 requires an API key</strong>, with one deliberate exception. Send it as a Bearer
+          token:
         </p>
+        <Code>{`GET /api/v1/games/<fixtureId>/snapshot
+authorization: Bearer ulop_live_1a2b3c4d_<64 hex characters>`}</Code>
+        <p>
+          A request without a valid key gets <code>401 UNAUTHORIZED</code>. Keys are issued per partner organization from{" "}
+          <code>/settings/api-keys</code>; the raw key is shown once at creation, and only its SHA-256 hash is stored, so a database
+          leak does not leak usable keys. Revocation takes effect on the next request. <code>x-api-key</code> is accepted as an
+          alternative header.
+        </p>
+        <p>
+          <strong className="text-text-1">The exception: <code>/api/v1/live</code> stays public.</strong> It is the league&apos;s
+          free scoreboard widget - score, period and clock only - and it is what a website embeds before it has a commercial
+          agreement. It is rate-limited per IP like any unauthenticated surface.
+        </p>
+        <table className="mt-2 min-w-full text-xs">
+          <thead>
+            <tr className="text-left text-text-3">
+              <th className="p-2">Tier</th>
+              <th className="p-2">Requests / minute</th>
+              <th className="p-2">Bulk exports</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-t border-line-subtle"><td className="p-2">BASIC</td><td className="p-2">60</td><td className="p-2">no</td></tr>
+            <tr className="border-t border-line-subtle"><td className="p-2">PRO</td><td className="p-2">600</td><td className="p-2">yes</td></tr>
+            <tr className="border-t border-line-subtle"><td className="p-2">ENTERPRISE</td><td className="p-2">6,000</td><td className="p-2">yes</td></tr>
+          </tbody>
+        </table>
         <p>
           Private surfaces are deliberately <em>not</em> part of this API: operator/broadcast controls, internal reconciliation
           detail, player contact data, coach plans and training logs all live behind an authenticated session on separate routes.
-          If a partner needs a private feed (for example pre-publication line-ups), that is a negotiated integration with its own
-          credential, not a flag on these routes.
         </p>
         <p>
           CORS is allow-listed, not <code>*</code>: the league configures permitted browser origins (<code>PUBLIC_API_ALLOWED_ORIGINS</code>

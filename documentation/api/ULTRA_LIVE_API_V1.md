@@ -22,6 +22,29 @@ See Part XXII: PUBLIC / PARTNER / INTERNAL. Today only PUBLIC (this document) an
 higher rate limits, an enriched feed) is a real future need but not built this track; nothing in
 the current architecture blocks adding it later as a new tier alongside these two.
 
+## Authentication (streak v9, Prompt 2)
+
+Every `/api/v1` route requires an API key **except `/api/v1/live`**, which stays public because it is the free
+scoreboard widget (score, period, clock only). The key goes in `Authorization: Bearer <key>` (`x-api-key` is also
+accepted). Keys are created per organization at `/settings/api-keys`; the raw key is shown exactly once and only
+its SHA-256 hash is stored, so the database cannot be replayed into usable credentials. Revocation is immediate.
+
+Lookup cannot be tenant-scoped (the organization is unknown until the key resolves), so authentication calls the
+`SECURITY DEFINER` function `resolve_api_key(hash)` created in migration `20261019190000_api_keys`. The function
+returns only `(id, organization_id, tier)`; the `ApiKey` table itself stays RLS-forced for every normal read and
+write. A missing, unknown, inactive or revoked key all return the same `401 UNAUTHORIZED` body - the API never
+says which.
+
+| Tier | Requests / minute | Bulk exports |
+| --- | --- | --- |
+| BASIC | 60 | no |
+| PRO | 600 | yes |
+| ENTERPRISE | 6,000 | yes |
+
+The per-key quota replaces the anonymous per-IP window (a partner's allowance should not depend on which egress
+address they use today), and every authenticated response carries `X-API-Tier` alongside the usual
+`X-RateLimit-*` headers.
+
 ## Rate limiting
 
 120 requests per client IP per rolling 60-second window, in-memory (this app runs as a single

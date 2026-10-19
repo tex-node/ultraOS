@@ -660,6 +660,8 @@ model User {
   // Streak v5: partner data-feed subscriptions this user created (the back-relation for
   // DataFeedSubscription.createdBy).
   dataFeedSubscriptionCreations DataFeedSubscription[]   @relation("DataFeedSubscriptionCreatedBy")
+  // Streak v9: developer API keys this user created.
+  apiKeysCreated                ApiKey[]                 @relation("ApiKeyCreatedBy")
   emailVerified                 DateTime?
   image                         String?
   passwordHash                  String?
@@ -4920,6 +4922,7 @@ model Organization {
   syncIdempotencyRecords    SyncIdempotency[]
   dataFeedSubscriptions     DataFeedSubscription[]
   dataFeedDeliveries        DataFeedDelivery[]
+  apiKeys                   ApiKey[]
   syncConflictLogs          SyncConflictLog[]
   createdAt                 DateTime                       @default(now())
   updatedAt                 DateTime                       @updatedAt
@@ -5053,4 +5056,38 @@ model DataFeedDelivery {
   @@index([organizationId, status, nextAttemptAt])
   @@index([subscriptionId, createdAt])
   @@index([gameId])
+}
+
+// Streak v9, Prompt 2: developer API keys for the partner API.
+//
+// The raw key is NEVER stored: `keyHash` is the sha256 of the full key, `prefix` is the display fragment an
+// operator can recognise in a list. Lookup by hash cannot be tenant-scoped (the organization is unknown until
+// the key resolves), so authentication goes through the SECURITY DEFINER function `resolve_api_key` created in
+// the migration - see its comment there for why a plain policy cannot do this.
+enum ApiKeyTier {
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+model ApiKey {
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  // sha256 hex of the raw key. Unique so a lookup is a single index hit.
+  keyHash        String       @unique
+  // The first characters of the key, for display only ("ulop_live_ab12"). Not a credential.
+  prefix         String
+  tier           ApiKeyTier   @default(BASIC)
+  isActive       Boolean      @default(true)
+  lastUsedAt     DateTime?
+  createdById    String
+  createdBy      User         @relation("ApiKeyCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  revokedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, id])
+  @@index([organizationId, isActive])
 }

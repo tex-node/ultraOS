@@ -25,17 +25,22 @@ function sweep(now: number) {
 
 export type RateLimitResult = { limited: boolean; limit: number; remaining: number; retryAfterSeconds: number };
 
-export function checkRateLimit(clientKey: string, now: number = Date.now()): RateLimitResult {
+/**
+ * @param limitOverride per-key quotas (streak v9): an authenticated partner gets the allowance of its TIER
+ *   rather than the anonymous per-IP window. Defaults to the anonymous limit, so existing callers are unchanged.
+ */
+export function checkRateLimit(clientKey: string, now: number = Date.now(), limitOverride?: number): RateLimitResult {
+  const limit = limitOverride ?? MAX_REQUESTS_PER_WINDOW;
   if (buckets.size > 5000) sweep(now);
   const existing = buckets.get(clientKey);
   if (!existing || now - existing.windowStart > WINDOW_MS) {
     buckets.set(clientKey, { count: 1, windowStart: now });
-    return { limited: false, limit: MAX_REQUESTS_PER_WINDOW, remaining: MAX_REQUESTS_PER_WINDOW - 1, retryAfterSeconds: 0 };
+    return { limited: false, limit, remaining: limit - 1, retryAfterSeconds: 0 };
   }
   existing.count += 1;
-  const remaining = Math.max(0, MAX_REQUESTS_PER_WINDOW - existing.count);
+  const remaining = Math.max(0, limit - existing.count);
   const retryAfterSeconds = Math.ceil((existing.windowStart + WINDOW_MS - now) / 1000);
-  return { limited: existing.count > MAX_REQUESTS_PER_WINDOW, limit: MAX_REQUESTS_PER_WINDOW, remaining, retryAfterSeconds };
+  return { limited: existing.count > limit, limit, remaining, retryAfterSeconds };
 }
 
 export function clientKeyFromRequest(request: Request): string {
