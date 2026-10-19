@@ -199,7 +199,18 @@ export default async function PlayerPassportPage({ params }: { params: Promise<{
                   </tr>
                 </thead>
                 <tbody>
-                  {passport.games.map((game) => (
+                  {passport.games.map((game, index) => (
+                    <Fragment key={`${game.gameId}-${index}`}>
+                      {/* Sport group header (streak v8, Prompt 3): a passport can span basketball and
+                          volleyball, and a volleyball match rendered as a row of zeroes reads as "did not
+                          play" rather than "different sport". */}
+                      {index === 0 || passport.games[index - 1].sportSlug !== game.sportSlug ? (
+                        <tr className="bg-white/[.03]">
+                          <td colSpan={12} className="p-1 text-[10px] font-bold uppercase tracking-wider text-brand-400">
+                            {game.sportName}
+                          </td>
+                        </tr>
+                      ) : null}
                     <tr key={`${game.gameId}`} className="border-t border-line-subtle">
                       <td className="p-1 text-text-2">{dateFormatter.format(game.playedAt)}</td>
                       <td className="p-1 text-text-1">
@@ -217,6 +228,7 @@ export default async function PlayerPassportPage({ params }: { params: Promise<{
                         <Badge source={game.provenance} />
                       </td>
                     </tr>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
