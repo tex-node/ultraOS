@@ -23,6 +23,7 @@ export function ScoreCapturePanel({
   currentPeriod,
   periodScores = [],
   tennisPoints,
+  score,
 }: {
   gameId: string;
   fixtureId: string;
@@ -36,9 +37,16 @@ export function ScoreCapturePanel({
   currentPeriod?: number;
   periodScores?: { period: number; home: number; away: number }[];
   tennisPoints?: { home: number; away: number };
+  /** Current match score, needed to offer "end as a draw" only when the score really is level. */
+  score?: { home: number; away: number };
 }) {
   const scoringModule = resolveScoringModule(definition);
   if (!scoringModule) return null;
+  // A draw is only a legal result for a sport whose definition allows one (football, cricket). The button is
+  // shown for those sports and only when the score is level, so the server-side check is a backstop rather than
+  // the only guard (streak v10).
+  const allowsDraw = definition.scoring.drawsAllowed;
+  const scoreIsLevel = score !== undefined && score.home === score.away;
   const actions = scoringModule.actions(definition);
   const title =
     scoringModule.kind === "SETS"
@@ -170,7 +178,7 @@ export function ScoreCapturePanel({
       <h3 className="font-semibold">{title}</h3>
       {progressSummary}
       {scoringModule.kind === "GOALS" ? <p className="mt-0.5 text-xs text-text-3">An own goal credits the other team.</p> : null}
-      {scoringModule.kind === "TENNIS" ? (
+      {scoringModule.kind === "TENNIS" || allowsDraw ? (
         <p className="mt-0.5 text-xs text-text-3">
           Every tap is one point in the ledger. Games, sets and the winner are derived from those points — the console
           never stores a game or set score by hand.
@@ -184,7 +192,7 @@ export function ScoreCapturePanel({
           </div>
         ))}
       </div>
-      {scoringModule.kind === "TENNIS" ? (
+      {scoringModule.kind === "TENNIS" || allowsDraw ? (
         <section className="mt-6 rounded-lg border border-warn/20 bg-ink-900 p-4">
           <h3 className="text-sm font-semibold">End the match early</h3>
           <p className="mt-0.5 text-xs text-text-3">
@@ -194,13 +202,17 @@ export function ScoreCapturePanel({
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {[
+              ...(allowsDraw ? [{ mode: "DRAW" as const, label: "End as a draw" }] : []),
               { mode: "LEADER" as const, label: "Leader wins" },
               { mode: "RETIRE_HOME" as const, label: `${teams[0]?.name ?? "Home"} retires` },
               { mode: "RETIRE_AWAY" as const, label: `${teams[1]?.name ?? "Away"} retires` },
             ].map((option) => (
               <form key={option.mode} action={endMatchEarly.bind(null, gameId, fixtureId)}>
                 <input type="hidden" name="mode" value={option.mode} />
-                <SubmitButton pendingLabel="…" className={`${BIG_BTN} border border-warn/40 text-xs text-warn`}>
+                <SubmitButton
+                  pendingLabel="…"
+                  className={`${BIG_BTN} border border-warn/40 text-xs text-warn ${option.mode === "DRAW" && !scoreIsLevel ? "hidden" : ""}`}
+                >
                   {option.label}
                 </SubmitButton>
               </form>

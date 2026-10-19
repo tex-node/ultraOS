@@ -786,7 +786,9 @@ export async function recordScoringEvent(gameId: string, fixtureId: string, form
 }
 
 const endMatchInput = z.object({
-  mode: z.enum(["LEADER", "RETIRE_HOME", "RETIRE_AWAY"]),
+  // DRAW (streak v10): football and other draws-allowed sports cannot be closed by LEADER (which refuses a level
+  // match) or by a retirement, so the operator needs an explicit "this match ended level" decision.
+  mode: z.enum(["LEADER", "RETIRE_HOME", "RETIRE_AWAY", "DRAW"]),
   reason: z.string().optional(),
 });
 
@@ -811,7 +813,15 @@ export async function endMatchEarly(gameId: string, fixtureId: string, formData:
     const homeScore = game.fixture.homeScore;
     const awayScore = game.fixture.awayScore;
     let winner: "HOME" | "AWAY" | null;
-    if (input.mode === "LEADER") {
+    if (input.mode === "DRAW") {
+      // A draw is a RESULT, not an absence of one (streak v10). Only a sport whose definition allows draws may be
+      // closed level, and only when the score actually is level. Finalising with no winner is what makes the
+      // standings award 1 point to each side.
+      const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
+      if (!definition?.scoring.drawsAllowed) throw new Error("DRAWS_NOT_ALLOWED");
+      if (homeScore !== awayScore) throw new Error("MATCH_NOT_LEVEL");
+      winner = null;
+    } else if (input.mode === "LEADER") {
       if (homeScore === awayScore) throw new Error("MATCH_LEVEL");
       winner = homeScore > awayScore ? "HOME" : "AWAY";
     } else {

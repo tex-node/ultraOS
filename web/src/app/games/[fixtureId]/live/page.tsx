@@ -417,6 +417,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             currentPeriod={game.currentPeriod}
             periodScores={game.periodScores.map((score) => ({ period: score.period, home: score.homeScore, away: score.awayScore }))}
             tennisPoints={tennisPoints}
+            score={{ home: fixture.homeScore, away: fixture.awayScore }}
             knockout={isKnockoutFormat(
               resolveFormat({
                 divisionFormat: fixture.division.format,
