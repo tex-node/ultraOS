@@ -10837,3 +10837,53 @@ with 0 errors, and `fccd1e1` differs from it only in `session.md` (documentation
 production is behaviourally identical whichever of the two labels is currently symlinked. The deploy script only
 swaps `current` after a successful build + migrate + restart, so an interrupted run leaves the previous release
 running rather than a broken one. This is recorded as unverified, not as green.
+
+## 2026-10-19 - Streak v9 / Prompt 1: recovery - the host came back, and nothing was lost
+
+**Why it died: a clean poweroff, not a crash.**
+```
+journalctl --list-boots
+  -1  …  Thu 2026-08-13 12:41:23 CEST … Mon 2026-10-19 12:19:33 CEST
+   0  …  Mon 2026-10-19 12:38:41 CEST … now
+last lines of the previous boot:
+  Reached target shutdown.target - System Shutdown.
+  Finished systemd-poweroff.service - System Power Off.
+  Reached target poweroff.target - System Power Off.
+  Sending SIGTERM to remaining processes... · Journal stopped
+```
+So: a **deliberate, orderly shutdown** at 12:19:31 CEST after ~19 minutes of no SSH, and the host returning at
+12:38:41 - a provider/host-console power cycle, as the user said. **No OOM entry, no disk-full event, no kernel
+panic on that boot.** The journal simply stops after the poweroff sequence.
+
+**One real OOM on record, and it was mine (not this outage):** on 2026-10-16 18:41 the kernel killed **ffmpeg**
+(3.5 GB anon-rss) during vision testing. It is worth keeping: ffmpeg on this host runs against a 12 GB box shared
+with Supabase and the app, so long clips belong in a container with a memory cap, not a bare CLI. This outage had
+nothing to do with it - the boot that died ran for 67 days.
+
+**Post-recovery state (verified, not assumed)**
+```
+uptime        8h · load 1.35   memory 11.9 GB total, 8.5 GB available, swap untouched
+disk          193 GB, 135 GB used, 59 GB free (70%)
+docker        supabase-db/kong/pooler/edge-functions/studio/vector — all healthy, up 8h
+services      ultraos-web.service active · ultraos-staging-web.service active
+feed timers   ultraos-feed-drain-production.timer and -staging.timer: active, last run 27 s ago
+smoke (prod)  7/7 PASS · 0 errors since the release started
+tenant guard  DataFeedSubscription on ultraleagueos: RLS forced, policy reads app.current_org_id,
+              grants match CoachingPlan, scoped SELECT PASS, no cross-tenant rows · RESULT: PASS
+```
+The Supabase stack explains the long-standing "port 8000 is not our vision service" finding: `supabase-kong`
+owns it, which is exactly why the vision API defaults to 8010.
+
+**Production was one release behind.** It was running `release-8d4be13`; `main` is at `fc071ed` (the docs-only
+commit whose deploy the outage interrupted). Redeployed from `origin/main`:
+```
+[deploy] source at fc071ed · migrations: up to date · smoke 7/7 PASS · 0 errors
+readlink -f /opt/ultraleagueos/current -> release-fc071ed-20261019T185327Z
+```
+Staging was brought to the same commit. Both environments now run `fc071ed`, so the "which release is live?"
+question from the last streak is closed.
+
+**Nothing was lost in the 19-minute gap.** The feed-drain timer resumes on boot (`OnBootSec=30s`), PENDING
+deliveries were still in the outbox, and the smoke test shows the app serving normally. No migration was pending.
+
+**Next step:** Prompt 2 (developer API keys).
