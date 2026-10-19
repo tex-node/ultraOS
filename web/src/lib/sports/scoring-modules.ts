@@ -145,7 +145,9 @@ const footballModule: SportScoringModule = {
 const cricketModule: SportScoringModule = {
   key: "CRICKET_RUNS",
   kind: "RUNS",
-  supports: (definition) => definition.scoring.unit === "run",
+  // Cricket is innings-with-OVERS. Baseball also scores in runs but has no overs, so it must not match here -
+  // it has its own module below (streak v11).
+  supports: (definition) => definition.scoring.unit === "run" && inningsConfig(definition) !== null,
   actions: () => [
     { typeKey: "RUN", label: "+1", runs: 1 },
     { typeKey: "RUN", label: "+2", runs: 2 },
@@ -344,7 +346,59 @@ const pointsModule: SportScoringModule = {
   },
 };
 
-export const SCORING_MODULES: SportScoringModule[] = [tennisModule, volleyballModule, footballModule, cricketModule, pointsModule];
+// Baseball (streak v11, Prompt 2): nine innings, runs, no overs. Each delivery credits the side the operator picks
+// (the batting side for that inning) and the game ends when regulation innings are complete and the scores differ;
+// a level game goes to extra innings, because baseball does not allow draws.
+const baseballModule: SportScoringModule = {
+  key: "BASEBALL_RUNS",
+  kind: "RUNS",
+  supports: (definition) => definition.key === "BASEBALL",
+  actions: (definition) =>
+    definition.events
+      .filter((event) => event.scores === true)
+      .map((event) => ({ typeKey: event.key, label: event.label, runs: event.pointValues?.[0] ?? 1 })),
+  apply: (definition, input) => {
+    const home = input.homeSeasonClubId!;
+    const away = input.awaySeasonClubId!;
+    if (input.seasonClubId !== home && input.seasonClubId !== away) return { ok: false, reason: "INVALID_TEAM" };
+    const isHome = input.seasonClubId === home;
+    const regulationInnings = Number(definition.rules?.find((rule) => rule.key === "INNINGS")?.value ?? definition.structure.periodCount);
+    const typeKey = input.typeKey ?? "SINGLE";
+    const eventDefinition = definition.events.find((event) => event.key === typeKey);
+    if (!eventDefinition) return { ok: false, reason: "UNKNOWN_EVENT" };
+    // The runs for this delivery come from the definition, never from the client: a forged `runs` value must not be
+    // able to turn a single into a home run.
+    const runs = eventDefinition.scores ? eventDefinition.pointValues?.[0] ?? 1 : 0;
+    const period = input.currentPeriod < 1 ? 1 : input.currentPeriod;
+
+    const existing = input.periodScores.find((score) => score.period === period);
+    const nextPeriodScore = {
+      period,
+      home: (existing?.home ?? 0) + (isHome ? runs : 0),
+      away: (existing?.away ?? 0) + (isHome ? 0 : runs),
+    };
+    const homeScore = input.homeScore + (isHome ? runs : 0);
+    const awayScore = input.awayScore + (isHome ? 0 : runs);
+
+    const regulationOver = period >= regulationInnings;
+    const decided = homeScore !== awayScore;
+    const finalize = regulationOver && decided;
+    return {
+      ok: true,
+      homeScore,
+      awayScore,
+      period: nextPeriodScore,
+      points: runs || null,
+      typeKey,
+      eventKind: runs > 0 ? "SCORE" : "NOTE",
+      finalize,
+      finalizeWinner: finalize ? (homeScore > awayScore ? "HOME" : "AWAY") : null,
+      // Level after regulation: extra innings. The period counter keeps climbing so the ledger shows which inning.
+      nextPeriod: regulationOver && !decided ? period + 1 : undefined,
+    };
+  },
+};
+export const SCORING_MODULES: SportScoringModule[] = [tennisModule, volleyballModule, footballModule, baseballModule, cricketModule, pointsModule];
 
 export function resolveScoringModule(definition: SportDefinition): SportScoringModule | null {
   return SCORING_MODULES.find((candidate) => candidate.supports(definition)) ?? null;

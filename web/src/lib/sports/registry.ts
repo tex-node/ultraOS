@@ -11,6 +11,8 @@ import type {
 } from "./types";
 import { BASKETBALL } from "./basketball";
 import { VOLLEYBALL } from "./volleyball";
+import { BASEBALL } from "./baseball";
+import { FLAG_RACE } from "./flag-race";
 import { FOOTBALL } from "./football";
 import { CRICKET } from "./cricket";
 import { TENNIS } from "./tennis";
@@ -21,6 +23,8 @@ import { isKnownValidator } from "./validators";
 export const SPORT_DEFINITIONS = {
   BASKETBALL,
   VOLLEYBALL,
+  BASEBALL,
+  FLAG_RACE,
   FOOTBALL,
   CRICKET,
   TENNIS,

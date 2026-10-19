@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ULTRA_RULES } from "@/lib/game-rules";
+import { resolveScoringModule } from "@/lib/sports/scoring-modules";
 import { BASKETBALL } from "@/lib/sports/basketball";
 import {
   SPORT_DEFINITION_LIST,
@@ -103,4 +104,40 @@ test("plain-language summaries describe format and competing entity", () => {
   const tennis = describeSport(getSportDefinition("tennis")!);
   assert.equal(tennis.formatSummary, "Best of 5 sets · first to 3 sets wins");
   assert.equal(tennis.entityLabel, "Individuals or pairs");
+});
+
+test("baseball, cricket and flag race are registered for the wizard", () => {
+  // The competition wizard is data-driven from the registry, so "is this sport available" is exactly "does the
+  // registry return it" (streak v11, Prompt 2).
+  const baseball = getSportDefinition("baseball");
+  assert.ok(baseball, "baseball is registered");
+  assert.equal(baseball.key, "BASEBALL");
+  assert.equal(baseball.structure.periodType, "INNING");
+  assert.equal(baseball.structure.periodCount, 9);
+  assert.equal(baseball.structure.clock, "NONE");
+  assert.equal(baseball.scoring.drawsAllowed, false);
+  for (const eventKey of ["SINGLE", "DOUBLE", "TRIPLE", "HOME_RUN", "STRIKEOUT", "WALK", "OUT", "RUN"]) {
+    assert.ok(baseball.events.some((event) => event.key === eventKey), `baseball has ${eventKey}`);
+  }
+  // Baseball must NOT borrow the cricket innings/overs module: a run unit is not enough, it has no overs.
+  const baseballModule = resolveScoringModule(baseball);
+  assert.equal(baseballModule?.key, "BASEBALL_RUNS");
+
+  const cricket = getSportDefinition("cricket");
+  assert.ok(cricket, "cricket is registered");
+  for (const eventKey of ["RUN", "WICKET", "EXTRAS_WIDE", "EXTRAS_NO_BALL", "FOUR", "SIX"]) {
+    assert.ok(cricket.events.some((event) => event.key === eventKey), `cricket has ${eventKey}`);
+  }
+  assert.equal(resolveScoringModule(cricket)?.key, "CRICKET_RUNS");
+
+  const flagRace = getSportDefinition("flag-race");
+  assert.ok(flagRace, "flag race is registered");
+  assert.equal(flagRace.key, "FLAG_RACE");
+  assert.equal(flagRace.structure.clock, "COUNT_UP");
+  for (const eventKey of ["START", "FINISH", "FALSE_START", "DISQUALIFICATION"]) {
+    assert.ok(flagRace.events.some((event) => event.key === eventKey), `flag race has ${eventKey}`);
+  }
+  // Honest state: there is no race scoring module, so the console can only record events. This assertion exists so
+  // that adding one later is a deliberate change, not an accident.
+  assert.equal(resolveScoringModule(flagRace), null);
 });

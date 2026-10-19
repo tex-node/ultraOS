@@ -45,6 +45,7 @@ import { isKnockoutFormat, resolveFormat } from "@/lib/sports/format";
 import { chaseTarget, inningsConfig, isDelivery, isLegalDelivery, oversDisplay } from "@/lib/sports/innings-scoring";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { ScoreCapturePanel } from "./score-capture-panel";
+import { EmbedCodeButton } from "./embed-code-button";
 import { SportCapturePanel } from "./sport-capture-panel";
 import { LiveScoreCapture } from "./live-score-capture";
 import { CaptureConnectivity } from "@/app/components/ui/capture-connectivity";
@@ -63,6 +64,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
   // Hoisted into a const: the narrowing above does not flow into the `.map()` callbacks below (TS
   // cannot know when they run), and the offline capture component needs the id inside one.
   const organizationId = session.user.organizationId;
+  const organizationSlug = (await withOrganizationContext(session.user.organizationId, (tx) => tx.organization.findUnique({ where: { id: session.user.organizationId! }, select: { slug: true } })))?.slug ?? "unknown";
   const fixture = await withOrganizationContext(session.user.organizationId, (tx) => tx.fixture.findUnique({
     where: { id: fixtureId },
     include: {
@@ -388,6 +390,8 @@ export default async function Live({ params, searchParams }: { params: Promise<{
             ))}
           </div>
         ) : null}
+        {/* Partner embed (streak v11, Prompt 4): the snippet carries the org slug, so the iframe is public. */}
+        <EmbedCodeButton orgSlug={organizationSlug} fixtureId={fixtureId} />
         {definition && game && game.status !== "FINAL" ? (
           <SportCapturePanel
             gameId={game.id}

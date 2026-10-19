@@ -25,7 +25,7 @@ test("the registry dispatches one module per scoring family", () => {
 assert.equal(resolveScoringModule(TENNIS)?.kind, "TENNIS");
 assert.equal(resolveScoringModule(AMERICAN_FOOTBALL)?.kind, "POINTS");
 assert.equal(resolveScoringModule(BASKETBALL), null); // basketball keeps its dedicated scorer
-assert.deepEqual(SCORING_MODULES.map((module) => module.kind), ["TENNIS", "SETS", "GOALS", "RUNS", "POINTS"]);
+assert.deepEqual(SCORING_MODULES.map((module) => module.kind), ["TENNIS", "SETS", "GOALS", "RUNS", "RUNS", "POINTS"]);
 });
 
 test("volleyball adds a rally point to the current set without finalizing early", () => {
