@@ -60,8 +60,10 @@ async function main() {
     const season = await tx.season.create({ data: { organizationId: ORG, competitionId: competition.id, name: `${TAG} season`, startDate: new Date(), endDate: new Date(Date.now() + 86400000) }, select: { id: true } });
     const venue = await tx.venue.findFirstOrThrow({ where: { organizationId: ORG }, select: { id: true } });
     const sides = [];
-    for (const name of ["Passport Volley A", "Passport Volley B"]) {
-      const club = await tx.club.create({ data: { organizationId: ORG, sportId: sport.id, name: `${name} ${RUN}`, shortName: `${name.slice(0, 2)}${RUN}`.toUpperCase() }, select: { id: true } });
+    // Both clubs start with "Passport Volley", so a prefix would give them the SAME short name - the suffix
+    // must differ per side (this is exactly how the second attempt failed).
+    for (const [index, name] of ["Passport Volley A", "Passport Volley B"].entries()) {
+      const club = await tx.club.create({ data: { organizationId: ORG, sportId: sport.id, name: `${name} ${RUN}`, shortName: `P${index + 1}${RUN}`.toUpperCase() }, select: { id: true } });
       const seasonClub = await tx.seasonClub.create({ data: { organizationId: ORG, seasonId: season.id, clubId: club.id, divisionId: division.id }, select: { id: true } });
       sides.push(seasonClub.id);
     }
