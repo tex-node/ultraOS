@@ -20,6 +20,7 @@ const ORGANIZATION = arg("organization");
 const ACTOR = arg("actor");
 const BASE_URL = arg("base-url") ?? "http://127.0.0.1:4120";
 const PORT = Number(arg("port") ?? 8096);
+const GAME_ARG = arg("game");
 const CRON_SECRET = process.env.CRON_SECRET ?? "";
 if (!ORGANIZATION || !ACTOR) {
   console.error("usage: feed-football-verify.ts --organization <id> --actor <userId> [--base-url url]");
@@ -30,14 +31,16 @@ const ACTOR_ID: string = ACTOR;
 
 async function main() {
   // A real game with a player on it, so the scorer/name resolution has something to resolve.
+  // A game WITH a player on its roster, so the scorer/name resolution is actually exercised rather than passing
+  // on a null-vs-null comparison (the first run picked a bare football fixture with no players and "passed").
   const game = await withOrganizationContext(ORG, (tx) =>
     tx.game.findFirst({
-      where: { organizationId: ORG, status: "FINAL" },
+      where: GAME_ARG ? { organizationId: ORG, id: GAME_ARG } : { organizationId: ORG, status: "FINAL", fixture: { homeSeasonClub: { players: { some: {} } } } },
       orderBy: { createdAt: "desc" },
       select: { id: true, fixture: { select: { homeSeasonClub: { select: { players: { select: { id: true, athlete: { select: { firstName: true, lastName: true } } }, take: 1 } } } } } },
     }),
   );
-  if (!game) throw new Error("no FINAL game in this organization");
+  if (!game) throw new Error("no game with a rostered player in this organization");
   const player = game.fixture.homeSeasonClub?.players[0];
   const playerId = player?.id ?? null;
   const playerName = player ? `${player.athlete.firstName} ${player.athlete.lastName}`.trim() : null;
