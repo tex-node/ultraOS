@@ -105,3 +105,25 @@ test("american football credits varied point values and rejects forged ones", ()
   const unknown = scoringModule.apply(AMERICAN_FOOTBALL, { ...baseInput, typeKey: "TOUCHDOWN_DANCE" });
   assert.equal(unknown.ok, false);
 });
+test("cricket takes its run values from the definition, not the caller", () => {
+  // Regression (streak v12): applyDelivery only ever received `input.runs`, so any delivery path that did not pass a
+  // value scored ZERO. A full 20-over innings measured 0-0 in the chase script. The definition is authoritative.
+  const scoringModule = resolveScoringModule(CRICKET)!;
+  const four = scoringModule.apply(CRICKET, { ...baseInput, typeKey: "FOUR" });
+  assert.equal(four.ok, true);
+  if (!four.ok) return;
+  assert.equal(four.homeScore, 4, "a four scores four without the caller passing runs");
+
+  const six = scoringModule.apply(CRICKET, { ...baseInput, typeKey: "SIX" });
+  assert.equal(six.ok && six.homeScore, 6, "a six scores six");
+
+  const single = scoringModule.apply(CRICKET, { ...baseInput, typeKey: "RUN" });
+  assert.equal(single.ok && single.homeScore, 1, "a plain run scores one by default");
+
+  // A forged value cannot exceed what the definition allows for that event (RUN offers 1/2/3).
+  const forged = scoringModule.apply(CRICKET, { ...baseInput, typeKey: "RUN", runs: 6 });
+  assert.equal(forged.ok && forged.homeScore, 3, "runs are clamped to the nearest allowed value");
+
+  const dot = scoringModule.apply(CRICKET, { ...baseInput, typeKey: "DOT_BALL" });
+  assert.equal(dot.ok && dot.homeScore, 0, "a dot ball scores nothing");
+});

@@ -178,7 +178,19 @@ const cricketModule: SportScoringModule = {
       balls: input.periodBalls?.[period] ?? 0,
     };
 
-    const outcome = applyDelivery(config, innings, { runs: input.runs, typeKey, wicket });
+    // Runs come from the DEFINITION, not from the caller (streak v12). Before this, applyDelivery only ever saw
+    // `input.runs`, so a FOUR or SIX delivered by anything other than the console's own buttons scored ZERO - the
+    // chase script measured a full 20-over innings at 0-0. The caller may choose a value only where the definition
+    // offers a range (RUN: 1/2/3), and a value outside that range is clamped to the nearest allowed one, so a forged
+    // `runs: 6` on a single cannot become a six.
+    const eventDefinition = definition.events.find((event) => event.key === typeKey);
+    const allowedPoints = eventDefinition?.scores ? eventDefinition.pointValues ?? [] : [];
+    const requested = input.runs ?? allowedPoints[0] ?? 0;
+    const runs = allowedPoints.length > 0
+      ? allowedPoints.reduce((best, candidate) => (Math.abs(candidate - requested) < Math.abs(best - requested) ? candidate : best), allowedPoints[0])
+      : requested;
+
+    const outcome = applyDelivery(config, innings, { runs, typeKey, wicket });
     const nextInningsRuns = innings.runs + outcome.runsAdded;
     const nextPeriodScore =
       batting === "HOME"
