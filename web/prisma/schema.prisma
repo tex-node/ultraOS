@@ -4159,22 +4159,6 @@ model ScoutReport {
   @@index([athleteId, seasonId, visibility])
 }
 
-model MVPVote {
-  id             String       @id @default(cuid())
-  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  userId         String
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gameId         String
-  game           Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  playerId       String
-  player         Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  createdAt      DateTime     @default(now())
-
-  @@unique([userId, gameId])
-  @@index([gameId, playerId])
-}
-
 model AuditLog {
   id             String       @id @default(cuid())
   organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
@@ -5095,4 +5079,23 @@ model ApiKey {
 
   @@unique([organizationId, id])
   @@index([organizationId, isActive])
+}
+
+// Fan MVP voting (existing model; streak v12 Prompt 4 adds the tenant checklist and the UI). One vote per user per
+// game, enforced in the database rather than in the action, so a double submit cannot slip through a race.
+model MVPVote {
+  id             String       @id @default(cuid())
+  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameId         String
+  game           Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  playerId       String
+  player         Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([userId, gameId])
+  @@unique([organizationId, id])
+  @@index([gameId, playerId])
 }

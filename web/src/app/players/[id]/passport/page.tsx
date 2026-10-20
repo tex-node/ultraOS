@@ -8,6 +8,7 @@ import { MissingOrganizationContextError } from "@/lib/authorization";
 import { resolveDefaultPublicOrganization } from "@/lib/tenant-context";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { loadAthletePassport, type Provenance } from "@/server/players/passport";
+import { mvpAwardCount } from "@/server/mvp/votes";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +85,12 @@ export default async function PlayerPassportPage({ params }: { params: Promise<{
     }
   }
   if (!passport) notFound();
+
+  // Fan MVP awards (streak v12, Prompt 4): the votes this athlete's performances won, read under the same tenant the
+  // passport was loaded from. A zero is a real answer and is shown as such, not hidden.
+  const mvpAwards = passport.athleteId
+    ? await withOrganizationContext(scope, (tx) => mvpAwardCount(tx, scope, passport.athleteId!))
+    : 0;
 
   // Coach-private surfaces: training logs and adopted plans.
   const canSeePrivate = hasPermission(session.user.roles, "game:operate") || hasPermission(session.user.roles, "data:import");

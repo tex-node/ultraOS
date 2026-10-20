@@ -22,6 +22,9 @@ import { withOrganizationContext } from "@/lib/tenant-context";
 import { AnalyticsCard } from "@/components/analytics/cards/AnalyticsCard";
 import { buildWhyTheyWonCard } from "@/lib/analytics/cards/game-cards";
 import { buildGameStarCard } from "@/lib/analytics/cards/player-cards";
+import { auth } from "@/auth";
+import { mvpCandidates, castMvpVote, hasVoted } from "@/server/mvp/votes";
+import { MvpVoteSection } from "./mvp-vote-section";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -71,6 +74,19 @@ export default async function Match({ params }: { params: Promise<{ id: string }
   const comparison = buildTeamComparison(game);
   const winner = game.home.score >= game.away.score ? game.home : game.away;
 
+  // Fan MVP voting (streak v12, Prompt 4): only after a FINAL game, and only for the three performers the box score
+  // puts forward. Voting needs a signed-in user, because one vote per person is the point.
+  const session = await auth();
+  const mvp = await withOrganizationContext(organizationId, async (tx) => {
+    const loaded = await tx.game.findUnique({ where: { fixtureId: id }, select: { id: true } });
+    if (!loaded) return { candidates: [], voted: false, gameId: null as string | null };
+    return {
+      candidates: await mvpCandidates(tx, loaded.id),
+      voted: session?.user?.id ? await hasVoted(tx, session.user.id, loaded.id) : false,
+      gameId: loaded.id,
+    };
+  });
+
   return (
     <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-12">
       <Hero game={game} headlineTag={headlineTag} scheduledAt={fixture.scheduledAt} venueName={fixture.venue.name} />
@@ -102,6 +118,10 @@ export default async function Match({ params }: { params: Promise<{ id: string }
             ))}
           </div>
         </section>
+      ) : null}
+
+      {mvp.gameId && mvp.candidates.length > 0 ? (
+        <MvpVoteSection gameId={mvp.gameId} candidates={mvp.candidates} voted={mvp.voted} signedIn={Boolean(session?.user?.id)} />
       ) : null}
 
       {performers.length > 0 ? (
