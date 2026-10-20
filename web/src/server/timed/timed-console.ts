@@ -30,7 +30,16 @@ export async function loadTimedConsoleData(organizationId: string, fixtureId: st
       select: { data: true, playerId: true, seasonClubId: true, entrantId: true },
     });
 
+    // A heat has more competitors than a fixture has sides (streak v12): entrant races are entered for the season,
+    // so the season's active entrants are selectable as well as the fixture's own two sides and players.
+    const seasonEntrants = await tx.entrant.findMany({
+      where: { seasonId: fixture.seasonId, organizationId },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+
     const nameById = new Map<string, string>();
+    for (const entrant of seasonEntrants) nameById.set(entrant.id, entrant.name);
     for (const side of [fixture.homeSeasonClub, fixture.awaySeasonClub]) {
       if (!side) continue;
       nameById.set(side.id, side.club.name);

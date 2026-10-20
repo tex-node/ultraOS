@@ -661,9 +661,12 @@ export async function recordFinishTime(gameId: string, fixtureId: string, formDa
       input.competitorId === game.fixture.awaySeasonClubId ||
       input.competitorId === game.fixture.homeEntrantId ||
       input.competitorId === game.fixture.awayEntrantId;
-    const player = isSide ? null : await tx.player.findFirst({ where: { id: input.competitorId, organizationId }, select: { id: true, seasonClubId: true, seasonClub: { select: { clubId: true } } } });
-    if (!isSide && !player) throw new Error("UNKNOWN_COMPETITOR");
-    // A player must belong to this fixture, otherwise a time could be recorded for someone in another match.
+    // An individual heat has more competitors than the fixture has sides (streak v12): the season's entrants are
+    // valid competitors, not just the fixture's own two. A PLAYER still has to belong to this fixture, so a time
+    // cannot be recorded for someone in another match.
+    const entrant = isSide ? null : await tx.entrant.findFirst({ where: { id: input.competitorId, organizationId, seasonId: game.fixture.seasonId }, select: { id: true } });
+    const player = isSide || entrant ? null : await tx.player.findFirst({ where: { id: input.competitorId, organizationId }, select: { id: true, seasonClubId: true } });
+    if (!isSide && !entrant && !player) throw new Error("UNKNOWN_COMPETITOR");
     if (player && player.seasonClubId !== game.fixture.homeSeasonClubId && player.seasonClubId !== game.fixture.awaySeasonClubId) {
       throw new Error("COMPETITOR_NOT_IN_FIXTURE");
     }
@@ -674,7 +677,7 @@ export async function recordFinishTime(gameId: string, fixtureId: string, formDa
         gameId,
         fixtureId,
         seasonClubId: isSide && input.competitorId === game.fixture.homeSeasonClubId ? input.competitorId : isSide && input.competitorId === game.fixture.awaySeasonClubId ? input.competitorId : player?.seasonClubId ?? null,
-        entrantId: isSide && (input.competitorId === game.fixture.homeEntrantId || input.competitorId === game.fixture.awayEntrantId) ? input.competitorId : null,
+        entrantId: entrant?.id ?? (isSide && (input.competitorId === game.fixture.homeEntrantId || input.competitorId === game.fixture.awayEntrantId) ? input.competitorId : null),
         playerId: player?.id ?? null,
         eventType: "NOTE",
         typeKey: "FINISH_TIME",
