@@ -2,8 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/lib/audit";
-import { queueGameLifecycleFeed, queueWinProbabilityFeed } from "@/lib/data-feed/dispatcher";
-import { winProbabilityForGame } from "@/lib/analytics/win-probability-context";
+import { queueGameLifecycleFeed } from "@/lib/data-feed/dispatcher";
 import { getSportDefinition } from "@/lib/sports/registry";
 import { applyRuleValues, parseRuleConfig, type RuleValue } from "@/lib/sports/rule-values";
 import { resolveSeasonRuleValues } from "@/lib/sports/rule-set-store";
@@ -199,38 +198,6 @@ export async function applyScoringDelivery(args: {
   if (result.nextPeriod) {
     await tx.game.update({ where: { id: gameId }, data: { currentPeriod: result.nextPeriod } });
   }
-
-  // Win probability (streak v12, Prompt 2). Queued after every scoring change, in the same transaction as the score
-  // itself, so a partner never receives a probability that precedes the score it describes. The model is named in the
-  // payload and the number is clamped away from 0/1 while the game is live.
-  const nextPeriodNumber = result.nextPeriod ?? result.period?.period ?? game.currentPeriod;
-  const probability = winProbabilityForGame({
-    definition: effectiveDefinition,
-    status: result.finalize ? "FINAL" : game.status,
-    homeScore: result.homeScore,
-    awayScore: result.awayScore,
-    period: nextPeriodNumber,
-    clockSecondsRemaining: remainingClockSeconds(game),
-    currentPoints: result.tennisPoints ?? null,
-  });
-  await queueWinProbabilityFeed(tx, {
-    organizationId,
-    gameId,
-    event: {
-      eventId: `${gameId}:wp`,
-      sequenceNumber: game.nextEventSequence,
-      period: nextPeriodNumber,
-      clockSeconds: remainingClockSeconds(game),
-      points: null,
-      eventType: "WIN_PROBABILITY_UPDATED",
-      winProbHome: probability.home,
-      winProbAway: probability.away,
-      method: probability.method,
-      confidence: probability.confidence,
-      homeScore: result.homeScore,
-      awayScore: result.awayScore,
-    },
-  });
 
   if (result.finalize) {
     const winnerSeasonClubId =

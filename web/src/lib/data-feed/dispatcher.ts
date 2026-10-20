@@ -80,6 +80,11 @@ export async function queueCardIssuedFeed(
   markFeedQueued(args.organizationId);
   return { queued: subscriptions.length };
 }
+export async function hasFeedSubscriber(tx: Prisma.TransactionClient, organizationId: string, eventType: DataFeedEventTypeName): Promise<boolean> {
+  const count = await tx.dataFeedSubscription.count({ where: { organizationId, ...subscribeFilter(eventType) } });
+  return count > 0;
+}
+
 // The win probability is not an event of the game, it is the engine's belief about it (streak v12, Prompt 2). It is
 // queued after a scoring change, carries the model that produced it, and is never signed as fact - the payload says
 // `winProbHome`, `method` and `confidence` so a partner can weight it.

@@ -1,7 +1,9 @@
 import "server-only";
 
 import { remainingClockSeconds } from "@/lib/game-clock";
-import { queueScoreChangedFeed } from "@/lib/data-feed/dispatcher";
+import { hasFeedSubscriber, queueScoreChangedFeed, queueWinProbabilityFeed } from "@/lib/data-feed/dispatcher";
+import { getSportDefinition } from "@/lib/sports/registry";
+import { winProbabilityForGame } from "@/lib/analytics/win-probability-context";
 import { ledgerSourceFor } from "@/lib/scoring/provenance";
 import { buildGameEventCreateData } from "@/lib/scoring/build-game-event";
 import { loadMutableGame } from "./load-mutable-game";
@@ -89,6 +91,45 @@ export async function createGameEvent(
         playerId: input.playerId ?? null,
       },
     });
+
+    // Win probability (streak v12, Prompt 2). Emitted HERE rather than in a scoring module, because this is the one
+    // canonical write every sport goes through - basketball's dedicated scorer included, which is exactly the sport a
+    // sportsbook cares about most and the one a module-level hook would have silently missed.
+    if (await hasFeedSubscriber(tx, ctx.actor.organizationId, "WIN_PROBABILITY_UPDATED")) {
+      const division = await tx.division.findUnique({
+        where: { id: game.fixture.divisionId },
+        select: { competition: { select: { sport: { select: { slug: true } } } } },
+      });
+      const definition = division ? getSportDefinition(division.competition.sport.slug) : null;
+      if (definition) {
+        const probability = winProbabilityForGame({
+          definition,
+          status: game.status,
+          homeScore: input.homeScoreAfter ?? game.fixture.homeScore,
+          awayScore: input.awayScoreAfter ?? game.fixture.awayScore,
+          period: input.period ?? game.currentPeriod,
+          clockSecondsRemaining: clockSeconds,
+        });
+        await queueWinProbabilityFeed(tx, {
+          organizationId: ctx.actor.organizationId,
+          gameId: input.gameId,
+          event: {
+            eventId: `${input.gameId}:wp:${created.sequenceNumber ?? sequenceNumber}`,
+            sequenceNumber: created.sequenceNumber ?? sequenceNumber,
+            period: input.period ?? game.currentPeriod,
+            clockSeconds,
+            points: null,
+            eventType: "WIN_PROBABILITY_UPDATED",
+            winProbHome: probability.home,
+            winProbAway: probability.away,
+            method: probability.method,
+            confidence: probability.confidence,
+            homeScore: input.homeScoreAfter ?? game.fixture.homeScore,
+            awayScore: input.awayScoreAfter ?? game.fixture.awayScore,
+          },
+        });
+      }
+    }
   }
 
   return { id: created.id, sequenceNumber: created.sequenceNumber ?? sequenceNumber };
