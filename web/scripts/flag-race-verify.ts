@@ -103,7 +103,7 @@ async function main() {
   if (!eventRows.every((row) => typeof (row.data as { seconds?: number } | null)?.seconds === "number" && ((row.data as { seconds: number }).seconds ?? 0) > 0)) {
     problems.push("an event row has no positive seconds value");
   }
-  if (consoleData.competitors.length !== 6) problems.push(`console offers ${consoleData.competitors.length} competitors, expected 6 (4 entrants + 2 sides)`);
+  // The fixture sides ARE two of the season entrants here, so the pool is the four entrants (deduplicated), not\n  // six: my first expectation double-counted them.\n  if (consoleData.competitors.length !== setup.entrants.length) problems.push(`console offers ${consoleData.competitors.length} competitors, expected ${setup.entrants.length}`);\n  for (const entrant of setup.entrants) {\n    if (!consoleData.competitors.some((competitor) => competitor.id === entrant.id)) problems.push(`console does not offer ${entrant.name}`);\n  }
   if (consoleData.recent.length !== 4) problems.push(`console lists ${consoleData.recent.length} times, expected 4`);
   if (leaderboard.length !== 4) problems.push(`leaderboard has ${leaderboard.length} rows, expected 4`);
   if (leaderboard[0]?.seconds !== 11.98) problems.push(`fastest time is ${leaderboard[0]?.seconds}, expected 11.98`);
