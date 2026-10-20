@@ -4,7 +4,7 @@ import { withOrganizationContext } from "../src/lib/tenant-context";
 import { createFeedSubscription } from "../src/server/data-feed/subscriptions";
 import { drainFeedDeliveries } from "../src/lib/data-feed/dispatcher";
 import { verifyWebhookSignature } from "../src/lib/data-feed/signature";
-import { applyScoringDelivery, type ScoringGamePayload } from "../src/server/scoring/applyScoringDelivery";
+import { recordScoreInternal } from "../src/app/games/actions-internal";
 import { createGame } from "../src/server/scoring/createGame";
 import { randomUUID } from "node:crypto";
 
@@ -32,18 +32,6 @@ if (!ORGANIZATION || !ACTOR) {
 const ORG: string = ORGANIZATION;
 const ACTOR_ID: string = ACTOR;
 const TAG = `WIN PROB ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
-
-async function loadGame(gameId: string): Promise<ScoringGamePayload> {
-  return prisma.game.findUniqueOrThrow({
-    where: { id: gameId },
-    include: {
-      fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } },
-      periodScores: { orderBy: { period: "asc" } },
-      ruleSnapshot: true,
-      events: { select: { period: true, typeKey: true, sequenceNumber: true, seasonClubId: true, entrantId: true }, orderBy: { sequenceNumber: "asc" } },
-    },
-  });
-}
 
 async function main() {
   const setup = await withOrganizationContext(ORG, async (tx) => {
@@ -94,25 +82,21 @@ async function main() {
   await withOrganizationContext(ORG, (tx) => tx.fixture.update({ where: { id: setup.fixtureId }, data: { status: "LIVE" } }));
 
   try {
-    // Three scoring changes, each followed by a drain, so the listener sees the probability move step by step.
-    const steps: { side: "home" | "away"; typeKey: string; points: number }[] = [
-      { side: "home", typeKey: "TWO_POINTER", points: 2 },
-      { side: "home", typeKey: "TWO_POINTER", points: 2 },
-      { side: "away", typeKey: "THREE_POINTER", points: 3 },
+    // Basketball does not go through a scoring module: it has its own scorer, which is what the console calls.
+    // (The first version of this script used applyScoringDelivery and threw NO_SCORING_MODULE - which is exactly how
+    // the emission point was found to be wrong.)
+    const steps: { side: "home" | "away"; points: number }[] = [
+      { side: "home", points: 2 },
+      { side: "home", points: 2 },
+      { side: "away", points: 3 },
     ];
     for (const step of steps) {
-      await withOrganizationContext(ORG, async (tx) => {
-        await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${setup.fixtureId} FOR UPDATE`;
-        const loaded = await loadGame(game.id);
-        await applyScoringDelivery({
-          tx,
-          organizationId: ORG,
-          actorId: ACTOR_ID,
-          fixtureId: setup.fixtureId,
-          game: loaded,
-          input: { seasonClubId: step.side === "home" ? setup.home : setup.away, typeKey: step.typeKey, points: step.points },
-        });
-      });
+      const form = new FormData();
+      form.set("seasonClubId", step.side === "home" ? setup.home : setup.away);
+      form.set("playerId", "");
+      form.set("points", String(step.points));
+      form.set("description", `Win probability step (${step.points} for ${step.side})`);
+      await recordScoreInternal(game.id, setup.fixtureId, form, { id: ACTOR_ID, organizationId: ORG });
       await fetch(`${BASE_URL}/api/cron/drain-feeds`, { headers: { "x-cron-secret": CRON_SECRET } }).catch(() => null);
       if (received.length < steps.indexOf(step) + 1) await drainFeedDeliveries({ organizationId: ORG, limit: 10 });
       const deadline = Date.now() + 8000;
