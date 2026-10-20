@@ -29,12 +29,14 @@ export const FLAG_RACE: SportDefinition = {
     // single 1 is a placeholder the engine never uses - no scoring module matches a `time` unit, so nothing can score
     // a race through this path. That is the honest state: races are timed, not scored, until a result import exists.
     values: [1],
-    winCondition: "HIGHEST_SCORE",
+    winCondition: "LOWEST_TIME",
     drawsAllowed: false,
   },
   events: [
     { key: "START", label: "Start", category: "GAME_CONTROL" },
     { key: "FINISH", label: "Finish", category: "GAME_CONTROL" },
+    // The timing console records this with the measured seconds in `data: { seconds }` (streak v12).
+    { key: "FINISH_TIME", label: "Finish time", category: "RESULT", producesMetrics: ["finishTimeMs"] },
     { key: "FALSE_START", label: "False start", category: "DISCIPLINE" },
     { key: "DISQUALIFICATION", label: "Disqualified", category: "DISCIPLINE" },
     { key: "LANE_ASSIGNMENT", label: "Lane assignment", category: "LINEUP" },

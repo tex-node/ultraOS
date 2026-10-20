@@ -628,6 +628,76 @@ export async function getGameIncidents(gameId: string) {
     .reverse();
 }
 
+// Finish-time capture for a timed sport (streak v12, Prompt 1b). A race is decided by the clock, so the console
+// records a measured time against a competitor - the measured seconds, not a score. The value is stored in the
+// event's `data.seconds` and the timed leaderboard reads it back; nothing here touches Fixture.homeScore, which
+// would pretend a race is a 1-0 result.
+const finishTimeInput = z.object({
+  competitorId: z.string().min(1),
+  seconds: z.coerce.number().positive().max(86_400),
+});
+
+export async function recordFinishTime(gameId: string, fixtureId: string, formData: FormData) {
+  const { session, organizationId } = await requireFixturePermission("game:operate", fixtureId);
+  const input = finishTimeInput.parse(Object.fromEntries(formData.entries()));
+
+  await withOrganizationContext(organizationId, async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${fixtureId} FOR UPDATE`;
+    const game = await tx.game.findUniqueOrThrow({
+      where: { id: gameId },
+      include: { fixture: { include: { division: { include: { competition: { include: { sport: true } } } } } } },
+    });
+    assertGameIsMutable(game.status, game.fixture.status);
+    if (game.status !== "LIVE" && game.status !== "PAUSED") throw new Error("GAME_NOT_ACTIVE");
+
+    const definition = getSportDefinition(game.fixture.division.competition.sport.slug);
+    if (!definition) throw new Error("UNKNOWN_SPORT");
+    if (definition.scoring.winCondition !== "LOWEST_TIME") throw new Error("NOT_A_TIMED_SPORT");
+    if (!definition.events.some((event) => event.key === "FINISH_TIME")) throw new Error("SPORT_HAS_NO_FINISH_TIME");
+
+    // The competitor is either one of the two sides (a team race) or a player on one of them (individual heat).
+    const isSide =
+      input.competitorId === game.fixture.homeSeasonClubId ||
+      input.competitorId === game.fixture.awaySeasonClubId ||
+      input.competitorId === game.fixture.homeEntrantId ||
+      input.competitorId === game.fixture.awayEntrantId;
+    const player = isSide ? null : await tx.player.findFirst({ where: { id: input.competitorId, organizationId }, select: { id: true, seasonClubId: true, seasonClub: { select: { clubId: true } } } });
+    if (!isSide && !player) throw new Error("UNKNOWN_COMPETITOR");
+    // A player must belong to this fixture, otherwise a time could be recorded for someone in another match.
+    if (player && player.seasonClubId !== game.fixture.homeSeasonClubId && player.seasonClubId !== game.fixture.awaySeasonClubId) {
+      throw new Error("COMPETITOR_NOT_IN_FIXTURE");
+    }
+
+    const seconds = Math.round(input.seconds * 100) / 100;
+    await createGameEvent(
+      {
+        gameId,
+        fixtureId,
+        seasonClubId: isSide && input.competitorId === game.fixture.homeSeasonClubId ? input.competitorId : isSide && input.competitorId === game.fixture.awaySeasonClubId ? input.competitorId : player?.seasonClubId ?? null,
+        entrantId: isSide && (input.competitorId === game.fixture.homeEntrantId || input.competitorId === game.fixture.awayEntrantId) ? input.competitorId : null,
+        playerId: player?.id ?? null,
+        eventType: "NOTE",
+        typeKey: "FINISH_TIME",
+        data: { seconds },
+        period: game.currentPeriod,
+        clockSeconds: remainingClockSeconds(game),
+        description: `Finish time ${seconds.toFixed(2)}s`,
+      },
+      { actor: { id: session.user.id, organizationId }, source: "LIVE_UI", tx },
+    );
+
+    await writeAuditLog(tx, {
+      organizationId,
+      userId: session.user.id,
+      action: "TIMED_RESULT_RECORDED",
+      entityType: "Game",
+      entityId: gameId,
+      details: { fixtureId, sportKey: definition.key, competitorId: input.competitorId, seconds },
+    });
+  });
+
+  revalidatePath(`/games/${fixtureId}/live`);
+}
 const sportEventInput = z.object({
   typeKey: z.string().min(1),
   seasonClubId: z.string().min(1),

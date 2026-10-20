@@ -46,6 +46,8 @@ import { chaseTarget, inningsConfig, isDelivery, isLegalDelivery, oversDisplay }
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { ScoreCapturePanel } from "./score-capture-panel";
 import { EmbedCodeButton } from "./embed-code-button";
+import { TimingPanel } from "./timing-panel";
+import { loadTimedConsoleData } from "@/server/timed/timed-console";
 import { SportCapturePanel } from "./sport-capture-panel";
 import { LiveScoreCapture } from "./live-score-capture";
 import { CaptureConnectivity } from "@/app/components/ui/capture-connectivity";
@@ -197,6 +199,8 @@ export default async function Live({ params, searchParams }: { params: Promise<{
   // Statistics verification (G.15) is a distinct signal from official game-result finality -
   // an Event Director can still finalize an unverified/mismatched game (Part XII), this is a
   // visible warning, not a hard block.
+  // A timed sport has no score to press: the console needs the stopwatch data instead of the scoring panel.
+  const timed = definition?.scoring.winCondition === "LOWEST_TIME" ? await loadTimedConsoleData(organizationId, fixtureId) : null;
   const reconciliation = game ? await getGameReconciliation(game.id) : null;
   const showFinalizationWarning = Boolean(
     reconciliation && reconciliation.overallStatus === "MISMATCH" && !game?.statisticsVerifiedAt,
@@ -392,6 +396,15 @@ export default async function Live({ params, searchParams }: { params: Promise<{
         ) : null}
         {/* Partner embed (streak v11, Prompt 4): the snippet carries the org slug, so the iframe is public. */}
         <EmbedCodeButton orgSlug={organizationSlug} fixtureId={fixtureId} />
+        {/* A timed sport has no score to press, so it gets a stopwatch instead of the scoring panel (streak v12). */}
+        {definition?.scoring.winCondition === "LOWEST_TIME" && game ? (
+          <TimingPanel
+            gameId={game.id}
+            fixtureId={fixtureId}
+            competitors={timed?.competitors ?? []}
+            recent={timed?.recent ?? []}
+          />
+        ) : null}
         {definition && game && game.status !== "FINAL" ? (
           <SportCapturePanel
             gameId={game.id}

@@ -40,7 +40,9 @@ export type StructureSpec = {
 export type ScoringSpec = {
   unit: string;
   values: number[];
-  winCondition: "HIGHEST_SCORE" | "HIGHEST_RUNS" | "BEST_OF_PERIODS";
+  // LOWEST_TIME (streak v12): a timed sport is decided by the clock, not by a score. Flag race uses it, and the
+  // standings page renders a timed leaderboard instead of a W/L table for these sports.
+  winCondition: "HIGHEST_SCORE" | "HIGHEST_RUNS" | "BEST_OF_PERIODS" | "LOWEST_TIME";
   drawsAllowed: boolean;
 };
 
