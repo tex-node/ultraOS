@@ -79,21 +79,11 @@ async function main() {
   await withOrganizationContext(ORG, (tx) => tx.fixture.update({ where: { id: setup.fixtureId }, data: { status: "LIVE" } }));
   console.log(`cricket fixture ${setup.fixtureId} · game ${game.id} · 2 innings x 20 overs`);
 
-  // A deterministic but varied sequence of legal deliveries: dot, single, boundary, six. Every value maps to exactly
-  // one delivery whose point value comes from the definition - the first version delivered a RUN for the "dot" and
-  // then a DOT_BALL on top of it, which scored a run on every dot ball.
-  const runPlan: { typeKey: string; runs: number }[] = [
-    { typeKey: "RUN", runs: 1 },
-    { typeKey: "DOT_BALL", runs: 0 },
-    { typeKey: "RUN", runs: 1 },
-    { typeKey: "FOUR", runs: 4 },
-    { typeKey: "DOT_BALL", runs: 0 },
-    { typeKey: "RUN", runs: 1 },
-    { typeKey: "SIX", runs: 6 },
-    { typeKey: "RUN", runs: 1 },
-    { typeKey: "DOT_BALL", runs: 0 },
-    { typeKey: "FOUR", runs: 4 },
-  ];
+  // Two deterministic plans. The first innings bats slowly (dots and singles) so it posts a modest total; the chase
+  // bats with boundaries, which is what makes "the target is reached with overs to spare" a real possibility rather
+  // than a tie on the last ball - the second run of this script finished 216-216 with the first plan used for both.
+  const batFirstPlan = ["DOT_BALL", "RUN", "RUN", "DOT_BALL", "RUN", "DOT_BALL", "RUN", "DOT_BALL"];
+  const chasePlan = ["FOUR", "RUN", "SIX", "RUN", "DOT_BALL", "RUN", "FOUR", "DOT_BALL", "RUN", "SIX"];
   let ball = 0;
   let state = await loadGame(game.id);
 
@@ -101,8 +91,7 @@ async function main() {
   for (let over = 1; over <= 20; over += 1) {
     for (let delivery = 1; delivery <= 6; delivery += 1) {
       if (state.status === "FINAL") break;
-      const plan = runPlan[ball % runPlan.length];
-      await deliver(game.id, setup.fixtureId, setup.home, plan.typeKey);
+      await deliver(game.id, setup.fixtureId, setup.home, batFirstPlan[ball % batFirstPlan.length]);
       state = await loadGame(game.id);
       ball += 1;
       void delivery;
@@ -118,8 +107,7 @@ async function main() {
   for (let over = 1; over <= 20; over += 1) {
     for (let delivery = 1; delivery <= 6; delivery += 1) {
       if (state.status === "FINAL") break;
-      const plan = runPlan[chaseBall % runPlan.length];
-      await deliver(game.id, setup.fixtureId, setup.away, plan.typeKey);
+      await deliver(game.id, setup.fixtureId, setup.away, chasePlan[chaseBall % chasePlan.length]);
       state = await loadGame(game.id);
       chaseBall += 1;
       if (state.status === "FINAL") {
