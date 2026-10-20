@@ -48,7 +48,9 @@ async function main() {
       sides.push(seasonClub.id);
     }
     const fixture = await tx.fixture.create({
-      // A public-API read only sees a PRODUCTION presentation fixture (the scope gate), so the verification fixture\n      // has to be one - otherwise the live-feed 404s for a reason that has nothing to do with win probability.\n      data: { organizationId: ORG, seasonId: season.id, divisionId: division.id, venueId: venue.id, homeSeasonClubId: sides[0], awaySeasonClubId: sides[1], scheduledAt: new Date(), status: "SCHEDULED", recordOrigin: "PRODUCTION" },
+      // A public-API read only sees a PRODUCTION presentation fixture (the scope gate), so the verification fixture
+      // has to be one - otherwise the live-feed 404s for a reason that has nothing to do with win probability.
+      data: { organizationId: ORG, seasonId: season.id, divisionId: division.id, venueId: venue.id, homeSeasonClubId: sides[0], awaySeasonClubId: sides[1], scheduledAt: new Date(), status: "SCHEDULED", recordOrigin: "PRODUCTION" },
       select: { id: true },
     });
     return { competitionId: competition.id, divisionId: division.id, seasonId: season.id, fixtureId: fixture.id, home: sides[0], away: sides[1] };
@@ -104,7 +106,11 @@ async function main() {
       while (Date.now() < deadline && received.length < steps.indexOf(step) + 1) await new Promise((resolve) => setTimeout(resolve, 150));
     }
 
-    // api/v1 is keyed (streak v9): the live-feed check needs a real key, or it would be testing the 401 path.\n    const key = await withOrganizationContext(ORG, (tx) => createApiKey(tx, { organizationId: ORG, actorId: ACTOR_ID, name: "Win probability verification", tier: "BASIC" }));\n    const feedResponse = await fetch(`${BASE_URL}/api/v1/games/${setup.fixtureId}/live-feed`, { headers: { authorization: `Bearer ${key.rawKey}` } });\n    const liveFeed = await feedResponse.json().catch((error) => ({ error: String(error) }));\n    console.log(`live-feed status: ${feedResponse.status}`);
+    // api/v1 is keyed (streak v9): the live-feed check needs a real key, or it would be testing the 401 path.
+    const key = await withOrganizationContext(ORG, (tx) => createApiKey(tx, { organizationId: ORG, userId: ACTOR_ID, name: "Win probability verification", tier: "BASIC" }));
+    const feedResponse = await fetch(`${BASE_URL}/api/v1/games/${setup.fixtureId}/live-feed`, { headers: { authorization: `Bearer ${key.rawKey}` } });
+    const liveFeed = await feedResponse.json().catch((error) => ({ error: String(error) }));
+    console.log(`live-feed status: ${feedResponse.status}`);
 
     console.log(`received ${received.length} WIN_PROBABILITY_UPDATED delivery(ies)`);
     for (const delivery of received) {
