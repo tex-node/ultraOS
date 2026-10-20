@@ -4995,6 +4995,8 @@ enum DataFeedEventType {
   // Streak v10: discipline events carry a player and a card colour. Football needs them (yellow/red), and so does
   // any sport with cards; a score-only feed cannot price a match with a man sent off.
   CARD_ISSUED
+  // Streak v12: the live win probability after a scoring change, for sportsbook partners.
+  WIN_PROBABILITY_UPDATED
 }
 
 enum DataFeedDeliveryStatus {

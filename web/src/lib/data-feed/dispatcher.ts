@@ -80,6 +80,45 @@ export async function queueCardIssuedFeed(
   markFeedQueued(args.organizationId);
   return { queued: subscriptions.length };
 }
+// The win probability is not an event of the game, it is the engine's belief about it (streak v12, Prompt 2). It is
+// queued after a scoring change, carries the model that produced it, and is never signed as fact - the payload says
+// `winProbHome`, `method` and `confidence` so a partner can weight it.
+export type WinProbabilityFeedEvent = {
+  eventId: string;
+  sequenceNumber: number;
+  period: number;
+  clockSeconds: number;
+  points: null;
+  eventType: "WIN_PROBABILITY_UPDATED";
+  winProbHome: number;
+  winProbAway: number;
+  method: string;
+  confidence: number;
+  homeScore: number;
+  awayScore: number;
+};
+
+export async function queueWinProbabilityFeed(
+  tx: Prisma.TransactionClient,
+  args: { organizationId: string; gameId: string; event: WinProbabilityFeedEvent },
+): Promise<QueueResult> {
+  const subscriptions = await tx.dataFeedSubscription.findMany({
+    where: { organizationId: args.organizationId, ...subscribeFilter("WIN_PROBABILITY_UPDATED") },
+    select: { id: true },
+  });
+  if (subscriptions.length === 0) return { queued: 0 };
+  await tx.dataFeedDelivery.createMany({
+    data: subscriptions.map((subscription) => ({
+      organizationId: args.organizationId,
+      subscriptionId: subscription.id,
+      gameId: args.gameId,
+      eventType: "WIN_PROBABILITY_UPDATED" as const,
+      eventData: args.event as unknown as Prisma.InputJsonValue,
+    })),
+  });
+  markFeedQueued(args.organizationId);
+  return { queued: subscriptions.length };
+}
 /** Queue a lifecycle event (GAME_STARTED / GAME_FINAL). Call from the status transition, in its transaction. */
 export async function queueGameLifecycleFeed(
   tx: Prisma.TransactionClient,

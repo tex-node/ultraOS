@@ -17,6 +17,8 @@ export type PublicGameFixture = {
   homeEntrant: { id: string; name: string } | null;
   awayEntrant: { id: string; name: string } | null;
   game: { id: string } | null;
+  /** The sport, needed by the live feed to pick a win-probability model (streak v12). */
+  division: { competition: { sport: { slug: string } } };
 };
 
 export async function loadPublicGame(fixturePublicId: string): Promise<{ fixture: PublicGameFixture; model: LivePresentationModel } | null> {
@@ -30,6 +32,8 @@ export async function loadPublicGame(fixturePublicId: string): Promise<{ fixture
         homeEntrant: { select: { id: true, name: true } },
         awayEntrant: { select: { id: true, name: true } },
         game: true,
+        // The live feed reports a win probability, which needs the sport (streak v12).
+        division: { select: { competition: { select: { sport: { select: { slug: true } } } } } },
       },
     });
     if (!fixture || !isProductionPresentationFixture(fixture) || !fixture.game) return null;

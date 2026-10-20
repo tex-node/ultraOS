@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { withPublicApiV1 } from "@/lib/api-v1/respond";
 import { apiError } from "@/lib/api-v1/errors";
 import { loadPublicGame } from "@/lib/api-v1/game-loader";
+import { getSportDefinition } from "@/lib/sports/registry";
+import { winProbabilityForGame } from "@/lib/analytics/win-probability-context";
 import type { LiveGameSnapshotEventV2 } from "@/lib/live-game-snapshot-v2";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +32,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
     const { fixture, model } = loaded;
     const generatedAt = new Date().toISOString();
 
+    // Win probability (streak v12, Prompt 2): the same pure model the feed emits, computed from the same state, so a
+    // partner cannot get a different number by polling instead of subscribing. `wpm` names the model.
+    const definition = getSportDefinition(fixture.division.competition.sport.slug);
+    const probability = definition
+      ? winProbabilityForGame({
+          definition,
+          status: model.status,
+          homeScore: model.score.home,
+          awayScore: model.score.away,
+          period: model.period,
+          clockSecondsRemaining: model.clock?.remainingSeconds ?? null,
+        })
+      : null;
+
     const events: LiveGameSnapshotEventV2[] | null =
       model.dataCapability === "BOX_SCORE_ONLY"
         ? null
@@ -50,6 +66,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
       cap: string;
       t: string;
       e: LiveFeedEvent[] | null;
+      wp: [number, number] | null;
+      wpm: string | null;
     } = {
       v: 1,
       gid: fixture.game!.id,
@@ -61,6 +79,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ publ
       c: model.clock?.remainingSeconds ?? null,
       cap: model.dataCapability,
       t: generatedAt,
+      wp: probability ? [probability.home, probability.away] : null,
+      wpm: probability ? probability.method : null,
       e:
         events === null
           ? null

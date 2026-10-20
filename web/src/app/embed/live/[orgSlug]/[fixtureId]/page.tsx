@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { fixtureSide } from "@/lib/fixture-side";
 import { isProductionPresentationFixture } from "@/lib/presentation-scope";
 import { getSportDefinition } from "@/lib/sports/registry";
+import { winProbabilityForGame } from "@/lib/analytics/win-probability-context";
 import { resolveActiveOrganizationBySlug, withOrganizationContext } from "@/lib/tenant-context";
 import { EmbedRefresher } from "./embed-refresher";
 
@@ -18,8 +19,17 @@ export const revalidate = 0;
 //
 // Data comes from the same production-scoped read as the rest of the public surface: a rehearsal fixture is a 404
 // here, exactly as it is everywhere else.
-export default async function EmbedLivePage({ params }: { params: Promise<{ orgSlug: string; fixtureId: string }> }) {
+export default async function EmbedLivePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orgSlug: string; fixtureId: string }>;
+  searchParams: Promise<{ wp?: string }>;
+}) {
   const { orgSlug, fixtureId } = await params;
+  // Opt-in, not default (streak v12, Prompt 2): a partner who wants the probability bar asks for it with ?wp=1, and
+  // the bar is absent otherwise rather than showing a number some partners would rather not publish.
+  const showProbability = (await searchParams).wp === "1";
   const organization = await resolveActiveOrganizationBySlug(orgSlug).catch(() => null);
   if (!organization) notFound();
 
@@ -69,6 +79,18 @@ export default async function EmbedLivePage({ params }: { params: Promise<{ orgS
     }
   })();
 
+  const probability =
+    showProbability && definition
+      ? winProbabilityForGame({
+          definition,
+          status: game.status,
+          homeScore: loaded.homeScore,
+          awayScore: loaded.awayScore,
+          period: game.currentPeriod,
+          clockSecondsRemaining: game.clockSecondsRemaining,
+        })
+      : null;
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-ink-900 p-2 text-text-1">
       <EmbedRefresher intervalSeconds={15} />
@@ -91,6 +113,19 @@ export default async function EmbedLivePage({ params }: { params: Promise<{ orgS
           {clock ? <span className="font-mono">{clock}</span> : null}
           {!periodLabel && !clock ? <span>{loaded.venue?.name ?? " "}</span> : null}
         </div>
+        {probability ? (
+          <div className="mt-2">
+            <div className="flex h-1.5 overflow-hidden rounded-full bg-white/10">
+              <span className="bg-brand-400" style={{ width: `${Math.round(probability.home * 100)}%` }} />
+              <span className="bg-warn" style={{ width: `${Math.round(probability.away * 100)}%` }} />
+            </div>
+            <p className="mt-1 flex justify-between text-[9px] text-text-3">
+              <span>{Math.round(probability.home * 100)}%</span>
+              <span>win probability · {probability.method.toLowerCase().replace(/_/g, " ")}</span>
+              <span>{Math.round(probability.away * 100)}%</span>
+            </p>
+          </div>
+        ) : null}
         <p className="mt-2 text-center text-[9px] text-text-3">{organization.name}</p>
       </div>
     </main>
