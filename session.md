@@ -11536,3 +11536,15 @@ MVPVote rls=true forced=true
   currently passes only clock-sport state (the presentation model does not expose rally points or chase maths), so
   SET_SCORE/CHASE reach the feed only when those fields are supplied. Stated rather than implied.
 - The MVP section needs a signed-in fan; anonymous voting was deliberately not built.
+
+**Post-script to Prompt 5 - an orphaned test edit, found while cleaning up.** `git status` after the final deploy
+showed `web/src/lib/registration/sport-identity.test.ts` still modified. The edit was made in **streak v11** when
+flag race gained a `SportDefinition` (the assertion went from "resolves to null" to "resolves to FLAG_RACE"), but it
+was never committed: every local run passed because the working tree had it, while the committed test on `main` still
+expected null and would have failed for anyone running a clean checkout. It is committed now (`1641396`) and both
+branches are pushed. The application code was never affected - the flag-race definition shipped in v11 - but a test
+suite that is green only in the author's working tree is not green, and the v11 report said 992 tests passed without
+qualifying that.
+
+**Streak v12 complete.** Both environments on `1641396`, smoke green, 1013 unit + 26 component + 49 DB tests, ratchet
+4/4, `main` merged.
