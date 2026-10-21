@@ -73,8 +73,12 @@ the differentiated asset.
   (plan-adoption persistence if you choose `SystemSetting`, broadcast state) must use
   the org-qualified key pattern from `broadcast-presentation-state.ts`.
 - **No real Ultra game video exists.** The user has confirmed none is available yet.
-  I4 and I5 are gated on a first real video arriving; they cannot be "finished" before
-  then, only made ready.
+  I4 and I5 were gated on a first real video arriving. **I4 is now "Model Installed & Synthetic Verified"
+  (streak v13):** YOLOv8n + ByteTrack run inside the service, write `VisionObservation` rows through the real
+  worker, and were measured on synthetic assets — 300/300 frames, recall 1.000, precision 1.000, mean IoU 0.974 on
+  a clip built from real person pixels, and **0 detections on a flat circle**, which is the correct answer rather
+  than a failed one. What that does NOT establish: accuracy on real camera footage, player identity, or the HTTP
+  service hop. See `documentation/vision/VISION_EMPIRICAL_REPORT.md`. I5 stays gated on a real video.
 - **R1/R2 registration, GIESM, LBCL, coaching, and tenancy work all coexist**. Do not
   fork; the Multi-Sport Architecture's D1–D3 decisions and the tenancy doctrine
   (server-derived org, RLS, composite FKs, canonical-write ratchet) apply to every
