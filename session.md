@@ -11493,3 +11493,46 @@ existing `MVPVote`'s back-relation, and a PowerShell loop that matched `model Mv
 the **existing** model too. Both were caught before any migration reached a database - the schema was restored with
 its back-relations intact - but it is a reminder that `-eq` is case-insensitive and that the schema file is not a
 scratch pad.
+
+## 2026-10-21 - Streak v12 / Prompt 5: final sync - 49/49 DB, both environments, main merged
+
+**Roadmaps**: `COACH_INTELLIGENCE_ROADMAP.md` records that the engine can now price a match (win probability on the
+feed and the live feed), that the cricket chase is verified, that flag race has a stopwatch and a race table, and
+that fans can vote for an MVP; it also records that the vision pipeline is untouched and still has no detector.
+`MULTI_SPORT_ROADMAP.md` records the same for the multi-sport story.
+
+**Suites**
+```
+npm test               1013 tests, 1012 pass, 0 fail  (1 pre-existing skip)
+npm run test:component   26 tests, 26 pass
+npm run test:db          49 tests, 49 pass (368 s, serialized, scratch clone)
+canonical-write ratchet  4 suppressions (ceiling 4)
+```
+
+**Deploys**
+| environment | release | migration | smoke |
+| --- | --- | --- | --- |
+| staging | `66af9bf` | `20261020140000_mvp_vote_tenancy` applied | 7/7 PASS, 0 errors |
+| production | `release-66af9bf` | `20261020140000_mvp_vote_tenancy` applied behind a verified backup `…pre_v12_20261021T001902Z.dump` (sha256 `4321cf04…`) | 7/7 PASS, 0 errors |
+
+**Production verified after the deploy**
+```
+GET /api/v1/live                          -> 200
+DataFeedEventType has WIN_PROBABILITY_UPDATED: 1
+MVPVote rls=true forced=true
+20261020140000_mvp_vote_tenancy applied: 1
+```
+
+**What this streak actually changed, in one line each**
+- The cricket chase ends the game the moment the target is passed - and boundaries no longer score zero.
+- Flag race is timed rather than scored: a stopwatch, a FINISH_TIME event, and a race leaderboard ordered by time.
+- Win probability is a pure, named model on the feed, the live feed and (optionally) the embed.
+- The vision clip exists and is verified; the inference does not exist, and the report says so with evidence.
+- Fans can vote for an MVP after a final game; the vote is isolated per tenant and counted on the passport.
+
+**Known gaps carried forward**
+- The vision detector/tracker (B1/B2) still does not exist; the synthetic clip is the fixture waiting for it.
+- Win probability for tennis and cricket is exercised by unit tests and by the API's inputs, but the live feed
+  currently passes only clock-sport state (the presentation model does not expose rally points or chase maths), so
+  SET_SCORE/CHASE reach the feed only when those fields are supplied. Stated rather than implied.
+- The MVP section needs a signed-in fan; anonymous voting was deliberately not built.
