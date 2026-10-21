@@ -20,7 +20,9 @@ test("registration sport slugs map and round-trip", () => {
 
 test("registered and unregistered sports resolve predictably", () => {
   assert.equal(registrationSportDefinition(RegistrationSport.VOLLEYBALL)?.key, "VOLLEYBALL");
-  assert.equal(registrationSportDefinition(RegistrationSport.FLAG_RACE), null);
+  // Flag race gained a SportDefinition in streak v11, so it now resolves like volleyball does. This used to assert
+  // null, which was the honest state before the definition existed.
+  assert.equal(registrationSportDefinition(RegistrationSport.FLAG_RACE)?.key, "FLAG_RACE");
   assert.equal(registrationSportLabel(RegistrationSport.VOLLEYBALL), "Volleyball");
   assert.equal(registrationSportLabel(RegistrationSport.FLAG_RACE), "Flag Race");
 });
@@ -35,6 +37,6 @@ test("configuredSports resolves definitions and rosters from a config", () => {
   assert.equal(volleyball.roster?.minRoster, 8);
 
   const flagRace = configured.find((entry) => entry.sport === RegistrationSport.FLAG_RACE)!;
-  assert.equal(flagRace.definition, null);
+  assert.equal(flagRace.definition?.key, "FLAG_RACE");
   assert.equal(flagRace.roster?.minRoster, 6);
 });
