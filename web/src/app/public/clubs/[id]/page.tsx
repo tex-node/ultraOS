@@ -24,6 +24,7 @@ import {
   resolvePublicResourceLocator,
 } from "@/lib/public-locators";
 import { withOrganizationContext } from "@/lib/tenant-context";
+import { eloForSeasonClubs } from "@/server/analytics/elo-ratings";
 
 const FALLBACK_PRIMARY_COLOR = "#16F2B3";
 
@@ -56,6 +57,12 @@ export default async function PublicClubPage({ params }: { params: Promise<{ id:
   );
   if (!club || !locatorMatchesResource(locator, club)) notFound();
   const organizationId = locator.organizationId;
+
+  // Elo rating (streak v13, Prompt 3): the pre-match strength number a sportsbook partner prices from, shown as a
+  // rank within the sport so it means something without a glossary.
+  const elo = await withOrganizationContext(organizationId, (tx) =>
+    eloForSeasonClubs(tx, organizationId, club.seasonClubs.map((seasonClub) => seasonClub.id)),
+  );
 
   const primarySeasonClub = club.seasonClubs[0];
   const displayPrimaryColor = club.primaryColor ?? FALLBACK_PRIMARY_COLOR;

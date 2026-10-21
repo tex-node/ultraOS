@@ -765,6 +765,7 @@ model Sport {
   registrationParticipantSports RegistrationParticipantSport[]
   createdAt                     DateTime                       @default(now())
   updatedAt                     DateTime                       @updatedAt
+  eloRatings                    EloRating[]
 }
 
 // Multi-sport Stage 1 (S1.3): organization-scoped customization of a sport definition. The code
@@ -994,7 +995,8 @@ model SeasonClub {
   updatedAt        DateTime          @updatedAt
 
   // Multi-sport Stage 2: a SeasonClub is represented as exactly one TEAM Entrant.
-  entrant Entrant?
+  entrant    Entrant?
+  eloRatings EloRating[]
 
   @@unique([seasonId, clubId, divisionId])
   // Phase 1 Stage 5.2B-3: backs DraftAllocation.seasonClubId's and DraftPick.seasonClubId's
@@ -1065,6 +1067,7 @@ model Entrant {
   metricValues   GameMetricValue[]
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+  eloRatings     EloRating[]
 
   @@unique([seasonClubId])
   @@unique([organizationId, id])
@@ -4915,6 +4918,7 @@ model Organization {
   syncConflictLogs          SyncConflictLog[]
   createdAt                 DateTime                       @default(now())
   updatedAt                 DateTime                       @updatedAt
+  eloRatings                EloRating[]
 
   @@index([status])
 }
@@ -5103,4 +5107,30 @@ model MVPVote {
   @@unique([userId, gameId])
   @@unique([organizationId, id])
   @@index([gameId, playerId])
+}
+
+// Historical Elo ratings (streak v13, Prompt 3). One row per rated competitor per sport per organization: a
+// season-club (team sports) or an entrant (individual sports), never both.
+model EloRating {
+  id             String       @id @default(cuid())
+  organizationId String       @default("cmt4odhgn0000wokk8fbwr6ro")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  sportId        String
+  sport          Sport        @relation(fields: [sportId], references: [id], onDelete: Restrict)
+  seasonClubId   String?
+  seasonClub     SeasonClub?  @relation(fields: [seasonClubId], references: [id], onDelete: Cascade)
+  entrantId      String?
+  entrant        Entrant?     @relation(fields: [entrantId], references: [id], onDelete: Cascade)
+  rating         Float        @default(1500)
+  games          Int          @default(0)
+  wins           Int          @default(0)
+  losses         Int          @default(0)
+  draws          Int          @default(0)
+  lastChange     Float        @default(0)
+  computedAt     DateTime     @default(now())
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, sportId, seasonClubId])
+  @@unique([organizationId, sportId, entrantId])
+  @@index([organizationId, sportId, rating])
 }

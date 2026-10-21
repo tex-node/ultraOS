@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { describeSport, getSportDefinition } from "@/lib/sports/registry";
 import { isIndividualSport } from "@/lib/sports/fixture-sides";
+import { eloForSeasonClubs } from "@/server/analytics/elo-ratings";
 import { buildIndividualStandings, formatRatio, type IndividualStandingInput } from "@/lib/public/individual-standings";
 import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
@@ -65,6 +66,12 @@ export default async function TournamentOverview({ params }: { params: Promise<{
       .map((e) => ({ key: e.id, name: e.name, detail: `${s.name} · ${e.type}`, color: e.primaryColor })),
   );
   const participants = [...teams, ...individuals];
+
+  // Elo (streak v13, Prompt 3): the strength number behind a pre-match probability, shown on the team list so a
+  // reader can see why one side is favoured before a ball is thrown up.
+  const elo = await withOrganizationContext(competition.organizationId, (tx) =>
+    eloForSeasonClubs(tx, competition.organizationId, teams.map((team) => team.key)),
+  );
 
   // Individual-sport standings (streak v6, Prompt 3). The engine's own Standing rows give matches and
   // sets; GAMES are summed from the per-set scores, because a tennis set's period score IS its games. A
@@ -192,6 +199,11 @@ export default async function TournamentOverview({ params }: { params: Promise<{
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{p.name}</p>
                   <p className="truncate text-xs text-text-3">{p.detail}</p>
+                  {elo.get(p.key) ? (
+                    <p className="truncate text-xs text-text-2">
+                      Elo {elo.get(p.key)!.rating.toFixed(0)} <span className="text-text-3">#{elo.get(p.key)!.rank} of {elo.get(p.key)!.of}</span>
+                    </p>
+                  ) : null}
                 </div>
               </div>
             ))}
