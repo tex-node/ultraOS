@@ -11548,3 +11548,97 @@ qualifying that.
 
 **Streak v12 complete.** Both environments on `1641396`, smoke green, 1013 unit + 26 component + 49 DB tests, ratchet
 4/4, `main` merged.
+
+## 2026-10-21 - Streak v13 / Prompt 1: the model is installed, and the measurements are honest
+
+**The v12 finding is now fixed.** The service had no inference at all; it now has `YOLOAnalyzer` (YOLOv8n person
+detection + ByteTrack ids writing `VisionTrack`/`VisionObservation` rows), `torch 2.14.1+cpu`, `ultralytics 8.4.183`,
+`opencv 5.0.0`, `lap 0.5.13` in a venv on the host, `requirements.txt` declaring all of it, and a Dockerfile that
+installs CPU torch (not the 2.5 GB CUDA build) and bakes `yolov8n.pt` in.
+
+**Three schema bugs the first live run exposed** - the B0 service could never have completed a run against the
+deployed schema: the `VisionAnalysisRun` insert omitted `updatedAt` (Prisma's `@updatedAt` is application-level, not
+a DB default), the `VisionModel` insert named a column that does not exist, and the pipeline's own enum/column
+assumptions did not match the schema (`MediaStorageProvider`, `MediaAssetPurpose`, `GameVideo.status` vs
+`ingestStatus`). All fixed, and the fixes are in the service, not in a wrapper.
+
+**Measured through the real worker** (Celery eager, so the lifecycle and the writes are the production path):
+
+| input | detections | precision | recall | mean IoU | conf |
+| --- | --- | --- | --- | --- | --- |
+| circle clip (the v12 asset) | **0** | 0 | 0 | — | — |
+| flat humanoid silhouette | **0** | 0 | 0 | — | — |
+| real person pixels, synthetic motion | **300** (1 track) | **1.000** | **1.000** | **0.974** | 0.891 |
+
+The circle is not detected, and that is correct: at conf ≥ 0.05 with no class filter YOLO calls the silhouette a
+**"sports ball" (0.141)** and never a person. The same model finds **4 people** in Ultralytics' reference photo, so
+the zero is a property of the input, not a broken harness - and the third clip closes the gap with a genuine
+true-positive run. `VISION_EMPIRICAL_REPORT.md` records all of it, plus what is still unproven: real camera footage,
+identity, and the HTTP service hop.
+
+## 2026-10-21 - Streak v13 / Prompt 2: the vision bridge, and the metric it refuses to invent
+
+`GameVideo` gained a nullable `trainingSessionId` (migration + index + FK), so a clip belongs to the session it was
+filmed at. `server/vision/training-bridge.ts` links a clip, converts a completed analysis into session metrics, and
+is idempotent by construction (the metric unique is `(record, definition)`, so re-analysing updates instead of
+inflating).
+
+**The mapping is the honest part.** The detector we installed detects *people*, not jump shots. So
+`vision_athlete_frames` is written from `PERSON_DETECTED` observations - the thing the model actually produces - and
+`vision_shots_detected` is defined and wired to `SHOT_ATTEMPT_CANDIDATE`, then **skipped with the reason "no shot
+classifier exists yet"** rather than written as a zero that would look like a measurement.
+
+**Verified on staging**
+```
+analysed clip: … · run 25fadb72… · 300 observations
+session … with 2 participants · linked: true
+first sync:  [{"metricKey":"vision_athlete_frames","value":300,"athletes":2}]
+             skipped [{"vision_shots_detected","no shot classifier exists yet…"}]
+second sync: same values (idempotence) · metric rows: 2
+session page shows: Athlete frames detected 300
+PASS
+```
+
+## 2026-10-21 - Streak v13 / Prompt 3: Elo, and a prior that says "unknown" instead of "average"
+
+`lib/analytics/elo.ts`: a pure Elo with two stated adjustments - a damped margin-of-victory multiplier
+(`ln(margin+1)`, capped at 2.5) and a 65-point home advantage used for the expectation only. Draws are 0.5 each; a
+no-draw sport ignores a level result **before** creating its two rating rows (its own test caught the first version
+creating rows for a game it then declined to rate). Nine tests, including the shape the prompt asked for: a 10-0 team
+outranks a 0-10 team, and the gap is expressed as a pre-match probability rather than a bare number.
+
+`EloRating` is a new tenant table with the full 5-step checklist, plus a CHECK that a competitor is a season club
+**or** an entrant, never both.
+
+**Verified on the LBCL data**
+```
+Basketball: 31 rated games, 10 competitors
+  CPS 1633.4 (7-0) · LBS 1577.0 (5-1) · LAR 1569.2 (4-2) … worst 1385.5
+  spread 247.9 · best-vs-worst pre-match 85.8%
+  wrote 10 rating row(s) · tenant guard on EloRating: 5/5 PASS
+```
+LBCL's longest record is 7-0 (not the 10-0 in the prompt's example); the 10-0 / 0-10 case is pinned by a unit test,
+and the API data's spread is shown above.
+
+`priorHomeWinForFixture` feeds the win-probability PRIOR state and returns **null** when either side has no rated
+games - an unrated team is unknown, not 1500. The club page and the tournament page now show the rating and its rank
+within the sport.
+
+## 2026-10-21 - Streak v13 / Prompt 4: a partner dashboard whose numbers are real
+
+`/partner/dashboard`: requests today and this month, a 14-day usage sparkline, webhook success rate, active
+subscriptions, the last five deliveries, and the keys on the account.
+
+"Requests today" could not be answered by `ApiKey.lastUsedAt` - it says *when*, not *how many* - and there is no
+request log to aggregate. So `ApiKeyUsageDaily` is a new tenant table (5-step checklist) incremented inside
+`authenticateApiRequest`, best effort because a metering failure must never fail a partner's request. The webhook
+rate is `DELIVERED` vs `FAILED + GAVE_UP` over 30 days **with the raw counts printed next to the percentage**, and a
+partner with no deliveries is told there is no rate to report rather than shown 100%.
+
+**Verified on staging**
+```
+4 authenticated requests -> 200,200,200,200 · no key -> 401
+usage rows=1 · requests today=4        (the 401 was not counted)
+GET /partner/dashboard -> 200 (34,213 bytes) · sections present · no session -> 307
+tenant guard on ApiKeyUsageDaily: 5/5 PASS
+```
