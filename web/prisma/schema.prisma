@@ -1264,6 +1264,7 @@ model TrainingSession {
   createdById     String
   createdBy       User                    @relation(fields: [createdById], references: [id], onDelete: Restrict)
   participants    AthleteTrainingRecord[]
+  visionVideos    GameVideo[]
   media           AthleteMedia[]
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
@@ -4339,6 +4340,10 @@ model GameVideo {
   frameRate          Float?
   resolutionWidth    Int?
   resolutionHeight   Int?
+  // Streak v13, Prompt 2: a training clip can be attached to the session it came from, which is what lets the vision
+  // observations become a session metric instead of an orphaned analysis.
+  trainingSessionId  String?
+  trainingSession    TrainingSession?  @relation(fields: [trainingSessionId], references: [id], onDelete: SetNull)
   // When actual recording started, in real-world time - distinct from "video time" (elapsed ms
   // from the start of the file), which is what timeline anchors are expressed in.
   recordingStartedAt DateTime?

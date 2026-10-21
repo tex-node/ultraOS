@@ -6,6 +6,7 @@ import { withOrganizationContext } from "@/lib/tenant-context";
 import { Card, Num, SectionTitle, formatDate } from "../../../_components/ui";
 import { completeSession } from "../actions";
 import { CompleteForm } from "../training-forms";
+import { loadVisionMetricsForSession } from "@/server/vision/training-bridge";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,12 @@ export default async function CoachingTrainingSessionPage({ params }: { params: 
 
   const session = await withOrganizationContext(scope.organizationId, (tx) => loadTrainingSession(tx, scope.organizationId, sessionId));
   if (!session || (session.seasonClubId && session.seasonClubId !== seasonClubId)) notFound();
+
+  // Vision-derived metrics (streak v13, Prompt 2): a clip linked to this session, analysed, and mapped to a metric -
+  // shown with the detector's own name so a coach knows where the number came from.
+  const visionMetrics = await withOrganizationContext(scope.organizationId, (tx) =>
+    loadVisionMetricsForSession(tx, scope.organizationId, sessionId),
+  );
 
   const logged = new Map<string, string>();
   for (const participant of session.participants) {
@@ -63,6 +70,24 @@ export default async function CoachingTrainingSessionPage({ params }: { params: 
       ) : (
         <p className="mt-3 text-sm text-text-3">No plan attached to this session.</p>
       )}
+
+      {visionMetrics.length > 0 ? (
+        <>
+          <SectionTitle>From video</SectionTitle>
+          <Card>
+            <p className="text-xs text-text-3">Recorded by the vision pipeline from a clip linked to this session (YOLOv8n person detection).</p>
+            <ul className="mt-1 space-y-1 text-sm text-text-1">
+              {visionMetrics.map((metric) => (
+                <li key={metric.metricKey}>
+                  {metric.name}: <b>{metric.value}</b>
+                  {metric.unit ? ` ${metric.unit}` : ""}
+                  <span className="ml-2 text-xs text-text-3">(attached to {metric.athleteCount} athlete{metric.athleteCount === 1 ? "" : "s"})</span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </>
+      ) : null}
 
       {session.participants.length > 0 ? (
         <>
