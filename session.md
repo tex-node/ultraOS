@@ -11642,3 +11642,46 @@ usage rows=1 · requests today=4        (the 401 was not counted)
 GET /partner/dashboard -> 200 (34,213 bytes) · sections present · no session -> 307
 tenant guard on ApiKeyUsageDaily: 5/5 PASS
 ```
+
+## 2026-10-21 - Streak v13 / Prompt 5: final sync - 49/49 DB, both environments, main merged
+
+**Roadmaps**: `COACH_INTELLIGENCE_ROADMAP.md` now marks **I4 as "Model Installed & Synthetic Verified"** with the
+measurements and, in the same bullet, what that does *not* establish (real footage, identity, the HTTP hop) - I5
+stays gated on a real video. `MULTI_SPORT_ROADMAP.md` records Elo, the vision bridge and the partner dashboard.
+
+**Suites**
+```
+npm test               1022 tests, 1021 pass, 0 fail  (1 pre-existing skip)
+npm run test:component   26 tests, 26 pass
+npm run test:db          49 tests, 49 pass (367 s, serialized, scratch clone)
+canonical-write ratchet  4 suppressions (ceiling 4)
+```
+
+**Deploys**
+| environment | release | migrations | smoke |
+| --- | --- | --- | --- |
+| staging | `65031d4` | `20261021060000_game_video_training_session`, `…080000_elo_ratings`, `…090000_api_key_usage_daily` | 7/7 PASS, 0 errors |
+| production | `release-65031d4` | same three, applied behind a verified backup `…pre_v13_20261021T215240Z.dump` (sha256 `3ba24341…`) | 7/7 PASS, 0 errors |
+
+**Production verified after the deploy**
+```
+GET /api/v1/live                 -> 200
+EloRating rls=true forced=true
+ApiKeyUsageDaily rls=true forced=true
+new migrations applied: 3
+```
+
+**What this streak changed, in one line each**
+- The vision service has a real detector, and the numbers on it are measured rather than asserted (300/300 frames,
+  IoU 0.974 on real person pixels; 0 on a circle, which is the honest answer).
+- A training clip becomes a session metric, and the metric the detector cannot support is skipped with a reason.
+- Elo ratings exist per sport, feed the pre-match prior, and appear on the public team pages.
+- Partners have a dashboard whose request counts come from a counter written as the requests happen.
+
+**Known gaps carried forward**
+- Vision has no shot classifier, no identity assignment and no real-footage accuracy; the report says so.
+- Elo is recomputed by a script, not on every result; a game finalised after the last run will not be reflected
+  until it runs again.
+- The partner dashboard counts requests only from the moment `ApiKeyUsageDaily` existed; older traffic shows as zero.
+- `/partner/dashboard` is scoped by the session's organization, so a partner user needs a membership; there is no
+  separate partner login.
