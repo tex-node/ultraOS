@@ -11353,3 +11353,99 @@ needs the fixture's scope checked before the route is blamed.
 - Cricket's chase/innings rules are verified by unit tests, not by a full match on staging this streak.
 - The generic scorebug reads `Fixture.homeScore/awayScore`, so it is only as current as the canonical write path —
   it does not recompute from events.
+
+## 2026-10-20 - Streak v12 / Prompt 1a: the cricket chase, and a scoring bug it exposed
+
+**Verified** (`scripts/cricket-chase-verify.ts`, staging): innings 1 = 60 off 20 overs, target 61; the chase passed
+the target in over 5 ball 2 and the game went FINAL **at that moment**, with the chasing side recorded as the winner
+and the standings showing W1/L1 (2 points vs 0).
+
+**It only got there after finding a real bug.** The first run measured a full 20-over innings at **0-0**, with both
+sides "drawing" on zero. `applyDelivery` only ever saw `input.runs`, so a FOUR or SIX delivered by anything other
+than the console's own buttons scored **nothing** - and nothing complained, because 0 is a valid run total. Runs now
+come from the **event definition**; the caller may choose within the definition's range (RUN 1/2/3) and anything
+outside it is clamped to the nearest allowed value, so a forged `runs: 6` on a single cannot become a six. A
+regression test covers four, six, a plain run, a dot ball and the forged value.
+
+The second run then finished 216-216 - a tie on the 120th ball, which proves nothing about the chase rule - because
+the same run plan was used for both innings. Innings one now bats dots and singles, so the chase has room to finish
+early. Two failures, both mine, both recorded rather than quietly fixed.
+
+## 2026-10-20 - Streak v12 / Prompt 1b: a stopwatch, a race table, and a competitor pool that was too small
+
+Flag race is timed, so it gets a **timing console** rather than a score panel: start, stop, then confirm the
+measured seconds against a competitor. The value is stored as a `FINISH_TIME` GameEvent with `data.seconds` through
+the same canonical write as any other event, and **nothing touches `Fixture.homeScore`** - a race is not a 1-0 result.
+
+- `WinCondition` gains `LOWEST_TIME`; flag race uses it; `FINISH_TIME` joins the event vocabulary.
+- `lib/sports/timed-standings.ts`: the leaderboard (best time per competitor, competition ranking so ties share a
+  rank, unrecorded competitors absent rather than last) and `formatRaceTime`. Six tests.
+- `/standings` renders the race table for a timed sport instead of a W/L table of zeroes.
+
+**Verified** (`scripts/flag-race-verify.ts`): four entrants, out-of-order times and a deliberate tie.
+```
+#1 Ada Sprint 0:11.98
+#2 Bola Dash 0:12.45 (+0.47)
+#2 Chidi Bolt 0:12.45 (+0.47)
+#4 Dayo Rush 0:13.10 (+1.12)
+fixture score untouched: 0-0
+PASS
+```
+The verification found a second real gap: the console could only offer the fixture's two sides, but **a heat has
+more competitors than a fixture has sides**. The pool is now the season's entrants as well, and `recordFinishTime`
+accepts a season entrant (a PLAYER must still belong to this fixture). My own assertion then failed a *correct*
+loader by double-counting the two sides that were already among the entrants - recorded because a test that fails
+correctly is worth as much as one that passes.
+
+## 2026-10-20 - Streak v12 / Prompt 2: a win probability that names its own model
+
+`lib/analytics/win-probability.ts` is a pure function of state and sport, and every answer says **which** model
+produced it: `CLOCK_SCORE` (logistic on the margin, scale shrinking as the clock runs down), `SET_SCORE` (sets, then
+the current set's points), `CHASE` (required run rate against the rate being scored - the only model where the side
+behind on runs can be favoured), `PRIOR` (pre-match, labelled weak) and `FINAL` (exact). A live number is clamped to
+[0.02, 0.98]; only FINAL returns 1 or 0, because certainty during play is a claim the engine cannot support. Ten
+tests pin it.
+
+**Two bugs the tests caught in the first draft:** the chase model had the sides **inverted** (it favoured the side
+defending, not the side chasing - the engine bats home first, so the chaser is away), and the live clamp existed in
+the comment but not in the code.
+
+**Wiring, and a bug the verification caught:** the emission was first hung off `applyScoringDelivery`, which threw
+`NO_SCORING_MODULE` for **basketball** - the sport a sportsbook cares about most, and the one that does not go
+through a scoring module at all. It now lives in `createGameEvent`, the single canonical write every sport passes
+through, behind a subscriber check so a scoring write with nobody listening costs nothing.
+
+**Verified** (staging, HMAC listener):
+```
+VERIFIED · 2-0 · home 65.5% · away 34.5% · CLOCK_SCORE (conf 0.855)
+VERIFIED · 4-0 · home 78.1% · away 21.9% · CLOCK_SCORE
+VERIFIED · 4-3 · home 58.1% · away 41.9% · CLOCK_SCORE
+live-feed: wp=[0.5807,0.4193] wpm=CLOCK_SCORE    (status 200, keyed)
+PASS
+```
+The live-feed read took three attempts to verify for reasons that had nothing to do with the model: the fixture was
+in the wrong organization (the public API serves the default public org), then not `recordOrigin = PRODUCTION` (the
+scope gate, seen in v11 too). Both were my setup errors, and both are the kind of 404 that looks like a broken
+deploy.
+
+## 2026-10-20 - Streak v12 / Prompt 3: the clip is real, the inference is not
+
+`services/vision/scripts/generate_synthetic_video.py` writes a deterministic 1280×720, 30 fps, 10-second half-court
+clip with one orange circle crossing the key and one static marker, plus ground truth. numpy + ffmpeg only -
+deliberately not opencv, so the generator does not share the analyser's library. `verify_synthetic_video.py` checks
+the container and three decoded frames:
+
+```
+container: h264 1280x720 @ 30fps, 300 frames
+frame   0: orange centroid 200,520  · expected 200,520  · delta 0,0
+frame 150: orange centroid 641,360  · expected 641,360  · delta 0,0
+frame 299: orange centroid 1080,520 · expected 1080,520 · delta 0,0
+PASS
+```
+
+**The prompt's premise was wrong.** It asked to prove that YOLO/ByteTrack detects the circle. This repository
+contains **no inference**: the only analyzer is `StubAnalyzer`, which returns zero observations with the note "no
+inference performed; real CV lands in B1/B2"; `requirements.txt` declares no torch/onnxruntime/ultralytics/opencv;
+and the B0 docstring says the detector and tracker arrive later. `documentation/vision/VISION_EMPIRICAL_REPORT.md`
+records that with the evidence, states plainly what was and was not proven, and names the real blocker: **the model,
+not the video**. The clip is now a ready-made accuracy fixture for the day B1 lands.
