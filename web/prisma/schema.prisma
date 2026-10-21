@@ -4919,6 +4919,7 @@ model Organization {
   createdAt                 DateTime                       @default(now())
   updatedAt                 DateTime                       @updatedAt
   eloRatings                EloRating[]
+  apiKeyUsageDailies        ApiKeyUsageDaily[]
 
   @@index([status])
 }
@@ -5069,22 +5070,23 @@ enum ApiKeyTier {
 }
 
 model ApiKey {
-  id             String       @id @default(cuid())
-  organizationId String       @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  usage          ApiKeyUsageDaily[]
+  id             String             @id @default(cuid())
+  organizationId String             @default(dbgenerated("'cmt4odhgn0000wokk8fbwr6ro'"))
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   name           String
   // sha256 hex of the raw key. Unique so a lookup is a single index hit.
-  keyHash        String       @unique
+  keyHash        String             @unique
   // The first characters of the key, for display only ("ulop_live_ab12"). Not a credential.
   prefix         String
-  tier           ApiKeyTier   @default(BASIC)
-  isActive       Boolean      @default(true)
+  tier           ApiKeyTier         @default(BASIC)
+  isActive       Boolean            @default(true)
   lastUsedAt     DateTime?
   createdById    String
-  createdBy      User         @relation("ApiKeyCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy      User               @relation("ApiKeyCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   revokedAt      DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
   @@unique([organizationId, id])
   @@index([organizationId, isActive])
@@ -5133,4 +5135,22 @@ model EloRating {
   @@unique([organizationId, sportId, seasonClubId])
   @@unique([organizationId, sportId, entrantId])
   @@index([organizationId, sportId, rating])
+}
+
+// Per-day API usage (streak v13, Prompt 4). The partner dashboard needs request counts; the key table only knows
+// when a key was last used, and there is no request log to aggregate.
+model ApiKeyUsageDaily {
+  id             String       @id @default(cuid())
+  organizationId String       @default("cmt4odhgn0000wokk8fbwr6ro")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  apiKeyId       String
+  apiKey         ApiKey       @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  day            DateTime     @db.Date
+  requests       Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([apiKeyId, day])
+  @@unique([organizationId, id])
+  @@index([organizationId, day])
 }

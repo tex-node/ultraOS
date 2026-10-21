@@ -55,9 +55,18 @@ export async function authenticateApiRequest(request: Request): Promise<Authenti
   if (!raw) return null;
   const key = await resolveApiKey(raw);
   if (!key) return null;
-  void withOrganizationContext(key.organizationId, (tx) =>
-    tx.apiKey.updateMany({ where: { id: key.keyId, organizationId: key.organizationId }, data: { lastUsedAt: new Date() } }),
-  ).catch(() => undefined);
+  // Touch the key and count the request (streak v13, Prompt 4). Both are best effort: a metering failure must
+  // never fail the partner's request, and a dashboard that misses one count is better than an API that 500s.
+  const day = new Date();
+  day.setUTCHours(0, 0, 0, 0);
+  void withOrganizationContext(key.organizationId, async (tx) => {
+    await tx.apiKey.updateMany({ where: { id: key.keyId, organizationId: key.organizationId }, data: { lastUsedAt: new Date() } });
+    await tx.apiKeyUsageDaily.upsert({
+      where: { apiKeyId_day: { apiKeyId: key.keyId, day } },
+      create: { organizationId: key.organizationId, apiKeyId: key.keyId, day, requests: 1 },
+      update: { requests: { increment: 1 } },
+    });
+  }).catch(() => undefined);
   return key;
 }
 
