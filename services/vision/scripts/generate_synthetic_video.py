@@ -76,7 +76,27 @@ def moving_position(frame: int) -> tuple[int, int]:
     return x, y
 
 
-def frames():
+def _figure(canvas: np.ndarray, x: int, y: int) -> None:
+    """A human silhouette at a size a person detector can actually see.
+
+    The first version was 44 px wide and 150 px tall - smaller than the head of a real player at this resolution -
+    and YOLOv8n found nothing. This one is ~90 x 280 px with human proportions (head, shoulders, torso, arms, legs)
+    and clothing colours, which is the smallest change that gives the detector a fair test rather than a rigged one.
+    """
+    head_r = 22
+    _circle(canvas, x, y - 128, head_r, (156, 176, 196))        # head
+    canvas[y - 104 : y + 6, x - 34 : x + 34] = (60, 90, 140)     # torso (dark blue top)
+    canvas[y - 104 : y - 92, x - 46 : x - 30] = (60, 90, 140)    # left shoulder
+    canvas[y - 104 : y - 92, x + 30 : x + 46] = (60, 90, 140)    # right shoulder
+    canvas[y - 100 : y + 10, x - 52 : x - 38] = (156, 176, 196)  # left arm
+    canvas[y - 100 : y + 10, x + 38 : x + 52] = (156, 176, 196)  # right arm
+    canvas[y + 6 : y + 140, x - 30 : x - 6] = (40, 44, 52)       # left leg
+    canvas[y + 6 : y + 140, x + 6 : x + 30] = (40, 44, 52)       # right leg
+    canvas[y + 132 : y + 146, x - 34 : x - 2] = (24, 24, 24)     # left shoe
+    canvas[y + 132 : y + 146, x + 2 : x + 34] = (24, 24, 24)     # right shoe
+
+
+def frames(figure: str = "circle"):
     background = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
     half_court(background)
     for frame in range(FRAME_COUNT):
@@ -85,7 +105,12 @@ def frames():
         # wrong, and the ground truth makes that checkable.
         _circle(canvas, 280, 200, 18, STATIC_MARKER)
         x, y = moving_position(frame)
-        _circle(canvas, x, y, 22, ORANGE)
+        if figure == "human":
+            # The ground truth still describes the moving object at the same position: the point is that the
+            # input changed, not the answer.
+            _figure(canvas, x, y)
+        else:
+            _circle(canvas, x, y, 22, ORANGE)
         yield canvas
 
 
@@ -94,6 +119,8 @@ def main() -> int:
     parser.add_argument("--out", default="/tmp/synthetic-court.mp4", help="output mp4 path")
     parser.add_argument("--truth", default=None, help="ground-truth json path (defaults to <out>.truth.json)")
     parser.add_argument("--ffmpeg", default="ffmpeg", help="ffmpeg binary")
+    parser.add_argument("--figure", choices=["circle", "human"], default="circle",
+                        help="what moves across the court: a plain orange circle, or a crude humanoid")
     args = parser.parse_args()
 
     out = Path(args.out)
@@ -119,7 +146,7 @@ def main() -> int:
     assert process.stdin is not None
     truth = {"width": WIDTH, "height": HEIGHT, "fps": FPS, "frames": FRAME_COUNT, "seconds": DURATION_SECONDS, "objects": []}
     try:
-        for frame, canvas in enumerate(frames()):
+        for frame, canvas in enumerate(frames(args.figure)):
             process.stdin.write(canvas.tobytes())
             x, y = moving_position(frame)
             truth["objects"].append({"frame": frame, "moving": [x, y, 22], "static": [280, 200, 18]})

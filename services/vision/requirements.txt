@@ -1,5 +1,8 @@
-# B0 runtime dependencies. Deliberately minimal: no torch/onnxruntime yet — those arrive in B1
-# (inference service) and B2 (detection & tracking) so B0 stays a fast, reviewable shell.
+# Vision service runtime dependencies.
+#
+# B0 (the shell) is the first block; B1 (real inference) is the second. The split is deliberate: a shell-only
+# deployment can still be built by installing the first block, and the reason the detector was absent for so long is
+# that nothing here ever asked for it.
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 celery==5.4.0
@@ -10,3 +13,15 @@ pydantic-settings==2.7.0
 httpx==0.28.1
 psycopg[binary]==3.2.3
 python-json-logger==3.2.1
+
+# B1: detection and tracking (streak v13).
+#
+# torch/torchvision are ranges, not pins: the CPU wheels come from https://download.pytorch.org/whl/cpu and the CUDA
+# wheels from the default index, and pinning one build would break the other. The Dockerfile installs them from the
+# CPU index first, then the rest of this file, so the image does not carry 2.5 GB of CUDA it cannot use.
+torch>=2.4
+torchvision>=0.19
+ultralytics==8.4.183
+opencv-python-headless>=4.10
+# ByteTrack's association step (ultralytics falls back to a slower solver without it).
+lap>=0.5.12

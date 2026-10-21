@@ -25,8 +25,10 @@ def ensure_stub_model(organization_id: str, model_key: str, version: str) -> str
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO "VisionModel" (id, "organizationId", key, version)
-                VALUES (gen_random_uuid()::text, %s, %s, %s)
+                -- VisionModel has createdAt but no updatedAt (schema.prisma): an insert that names it fails on
+                -- the real schema, which is how this was found.
+                INSERT INTO "VisionModel" (id, "organizationId", key, version, "createdAt")
+                VALUES (gen_random_uuid()::text, %s, %s, %s, now())
                 ON CONFLICT (key) DO UPDATE SET version = EXCLUDED.version
                 RETURNING id
                 """,
@@ -43,8 +45,9 @@ def create_run(game_video_id: str, organization_id: str, requested_by_id: str, m
             cur.execute(
                 """
                 INSERT INTO "VisionAnalysisRun"
-                    (id, "organizationId", "gameVideoId", "visionModelId", status, "requestedById")
-                VALUES (gen_random_uuid()::text, %s, %s, %s, %s, %s)
+                    (id, "organizationId", "gameVideoId", "visionModelId", status, "requestedById",
+                     "createdAt", "updatedAt")
+                VALUES (gen_random_uuid()::text, %s, %s, %s, %s, %s, now(), now())
                 RETURNING id
                 """,
                 (organization_id, game_video_id, model_id, VisionAnalysisRunStatus.QUEUED, requested_by_id),
