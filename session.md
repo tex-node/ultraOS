@@ -11449,3 +11449,47 @@ inference performed; real CV lands in B1/B2"; `requirements.txt` declares no tor
 and the B0 docstring says the detector and tracker arrive later. `documentation/vision/VISION_EMPIRICAL_REPORT.md`
 records that with the evidence, states plainly what was and was not proven, and names the real blocker: **the model,
 not the video**. The clip is now a ready-made accuracy fixture for the day B1 lands.
+
+## 2026-10-20 - Streak v12 / Prompt 4: fan MVP voting, and the table that was already there
+
+**Finding: `MVPVote` already existed** - the original MVP spec created it, with back-relations on User/Organization/
+Game/Player - but with **no RLS, no policy, no grants and no UI**. So this prompt was mostly the tenant checklist.
+
+`20261020140000_mvp_vote_tenancy` completes the 5-step checklist on the existing table: composite unique
+`(organizationId, id)`, RLS **enabled and forced**, the canonical `tenant_isolation` policy on `app.current_org_id`,
+and GRANTs to `ultraos`, `ultraos_app` and `ultraos_staging` in the same file. The one-vote-per-user-per-game
+`UNIQUE(userId, gameId)` was already there and is what actually refuses a double submit.
+
+```
+verify-tenant-table.sh MVPVote
+  1. rls enabled + forced              PASS
+  2. policy reads app.current_org_id   PASS
+  3. grants match CoachingPlan         PASS (ultraos,ultraos_app,ultraos_staging)
+  4a. scoped SELECT as app role        PASS
+  4b. no cross-tenant rows visible     PASS
+  RESULT: PASS
+```
+
+- `server/mvp/votes.ts`: the candidate shortlist is computed **from the box score** (points first, then rebounds and
+  assists at half weight - a stated rule, not a claim of being the best metric), with live vote counts;
+  `castMvpVote` refuses a non-final game and a non-candidate and turns the P2002 unique violation into
+  `ALREADY_VOTED` instead of a 500; `mvpAwardCount` and `hasVoted` support the passport and the UI.
+- The public match centre gained a **Vote for MVP** section after a FINAL game: the three performers, the tally,
+  and a signed-out state that asks the fan to sign in rather than showing a dead button.
+- The athlete passport shows the **MVP** count beside the career totals.
+
+**Verified on staging** (`scripts/mvp-vote-verify.ts`):
+```
+candidates: Timmy T (21 PTS) · Damilare Sowere (13) · Evans Amadi (10)
+first vote:     {"ok":true}
+duplicate vote: {"ok":false,"reason":"ALREADY_VOTED"}
+second fan:     {"ok":true}
+rows for this game: 2 · MVP awards for Timmy T: 2 · tally: Timmy T 2 · …
+PASS
+```
+
+**A trap worth recording:** my first attempt added a *parallel* `MvpVote` model with the same field name as the
+existing `MVPVote`'s back-relation, and a PowerShell loop that matched `model MvpVote {` case-insensitively deleted
+the **existing** model too. Both were caught before any migration reached a database - the schema was restored with
+its back-relations intact - but it is a reminder that `-eq` is case-insensitive and that the schema file is not a
+scratch pad.
