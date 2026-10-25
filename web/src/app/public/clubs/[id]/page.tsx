@@ -97,6 +97,17 @@ export default async function PublicClubPage({ params }: { params: Promise<{ id:
         <section className="mt-8" key={seasonClub.id}>
           <h2 className="text-2xl font-semibold">{seasonClub.season.name} · {seasonClub.division.name}</h2>
           <p className="mt-2 text-text-2">Record {seasonClub.standing?.won ?? 0}-{seasonClub.standing?.lost ?? 0} · {seasonClub.standing?.leaguePoints ?? 0} points</p>
+          {/* Elo (streak v13): the pre-match strength number, with its rank in the sport so it means something
+              without a glossary. The first version of this edit loaded `elo` and never rendered it - caught by
+              fetching the production page and finding no "Elo" in the HTML. */}
+          {elo.get(seasonClub.id) ? (
+            <p className="mt-1 text-sm text-text-2">
+              Elo <b className="text-text-1">{elo.get(seasonClub.id)!.rating.toFixed(0)}</b>
+              <span className="ml-2 text-xs text-text-3">
+                #{elo.get(seasonClub.id)!.rank} of {elo.get(seasonClub.id)!.of} · {elo.get(seasonClub.id)!.games} games rated
+              </span>
+            </p>
+          ) : null}
           <TeamDnaSection
             organizationId={organizationId}
             seasonId={seasonClub.seasonId}
