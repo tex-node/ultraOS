@@ -64,6 +64,11 @@ async function main() {
       continue;
     }
 
+    // A side is a SeasonClub OR an Entrant. Some demo fixtures carry BOTH ids, which violates the table's
+    // subject CHECK (found on production: the public org's fixtures have an entrant id alongside a club id, and the
+    // whole run failed on the first row). The season club wins - it is the team-sport identity.
+    const sideOf = (seasonClubId: string | null, entrantId: string | null): Side =>
+      seasonClubId ? { seasonClubId, entrantId: null } : { seasonClubId: null, entrantId };
     const games: (EloGame & { fixtureId: string; home: Side; away: Side })[] = [];
     for (const fixture of fixtures) {
       const homeKey = fixture.homeSeasonClubId ?? fixture.homeEntrantId;
@@ -77,8 +82,8 @@ async function main() {
         awayScore: fixture.awayScore,
         drawsAllowed: true,
         playedAt: fixture.scheduledAt,
-        home: { seasonClubId: fixture.homeSeasonClubId, entrantId: fixture.homeEntrantId },
-        away: { seasonClubId: fixture.awaySeasonClubId, entrantId: fixture.awayEntrantId },
+        home: sideOf(fixture.homeSeasonClubId, fixture.homeEntrantId),
+        away: sideOf(fixture.awaySeasonClubId, fixture.awayEntrantId),
       });
     }
 
