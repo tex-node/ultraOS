@@ -11685,3 +11685,46 @@ new migrations applied: 3
 - The partner dashboard counts requests only from the moment `ApiKeyUsageDaily` existed; older traffic shows as zero.
 - `/partner/dashboard` is scoped by the session's organization, so a partner user needs a membership; there is no
   separate partner login.
+
+## 2026-10-25 - Streak v13 re-send: a verification pass that found two real defects
+
+The v13 brief arrived a third time. The code was already live, so re-implementing it would have produced duplicate
+migrations and a second set of commits for work that exists. Instead this was a **verification and completion pass**,
+and it found two things the original reports got wrong.
+
+**Defect 1 - production had no ratings at all.** The three v13 tables were empty on production (`EloRating` 0,
+`ApiKeyUsageDaily` 0, `VisionObservation` 0). The Elo script had only ever been run against staging. Running it
+against production exposed a **real bug**: the default public org's demo fixtures carry a `seasonClubId` **and** an
+`entrantId`, and the script copied both into the row, so the insert failed `EloRating_subject_chk` on the first
+rating. The table's CHECK was right and the script was wrong; a side now resolves to exactly one subject (the season
+club wins). After the fix:
+
+```
+basketball (default public org): 12 rated games, 8 competitors · spread 148.8 · best-vs-worst 77.4%
+basketball (LBCL production):    32 rated games, 10 competitors · spread 247.9 · best-vs-worst 85.8%
+EloRating rows in production: 18 (8 public + 10 LBCL)
+```
+
+**Defect 2 - the club page loaded the rating and never rendered it.** My v13 edit matched a line containing a
+mojibake middle dot, silently did nothing, and `tsc` was satisfied because `elo` was used elsewhere (to build the
+map). The claim "the club page and the tournament page now show the rating" was therefore **half true**: the
+tournament page rendered it, the club page did not. Found by fetching the production page and grepping for "Elo"
+after the backfill - a 200 with no rating in it. The block is now inserted above `TeamDnaSection`, and both pages
+verify on production:
+
+```
+GET /public/clubs/<rated club>  -> 200 (67,546 bytes) · "games rated" present
+GET /t/<competition slug>       -> 200 (34,339 bytes) · "Elo" present
+```
+
+**Production API traffic (also empty before):** a BASIC key was created on production, used for three requests to
+`/api/v1/games/<fixture>/snapshot` (200, 200, 200), the unauthenticated call returned 401 and was **not** counted,
+`ApiKeyUsageDaily` recorded `requests=3`, and the key was revoked immediately. `/partner/dashboard` was **not**
+verified on production: a scripted session token was rejected (307) with both cookie salts, which is a limitation of
+my harness rather than evidence about the page - the same page code returns 200 with real data on staging. A real
+partner signing in through the UI is the only honest way to claim it there, and that has not been done.
+
+**Vision re-check (staging):** 5 completed analysis runs, 300 observation rows, unchanged from the v13 report.
+Production has no analysed video, and creating a junk fixture to manufacture one would be worse than saying so.
+
+**Deploys:** production redeployed to `bf691bc` (smoke 7/7, 0 errors); the fix commit is on `main` after this entry.
