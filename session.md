@@ -11824,3 +11824,50 @@ feed condition was `points > 0` - 4 of 5 sports produced deliveries); **finalisa
 violation; a winner is a SeasonClub *or* an Entrant); and **cricket refuses a delivery to the non-batting side**
 (`NOT_BATTING` ×4 - the engine was right, the test was wrong). Cleanup also had to be fixed (season clubs before
 clubs) and made non-fatal, and the 20 leftover competitions from the crashed runs were removed by SQL.
+
+## 2026-10-26 - Streak v14 / Prompt 5: final sync - 49/49 DB, both environments, main merged
+
+**Roadmaps**: `MULTI_SPORT_ROADMAP.md` records the measured concurrency result and the tennis feed defect it found;
+`COACH_INTELLIGENCE_ROADMAP.md` records that vision now reaches partners (`VISION_EVENT_CONFIRMED`), that run rows
+name the real analyzer, and why the inference environment moved out of the checkout.
+
+**Suites**
+```
+npm test               1022 tests, 1021 pass, 0 fail  (1 pre-existing skip)
+npm run test:component   26 tests, 26 pass
+npm run test:db          49 tests, 49 pass (398 s, serialized, scratch clone)
+canonical-write ratchet  4 suppressions (ceiling 4)
+```
+
+**Deploys**
+| environment | release | migrations | smoke |
+| --- | --- | --- | --- |
+| staging | `04e43f9` | `20261026100000_feed_vision_confirmed` | 7/7 PASS, 0 errors |
+| production | `release-04e43f9` | same, applied behind a verified backup `…pre_v14_20261026T032510Z.dump` (sha256 `0aa8fda5…`) | 7/7 PASS, 0 errors |
+
+**Production verified after the deploy**
+```
+GET /api/v1/live                          -> 200
+DataFeedEventType has VISION_EVENT_CONFIRMED: 1
+20261026100000_feed_vision_confirmed applied: 1
+```
+
+**What this streak actually changed**
+- `/partner/dashboard` is proven on production (**34,207 bytes, 7/7 expected strings**) - the missing piece was the
+  `__Secure-` cookie, not the page.
+- The repo's `tsc` gate was **red on main** (`auth.ts:148`) and is now green; deploys never noticed.
+- The v13 vision claim is corrected with evidence: YOLO really ran, the run row was lying (`stub-analyzer`), and the
+  environment had been deleted by a deploy's `git clean -fdx`. It now lives outside the checkout.
+- A human-confirmed observation reaches partners with the AI box beside the reviewer's decision.
+- Five sports scored concurrently: 40 writes, 40 deliveries, per-sport standings, and a documented pool ceiling
+  (27 of 40 simultaneous writes rejected; 8 in flight ≈ 1.1 s).
+
+**Known gaps carried forward**
+- The vision detector produces no shot classification and no player identity, so `confirmedEventType` and `playerId`
+  are null in the feed payload until those models exist.
+- A training clip has no game, so its confirmations cannot reach the feed (audit-logged as skipped); the feed is
+  game-scoped by schema.
+- Concurrency above ~13 simultaneous interactive transactions is bounded by the Prisma pool, not by the engine; the
+  numbers are in `MULTI_SPORT_ARCHITECTURE.md` §14, and no pool tuning was attempted.
+- The stress test's own cleanup still reports `cleanup incomplete` on a stale FK; the leftovers were removed by SQL
+  and the message is non-fatal.
