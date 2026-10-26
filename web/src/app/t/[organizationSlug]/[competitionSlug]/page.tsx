@@ -4,19 +4,23 @@ import { describeSport, getSportDefinition } from "@/lib/sports/registry";
 import { isIndividualSport } from "@/lib/sports/fixture-sides";
 import { eloForSeasonClubs } from "@/server/analytics/elo-ratings";
 import { buildIndividualStandings, formatRatio, type IndividualStandingInput } from "@/lib/public/individual-standings";
-import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
+import { resolveActiveOrganizationBySlug, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 // Tournament sub-site overview (product roadmap F2.1): rules, venues, teams, seasons.
 // Everything reads the accepted model — no new tables, no new endpoints.
-export default async function TournamentOverview({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const organization = await resolveDefaultPublicOrganization();
+export default async function TournamentOverview({ params }: { params: Promise<{ organizationSlug: string; competitionSlug: string }> }) {
+  const { organizationSlug, competitionSlug } = await params;
+  // Multi-tenant public routing (streak v16, Prompt 2): the organization comes from the URL, not from the deployment.
+  // resolveDefaultPublicOrganization() stays for pages that genuinely serve the platform default; a tournament sub-site
+  // is addressed by its own tenant, which is what lets a partner league live at its own path.
+  const organization = await resolveActiveOrganizationBySlug(organizationSlug).catch(() => null);
+  if (!organization) notFound();
   const competition = await withOrganizationContext(organization.id, (tx) =>
     tx.competition.findFirst({
-      where: { organizationId: organization.id, slug, isActive: true },
+      where: { organizationId: organization.id, slug: competitionSlug, isActive: true },
       include: {
         sport: true,
         divisions: true,
@@ -293,7 +297,7 @@ export default async function TournamentOverview({ params }: { params: Promise<{
           Fixtures, live scores, standings, and full match pages update automatically as games are scored.
         </p>
         <Link
-          href={`/t/${competition.slug}/fixtures`}
+          href={`/t/${organizationSlug}/${competition.slug}/fixtures`}
           className="mt-3 inline-block rounded-md bg-brand-400 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-300"
         >
           View fixtures & standings

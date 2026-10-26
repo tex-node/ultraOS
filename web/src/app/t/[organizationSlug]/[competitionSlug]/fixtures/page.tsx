@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { formatLagosDateTime } from "@/lib/format-datetime";
-import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
+import { resolveActiveOrganizationBySlug, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -46,12 +46,16 @@ function sortStandings(rows: StandingRow[]) {
 // Tournament sub-site fixtures & standings (product roadmap F2.2). Standings read the same
 // Standing rows as the global table, scoped to each season and grouped by division —
 // entrant-sided (individual-sport) rows included, never assumed to be clubs.
-export default async function TournamentFixtures({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const organization = await resolveDefaultPublicOrganization();
+export default async function TournamentFixtures({ params }: { params: Promise<{ organizationSlug: string; competitionSlug: string }> }) {
+  const { organizationSlug, competitionSlug } = await params;
+  // Multi-tenant public routing (streak v16, Prompt 2): the organization comes from the URL, not from the deployment.
+  // resolveDefaultPublicOrganization() stays for pages that genuinely serve the platform default; a tournament sub-site
+  // is addressed by its own tenant, which is what lets a partner league live at its own path.
+  const organization = await resolveActiveOrganizationBySlug(organizationSlug).catch(() => null);
+  if (!organization) notFound();
   const competition = await withOrganizationContext(organization.id, (tx) =>
     tx.competition.findFirst({
-      where: { organizationId: organization.id, slug, isActive: true },
+      where: { organizationId: organization.id, slug: competitionSlug, isActive: true },
       include: {
         seasons: {
           include: {

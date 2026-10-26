@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { PortalShell } from "@/app/components/portal-shell";
-import { SubSiteTabs } from "@/app/t/[slug]/sub-site-tabs";
+import { SubSiteTabs } from "@/app/t/[organizationSlug]/[competitionSlug]/sub-site-tabs";
 import { TOURNAMENT_STATUS_STYLE, tournamentStatusFromSeasons } from "@/lib/tournament-subsite";
 import { resolveVanityCompetitionId } from "@/lib/vanity-tournament";
 import { withOrganizationContext } from "@/lib/tenant-context";

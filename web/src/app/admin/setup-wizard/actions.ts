@@ -25,7 +25,7 @@ const setupInput = z.object({
 });
 
 export type SetupWizardResult =
-  | { ok: true; slug: string; competitionId: string; participants: number; fixtures: number; kind: "team" | "individual" }
+  | { ok: true; slug: string; organizationSlug: string; competitionId: string; participants: number; fixtures: number; kind: "team" | "individual" }
   | { ok: false; error: string };
 
 export async function createLeagueAction(_previous: SetupWizardResult | null, formData: FormData): Promise<SetupWizardResult> {
@@ -84,9 +84,11 @@ export async function createLeagueAction(_previous: SetupWizardResult | null, fo
       }),
     );
 
+    // The new public URL is /t/<organizationSlug>/<competitionSlug> (streak v16, Prompt 2).
+    const organization = await prisma.organization.findUnique({ where: { id: result.organizationId }, select: { slug: true } });
     revalidatePath("/admin/setup-wizard");
     revalidatePath("/public");
-    return { ok: true, ...result };
+    return { ok: true, ...result, organizationSlug: organization?.slug ?? "unknown" };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }

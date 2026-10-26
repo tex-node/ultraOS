@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { PortalShell } from "@/app/components/portal-shell";
 import { SubSiteTabs } from "./sub-site-tabs";
 import { TOURNAMENT_STATUS_STYLE, tournamentStatusFromSeasons } from "@/lib/tournament-subsite";
-import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
+import { resolveActiveOrganizationBySlug, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,13 +15,17 @@ export default async function TournamentLayout({
   params,
 }: {
   children: React.ReactNode;
-  params: Promise<{ slug: string }>;
+  params: Promise<{ organizationSlug: string; competitionSlug: string }>;
 }) {
-  const { slug } = await params;
-  const organization = await resolveDefaultPublicOrganization();
+  const { organizationSlug, competitionSlug } = await params;
+  // Multi-tenant public routing (streak v16, Prompt 2): the organization comes from the URL, not from the deployment.
+  // resolveDefaultPublicOrganization() stays for pages that genuinely serve the platform default; a tournament sub-site
+  // is addressed by its own tenant, which is what lets a partner league live at its own path.
+  const organization = await resolveActiveOrganizationBySlug(organizationSlug).catch(() => null);
+  if (!organization) notFound();
   const competition = await withOrganizationContext(organization.id, (tx) =>
     tx.competition.findFirst({
-      where: { organizationId: organization.id, slug, isActive: true },
+      where: { organizationId: organization.id, slug: competitionSlug, isActive: true },
       include: {
         sport: true,
         seasons: { select: { id: true, status: true, fixtures: { select: { status: true } } } },
@@ -32,7 +36,7 @@ export default async function TournamentLayout({
   const status = tournamentStatusFromSeasons(
     competition.seasons.map((s) => ({ fixtureStatuses: s.fixtures.map((f) => f.status), seasonStatus: s.status })),
   );
-  const basePath = `/t/${competition.slug}`;
+  const basePath = `/t/${organizationSlug}/${competition.slug}`;
 
   return (
     <PortalShell>

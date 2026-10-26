@@ -99,7 +99,6 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
   const cities = [...new Set(venues.map((v) => v.city).filter(Boolean))].sort();
   const sports = new Map<string, { slug: string; name: string; count: number }>();
   const shaped = perOrgCompetitions.flatMap(({ org, competitions, vanityLocators }) => {
-    const vanityByCompetitionId = new Map(vanityLocators.map((l) => [l.resourceId, l.publicKey]));
     return competitions.map((c) => {
       const entry = sports.get(c.sport.slug) ?? { slug: c.sport.slug, name: c.sport.name, count: 0 };
       entry.count += 1;
@@ -109,8 +108,9 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
       const fixtureCities = [...new Set(fixtures.map((f) => f.venue.city).filter(Boolean))];
       const starts = c.seasons.map((s) => s.startDate.getTime());
       const ends = c.seasons.map((s) => s.endDate.getTime());
-      const vanitySlug = vanityByCompetitionId.get(c.id);
-      const href = org.id === organization.id ? `/t/${c.slug}` : vanitySlug ? `/${vanitySlug}` : null;
+      // Multi-tenant routing (streak v16): EVERY competition is now addressable under its own organization, so a
+      // partner league is a link rather than a vanity-only special case.
+      const href = `/t/${org.slug}/${c.slug}`;
       return {
         slug: c.slug,
         name: c.name,
@@ -136,13 +136,13 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
   // collapse every season into one status per product roadmap F3, so a completed season with
   // no card of its own would otherwise be unfindable once its competition moves on.
   const completedSeasons = perOrgCompetitions.flatMap(({ org, competitions, vanityLocators }) => {
-    const vanityByCompetitionId = new Map(vanityLocators.map((l) => [l.resourceId, l.publicKey]));
     return competitions.flatMap((c) =>
       c.seasons
         .filter((s) => seasonDisplayStatus({ fixtureStatuses: s.fixtures.map((f) => f.status), seasonStatus: s.status }) === "COMPLETED")
         .map((s) => {
-          const vanitySlug = vanityByCompetitionId.get(c.id);
-          const href = org.id === organization.id ? `/t/${c.slug}` : vanitySlug ? `/${vanitySlug}` : null;
+            // Multi-tenant routing (streak v16): EVERY competition is now addressable under its own organization, so a
+      // partner league is a link rather than a vanity-only special case.
+      const href = `/t/${org.slug}/${c.slug}`;
           return {
             key: `${org.id}:${c.slug}:${s.id}`,
             competitionName: c.name,

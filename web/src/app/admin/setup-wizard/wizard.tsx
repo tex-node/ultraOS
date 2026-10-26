@@ -183,7 +183,7 @@ export function SetupWizard({ canCreateOrganization }: { canCreateOrganization: 
         {result && result.ok ? (
           <p className="text-sm text-brand-300">
             Created {result.participants} participants and {result.fixtures} fixtures.{" "}
-            <a className="underline" href={`/t/${result.slug}`}>Open the tournament site</a>
+            <a className="underline" href={`/t/${result.organizationSlug}/${result.slug}`}>Open the tournament site</a>
           </p>
         ) : null}
 
