@@ -1,6 +1,7 @@
 import { prisma } from "../src/lib/prisma";
 import { withOrganizationContext } from "../src/lib/tenant-context";
 import { createLeague } from "../src/server/onboarding/create-league";
+import { createGame } from "../src/server/scoring/createGame";
 import { randomUUID } from "node:crypto";
 
 // Streak v15, Prompt 3 verification: a brand-new football league, created the way the wizard creates it.
@@ -52,7 +53,9 @@ async function main() {
         name: true,
         slug: true,
         sport: { select: { slug: true } },
-        seasons: { select: { id: true, divisions: { select: { id: true } }, seasonClubs: { select: { id: true, club: { select: { name: true } } } } } },
+        // Divisions hang off the competition, season clubs off the season - selecting them the other way round is
+        // not a thing Prisma allows (and would not be a thing the schema has).
+        seasons: { select: { id: true, seasonClubs: { select: { id: true, club: { select: { name: true } } } } } },
       },
     });
     const fixtures = await tx.fixture.findMany({
@@ -65,10 +68,10 @@ async function main() {
   // A game on the first fixture, then a goal: the league has to be scoreable, not just present.
   const first = detail.fixtures[0];
   const game = await withOrganizationContext(ORG, async (tx) => {
-    const { createGame } = await import("../src/server/scoring/createGame");
+    const actor = await tx.user.findFirstOrThrow({ select: { id: true } });
     const created2 = await createGame(
       { id: `wizard_${randomUUID().slice(0, 8)}`, fixtureId: first.id, status: "LIVE", currentPeriod: 1, clockSecondsRemaining: 2700 },
-      { tx, actor: { id: (await tx.user.findFirstOrThrow({ select: { id: true } })).id, organizationId: ORG }, source: "LIVE_UI" },
+      { tx, actor: { id: actor.id, organizationId: ORG }, source: "LIVE_UI" },
     );
     await tx.fixture.update({ where: { id: first.id }, data: { status: "LIVE" } });
     return created2;
