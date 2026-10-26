@@ -5,6 +5,8 @@ import { hasPermission } from "@/lib/permissions";
 import { MissingOrganizationContextError } from "@/lib/authorization";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { loadPlanUsage, PLAN_LIMITS, type PlanName } from "@/lib/plans";
+import { stripeConfigured } from "@/lib/stripe";
+import { startCheckoutAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,13 +19,17 @@ export const dynamic = "force-dynamic";
 const PLAN_LABEL: Record<PlanName, string> = { FREE: "Free", PRO: "Pro", ENTERPRISE: "Enterprise" };
 const RESOURCE_LABELS = { apiKeys: "API keys", competitions: "Competitions", webhooks: "Webhook subscriptions" } as const;
 
-export default async function BillingPage() {
+export default async function BillingPage({ searchParams }: { searchParams: Promise<{ error?: string; upgraded?: string }> }) {
+  const query = await searchParams;
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/settings/billing");
   if (!session.user.organizationId) throw new MissingOrganizationContextError();
   if (!hasPermission(session.user.roles, "operations:manage")) redirect("/dashboard");
 
   const usage = await withOrganizationContext(session.user.organizationId, (tx) => loadPlanUsage(tx, session.user.organizationId!));
+  // Billing is "configured" only when a Stripe key exists. A button that throws on click is worse than a sentence that
+  // says why it cannot work yet (streak v17, Prompt 2).
+  const billingConfigured = stripeConfigured();
 
   return (
     <OperationsShell user={session.user}>
@@ -34,6 +40,15 @@ export default async function BillingPage() {
           On the <b className="text-text-1">{PLAN_LABEL[usage.plan]}</b> plan
           {usage.stripeCustomerId ? ` · Stripe customer ${usage.stripeCustomerId}` : " · no payment method on file"}.
         </p>
+
+        {query.error ? (
+          <p className="mt-4 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">{query.error}</p>
+        ) : null}
+        {query.upgraded ? (
+          <p className="mt-4 rounded-lg border border-brand-400/40 bg-brand-400/10 px-3 py-2 text-xs text-brand-300">
+            {'Payment received. The plan changes when the Stripe webhook confirms it - refresh in a moment if it still shows the old one.'}
+          </p>
+        ) : null}
 
         <section aria-labelledby="usage" className="mt-6 space-y-3">
           <h2 id="usage" className="text-sm font-semibold uppercase tracking-wider text-text-3">This month</h2>
@@ -70,23 +85,25 @@ export default async function BillingPage() {
                 </ul>
                 {plan === usage.plan ? (
                   <p className="mt-3 text-[10px] font-bold uppercase tracking-wide text-brand-300">Current plan</p>
+                ) : billingConfigured ? (
+                  <form action={startCheckoutAction}>
+                    <input type="hidden" name="plan" value={plan} />
+                    <button type="submit" className="mt-3 w-full rounded-lg bg-brand-400 px-3 py-1.5 text-xs font-bold text-ink-900">
+                      Upgrade to {PLAN_LABEL[plan]}
+                    </button>
+                  </form>
                 ) : (
-                  <button
-                    type="button"
-                    disabled
-                    title="Billing is not connected yet - this is a placeholder, not a purchase"
-                    className="mt-3 w-full rounded-lg border border-line px-3 py-1.5 text-xs text-text-3 opacity-60"
-                  >
-                    Upgrade (not connected)
-                  </button>
+                  <p className="mt-3 rounded-lg border border-line px-3 py-1.5 text-[11px] text-text-3">
+                    Billing not configured: no Stripe key in this environment.
+                  </p>
                 )}
               </div>
             ))}
           </div>
           <p className="mt-2 text-xs text-text-3">
-            Upgrades are not wired to a payment provider yet: the button is disabled on purpose rather than pretending to
-            take money. Plan limits are enforced where the resource is created, so they apply to the API, the wizard and
-            the webhook console alike.
+            {billingConfigured
+              ? "Checkout is handled by Stripe; the plan changes when its webhook confirms payment, not when the button is clicked."
+              : "This deployment has no Stripe key, so upgrades are shown as a message rather than a button that would fail. Plan limits are enforced where the resource is created, so they apply to the API, the wizard and the webhook console alike."}
           </p>
         </section>
       </main>
