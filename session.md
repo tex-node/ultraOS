@@ -11974,3 +11974,51 @@ Two fixes on the way: the match-centre check 404'd because the page is addressed
 not its id (v10's lesson, relearned); and the Highlights section existed **only in the FINAL branch**, so a confirmed
 event during a live game - the case the feature exists for - rendered nowhere. It now appears in the pre-game/live
 view too.
+
+## 2026-10-26 - Streak v15 / Prompt 5: final sync - 49/49 DB, both environments, main merged
+
+**Roadmaps**: `MULTI_SPORT_ROADMAP.md` records the pool fix with its measured numbers (30 slots → 13/40; 40 slots →
+40/40 in 1.9 s), the tennis-to-completion result and the broken individual-sport standings write, the onboarding
+wizard and highlight clips. `COACH_INTELLIGENCE_ROADMAP.md` records the highlights pipeline.
+
+**Suites**
+```
+npm test               1022 tests, 1021 pass, 0 fail  (1 pre-existing skip)
+npm run test:component   26 tests, 26 pass
+npm run test:db          49 tests, 49 pass (387 s, serialized, scratch clone)
+canonical-write ratchet  4 suppressions (ceiling 4)
+```
+
+**Deploys**
+| environment | release | migrations | smoke |
+| --- | --- | --- | --- |
+| staging | `de4e8af` | `20261026120000_highlight_clip_purpose` | 7/7 PASS, 0 errors |
+| production | `release-de4e8af` | same, applied behind a verified backup `…pre_v15_20261026T094344Z.dump` (sha256 `00fffb28…`) | 7/7 PASS, 0 errors |
+
+**Production verified after the deploy**
+```
+GET /api/v1/live                             -> 200
+MediaAssetPurpose has HIGHLIGHT_CLIP: 1
+20261026120000_highlight_clip_purpose applied: 1
+GET /admin/setup-wizard (no session)         -> 307 (redirect to login, as designed)
+```
+
+**What this streak actually changed**
+- The Prisma pool ceiling is fixed **at the layer that was ignoring it** - the pg adapter takes `max`, not a
+  `connection_limit` query parameter. 40 simultaneous writes: 13/40 before, **40/40 in 1.9 s** after.
+- Every tenant transaction got a 15s budget with `maxWait` below it, and the drain retries P2024/P2028 with backoff.
+- Tennis played to completion: 107 rallies, 107 score deliveries, exactly one winner column - and it found a broken
+  individual-sport standings write that had never been exercised.
+- A five-step wizard creates a whole league (org, competition, season, participants, fixtures) in one transaction.
+- Confirmed vision observations become playable 10-second clips, stored as assets and rendered on the match centre.
+
+**Known gaps carried forward**
+- The public tournament site (`/t/<slug>`) resolves the **default public organization only**: a league created in
+  another tenant is 404 there. Single-tenant public routing is a product gap, not a wizard bug.
+- `Standing_party_chk` is `seasonClubId OR entrantId` - it forbids NEITHER, not both. The 14 rows I previously called
+  violations are legal; the "exactly one subject" rule applies to winner columns and the Elo table, not to Standing.
+  Correcting that here because the earlier report overstated it.
+- A highlight clip is stored with a `file://` public URL, which works on the host but not through a CDN; the R2 upload
+  path for highlights has not been built.
+- The pool default of 40 is right for this host's 100-connection server when one instance bursts; a second instance
+  bursting at the same time would need `PRISMA_POOL_SIZE` lowered.
