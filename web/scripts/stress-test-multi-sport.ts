@@ -240,7 +240,12 @@ async function main() {
   if (rejected.length > 0) {
     const reasons = new Map<string, number>();
     for (const result of rejected) {
-      const reason = result.status === "rejected" ? String((result.reason as Error)?.message ?? result.reason).slice(0, 90) : "";
+      // A Prisma error's message often starts with a newline, so its first line can be empty; print the error code and
+      // the first non-empty line instead (the v15 run reported 32 rejections with a blank reason, which told us
+      // nothing).
+      const raw = result.status === "rejected" ? (result.reason as { code?: string; message?: string }) : undefined;
+      const firstLine = String(raw?.message ?? "").split("\n").map((line) => line.trim()).find(Boolean) ?? "unknown";
+      const reason = raw ? `${raw.code ?? ""} ${firstLine}`.trim() : "";
       reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
     }
     console.log(`   rejections: ${[...reasons.entries()].map(([reason, count]) => `${reason}×${count}`).join(", ")}`);

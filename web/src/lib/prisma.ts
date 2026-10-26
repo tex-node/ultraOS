@@ -22,12 +22,17 @@ function createPrismaClient() {
   // a code change; the defaults are the numbers the stress test was tuned against.
   const poolSize = Number(process.env.PRISMA_POOL_SIZE ?? 20);
   const poolTimeoutSeconds = Number(process.env.PRISMA_POOL_TIMEOUT ?? 15);
-  const url = new URL(connectionString);
-  if (!url.searchParams.has("connection_limit") && Number.isFinite(poolSize)) url.searchParams.set("connection_limit", String(poolSize));
-  if (!url.searchParams.has("pool_timeout") && Number.isFinite(poolTimeoutSeconds)) url.searchParams.set("pool_timeout", String(poolTimeoutSeconds));
 
+  // IMPORTANT: with @prisma/adapter-pg the pool is a node-postgres Pool, and `connection_limit` in the URL means
+  // nothing to it. The first version of this fix set the query-string parameters and changed nothing - the stress test
+  // still rejected 32 of 40 writes. The adapter takes a pg PoolConfig, so the size and the wait are passed as `max`
+  // and `connectionTimeoutMillis`.
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString: url.toString() }),
+    adapter: new PrismaPg({
+      connectionString,
+      max: Number.isFinite(poolSize) && poolSize > 0 ? poolSize : 20,
+      connectionTimeoutMillis: (Number.isFinite(poolTimeoutSeconds) && poolTimeoutSeconds > 0 ? poolTimeoutSeconds : 15) * 1000,
+    }),
   });
 }
 
