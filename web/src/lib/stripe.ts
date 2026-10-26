@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import Stripe from "stripe";
 import type { Prisma } from "@/generated/prisma/client";
 import type { PlanName } from "@/lib/plans";
@@ -15,6 +16,27 @@ export function stripeConfigured(): boolean {
 
 export function webhookConfigured(): boolean {
   return Boolean(process.env.STRIPE_WEBHOOK_SECRET);
+}
+
+// Signature verification deliberately does NOT go through stripeClient(): verifying an HMAC needs the webhook secret
+// and nothing else, and requiring an API key to check a signature meant a deployment could hold a valid webhook secret
+// and still reject every real event (found by exactly that failing on staging).
+export function verifyWebhookSignature(rawBody: string, signatureHeader: string, secret: string, toleranceSeconds = 300): Stripe.Event {
+  const parts = signatureHeader.split(",").reduce<Record<string, string[]>>((acc, part) => {
+    const [key, value] = part.split("=");
+    if (!key || !value) return acc;
+    (acc[key] ??= []).push(value);
+    return acc;
+  }, {});
+  const timestamp = parts.t?.[0];
+  if (!timestamp) throw new Error("No timestamp in the signature header.");
+  const age = Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp));
+  if (!Number.isFinite(age) || age > toleranceSeconds) throw new Error(`Signature timestamp is ${age}s old (tolerance ${toleranceSeconds}s).`);
+  const expected = crypto.createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
+  const candidates = parts.v1 ?? [];
+  const matched = candidates.some((candidate) => candidate.length === expected.length && crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(expected)));
+  if (!matched) throw new Error("No matching v1 signature.");
+  return JSON.parse(rawBody) as Stripe.Event;
 }
 
 let cached: Stripe | null = null;

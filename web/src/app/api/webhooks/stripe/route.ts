@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { applyStripeEvent, stripeClient, webhookConfigured } from "@/lib/stripe";
+import { applyStripeEvent, verifyWebhookSignature, webhookConfigured } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,7 +24,8 @@ export async function POST(request: Request) {
   const rawBody = await request.text();
   let event;
   try {
-    event = stripeClient().webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET!);
+    // Verified locally (HMAC), so the route needs only STRIPE_WEBHOOK_SECRET - not an API key.
+    event = verifyWebhookSignature(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch (error) {
     return NextResponse.json({ error: `Signature verification failed: ${error instanceof Error ? error.message : "unknown"}` }, { status: 400 });
   }
