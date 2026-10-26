@@ -72,7 +72,20 @@ async function main() {
     probe = `ffprobe failed: ${error instanceof Error ? error.message : String(error)}`;
   }
 
-  const fixtureUrl = `${BASE_URL}/public/fixtures/${observation.gameVideo.fixtureId}`;
+  // The public match centre is addressed by the fixture's public LOCATOR, not its id (v10 learned this: a raw id is a
+  // 404). Create a temporary locator when the fixture has none, and remove it afterwards.
+  const existing = await withOrganizationContext(ORG, (tx) =>
+    tx.publicResourceLocator.findFirst({ where: { organizationId: ORG, resourceType: "FIXTURE", resourceId: observation.gameVideo.fixtureId }, select: { publicKey: true } }),
+  );
+  const temporaryKey = existing ? null : `highlight-verify-${Date.now()}`;
+  if (temporaryKey) {
+    await withOrganizationContext(ORG, (tx) =>
+      tx.publicResourceLocator.create({
+        data: { organizationId: ORG, resourceType: "FIXTURE", publicKey: temporaryKey, resourceId: observation.gameVideo.fixtureId, status: "ACTIVE" },
+      }),
+    );
+  }
+  const fixtureUrl = `${BASE_URL}/public/fixtures/${existing?.publicKey ?? temporaryKey}`;
   const page = await fetch(fixtureUrl);
   const html = await page.text();
 
@@ -103,7 +116,10 @@ async function main() {
       await tx.mediaAsset.delete({ where: { id: asset.id } });
       await tx.visionObservation.update({ where: { id: observation.id }, data: { status: "PENDING" } });
     });
-    console.log("cleanup: the clip asset, its links and the observation status removed (use --keep to inspect)");
+    if (temporaryKey) {
+      await withOrganizationContext(ORG, (tx) => tx.publicResourceLocator.deleteMany({ where: { publicKey: temporaryKey } }));
+    }
+    console.log("cleanup: the clip asset, its links, the temporary locator and the observation status removed (use --keep to inspect)");
   }
 }
 
