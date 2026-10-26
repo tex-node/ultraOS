@@ -189,6 +189,10 @@ async function PreGameOrLive({
   fixture: { id: string; status: string; homeScore: number; awayScore: number; scheduledAt: Date; venue: { name: string }; homeName: string; awayName: string };
 }) {
   const game = await withOrganizationContext(organizationId, (tx) => tx.game.findUnique({ where: { fixtureId: fixture.id }, select: { id: true } }));
+  // Highlights are not a post-match luxury (streak v15, Prompt 4): a confirmed vision event during a LIVE game is the
+  // most watchable moment there is, and the first version of this section lived only in the FINAL branch, so it was
+  // invisible for exactly the case it was built for. Rendered here too.
+  const highlights = await withOrganizationContext(organizationId, (tx) => loadFixtureHighlights(tx, organizationId, fixture.id));
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">
       <section className="rounded-lg border border-line bg-ink-800 p-8 text-center">
@@ -201,6 +205,22 @@ async function PreGameOrLive({
         <p className="mt-8 text-text-2">
           {formatLagosDateTime(fixture.scheduledAt)} · {fixture.venue.name}
         </p>
+        {highlights.length > 0 ? (
+          <div className="mt-8 text-left">
+            <h2 className="text-lg font-bold tracking-tight">Highlights</h2>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {highlights.map((clip) => (
+                <div key={clip.id} className="rounded-lg border border-line bg-ink-900 p-3">
+                  <p className="text-sm font-semibold text-text-1">{clip.title ?? "Highlight"}</p>
+                  {clip.publicUrl ? (
+                    <video controls preload="metadata" className="mt-2 w-full rounded" src={clip.publicUrl} aria-label={clip.title ?? "Highlight clip"} />
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {game && fixture.status === "LIVE" ? (
           <Link href={`/scoreboard/${game.id}`} className="mt-5 inline-block text-info">
             Full-screen scoreboard
