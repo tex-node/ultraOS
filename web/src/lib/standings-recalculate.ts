@@ -141,8 +141,14 @@ await buildFairPlayMap(tx, seasonId),
       entrants.map((entrant) => ({ seasonClubId: entrant.id, name: entrant.name, entrantId: entrant.id })),
       individualFixtures,
     );
+    // The engine is fed entrants under a `seasonClubId` key (it predates individual sports), so the result has to be
+    // mapped BACK: the row is an entrant, and its id lives in `row.seasonClubId` (or `row.entrantId` depending on the
+    // engine path). The first version trusted `row.seasonClubId` alone and, when it was null, wrote a Standing with
+    // neither party - violating Standing_party_chk on the way out of a finished tennis match.
     for (const row of computed) {
-      await upsertStanding(tx, organizationId, seasonId, { seasonClubId: null, entrantId: row.seasonClubId }, row);
+      const entrantId = row.entrantId ?? row.seasonClubId;
+      if (!entrantId) continue;
+      await upsertStanding(tx, organizationId, seasonId, { seasonClubId: null, entrantId }, row);
     }
   }
 }

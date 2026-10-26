@@ -65,6 +65,23 @@ async function main() {
     return { competitionId: competition.id, divisionId: division.id, seasonId: season.id, fixtureId: fixture.id, entrants };
   });
 
+  // A subscriber, so the feed actually queues: without one every queue call returns early, and a test that reads
+  // deliveries would measure its own missing subscription rather than the engine (which is what the first run did).
+  const subscription = await withOrganizationContext(ORG, (tx) =>
+    tx.dataFeedSubscription.create({
+      data: {
+        organizationId: ORG,
+        createdById: ACTOR_ID,
+        name: `${TAG} subscriber`,
+        webhookUrl: "http://127.0.0.1:9/unreachable",
+        secret: randomUUID().replace(/-/g, ""),
+        events: ["SCORE_CHANGED", "WIN_PROBABILITY_UPDATED"],
+        isActive: true,
+      },
+      select: { id: true },
+    }),
+  );
+
   const game = await withOrganizationContext(ORG, (tx) =>
     createGame({ id: `tennis_${randomUUID().slice(0, 8)}`, fixtureId: setup.fixtureId, status: "LIVE", currentPeriod: 1, clockSecondsRemaining: 0 }, { tx, actor: { id: ACTOR_ID, organizationId: ORG }, source: "LIVE_UI" }),
   );
@@ -122,6 +139,7 @@ async function main() {
   if (!KEEP) {
     await withOrganizationContext(ORG, async (tx) => {
       await tx.dataFeedDelivery.deleteMany({ where: { gameId: game.id } });
+      await tx.dataFeedSubscription.deleteMany({ where: { id: subscription.id } });
       await tx.fixture.deleteMany({ where: { id: setup.fixtureId } });
       await tx.entrant.deleteMany({ where: { seasonId: setup.seasonId } });
       await tx.season.deleteMany({ where: { id: setup.seasonId } });
