@@ -55,7 +55,14 @@ async function main() {
       select: { id: true, purpose: true, objectKey: true, publicUrl: true, byteSize: true, mimeType: true, title: true, source: true, usages: { select: { entityType: true, entityId: true } } },
     }),
   );
-  const clipPath = (asset.publicUrl ?? "").replace(/^file:\/\//, "");
+  // Probe the bytes wherever they actually are: the R2 URL when the provider produced one, otherwise the local object
+  // the app wrote (mediaLocalRoot + objectKey). Probing an empty path is what produced "ffprobe failed: No such file".
+  const clipPath = asset.publicUrl && /^file:\/\//.test(asset.publicUrl)
+    ? asset.publicUrl.replace(/^file:\/\//, "")
+    : asset.publicUrl && /^https?:/.test(asset.publicUrl)
+      ? asset.publicUrl
+      : `${process.env.MEDIA_LOCAL_ROOT ?? "/opt/ultraos-staging/shared/media"}/${asset.objectKey}`;
+  console.log(`probing: ${clipPath}`);
 
   // ffprobe is the honest test: a 0-byte or truncated file has a size but no decodable stream.
   let probe = "";
