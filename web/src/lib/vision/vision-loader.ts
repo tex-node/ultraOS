@@ -239,10 +239,20 @@ export async function reviewObservation(organizationId: string, observationId: s
         where: { id: after.gameVideoId },
         select: { fixtureId: true, gameId: true },
       });
-      if (video?.gameId) {
+      // The feed is game-scoped (DataFeedDelivery.gameId is required), and a clip is not always registered with its
+      // game - the pipeline registers it against the fixture. Resolve through the fixture before giving up, and when
+      // there really is no game (a training clip), record why rather than dropping the event silently.
+      const gameId = video?.gameId ?? (video ? (await tx.game.findFirst({ where: { fixtureId: video.fixtureId }, select: { id: true } }))?.id ?? null : null);
+      if (!video || !gameId) {
+        await writeAuditLog(tx, {
+          organizationId, userId: actorId, action: "VISION_FEED_EVENT_SKIPPED", entityType: "VisionObservation", entityId: observationId,
+          details: { reason: "no game is attached to this video or its fixture; the partner feed is game-scoped", gameVideoId: after.gameVideoId },
+        });
+      }
+      if (gameId) {
         await queueVisionEventConfirmedFeed(tx, {
           organizationId,
-          gameId: video.gameId,
+          gameId,
           event: {
             eventId: after.id,
             sequenceNumber: 0,

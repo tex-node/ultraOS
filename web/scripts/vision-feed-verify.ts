@@ -46,8 +46,15 @@ async function main() {
     }),
   );
   if (!observation) throw new Error("no unconfirmed observation from a completed run - run the vision pipeline first");
-  if (!observation.gameVideo.gameId) throw new Error("this video is not attached to a game, so a feed event has no game to belong to");
-  console.log(`observation ${observation.id} · ${observation.observationType} · conf ${observation.confidence} · game ${observation.gameVideo.gameId}`);
+
+  // The pipeline registers a clip against a fixture; the delivery needs a game. Attach it the way a real review
+  // would be attached (the clip is game footage), and prove the fixture fallback separately by NOT setting gameId on
+  // the first attempt.
+  const game = await withOrganizationContext(ORG, (tx) =>
+    tx.game.findFirst({ where: { fixtureId: observation.gameVideo.fixtureId }, select: { id: true } }),
+  );
+  if (!game) throw new Error(`no game for fixture ${observation.gameVideo.fixtureId}`);
+  console.log(`observation ${observation.id} · ${observation.observationType} · conf ${observation.confidence} · gameId on the video: ${observation.gameVideo.gameId ?? "null (resolved via the fixture)"}`);
 
   const subscription = await withOrganizationContext(ORG, (tx) =>
     createFeedSubscription(tx, {
