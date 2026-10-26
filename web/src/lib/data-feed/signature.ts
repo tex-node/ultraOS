@@ -6,7 +6,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 // script that pretends to be a sportsbook, and by the API docs' example - so a partner copying the docs
 // verifies exactly what the server signs.
 
-export type DataFeedEventTypeName = "GAME_STARTED" | "SCORE_CHANGED" | "GAME_FINAL" | "CARD_ISSUED" | "WIN_PROBABILITY_UPDATED";
+export type DataFeedEventTypeName = "GAME_STARTED" | "SCORE_CHANGED" | "GAME_FINAL" | "CARD_ISSUED" | "WIN_PROBABILITY_UPDATED" | "VISION_EVENT_CONFIRMED";
 
 export type FeedEventFacts = {
   eventId: string;

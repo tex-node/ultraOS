@@ -4991,6 +4991,8 @@ enum DataFeedEventType {
   CARD_ISSUED
   // Streak v12: the live win probability after a scoring change, for sportsbook partners.
   WIN_PROBABILITY_UPDATED
+  // Streak v14: a vision observation a human reviewer confirmed, with the AI box and the confirmed event type.
+  VISION_EVENT_CONFIRMED
 }
 
 enum DataFeedDeliveryStatus {

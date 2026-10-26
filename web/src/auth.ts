@@ -145,7 +145,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       if (user) {
-        token.id = user.id;
+        // `user.id` is optional on NextAuth's own User type; our JWT declares it as a string. A token without an id
+        // is unusable anyway (the session callback rejects it), so guard the assignment rather than casting.
+        if (typeof user.id === "string") token.id = user.id;
         token.role = user.role;
         token.roles = user.roles;
         token.organizationId = user.organizationId;

@@ -27,7 +27,7 @@ export type FeedSubscriptionRow = {
   counts: { delivered: number; pending: number; failed: number };
 };
 
-export const FEED_EVENT_TYPES = ["GAME_STARTED", "SCORE_CHANGED", "GAME_FINAL", "CARD_ISSUED", "WIN_PROBABILITY_UPDATED"] as const;
+export const FEED_EVENT_TYPES = ["GAME_STARTED", "SCORE_CHANGED", "GAME_FINAL", "CARD_ISSUED", "WIN_PROBABILITY_UPDATED", "VISION_EVENT_CONFIRMED"] as const;
 export type FeedEventType = (typeof FEED_EVENT_TYPES)[number];
 
 function generateSecret(): string {

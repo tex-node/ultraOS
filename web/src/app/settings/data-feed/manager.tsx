@@ -9,7 +9,7 @@ import { createSubscriptionAction, retryDeliveryAction, rollSecretAction, toggle
 //   2. the delivery log is the truth - Success / Pending / Failed straight from the rows, not a guess;
 //   3. Retry is explicit and audited, and it drains immediately so the operator sees what happened.
 
-const EVENTS = ["GAME_STARTED", "SCORE_CHANGED", "GAME_FINAL", "CARD_ISSUED", "WIN_PROBABILITY_UPDATED"] as const;
+const EVENTS = ["GAME_STARTED", "SCORE_CHANGED", "GAME_FINAL", "CARD_ISSUED", "WIN_PROBABILITY_UPDATED", "VISION_EVENT_CONFIRMED"] as const;
 
 function SecretReveal({ label, secret }: { label: string; secret: string }) {
   return (

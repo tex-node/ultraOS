@@ -11,6 +11,7 @@
 // observationId, etc.) is now invisible to RLS and throws not-found, never reaching a write.
 import { Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/lib/audit";
+import { queueVisionEventConfirmedFeed } from "@/lib/data-feed/dispatcher";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import type { VideoSourceType, VisionObservationType, VisionObservationStatus, VisionAnalysisRunStatus } from "@/generated/prisma/enums";
 import { deriveLineup, type LineupEntry, type SubstitutionRecord } from "@/lib/lineup";
@@ -229,6 +230,41 @@ export async function reviewObservation(organizationId: string, observationId: s
       organizationId, userId: actorId, action: "VISION_OBSERVATION_REVIEWED", entityType: "VisionObservation", entityId: observationId,
       details: { previousStatus: before.status, newStatus: action, reason: reason ?? null },
     });
+
+    // A CONFIRMED observation is a decision, and a partner pays for decisions (streak v14, Prompt 3). The delivery is
+    // queued in the SAME transaction as the status change, so a subscriber can never be told about a confirmation
+    // that rolled back. Only the transition into CONFIRMED emits - re-saving the same status is not a new event.
+    if (action === "CONFIRMED" && before.status !== "CONFIRMED") {
+      const video = await tx.gameVideo.findUnique({
+        where: { id: after.gameVideoId },
+        select: { fixtureId: true, gameId: true },
+      });
+      if (video?.gameId) {
+        await queueVisionEventConfirmedFeed(tx, {
+          organizationId,
+          gameId: video.gameId,
+          event: {
+            eventId: after.id,
+            sequenceNumber: 0,
+            period: 0,
+            clockSeconds: 0,
+            points: null,
+            eventType: "VISION_EVENT_CONFIRMED",
+            observationId: after.id,
+            observationType: String(after.observationType),
+            confirmedEventType: after.eventCandidateType ?? null,
+            playerId: after.playerCandidatePlayerId ?? null,
+            jerseyNumber: after.jerseyCandidateNumber ?? null,
+            boundingBox: after.boundingBox ?? null,
+            videoTimeMs: after.videoTimeMs,
+            confidence: after.confidence,
+            reviewedById: actorId,
+            // VisionObservation has no updatedAt column; the review time is now, which is when the reviewer acted.
+            reviewedAt: new Date().toISOString(),
+          },
+        });
+      }
+    }
     return after;
   });
 }

@@ -124,6 +124,49 @@ export async function queueWinProbabilityFeed(
   markFeedQueued(args.organizationId);
   return { queued: subscriptions.length };
 }
+// A human-confirmed vision observation (streak v14, Prompt 3). The AI's own output is never published on its own -
+// a partner gets this only after a reviewer marked the observation CONFIRMED, and the payload keeps the AI provenance
+// (box, confidence, model) next to the human decision so the two cannot be confused.
+export type VisionEventConfirmedFeed = {
+  eventId: string;
+  sequenceNumber: number;
+  period: number;
+  clockSeconds: number;
+  points: null;
+  eventType: "VISION_EVENT_CONFIRMED";
+  observationId: string;
+  observationType: string;
+  confirmedEventType: string | null;
+  playerId: string | null;
+  jerseyNumber: number | null;
+  boundingBox: unknown;
+  videoTimeMs: number;
+  confidence: number;
+  reviewedById: string;
+  reviewedAt: string;
+};
+
+export async function queueVisionEventConfirmedFeed(
+  tx: Prisma.TransactionClient,
+  args: { organizationId: string; gameId: string; event: VisionEventConfirmedFeed },
+): Promise<QueueResult> {
+  const subscriptions = await tx.dataFeedSubscription.findMany({
+    where: { organizationId: args.organizationId, ...subscribeFilter("VISION_EVENT_CONFIRMED") },
+    select: { id: true },
+  });
+  if (subscriptions.length === 0) return { queued: 0 };
+  await tx.dataFeedDelivery.createMany({
+    data: subscriptions.map((subscription) => ({
+      organizationId: args.organizationId,
+      subscriptionId: subscription.id,
+      gameId: args.gameId,
+      eventType: "VISION_EVENT_CONFIRMED" as const,
+      eventData: args.event as unknown as Prisma.InputJsonValue,
+    })),
+  });
+  markFeedQueued(args.organizationId);
+  return { queued: subscriptions.length };
+}
 /** Queue a lifecycle event (GAME_STARTED / GAME_FINAL). Call from the status transition, in its transaction. */
 export async function queueGameLifecycleFeed(
   tx: Prisma.TransactionClient,
