@@ -131,7 +131,10 @@ export async function createLeague(
           organizationId,
           sportId: sport.id,
           name,
-          shortName: name.replace(/[^A-Za-z0-9]/g, "").slice(0, 4).toUpperCase() || "TEAM",
+          // shortName is unique per organization, and deriving it from the first four characters makes collisions
+          // ordinary ("Admin A" and "Admin B" both became "ADMI", and the whole league failed on the constraint). The
+          // base is still that derivation; a suffix is added only when it is already taken.
+          shortName: await uniqueShortName(tx, organizationId, name),
         },
         select: { id: true },
       });
@@ -186,4 +189,19 @@ export async function createLeague(
     fixtures: created,
     kind: individual ? "individual" : "team",
   };
+}
+
+/** A 4-character short name that is unique within the organization, with a numeric suffix if the base is taken. */
+async function uniqueShortName(tx: Prisma.TransactionClient, organizationId: string, name: string): Promise<string> {
+  const base = name.replace(/[^A-Za-z0-9]/g, "").slice(0, 4).toUpperCase() || "TEAM";
+  const taken = new Set(
+    (await tx.club.findMany({ where: { organizationId, shortName: { startsWith: base.slice(0, 3) } }, select: { shortName: true } }))
+      .map((club) => club.shortName),
+  );
+  if (!taken.has(base)) return base;
+  for (let suffix = 2; suffix < 100; suffix += 1) {
+    const candidate = `${base.slice(0, 3)}${suffix}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  throw new Error(`Could not find a free short name for "${name}".`);
 }
