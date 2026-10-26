@@ -76,7 +76,18 @@ export async function createGameEvent(
   // THIS transaction - no network, no timer. The drain that signs and POSTs runs after commit, so a slow
   // subscriber can never stall the canonical write. Only scoring events are queued here; lifecycle events
   // (GAME_STARTED / GAME_FINAL) are queued by the status transition via queueGameLifecycleFeed.
-  if ((input.points ?? 0) > 0) {
+  // A scoring change is not always a `points` value. Tennis (and any rally-point sport) records every rally with
+  // points = 0 - the match score moves in sets and the set score in `tennisPoints` - so keying the feed on points > 0
+  // silently emitted nothing for tennis, which the multi-sport stress test caught (4 of 5 sports produced
+  // win-probability deliveries; tennis produced none). The condition now also looks at the score before/after and at
+  // a tennis point, so every sport that moves a score emits.
+  const scoreChanged =
+    (input.points ?? 0) > 0 ||
+    (input.homeScoreAfter !== undefined &&
+      input.awayScoreAfter !== undefined &&
+      (input.homeScoreAfter !== (input.homeScoreBefore ?? input.homeScoreAfter) || input.awayScoreAfter !== (input.awayScoreBefore ?? input.awayScoreAfter))) ||
+    (input.data as { tennisPoints?: unknown } | null | undefined)?.tennisPoints !== undefined;
+  if (scoreChanged) {
     await queueScoreChangedFeed(tx, {
       organizationId: ctx.actor.organizationId,
       gameId: input.gameId,
