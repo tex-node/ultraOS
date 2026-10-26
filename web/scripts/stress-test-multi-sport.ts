@@ -6,6 +6,8 @@ import { createGameEvent } from "../src/server/scoring/createGameEvent";
 import { recalculateStandings } from "../src/lib/standings-recalculate";
 import { recordScoreInternal } from "../src/app/games/actions-internal";
 import { computeEloRatings } from "../src/lib/analytics/elo";
+import { getSportDefinition } from "../src/lib/sports/registry";
+import { battingSide, inningsConfig } from "../src/lib/sports/innings-scoring";
 import { randomUUID } from "node:crypto";
 
 // Streak v14, Prompt 4: five sports scored at the same time, in one organization, without bleeding into each other.
@@ -153,13 +155,25 @@ async function deliver(setup: SportSetup, side: "home" | "away", typeKey: string
   await withOrganizationContext(ORG, async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Fixture" WHERE id = ${setup.fixtureId} FOR UPDATE`;
     const loaded = await loadGame(setup.gameId);
+    // Cricket is the one sport where a delivery has a legal recipient: only the batting side. Firing at the other
+    // side is refused by the engine (NOT_BATTING), which is correct - the first run did exactly that four times. The
+    // test now asks the engine who is batting, so the delivery is legal rather than merely tolerated.
+    let target = sideId;
+    if (setup.slug === "cricket") {
+      const definition = getSportDefinition("cricket");
+      const config = definition ? inningsConfig(definition) : null;
+      if (config) {
+        const batting = battingSide(config, loaded.currentPeriod);
+        target = batting === "HOME" ? setup.home : setup.away;
+      }
+    }
     await applyScoringDelivery({
       tx,
       organizationId: ORG,
       actorId: ACTOR_ID,
       fixtureId: setup.fixtureId,
       game: loaded,
-      input: { seasonClubId: sideId, typeKey },
+      input: { seasonClubId: target, typeKey },
     });
   });
 }
@@ -251,12 +265,19 @@ async function main() {
         },
         { tx, actor: { id: ACTOR_ID, organizationId: ORG }, source: "LIVE_UI" },
       );
+      // A winner is a SeasonClub OR an Entrant (the same rule as the Elo table). Setting both - or setting the
+      // entrant column to a season-club id - violates the FK, which the first finalisation attempt did.
+      const fixtureSides = await tx.fixture.findUniqueOrThrow({
+        where: { id: setup.fixtureId },
+        select: { homeEntrantId: true, awayEntrantId: true },
+      });
+      const entrantFixture = Boolean(fixtureSides.homeEntrantId || fixtureSides.awayEntrantId);
       await tx.fixture.update({
         where: { id: setup.fixtureId },
         data: {
           status: "FINAL",
-          winnerSeasonClubId: leader === "HOME" ? setup.home : leader === "AWAY" ? setup.away : null,
-          winnerEntrantId: leader === "HOME" && setup.home ? setup.home : leader === "AWAY" ? setup.away : null,
+          winnerSeasonClubId: entrantFixture || !leader ? null : leader === "HOME" ? setup.home : setup.away,
+          winnerEntrantId: entrantFixture && leader ? (leader === "HOME" ? setup.home : setup.away) : null,
         },
       });
       await tx.game.update({ where: { id: setup.gameId }, data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null } });
