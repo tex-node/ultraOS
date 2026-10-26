@@ -20,7 +20,12 @@ function createPrismaClient() {
   //
   // PRISMA_POOL_SIZE / PRISMA_POOL_TIMEOUT are read from the environment so staging and production can differ without
   // a code change; the defaults are the numbers the stress test was tuned against.
-  const poolSize = Number(process.env.PRISMA_POOL_SIZE ?? 20);
+  // 40 is the MEASURED requirement, not a guess: with 30 slots a 40-write burst still rejected 13 of 40 (P2028), and
+  // with 40 it completed 40/40 in 1.9 s. Each interactive transaction holds a connection for its whole duration, so
+  // the pool has to cover the burst rather than the steady state (which needs ~5). Postgres here allows 100
+  // connections for the whole server, shared with Supabase, so an instance that shares the server with another busy
+  // one should lower this with PRISMA_POOL_SIZE.
+  const poolSize = Number(process.env.PRISMA_POOL_SIZE ?? 40);
   const poolTimeoutSeconds = Number(process.env.PRISMA_POOL_TIMEOUT ?? 15);
 
   // IMPORTANT: with @prisma/adapter-pg the pool is a node-postgres Pool, and `connection_limit` in the URL means
@@ -30,7 +35,7 @@ function createPrismaClient() {
   return new PrismaClient({
     adapter: new PrismaPg({
       connectionString,
-      max: Number.isFinite(poolSize) && poolSize > 0 ? poolSize : 20,
+      max: Number.isFinite(poolSize) && poolSize > 0 ? poolSize : 40,
       connectionTimeoutMillis: (Number.isFinite(poolTimeoutSeconds) && poolTimeoutSeconds > 0 ? poolTimeoutSeconds : 15) * 1000,
     }),
   });
