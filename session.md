@@ -12242,3 +12242,51 @@ cross-tenant: LBCL org + PUBLIC fixture -> 404 · PUBLIC org + LBCL fixture -> 4
 One detail worth recording: the first attempt 404'd on the LBCL fixture I picked because it was an **IMPORT** record and
 the overlay (like `/live`) only presents `PRODUCTION` fixtures. That is the pre-existing presentation-scope rule doing
 its job, not a routing failure - re-run against one of LBCL's four PRODUCTION fixtures it is 200.
+
+## 2026-10-26 - Streak v17 / Prompt 5: final sync - 49/49 DB, both environments, main merged
+
+**Roadmaps**: `MULTI_SPORT_ROADMAP.md` records the backfill, the Stripe webhook and the short-name bug the admin page
+exposed; `COACH_INTELLIGENCE_ROADMAP.md` records that the media backlog is gone (17 assets, 13.77 MB, all on R2).
+
+**Suites**
+```
+npm test               1022 tests, 1021 pass, 0 fail  (1 pre-existing skip)
+npm run test:component   26 tests, 26 pass
+npm run test:db          49 tests, 49 pass (378 s, scratch clone)
+canonical-write ratchet  4 suppressions (ceiling 4)
+```
+
+**Deploys**
+| environment | release | migrations | smoke |
+| --- | --- | --- | --- |
+| staging | `b7823e0` | up to date | 7/7 PASS, 0 errors |
+| production | `release-b7823e0` | up to date, behind a verified backup `…pre_v17_20261026T224940Z.dump` (sha256 `9cc07aa6…`) | 7/7 PASS, 0 errors |
+
+**Production verified after the deploy**
+```
+GET /api/v1/live                                  -> 200
+POST /api/webhooks/stripe (unconfigured)          -> 503
+GET /broadcast/overlay/neon-ultra/<fixture>       -> 200
+MediaAssets on R2: 17 · still local: 0
+GET /admin/organizations (no session)             -> 307
+```
+
+**An infrastructure change outside the app:** `/root/deploy.sh` hard-coded `--max-old-space-size=4096` and the build
+began dying with SIGABRT ("Ineffective mark-compacts near heap limit"). It now defaults to 6144 MB and still honours a
+caller's `NODE_OPTIONS`; the host has 11 GB and both environments built cleanly afterwards. Backed up as
+`deploy.sh.bak-<timestamp>`.
+
+**What this streak actually changed**
+- 17 assets (13.77 MB) that were stranded on local disk now serve from R2, verified with real HTTP responses.
+- Stripe checkout works when configured and says why when not; the webhook verifies signatures locally, which fixed a
+  genuine coupling bug (verification needed the API key, so a webhook-secret-only deployment rejected every event).
+- A platform admin can change a plan, and doing so exercised - and fixed - a collision bug in the v15 wizard.
+- OBS overlays are tenant-addressed; cross-tenant fixture ids are 404s.
+
+**Known gaps carried forward**
+- Billing writes no AuditLog row (its `userId` is a foreign key and a webhook has no user); the Stripe event id is
+  logged to the process log instead. A `SystemActor` or nullable audit actor is the real fix.
+- There is no admin UI for `stripeCustomerId`, and no way to trigger a plan change from the UI without Stripe.
+- The deploy-time `MEDIA_STORAGE_PROVIDER` fix lives in the environment files, not in code: a new environment must set
+  it, and nothing validates that at boot beyond `validateMediaConfiguration()`.
+- Local files were deliberately left on disk after the backfill; reclaiming that space is a separate, backed-up job.
