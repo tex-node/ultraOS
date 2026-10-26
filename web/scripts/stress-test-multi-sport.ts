@@ -2,6 +2,8 @@ import { prisma } from "../src/lib/prisma";
 import { withOrganizationContext } from "../src/lib/tenant-context";
 import { applyScoringDelivery, type ScoringGamePayload } from "../src/server/scoring/applyScoringDelivery";
 import { createGame } from "../src/server/scoring/createGame";
+import { createGameEvent } from "../src/server/scoring/createGameEvent";
+import { recalculateStandings } from "../src/lib/standings-recalculate";
 import { recordScoreInternal } from "../src/app/games/actions-internal";
 import { computeEloRatings } from "../src/lib/analytics/elo";
 import { randomUUID } from "node:crypto";
@@ -26,6 +28,11 @@ const arg = (name: string) => {
 const ORGANIZATION = arg("organization");
 const ACTOR = arg("actor");
 const EVENTS_PER_SPORT = Number(arg("events") ?? 12);
+// Bounded concurrency (streak v14 finding). Firing all writes at once rejected 27 of 40 with "Unable to start a
+// transaction in the given time": 40 interactive transactions against a Prisma pool sized ~2*CPUs+1 saturate it, and
+// the 5s interactive-transaction timeout aborts the queue. A real venue runs a handful of consoles, so the default
+// here is the platform's practical ceiling - and --concurrency lets the limit itself be measured.
+const CONCURRENCY = Number(arg("concurrency") ?? 8);
 const KEEP = process.argv.includes("--keep");
 if (!ORGANIZATION || !ACTOR) {
   console.error("usage: stress-test-multi-sport.ts --organization <id> --actor <userId> [--keep] [--events N]");
@@ -193,19 +200,69 @@ async function main() {
     }
   }
 
-  console.log(`== delivering ${jobs.length} scoring events concurrently`);
+  console.log(`== delivering ${jobs.length} scoring events, ${CONCURRENCY} in flight, interleaved across five sports`);
   const started = Date.now();
-  const results = await Promise.allSettled(jobs.map((job) => deliver(job.setup, job.side, job.typeKey)));
+  const outcomes: PromiseSettledResult<void>[] = new Array(jobs.length);
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, async () => {
+      while (cursor < jobs.length) {
+        const index = cursor;
+        cursor += 1;
+        const job = jobs[index];
+        try {
+          await deliver(job.setup, job.side, job.typeKey);
+          outcomes[index] = { status: "fulfilled", value: undefined };
+        } catch (error) {
+          outcomes[index] = { status: "rejected", reason: error };
+        }
+      }
+    }),
+  );
   const elapsed = Date.now() - started;
+  const results = outcomes;
   const rejected = results.filter((result) => result.status === "rejected");
   console.log(`   ${results.length - rejected.length}/${results.length} accepted in ${elapsed} ms (${Math.round(msPerEvent(results.length, elapsed))} ms/event)`);
   if (rejected.length > 0) {
     const reasons = new Map<string, number>();
     for (const result of rejected) {
-      const reason = result.status === "rejected" ? String((result.reason as Error)?.message ?? result.reason) : "";
+      const reason = result.status === "rejected" ? String((result.reason as Error)?.message ?? result.reason).slice(0, 90) : "";
       reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
     }
     console.log(`   rejections: ${[...reasons.entries()].map(([reason, count]) => `${reason}×${count}`).join(", ")}`);
+  }
+
+  // Finalise each game the same way a match ends, so the standings have something to compute from. Without this the
+  // first run reported five empty standings tables: standings are recalculated on finalisation, not on every score.
+  console.log("\n== finalising the five games");
+  for (const setup of setups) {
+    const row = await withOrganizationContext(ORG, (tx) => tx.fixture.findUniqueOrThrow({ where: { id: setup.fixtureId }, select: { homeScore: true, awayScore: true } }));
+    const leader = row.homeScore === row.awayScore ? null : row.homeScore > row.awayScore ? "HOME" : "AWAY";
+    await withOrganizationContext(ORG, async (tx) => {
+      await createGameEvent(
+        {
+          gameId: setup.gameId,
+          fixtureId: setup.fixtureId,
+          eventType: "GAME_ENDED",
+          typeKey: "GAME_ENDED",
+          period: 1,
+          clockSeconds: 0,
+          description: `Stress final ${row.homeScore}-${row.awayScore}`,
+        },
+        { tx, actor: { id: ACTOR_ID, organizationId: ORG }, source: "LIVE_UI" },
+      );
+      await tx.fixture.update({
+        where: { id: setup.fixtureId },
+        data: {
+          status: "FINAL",
+          winnerSeasonClubId: leader === "HOME" ? setup.home : leader === "AWAY" ? setup.away : null,
+          winnerEntrantId: leader === "HOME" && setup.home ? setup.home : leader === "AWAY" ? setup.away : null,
+        },
+      });
+      await tx.game.update({ where: { id: setup.gameId }, data: { status: "FINAL", endedAt: new Date(), clockStartedAt: null } });
+      await recalculateStandings(tx, ORG, setup.seasonId);
+    });
+    console.log(`   ${setup.slug.padEnd(11)} FINAL ${row.homeScore}-${row.awayScore} (${leader ?? "draw"})`);
   }
 
   // 1. Each fixture's score moved only for its own events.
