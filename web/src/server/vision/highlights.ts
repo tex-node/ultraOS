@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import type { Prisma } from "@/generated/prisma/client";
+import { storeMediaBytes } from "@/lib/media-storage";
 
 // Highlight clips from a confirmed vision observation (streak v15, Prompt 4).
 //
@@ -82,29 +82,25 @@ export async function saveHighlightAsset(
     athleteId: string | null;
     uploadedById: string;
   },
-): Promise<{ mediaAssetId: string }> {
+): Promise<{ mediaAssetId: string; publicUrl: string | null }> {
+  // The clip goes to the SAME media storage as every other asset (streak v16, Prompt 1). Storing `file://` here worked
+  // on the host and played in nothing else: a browser cannot fetch a path on the server. storeMediaBytes returns the
+  // R2 public URL when the provider is configured, and null when it is not - in which case the app's own
+  // /media/assets/<id>/file route is the fallback, never a fake absolute path.
   const bytes = await readFile(args.clipPath);
-  const checksum = createHash("sha256").update(bytes).digest("hex");
-  const objectKey = `highlights/${args.organizationId}/${basename(args.clipPath)}`;
-
-  const asset = await tx.mediaAsset.create({
-    data: {
-      organizationId: args.organizationId,
-      storageProvider: "LOCAL_PERSISTENT_STORAGE",
-      objectKey,
-      publicUrl: `file://${args.clipPath}`,
-      originalFilename: basename(args.clipPath),
-      mimeType: "video/mp4",
-      byteSize: bytes.byteLength,
-      checksumSha256: checksum,
-      status: "UPLOADED",
-      purpose: "HIGHLIGHT_CLIP",
-      title: `Highlight from ${args.startSeconds.toFixed(0)}s (${args.durationSeconds.toFixed(0)}s)`,
-      source: `vision:${args.observationId}`,
-      uploadedById: args.uploadedById,
-    },
-    select: { id: true },
+  const stored = await storeMediaBytes({
+    tx,
+    organizationId: args.organizationId,
+    bytes,
+    mimeType: "video/mp4",
+    purpose: "HIGHLIGHT_CLIP",
+    uploadedById: args.uploadedById,
+    originalFilename: basename(args.clipPath),
+    title: `Highlight from ${args.startSeconds.toFixed(0)}s (${args.durationSeconds.toFixed(0)}s)`,
+    source: `vision:${args.observationId}`,
+    visibility: "PUBLIC",
   });
+  const asset = { id: stored.id, publicUrl: stored.publicUrl };
 
   // The link is what the UI reads: a highlight belongs to a fixture, and to an athlete when the observation does.
   await tx.mediaAssetUsage.create({
@@ -129,7 +125,7 @@ export async function saveHighlightAsset(
       },
     });
   }
-  return { mediaAssetId: asset.id };
+  return { mediaAssetId: asset.id, publicUrl: asset.publicUrl };
 }
 
 /** The highlights a fixture has, for the match centre. */
@@ -142,8 +138,11 @@ export async function loadFixtureHighlights(tx: Prisma.TransactionClient, organi
   if (usages.length === 0) return [];
   // MediaAsset has no durationSeconds column; the clip length is in the title (written when the asset was created) and
   // the file itself. Selecting the columns that exist rather than inventing one.
-  return tx.mediaAsset.findMany({
+  const assets = await tx.mediaAsset.findMany({
     where: { organizationId, id: { in: usages.map((usage) => usage.assetId) } },
     select: { id: true, title: true, publicUrl: true, byteSize: true, createdAt: true, source: true },
   });
+  // A clip stored by a provider that cannot produce a public URL still has to play: the app serves the bytes itself
+  // at /media/assets/<id>/file, which is a real URL rather than a server-side path (streak v16, Prompt 1).
+  return assets.map((asset) => ({ ...asset, publicUrl: asset.publicUrl ?? `/media/assets/${asset.id}/file` }));
 }

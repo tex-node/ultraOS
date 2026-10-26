@@ -102,6 +102,10 @@ export function detectImageType(bytes: Buffer) {
 export function extensionForMime(mimeType: string) {
   if (mimeType === "image/png") return "png";
   if (mimeType === "image/webp") return "webp";
+  // Video (streak v16): a highlight clip is mp4, and a .jpg extension on an mp4 breaks both the CDN content type and
+  // every player that sniffs by extension.
+  if (mimeType === "video/mp4") return "mp4";
+  if (mimeType === "video/webm") return "webm";
   return "jpg";
 }
 
@@ -170,6 +174,52 @@ function variantsForPurpose(purpose: MediaAssetPurpose) {
   return [];
 }
 
+/**
+ * Store arbitrary bytes as a media asset (streak v16, Prompt 1).
+ *
+ * uploadMediaAsset is image-only on purpose - it validates with sharp and generates image variants. Video needs the
+ * same storage decision (R2 when configured, local disk otherwise) without the image pipeline, so the bytes go through
+ * the same storeObject/safeObjectKey path and the same MediaAsset row shape.
+ *
+ * Returns the stored public URL when the provider can produce one (R2 + MEDIA_PUBLIC_BASE_URL), and null when it
+ * cannot - the caller then falls back to the app's own /media/assets/<id>/file route rather than inventing a URL.
+ */
+export async function storeMediaBytes(input: {
+  tx: Prisma.TransactionClient;
+  organizationId: string;
+  bytes: Buffer;
+  mimeType: string;
+  purpose: MediaAssetPurpose;
+  uploadedById: string;
+  originalFilename?: string | null;
+  title?: string | null;
+  source?: string | null;
+  visibility?: MediaVisibility;
+}): Promise<{ id: string; objectKey: string; publicUrl: string | null; storageProvider: MediaStorageProvider }> {
+  const provider = configuredProvider();
+  const key = safeObjectKey({ purpose: input.purpose, uploadedById: input.uploadedById, mimeType: input.mimeType });
+  const storedPublicUrl = await storeObject(provider, key, input.bytes, input.mimeType);
+  const asset = await input.tx.mediaAsset.create({
+    data: {
+      organizationId: input.organizationId,
+      byteSize: input.bytes.byteLength,
+      checksumSha256: crypto.createHash("sha256").update(input.bytes).digest("hex"),
+      mimeType: input.mimeType,
+      objectKey: key,
+      originalFilename: input.originalFilename ?? null,
+      publicUrl: storedPublicUrl,
+      purpose: input.purpose,
+      status: MediaAssetStatus.READY,
+      storageProvider: provider,
+      title: input.title ?? null,
+      source: input.source ?? null,
+      uploadedById: input.uploadedById,
+      visibility: input.visibility ?? MediaVisibility.PUBLIC,
+    },
+    select: { id: true },
+  });
+  return { id: asset.id, objectKey: key, publicUrl: storedPublicUrl, storageProvider: provider };
+}
 export async function uploadMediaAsset(input: MediaUploadInput) {
   const { tx, organizationId } = input;
   const provider = configuredProvider();

@@ -86,6 +86,15 @@ async function main() {
     );
   }
   const fixtureUrl = `${BASE_URL}/public/fixtures/${existing?.publicKey ?? temporaryKey}`;
+  // The point of streak v16: the stored URL must be one a browser can fetch. A file:// path (v15) played nowhere.
+  let urlStatus = 0;
+  let urlType = "";
+  if (asset.publicUrl && /^https?:/.test(asset.publicUrl)) {
+    const head = await fetch(asset.publicUrl, { method: "GET", headers: { range: "bytes=0-1023" } }).catch(() => null);
+    urlStatus = head?.status ?? 0;
+    urlType = head?.headers.get("content-type") ?? "";
+  }
+
   const page = await fetch(fixtureUrl);
   const html = await page.text();
 
@@ -93,11 +102,14 @@ async function main() {
   console.log(`asset: ${asset.purpose} · ${asset.mimeType} · ${asset.byteSize} bytes · ${asset.objectKey}`);
   console.log(`linked to: ${asset.usages.map((usage) => `${usage.entityType}:${usage.entityId}`).join(", ")}`);
   console.log(`ffprobe: ${probe}`);
+  console.log(`stored URL: ${asset.publicUrl ?? "(none)"} -> ${urlStatus} · ${urlType || "no content-type"}`);
   console.log(`match centre: ${fixtureUrl} -> ${page.status} · "Highlights" present: ${html.includes("Highlights")} · <video> present: ${html.includes("<video")}`);
 
   const problems: string[] = [];
   if (asset.purpose !== "HIGHLIGHT_CLIP") problems.push(`asset purpose is ${asset.purpose}`);
   if (!asset.usages.some((usage) => usage.entityType === "FIXTURE" && usage.entityId === observation.gameVideo.fixtureId)) problems.push("the clip is not linked to the fixture");
+  if (!asset.publicUrl || !/^https?:\/\//.test(asset.publicUrl)) problems.push(`the stored URL is not an HTTP URL (${asset.publicUrl ?? "null"})`);
+  if (urlStatus !== 200 && urlStatus !== 206) problems.push(`fetching the stored URL returned ${urlStatus}`);
   if (!probe.includes("codec_name")) problems.push("ffprobe found no decodable stream");
   if (!/duration=[\d.]+/.test(probe)) problems.push("the clip has no duration");
   const duration = Number(/duration=([\d.]+)/.exec(probe)?.[1] ?? 0);

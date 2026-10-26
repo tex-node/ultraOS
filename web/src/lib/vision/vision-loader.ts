@@ -343,7 +343,7 @@ export async function createHighlightForObservation(
         action: "VISION_HIGHLIGHT_CREATED",
         entityType: "VisionObservation",
         entityId: observation.id,
-        details: { mediaAssetId: saved.mediaAssetId, startSeconds: clip.startSeconds, durationSeconds: clip.durationSeconds, bytes: clip.bytes },
+        details: { mediaAssetId: saved.mediaAssetId, publicUrl: saved.publicUrl, startSeconds: clip.startSeconds, durationSeconds: clip.durationSeconds, bytes: clip.bytes },
       }),
     );
     return { ok: true, mediaAssetId: saved.mediaAssetId };
