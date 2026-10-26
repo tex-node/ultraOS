@@ -1,11 +1,11 @@
 import { notFound } from "next/navigation";
-import { GraphicRefresher } from "../../game/graphic-refresher";
-import { TransparentBody } from "../../game/transparent-body";
+import { GraphicRefresher } from "../../../game/graphic-refresher";
+import { TransparentBody } from "../../../game/transparent-body";
 import { fixtureSide } from "@/lib/fixture-side";
 import { isProductionPresentationFixture } from "@/lib/presentation-scope";
 import { getSportDefinition } from "@/lib/sports/registry";
 import { winProbabilityForGame } from "@/lib/analytics/win-probability-context";
-import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
+import { resolveActiveOrganizationBySlug, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,12 +22,16 @@ export const revalidate = 0;
 
 const PERIOD_LABEL: Record<string, string> = { QUARTER: "Q", HALF: "Half", SET: "Set", INNING: "Inn", PERIOD: "P" };
 
-export default async function ObsOverlay({ params }: { params: Promise<{ fixtureId: string }> }) {
-  const { fixtureId } = await params;
-  const organization = await resolveDefaultPublicOrganization();
+export default async function ObsOverlay({ params }: { params: Promise<{ organizationSlug: string; fixtureId: string }> }) {
+  const { organizationSlug, fixtureId } = await params;
+  // Multi-tenant overlays (streak v17, Prompt 4): the organization comes from the URL and the fixture is looked up
+  // INSIDE it, so a guessed fixture id from another tenant resolves to nothing rather than leaking that tenant's game
+  // onto someone else's stream.
+  const organization = await resolveActiveOrganizationBySlug(organizationSlug).catch(() => null);
+  if (!organization) notFound();
   const loaded = await withOrganizationContext(organization.id, async (tx) => {
-    const fixture = await tx.fixture.findUnique({
-      where: { id: fixtureId },
+    const fixture = await tx.fixture.findFirst({
+      where: { id: fixtureId, organizationId: organization.id },
       include: {
         homeSeasonClub: { include: { club: true } },
         awaySeasonClub: { include: { club: true } },

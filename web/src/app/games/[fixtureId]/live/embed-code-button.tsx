@@ -41,7 +41,7 @@ export function EmbedCodeButton({ orgSlug, fixtureId }: { orgSlug: string; fixtu
           className="mt-2 h-20 w-full rounded-lg border border-line bg-ink-900 p-2 font-mono text-[10px] text-text-2"
         />
       ) : null}
-      <ObsUrlButton fixtureId={fixtureId} />
+      <ObsUrlButton organizationSlug={orgSlug} fixtureId={fixtureId} />
       <p className="mt-1 text-[10px] text-text-3">
         Public iframe · no key needed · shows the score and clock for {fixtureId.slice(0, 8)}…
       </p>
@@ -56,9 +56,10 @@ export function EmbedCodeButton({ orgSlug, fixtureId }: { orgSlug: string; fixtu
  * their page, a streamer wants a transparent source in OBS. The URL is generated from the current origin so staging
  * links never leak into a production stream.
  */
-export function ObsUrlButton({ fixtureId }: { fixtureId: string }) {
+export function ObsUrlButton({ organizationSlug, fixtureId }: { organizationSlug: string; fixtureId: string }) {
   const [copied, setCopied] = useState(false);
-  const url = typeof window === "undefined" ? "" : `${window.location.origin}/broadcast/overlay/${fixtureId}`;
+  // Multi-tenant overlay URL (streak v17, Prompt 4): /broadcast/overlay/<organizationSlug>/<fixtureId>.
+  const url = typeof window === "undefined" ? "" : `${window.location.origin}/broadcast/overlay/${organizationSlug}/${fixtureId}`;
 
   async function copy() {
     try {
