@@ -140,6 +140,8 @@ async function main() {
     await withOrganizationContext(ORG, async (tx) => {
       await tx.dataFeedDelivery.deleteMany({ where: { gameId: game.id } });
       await tx.dataFeedSubscription.deleteMany({ where: { id: subscription.id } });
+      // Sweep a previous crashed run's subscriber too: it keeps matching new deliveries and inflates the count.
+      await tx.dataFeedSubscription.deleteMany({ where: { organizationId: ORG, name: { startsWith: "TENNIS VERIFY" } } });
       await tx.fixture.deleteMany({ where: { id: setup.fixtureId } });
       await tx.entrant.deleteMany({ where: { seasonId: setup.seasonId } });
       await tx.season.deleteMany({ where: { id: setup.seasonId } });

@@ -122,8 +122,12 @@ teams.map((team) => ({ seasonClubId: team.id, name: team.club.name, entrantId: t
 teamFixtures,
 await buildFairPlayMap(tx, seasonId),
 );
+    // One subject per Standing row (the same rule the Elo table enforces). A SeasonClub that is ALSO bound to an
+    // entrant produced rows with both columns set, which Standing_party_chk rejects on insert - so the team branch
+    // writes the season club and leaves the entrant column null, exactly like the individual branch does in reverse.
     for (const row of computed) {
-      await upsertStanding(tx, organizationId, seasonId, { seasonClubId: row.seasonClubId, entrantId: row.entrantId }, row);
+      if (!row.seasonClubId) continue;
+      await upsertStanding(tx, organizationId, seasonId, { seasonClubId: row.seasonClubId, entrantId: null }, row);
     }
   }
 
