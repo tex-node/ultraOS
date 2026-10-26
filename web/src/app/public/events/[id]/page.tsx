@@ -14,6 +14,23 @@ import { withOrganizationContext } from "@/lib/tenant-context";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+type EventResultPlacement = { rank?: number; name: string };
+type EventResultCategory = {
+  key?: string;
+  label: string;
+  kind?: string;
+  sport?: string;
+  placements: EventResultPlacement[];
+};
+type EventResults = { publishedAt?: string; categories: EventResultCategory[] };
+
+function parseEventResults(raw: unknown): EventResults | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as EventResults;
+  if (!Array.isArray(value.categories) || value.categories.length === 0) return null;
+  return value;
+}
+
 export default async function PublicEventPage({
   params,
 }: {
@@ -28,7 +45,7 @@ export default async function PublicEventPage({
   if (!locator) notFound();
   const event = await withOrganizationContext(locator.organizationId, (tx) =>
     tx.event.findFirst({
-      where: { id: locator.resourceId, status: { in: ["PUBLISHED", "IN_PROGRESS"] } },
+      where: { id: locator.resourceId, status: { in: ["PUBLISHED", "IN_PROGRESS", "COMPLETED"] } },
       include: {
         venue: true,
         fixtures: {
@@ -52,6 +69,7 @@ export default async function PublicEventPage({
     }),
   );
   if (!event || !locatorMatchesResource(locator, event)) notFound();
+  const results = parseEventResults(event.results);
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">
       <p className="text-xs uppercase tracking-[.24em] text-brand-400">{event.status}</p>
@@ -59,6 +77,40 @@ export default async function PublicEventPage({
       <p className="mt-3 text-text-2">{formatLagosDateTime(event.startTime)} · {event.venue.name}, {event.venue.city}</p>
       <div className="mt-6 flex flex-wrap gap-2">{event.fixtures.map((fixture) => <span key={fixture.id} className="rounded-full border border-line bg-white/[.04] px-3 py-2 text-sm text-text-1">{fixture.homeSeasonClub?.club.name ?? fixture.homeEntrant?.name ?? "TBD"} vs {fixture.awaySeasonClub?.club.name ?? fixture.awayEntrant?.name ?? "TBD"}</span>)}</div>
       {event.sponsorCampaigns.length ? <section className="mt-8 rounded-lg border border-warn/20 bg-warn/[.05] p-5"><p className="text-xs uppercase tracking-[.2em] text-warn">Event partners</p><div className="mt-3 flex flex-wrap gap-3">{event.sponsorCampaigns.map((campaign)=><span key={campaign.id} className="rounded-full border border-line bg-white/[.04] px-3 py-2 text-sm">{campaign.sponsorName}<SponsorImpression campaignId={campaign.id} /></span>)}</div></section> : null}
+      {results ? (
+        <section className="mt-10">
+          <h2 className="text-2xl font-semibold">Final results</h2>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            {results.categories.map((category) => (
+              <article
+                key={category.key ?? category.label}
+                className="rounded-lg border border-line bg-ink-800 p-5"
+              >
+                <h3 className="font-semibold">{category.label}</h3>
+                <ol className="mt-3 space-y-2">
+                  {(category.placements ?? []).map((placement, index) => (
+                    <li
+                      key={`${category.key ?? category.label}-${placement.rank ?? index}`}
+                      className="flex items-center gap-3"
+                    >
+                      <span className="grid h-7 w-7 place-items-center rounded-full bg-white/10 text-xs font-bold text-text-1">
+                        {placement.rank ?? index + 1}
+                      </span>
+                      <span className="text-text-1">{placement.name}</span>
+                    </li>
+                  ))}
+                </ol>
+              </article>
+            ))}
+          </div>
+          {results.publishedAt ? (
+            <p className="mt-3 text-xs text-text-3">
+              Results published {new Date(results.publishedAt).toLocaleDateString()}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+      {event.status === "COMPLETED" ? null : (
       <section className="mt-10">
         <h2 className="text-2xl font-semibold">Choose your zone</h2>
         <div className="mt-5 grid gap-4 md:grid-cols-3">
@@ -69,6 +121,7 @@ export default async function PublicEventPage({
           })}
         </div>
       </section>
+      )}
     </main>
   );
 }
