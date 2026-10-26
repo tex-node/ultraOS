@@ -5,6 +5,8 @@ import { createFeedSubscription } from "../src/server/data-feed/subscriptions";
 import { drainFeedDeliveries } from "../src/lib/data-feed/dispatcher";
 import { verifyWebhookSignature } from "../src/lib/data-feed/signature";
 import { reviewObservation } from "../src/lib/vision/vision-loader";
+import { createGame } from "../src/server/scoring/createGame";
+import { randomUUID } from "node:crypto";
 
 // Streak v14, Prompt 3 verification: a human confirms a vision observation, and a partner hears about it.
 //
@@ -50,10 +52,22 @@ async function main() {
   // The pipeline registers a clip against a fixture; the delivery needs a game. Attach it the way a real review
   // would be attached (the clip is game footage), and prove the fixture fallback separately by NOT setting gameId on
   // the first attempt.
-  const game = await withOrganizationContext(ORG, (tx) =>
+  let game = await withOrganizationContext(ORG, (tx) =>
     tx.game.findFirst({ where: { fixtureId: observation.gameVideo.fixtureId }, select: { id: true } }),
   );
-  if (!game) throw new Error(`no game for fixture ${observation.gameVideo.fixtureId}`);
+  if (!game) {
+    // The pipeline attached the clip to a fixture that has no game yet. In production a video is footage OF a game,
+    // so the honest test setup is to create the game and attach the clip, not to fake a game id.
+    const created = await withOrganizationContext(ORG, (tx) =>
+      createGame(
+        { id: `vision_feed_${randomUUID().slice(0, 8)}`, fixtureId: observation.gameVideo.fixtureId, status: "LIVE", currentPeriod: 1, clockSecondsRemaining: 0 },
+        { tx, actor: { id: ACTOR_ID, organizationId: ORG }, source: "LIVE_UI" },
+      ),
+    );
+    await withOrganizationContext(ORG, (tx) => tx.gameVideo.update({ where: { id: observation.gameVideoId }, data: { gameId: created.id } }));
+    game = { id: created.id };
+    console.log(`created game ${created.id} for fixture ${observation.gameVideo.fixtureId} and attached the clip`);
+  }
   console.log(`observation ${observation.id} · ${observation.observationType} · conf ${observation.confidence} · gameId on the video: ${observation.gameVideo.gameId ?? "null (resolved via the fixture)"}`);
 
   const subscription = await withOrganizationContext(ORG, (tx) =>
