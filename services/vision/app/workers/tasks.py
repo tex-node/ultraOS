@@ -14,7 +14,7 @@ from app.core.run_lifecycle import (
     STUB_MODEL_KEY,
     STUB_MODEL_VERSION,
     create_run,
-    ensure_stub_model,
+    ensure_model,
     mark_completed,
     mark_failed,
     mark_processing,
@@ -41,7 +41,10 @@ def poll_ready_videos(limit: int = 20) -> int:
 def analyze_video(self, game_video_id: str, organization_id: str, requested_by_id: str) -> str:
     settings = get_settings()
     analyzer = get_analyzer(settings.vision_analyzer)
-    model_id = ensure_stub_model(organization_id, STUB_MODEL_KEY, STUB_MODEL_VERSION)
+    # Record the analyzer that actually runs, so the run row can never claim "stub" for real inference.
+    model_key = getattr(analyzer, "key", STUB_MODEL_KEY) or STUB_MODEL_KEY
+    model_version = getattr(analyzer, "version", STUB_MODEL_VERSION) or STUB_MODEL_VERSION
+    model_id = ensure_model(organization_id, model_key, model_version)
     run_id = create_run(game_video_id, organization_id, requested_by_id, model_id)
     mark_processing(run_id)
     try:

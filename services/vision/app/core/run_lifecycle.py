@@ -19,8 +19,13 @@ STUB_MODEL_KEY = "stub-analyzer"
 STUB_MODEL_VERSION = "b0"
 
 
-def ensure_stub_model(organization_id: str, model_key: str, version: str) -> str:
-    """Upsert and return a VisionModel id for the given organization/key."""
+def ensure_model(organization_id: str, model_key: str, version: str) -> str:
+    """Upsert and return a VisionModel id for the given organization/key.
+
+    Named `ensure_model`, not `ensure_stub_model`: the run row must record the analyzer that actually ran. The
+    original name made every run - including real YOLO inference - look like the stub, which is exactly how a
+    genuine 300-observation run gets read as "the stub was used" three reports later.
+    """
     with connection() as conn:
         with conn.cursor() as cur:
             cur.execute(

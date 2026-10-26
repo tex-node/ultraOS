@@ -7,7 +7,7 @@ from app.core.run_lifecycle import (
     STUB_MODEL_KEY,
     STUB_MODEL_VERSION,
     create_run,
-    ensure_stub_model,
+    ensure_model,
 )
 from app.workers.tasks import analyze_video
 
@@ -25,14 +25,19 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     settings = get_settings()
     # Fail fast if the analyzer name is misconfigured rather than after a queue hop.
     try:
-        get_analyzer(settings.vision_analyzer)
+        analyzer = get_analyzer(settings.vision_analyzer)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     if not request.requested_by_id:
         raise HTTPException(status_code=422, detail="requested_by_id is required")
 
-    model_id = ensure_stub_model(request.organization_id, STUB_MODEL_KEY, STUB_MODEL_VERSION)
+    # The queued run names the configured analyzer, not the stub (streak v14, Prompt 2).
+    model_id = ensure_model(
+        request.organization_id,
+        getattr(analyzer, "key", STUB_MODEL_KEY) or STUB_MODEL_KEY,
+        getattr(analyzer, "version", STUB_MODEL_VERSION) or STUB_MODEL_VERSION,
+    )
     run_id = create_run(
         game_video_id=request.game_video_id,
         organization_id=request.organization_id,
