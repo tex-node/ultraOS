@@ -405,6 +405,32 @@ export function scheduleFeedDrain(organizationId: string, options: { delayMs?: n
 }
 
 /** For a cron worker: reclaim crashed claims, then drain every organization that has due deliveries. */
+/**
+ * Retry a drain step through a transient database problem (streak v15, Prompt 1).
+ *
+ * The two errors worth retrying are the ones a busy pool produces: P2024 ("timed out fetching a new connection from
+ * the pool") and P2028 ("transaction API error", which is what an aborted interactive transaction raises). Both are
+ * load, not logic - retrying with backoff is the correct response; anything else is rethrown so a real bug is not
+ * hidden behind a retry loop. The waits are 250/500/1000/2000 ms, so four attempts add at most ~3.8 s to a drain that
+ * would otherwise have thrown.
+ */
+async function withTransientRetry<T>(label: string, operation: () => Promise<T>, attempts = 5): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const code = (error as { code?: string }).code;
+      const retryable = code === "P2024" || code === "P2028";
+      if (!retryable || attempt === attempts) break;
+      const backoff = 250 * 2 ** (attempt - 1);
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+    }
+  }
+  throw lastError;
+}
+
 export async function drainAllOrganizations(options: { limitPerOrganization?: number; stuckAfterMs?: number } = {}): Promise<Record<string, DrainResult>> {
   // Organization is a global table (not RLS-scoped), so this read is legitimate.
   const organizations = await prisma.organization.findMany({ select: { id: true } });
@@ -415,17 +441,23 @@ export async function drainAllOrganizations(options: { limitPerOrganization?: nu
     // pick up again. Anything claimed longer ago than the timeout goes back to PENDING (it will be retried,
     // and the subscriber may see the same delivery id twice - which is why the id is stable and documented
     // as a dedupe key).
-    await withOrganizationContext(organization.id, (tx) =>
-      tx.dataFeedDelivery.updateMany({
-        where: { organizationId: organization.id, status: "DELIVERING", nextAttemptAt: { lt: stuckBefore } },
-        data: { status: "PENDING" },
-      }),
+    await withTransientRetry(`reclaim:${organization.id}`, () =>
+      withOrganizationContext(organization.id, (tx) =>
+        tx.dataFeedDelivery.updateMany({
+          where: { organizationId: organization.id, status: "DELIVERING", nextAttemptAt: { lt: stuckBefore } },
+          data: { status: "PENDING" },
+        }),
+      ),
     );
-    const pending = await withOrganizationContext(organization.id, (tx) =>
-      tx.dataFeedDelivery.count({ where: { organizationId: organization.id, status: "PENDING", nextAttemptAt: { lte: new Date() } } }),
+    const pending = await withTransientRetry(`count:${organization.id}`, () =>
+      withOrganizationContext(organization.id, (tx) =>
+        tx.dataFeedDelivery.count({ where: { organizationId: organization.id, status: "PENDING", nextAttemptAt: { lte: new Date() } } }),
+      ),
     );
     if (pending === 0) continue;
-    results[organization.id] = await drainFeedDeliveries({ organizationId: organization.id, limit: options.limitPerOrganization ?? 25 });
+    results[organization.id] = await withTransientRetry(`drain:${organization.id}`, () =>
+      drainFeedDeliveries({ organizationId: organization.id, limit: options.limitPerOrganization ?? 25 }),
+    );
   }
   return results;
 }

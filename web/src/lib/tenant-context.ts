@@ -87,6 +87,13 @@ export async function resolveDefaultPublicOrganization() {
 // `{schema}` option. Optional and defaulting to the singleton, so every existing call site is
 // unaffected. Found by a real failure, not anticipated: loadActiveCoachingPlan could not be tested
 // at all until this parameter existed - it queried the wrong schema and returned a permission error.
+// The interactive-transaction budget for every tenant-scoped write. Exported so a caller that KNOWS it is doing a
+// long bulk operation can assert the same numbers in a test rather than guessing.
+export const ORG_TRANSACTION_TIMEOUT_MS = 15_000;
+// How long a transaction waits for a free pool connection before failing with P2024. Kept below the query timeout so
+// a saturated pool surfaces as "pool exhausted" rather than as a mysterious 15s abort.
+export const ORG_TRANSACTION_MAX_WAIT_MS = 10_000;
+
 export async function withOrganizationContext<T>(
   organizationId: string,
   fn: (tx: Prisma.TransactionClient) => Promise<T>,

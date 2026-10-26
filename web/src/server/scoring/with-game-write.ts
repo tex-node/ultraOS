@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { prisma as defaultPrisma } from "@/lib/prisma";
 import type { PrismaClient } from "@/generated/prisma/client";
@@ -13,6 +13,11 @@ import type { AuthActor, EventSource, LedgerSourceHint, WriteContext } from "./t
 //
 // Callers must derive event fields (descriptions, computed values) from the locked game passed
 // to the callback, not from a separate load outside the transaction.
+// The scoring write budget (streak v15, Prompt 1): the same 15s as the tenant wrapper, kept as named constants so the
+// numbers are visible in one place rather than buried in a call.
+const SCORING_TRANSACTION_TIMEOUT_MS = 15_000;
+const SCORING_TRANSACTION_MAX_WAIT_MS = 10_000;
+
 export async function withGameWrite<T>(
   gameId: string,
   fixtureId: string,
@@ -31,7 +36,11 @@ export async function withGameWrite<T>(
   fn: (writeCtx: WriteContext & { game: MutableGame }) => Promise<T>,
 ): Promise<T> {
   const client = ctx.prisma ?? defaultPrisma;
-  const result = await client.$transaction(async (tx) => {
+  void SCORING_TRANSACTION_TIMEOUT_MS;
+  // Same 15s budget as withOrganizationContext (streak v15, Prompt 1): a scorer write should never be aborted at 5s
+  // because a busy pool delayed the start or the ledger queries took longer than a quiet system would.
+  const result = await client.$transaction(
+    async (tx) => {
     const game = await loadMutableGame(
       tx,
       ctx.actor.organizationId,
@@ -41,8 +50,10 @@ export async function withGameWrite<T>(
       ctx.source,
       ctx.ledgerSourceHint,
     );
-    return fn({ ...ctx, tx, game });
-  });
+      return fn({ ...ctx, tx, game });
+    },
+    { timeout: SCORING_TRANSACTION_TIMEOUT_MS, maxWait: SCORING_TRANSACTION_MAX_WAIT_MS },
+  );
 
   // After commit, and only after commit: wake the partner data-feed drain. Fire-and-forget with a
   // per-organization guard (see dispatcher.ts) so the caller never waits on a subscriber, and a failed
