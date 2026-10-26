@@ -2313,6 +2313,9 @@ model Event {
   startTime               DateTime
   endTime                 DateTime?
   status                  EventStatus              @default(DRAFT)
+  // Public final results for a completed event (podiums/standings), rendered on the public event
+  // page. Shape: { publishedAt?: string, categories: [{ key, label, kind, sport, placements: [{ rank, name }] }] }.
+  results                 Json?
   fixtures                Fixture[]
   seatZones               SeatZone[]
   reservations            SeatReservation[]
