@@ -14,6 +14,26 @@ import {
 import { writeAuditLog } from "@/lib/audit";
 import { assertSameOrganization } from "@/lib/authorization";
 import { upsertPublicResourceLocator } from "@/lib/public-locators";
+// One storage implementation, split by concern: media-blob.ts holds the framework-free byte storage (so a worker or a
+// script can use it without Next), and this module re-exports it for the rest of the app.
+export {
+  configuredProvider,
+  extensionForMime,
+  mediaLocalRoot,
+  publicBaseUrl,
+  safeObjectKey,
+  storeMediaBytes,
+  storeObject,
+  validateMediaConfiguration,
+} from "@/lib/media-blob";
+import { configuredProvider, mediaLocalRoot, safeObjectKey, storeObject } from "@/lib/media-blob";
+
+export function detectImageType(bytes: Buffer) {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (bytes.length >= 12 && bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  return null;
+}
 
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const profileMaxBytes = 15 * 1024 * 1024;
@@ -43,80 +63,6 @@ export type MediaAssignmentTarget = {
   purpose: MediaAssetPurpose;
 };
 
-function configuredProvider() {
-  const value = process.env.MEDIA_STORAGE_PROVIDER;
-  if (value === MediaStorageProvider.CLOUDFLARE_OBJECT_STORAGE) return MediaStorageProvider.CLOUDFLARE_OBJECT_STORAGE;
-  return MediaStorageProvider.LOCAL_PERSISTENT_STORAGE;
-}
-
-export function mediaLocalRoot() {
-  if (process.env.MEDIA_LOCAL_ROOT) return process.env.MEDIA_LOCAL_ROOT;
-  if (process.cwd().includes("/opt/ultraos-staging/")) return "/opt/ultraos-staging/shared/media";
-  return path.join(/* turbopackIgnore: true */ process.cwd(), ".media");
-}
-
-function publicBaseUrl() {
-  return (process.env.MEDIA_PUBLIC_BASE_URL ?? process.env.R2_PUBLIC_BASE_URL ?? "").replace(/\/$/, "");
-}
-
-function requiredEnv(name: string, fallbackName?: string) {
-  const value = process.env[name] ?? (fallbackName ? process.env[fallbackName] : undefined);
-  if (!value) throw new Error(`${name} is required for configured media storage.`);
-  return value;
-}
-
-function s3Client() {
-  return new S3Client({
-    credentials: {
-      accessKeyId: requiredEnv("MEDIA_S3_ACCESS_KEY_ID", "R2_ACCESS_KEY_ID"),
-      secretAccessKey: requiredEnv("MEDIA_S3_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_KEY"),
-    },
-    endpoint: process.env.MEDIA_S3_ENDPOINT ?? process.env.R2_ENDPOINT ?? `https://${requiredEnv("R2_ACCOUNT_ID")}.r2.cloudflarestorage.com`,
-    forcePathStyle: true,
-    region: "auto",
-  });
-}
-
-export function validateMediaConfiguration() {
-  const provider = configuredProvider();
-  return {
-    provider,
-    cloudflareReady: Boolean(
-      (process.env.MEDIA_S3_ENDPOINT || process.env.R2_ENDPOINT || process.env.R2_ACCOUNT_ID) &&
-      (process.env.MEDIA_S3_BUCKET || process.env.R2_BUCKET) &&
-      (process.env.MEDIA_S3_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY_ID) &&
-      (process.env.MEDIA_S3_SECRET_ACCESS_KEY || process.env.R2_SECRET_ACCESS_KEY),
-    ),
-    localReady: Boolean(mediaLocalRoot()),
-    publicBaseUrlConfigured: Boolean(publicBaseUrl()),
-  };
-}
-
-export function detectImageType(bytes: Buffer) {
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
-  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
-  if (bytes.length >= 12 && bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
-  return null;
-}
-
-export function extensionForMime(mimeType: string) {
-  if (mimeType === "image/png") return "png";
-  if (mimeType === "image/webp") return "webp";
-  // Video (streak v16): a highlight clip is mp4, and a .jpg extension on an mp4 breaks both the CDN content type and
-  // every player that sniffs by extension.
-  if (mimeType === "video/mp4") return "mp4";
-  if (mimeType === "video/webm") return "webm";
-  return "jpg";
-}
-
-export function safeObjectKey(params: { purpose: MediaAssetPurpose; uploadedById: string; mimeType: string; variant?: string }) {
-  const safeUser = params.uploadedById.replace(/[^a-zA-Z0-9_-]/g, "");
-  const randomName = crypto.randomBytes(16).toString("hex");
-  const ext = extensionForMime(params.mimeType);
-  const prefix = params.variant ? "variants" : "originals";
-  return `${prefix}/${params.purpose.toLowerCase()}/${safeUser}/${Date.now()}-${randomName}.${ext}`;
-}
-
 function maxBytesForPurpose(purpose: MediaAssetPurpose) {
   return purpose === MediaAssetPurpose.CLUB_LOGO || purpose === MediaAssetPurpose.CLUB_SECONDARY_LOGO ? logoMaxBytes : profileMaxBytes;
 }
@@ -136,26 +82,6 @@ export async function validateImageFile(file: File, purpose: MediaAssetPurpose) 
     mimeType: detectedType,
     width: metadata.width,
   };
-}
-
-async function storeObject(provider: MediaStorageProvider, key: string, body: Buffer, mimeType: string) {
-  if (provider === MediaStorageProvider.CLOUDFLARE_OBJECT_STORAGE) {
-    await s3Client().send(new PutObjectCommand({
-      Body: body,
-      Bucket: requiredEnv("MEDIA_S3_BUCKET", "R2_BUCKET"),
-      CacheControl: "public, max-age=31536000, immutable",
-      ContentDisposition: "inline",
-      ContentType: mimeType,
-      Key: key,
-    }));
-    const baseUrl = publicBaseUrl();
-    return baseUrl ? `${baseUrl}/${key}` : null;
-  }
-
-  const fullPath = path.join(mediaLocalRoot(), key);
-  await mkdir(path.dirname(fullPath), { recursive: true });
-  await writeFile(fullPath, body);
-  return null;
 }
 
 async function variantBuffer(bytes: Buffer, purpose: MediaAssetPurpose, variant: string) {
@@ -184,42 +110,6 @@ function variantsForPurpose(purpose: MediaAssetPurpose) {
  * Returns the stored public URL when the provider can produce one (R2 + MEDIA_PUBLIC_BASE_URL), and null when it
  * cannot - the caller then falls back to the app's own /media/assets/<id>/file route rather than inventing a URL.
  */
-export async function storeMediaBytes(input: {
-  tx: Prisma.TransactionClient;
-  organizationId: string;
-  bytes: Buffer;
-  mimeType: string;
-  purpose: MediaAssetPurpose;
-  uploadedById: string;
-  originalFilename?: string | null;
-  title?: string | null;
-  source?: string | null;
-  visibility?: MediaVisibility;
-}): Promise<{ id: string; objectKey: string; publicUrl: string | null; storageProvider: MediaStorageProvider }> {
-  const provider = configuredProvider();
-  const key = safeObjectKey({ purpose: input.purpose, uploadedById: input.uploadedById, mimeType: input.mimeType });
-  const storedPublicUrl = await storeObject(provider, key, input.bytes, input.mimeType);
-  const asset = await input.tx.mediaAsset.create({
-    data: {
-      organizationId: input.organizationId,
-      byteSize: input.bytes.byteLength,
-      checksumSha256: crypto.createHash("sha256").update(input.bytes).digest("hex"),
-      mimeType: input.mimeType,
-      objectKey: key,
-      originalFilename: input.originalFilename ?? null,
-      publicUrl: storedPublicUrl,
-      purpose: input.purpose,
-      status: MediaAssetStatus.READY,
-      storageProvider: provider,
-      title: input.title ?? null,
-      source: input.source ?? null,
-      uploadedById: input.uploadedById,
-      visibility: input.visibility ?? MediaVisibility.PUBLIC,
-    },
-    select: { id: true },
-  });
-  return { id: asset.id, objectKey: key, publicUrl: storedPublicUrl, storageProvider: provider };
-}
 export async function uploadMediaAsset(input: MediaUploadInput) {
   const { tx, organizationId } = input;
   const provider = configuredProvider();

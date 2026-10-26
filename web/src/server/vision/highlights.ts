@@ -3,7 +3,7 @@ import { mkdir, readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import type { Prisma } from "@/generated/prisma/client";
-import { storeMediaBytes } from "@/lib/media-storage";
+import { storeMediaBytes } from "@/lib/media-blob";
 
 // Highlight clips from a confirmed vision observation (streak v15, Prompt 4).
 //
