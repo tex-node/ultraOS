@@ -11878,3 +11878,99 @@ Prompt 2 correction I copied them to the host to fix the analyzer-naming bug and
 so the *running* service recorded `yolov8n-person` while the repository still called every run `stub-analyzer` - the
 exact mismatch this streak set out to remove, reintroduced by my own workflow. They are committed now (`23e7ee7`) and
 merged; both branches and `main` agree with what the host executes.
+
+## 2026-10-26 - Streak v15 / Prompt 1: the pool ceiling, fixed at the layer that was actually ignoring it
+
+The v14 finding was a 40-write burst rejecting 27 of 40 with P2028. The fix had three parts, and the first attempt
+**did not work at all** - which is the most useful thing in this entry.
+
+1. **`connection_limit` in the URL does nothing with `@prisma/adapter-pg`.** The adapter wraps a node-postgres `Pool`;
+   the pool size is `max`, not a Prisma query-string parameter. My first patch set `connection_limit` and
+   `pool_timeout` on the connection string and the 40-write burst still rejected **32 of 40**. The adapter now gets
+   `{ max, connectionTimeoutMillis }` directly.
+2. **The number was measured, not guessed.** With 30 slots: 13/40 accepted, 24 P2028 aborts. With 40 slots:
+   **40/40 in 1,890 ms (47 ms/event)**. The pool has to cover the BURST (each interactive transaction holds a
+   connection for its whole duration), while steady state needs about five. The default is therefore 40, overridable
+   with `PRISMA_POOL_SIZE`, and the caveat is written down: Postgres here allows 100 connections for the whole server
+   (shared with Supabase), so an instance sharing that server should lower it.
+3. **Transactions got a 15s budget** (`timeout: 15_000`, `maxWait: 10_000`) in both `withOrganizationContext` and
+   `withGameWrite`; `maxWait` is deliberately below the timeout so a saturated pool surfaces as P2024 rather than as a
+   mystery abort. `drainAllOrganizations` retries P2024/P2028 with 250/500/1000/2000 ms backoff and rethrows anything
+   else.
+
+A small but real diagnostic fix: the stress test printed "32 rejections" with a **blank reason**, because a Prisma
+error's message starts with a newline and my first-line slice took the empty line. It now prints the code and the first
+non-empty line.
+
+## 2026-10-26 - Streak v15 / Prompt 2: tennis, to completion, with two real bugs on the way
+
+`scripts/tennis-verify.ts` plays a short tennis match (one set) to completion through the module path:
+
+```
+played 107 rallies · game FINAL · fixture 3-0
+deliveries: 107 SCORE_CHANGED · 107 WIN_PROBABILITY_UPDATED
+fixture: FINAL 3-0 · winnerSeasonClubId=null · winnerEntrantId=cmvp056ro…   ← exactly one winner column
+PASS
+```
+
+Three things were wrong before it passed, and only one was the code the brief named:
+
+- **The test had no subscriber.** Every `queue*Feed` call returns early when nobody is subscribed, so "tennis emits
+  nothing" was first measured against a database with no subscription. The test now creates one.
+- **Standings for individual sports was broken.** A finished tennis match crashed with `Standing_party_chk`: the
+  individual branch feeds entrants to the engine under a `seasonClubId` key and then trusted `row.seasonClubId` when
+  writing the result, so a row whose key lived in `row.entrantId` was written with neither party. Fixed to take
+  `row.entrantId ?? row.seasonClubId` and skip a row that identifies nobody.
+- **My assumption about the constraint was wrong.** `Standing_party_chk` is `(seasonClubId IS NOT NULL) OR
+  (entrantId IS NOT NULL)` - it forbids a row with NEITHER, not a row with both. So the 14 "both party" Standing rows
+  I flagged are **legal** and were never the problem; I had inferred an exactly-one rule that the database does not
+  have. The team branch still writes one subject because the Elo table and the winner columns do require that, but the
+  report should not have called those rows a violation.
+- The delivery count also inflated across runs (107 → 214 → 321) because a crashed run left its subscriber behind;
+  the test now sweeps its own previous subscribers.
+
+## 2026-10-26 - Streak v15 / Prompt 3: an onboarding wizard that writes a league in one transaction
+
+`/admin/setup-wizard` (five steps: sport, league, participants, format, generate) posting to **one** server action
+that calls **one** service, `server/onboarding/create-league.ts`. Nothing is written until step 5, and step 5 is a
+single transaction: organization (optional), competition, division, season, clubs + season clubs for a team sport or
+entrants for an individual one, a venue if the org has none, and the fixture list.
+
+The format rules live in the service, not the UI: a round robin produces every pairing once or twice, a knockout pads
+to a power of two and **skips a bye** rather than writing a fixture with a null opponent, and every fixture carries
+exactly two sides of the same kind (the database CHECK would reject anything else).
+
+**Verified on staging, in the default public organization:**
+```
+created: 4 participants · 12 fixtures (double round robin) · kind team
+clubs: Wizard FC, Onboard United, Setup City, Schema Rovers
+fixture sides: all two-sided
+game created: wizard_545d8059 · /t/wizard-football-2d87… -> 200 (38,517 bytes) · name present: true
+PASS
+```
+
+**And a limitation worth naming:** the same league created in the LBCL organization returns **404** on `/t/<slug>`,
+because the public tournament route resolves the **default public organization**. The wizard works for any tenant; the
+public tournament site is single-tenant today. That is a product gap, not a bug in this prompt, and it is recorded
+rather than papered over.
+
+## 2026-10-26 - Streak v15 / Prompt 4: a confirmed observation becomes a playable clip
+
+`MediaAssetPurpose` gained `HIGHLIGHT_CLIP`; `server/vision/highlights.ts` cuts the ten seconds around an observation
+with ffmpeg (`-ss` before `-i` for a keyframe seek, `-c copy` so the clip is as playable as its source, `+faststart`)
+and stores it as a MediaAsset linked to the fixture and, when the observation names one, the athlete. The cut runs
+**after** the confirmation commits: an ffmpeg subprocess must not hold a database transaction, and a failed cut must
+never undo a reviewer's decision. A zero-byte output is an error, never an asset.
+
+```
+observation 2a71d6b1… at 3,066 ms · source file:///tmp/person-v14.mp4
+asset: HIGHLIGHT_CLIP · video/mp4 · 90,666 bytes · linked to FIXTURE:cmu2i8wse…
+ffprobe: codec_name=h264 · width=1280 · height=720 · nb_frames=300 · duration=10.000000
+match centre: 200 · "Highlights" present: true · <video> present: true
+PASS
+```
+
+Two fixes on the way: the match-centre check 404'd because the page is addressed by the fixture's **public locator**,
+not its id (v10's lesson, relearned); and the Highlights section existed **only in the FINAL branch**, so a confirmed
+event during a live game - the case the feature exists for - rendered nowhere. It now appears in the pre-game/live
+view too.
