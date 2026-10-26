@@ -12155,3 +12155,90 @@ it here because a migration with my release attached to it should not be left un
   so `/media/assets/<id>/file` remains their only route.
 - The OBS overlay serves the default public organization only (like `/live`); a partner-tenant overlay needs the same
   organization-in-URL treatment that `/t/` just received.
+
+## 2026-10-26 - Streak v17 / Prompt 1: the local assets moved to R2
+
+Production had **17 MediaAssets, every one on local disk with a null publicUrl** - written before `MEDIA_STORAGE_PROVIDER`
+existed (v16 found the switch was never on; this is the backlog it left).
+
+```
+dry run : 17 would move (13.77 MB), 0 missing on disk
+backup  : ultraleagueos_pre_media_backfill_20261026T214033Z.dump (sha256 90678ed3…)
+apply   : 17 uploaded
+after   : CLOUDFLARE_OBJECT_STORAGE=17 · r2-public=17 · assets with null publicUrl: 0
+club logo  -> 200 image/png  1,025,115 bytes from pub-e130aa56d5b242f68e0574ce9e065d59.r2.dev
+coach photo-> 200 image/jpeg    50,188 bytes from the same domain
+```
+
+The script refuses to invent a URL for a file that is missing on disk (it reports and skips), updates each row only
+after its own upload succeeds, and leaves the local file in place - deleting it is a separate decision with a separate
+backup.
+
+## 2026-10-26 - Streak v17 / Prompt 2: Stripe checkout and a webhook that verifies itself
+
+`stripe` installed; `src/lib/stripe.ts` keeps the client behind `stripeConfigured()`; `/api/webhooks/stripe` reads the
+**raw** body, verifies the signature, then applies `checkout.session.completed` (plan from session metadata, plus the
+customer id) and `customer.subscription.deleted` (back to FREE), acknowledging unhandled event types with 200 and
+refusing an unsigned payload with 503.
+
+```
+unsigned POST (not configured) -> 503 {"error":"Stripe webhooks are not configured…"}
+bad signature                  -> 400 "Signature timestamp is 1793053591s old (tolerance 300s)"
+correctly signed event         -> 200 {"handled":true,"plan":"PRO"}
+organization                   -> plan=PRO customer=cus_v17_http
+logic: checkout -> PRO · subscription.deleted -> FREE · invoice.paid -> handled=false
+PASS
+```
+
+**Two real defects surfaced here, both worth more than the feature:**
+
+1. **A correctly signed event was rejected** with "Signature verification failed: STRIPE_SECRET_KEY is not configured",
+   because `stripeClient().webhooks.constructEvent()` needs the client and the client needs the API key. Verifying an
+   HMAC needs the webhook secret and nothing else, so `verifyWebhookSignature()` now does it directly (timestamp
+   tolerance, timing-safe compare). Without this, an environment holding only a webhook secret could never accept an
+   event.
+2. **`npm ci` refused the lock file after adding stripe** ("Missing: @swc/helpers@0.5.23 from lock file") - the lock had
+   been resolved on Windows. Regenerated with the same npm the deploy uses; `npm ci --dry-run` passes and no direct
+   dependency changed.
+
+And a third, found because the deploy failed outright: **the build ran out of memory at the deploy script's fixed
+`--max-old-space-size=4096`** (SIGABRT, "Ineffective mark-compacts near heap limit"). The script now defaults to 6144 MB
+and still honours a caller's `NODE_OPTIONS`. Both environments have 11 GB.
+
+**Honest limitation:** a billing change writes no `AuditLog` row, because `AuditLog.userId` is a foreign key to `User`
+and a webhook has no user. A synthetic id would violate the FK; attributing a payment change to a real person would be a
+lie. The Stripe event id is logged instead.
+
+## 2026-10-26 - Streak v17 / Prompt 3: an operator can change a plan
+
+`/admin/organizations` (SUPER_ADMIN): every organization with its plan, its usage in the same units its own billing page
+shows, and a dropdown that writes one column - audited against the admin who clicked it, because here there *is* a real
+user.
+
+```
+GET /admin/organizations (no session) -> 307
+FREE: blocked competitions=true apiKeys=true webhooks=true
+PRO : blocked competitions=false apiKeys=false webhooks=false
+PRO wizard: competition created = true, then cleaned up
+PASS
+```
+
+**A real bug in the v15 wizard fell out of this:** creating a league whose teams share their first four alphanumeric
+characters ("Admin A" / "Admin B") failed the whole transaction on `Club`'s `(organizationId, shortName)` unique
+constraint, because `shortName` was derived from the name with no collision handling. It now takes that derivation as a
+base and appends a suffix only when the base is taken, inside the same transaction. My v15 verification never caught it
+because its four team names happened to differ in their first four characters.
+
+## 2026-10-26 - Streak v17 / Prompt 4: the overlay knows its tenant
+
+`/broadcast/overlay/[organizationSlug]/[fixtureId]`: the organization resolves from the URL and the fixture is looked up
+**inside** it, so a guessed fixture id cannot put another tenant's game on someone's stream.
+
+```
+GET /broadcast/overlay/lagos-basketball-community-league/<fixture> -> 200 (12,941 bytes) · transparent · no shell
+cross-tenant: LBCL org + PUBLIC fixture -> 404 · PUBLIC org + LBCL fixture -> 404 · unknown org -> 404
+```
+
+One detail worth recording: the first attempt 404'd on the LBCL fixture I picked because it was an **IMPORT** record and
+the overlay (like `/live`) only presents `PRODUCTION` fixtures. That is the pre-existing presentation-scope rule doing
+its job, not a routing failure - re-run against one of LBCL's four PRODUCTION fixtures it is 200.
