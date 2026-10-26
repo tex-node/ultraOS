@@ -11728,3 +11728,99 @@ partner signing in through the UI is the only honest way to claim it there, and 
 Production has no analysed video, and creating a junk fixture to manufacture one would be worse than saying so.
 
 **Deploys:** production redeployed to `bf691bc` (smoke 7/7, 0 errors); the fix commit is on `main` after this entry.
+
+## 2026-10-26 - Streak v14 / Prompt 1: the partner dashboard, proven on production
+
+The v13 gap is closed, and the reason it was open is now known: **production uses the secure cookie**. The page code
+was fine; my earlier attempt sent the wrong name/salt pair and read the 307 as a broken page.
+
+`scripts/verify-partner-dashboard.ts` mints a session with the app's own `next-auth/jwt` and tries both cookie names,
+reporting which the server accepted:
+
+```
+production (http://127.0.0.1:4110, AUTH_URL=https://app.neonultra.ng)
+  cookie authjs.session-token            -> 307 · 9,025 bytes · confirmed 0/7
+  cookie __Secure-authjs.session-token   -> 200 · 34,207 bytes · confirmed 7/7
+  PASS: Partner integration · API dashboard · Requests today · Requests this month ·
+        Active subscriptions · Webhook delivery · Last 5 deliveries
+staging (http://127.0.0.1:4120)
+  cookie authjs.session-token            -> 200 · 29,108 bytes · confirmed 7/7
+```
+
+**A type error found on the way, which matters more than it looks.** Running `tsc` before the script failed on
+`src/auth.ts:148` (`token.id = user.id`, NextAuth's `id?: string` against our `string`). The repo's typecheck was
+**red on main** before this streak; the deploys never noticed because `next build` does not fail on it here. Guarded
+with `if (typeof user.id === "string")`, which is also the correct semantics (a token without an id is unusable).
+
+## 2026-10-26 - Streak v14 / Prompt 2: the vision correction - it was real, and it was erased
+
+The brief's premise was that the synthetic test had been skipped or the stub used. Neither is true, and the record
+now shows exactly what happened:
+
+* `torch 2.14.1+cpu`, `torchvision 0.29.1+cpu`, `cv2 5.0.0`, `ultralytics 8.4.189`, `lap 0.5.13` are installed;
+  `YOLOAnalyzer` is in `app/core/analyzer.py` (`class YOLOAnalyzer`, `ultralytics` imported lazily).
+* **The v13 environment was deleted by a deploy.** It lived at `services/vision/.venv`, inside the deploy-managed
+  checkout, and `git clean -fdx` removes it. That is why the "real inference" environment was missing a week later
+  while the code and report still described it. It now lives at `/opt/ultraos-vision/venv`, outside any checkout.
+* **The runs said "stub" because the code did.** `ensure_stub_model(org, STUB_MODEL_KEY, ...)` was called
+  unconditionally, so a genuine 300-observation YOLO run recorded `VisionModel.key = "stub-analyzer"`. That is the
+  single reason the earlier report read as a stub run. The worker now records `analyzer.key` / `analyzer.version`.
+
+Re-run on staging with the durable environment:
+
+```
+circle clip  (the orange circle the brief asks about)  COMPLETED · 0 observations · model yolov8n-person
+person clip  (real person pixels, positive control)    COMPLETED · 300 observations · 1 track · conf 0.891
+```
+
+The circle is still 0, and that remains the correct answer: YOLOv8n is a COCO person detector, and at conf ≥ 0.05
+with no class filter it calls the synthetic circle/silhouette a "sports ball", never a person. The positive control
+is what proves the harness: real person pixels, 300/300 frames, IoU 0.974 (v13 measurement, unchanged).
+
+## 2026-10-26 - Streak v14 / Prompt 3: a confirmed AI observation becomes a partner event
+
+`reviewObservation(.., "CONFIRMED")` now queues a **`VISION_EVENT_CONFIRMED`** delivery in the same transaction as the
+status change. The payload keeps the two things apart on purpose - the AI's provenance (`observationType`,
+`boundingBox`, `confidence`, `videoTimeMs`) beside the human decision (`reviewedById`, `reviewedAt`) and the resolved
+event (`confirmedEventType`, `playerId`, `jerseyNumber`).
+
+Two defects the verification found:
+
+1. **The pipeline registers a clip against a fixture, not a game**, so `GameVideo.gameId` was null and the
+   confirmation produced no delivery **silently**. The emit now resolves the game through the fixture, and when there
+   really is no game (a training clip) it writes an audit entry naming the reason instead of dropping it.
+2. The verification then had to create the game (`createGame`) the clip is footage of, rather than fake an id.
+
+```
+observation cb36ad75… · PERSON_DETECTED · conf 0.8891 · gameId on the video: null (resolved via the fixture)
+queued: 1 · received 1 · verified 1 (HMAC)
+payload: boundingBox {x 0.1424, y 0.36204, w 0.09042, h 0.41817} · confidence 0.8891 · reviewedAt 2026-10-26T02:35:31Z
+re-confirming produced 0 extra rows
+PASS
+```
+
+`confirmedEventType` and `playerId` are null because the detector produces neither a shot classification nor an
+identity; inventing them would be the same lie as a stub that reports detections it never made.
+
+## 2026-10-26 - Streak v14 / Prompt 4: five sports at once, and the ceiling it exposed
+
+`scripts/stress-test-multi-sport.ts`: five competitions in one organization, 40 deliveries interleaved across the
+sports, bounded concurrency.
+
+```
+scores        basketball 8-9 · football 4-4 · tennis 0-0 · volleyball 0-0 · cricket 27-0  (all FINAL)
+wp deliveries 8 · 8 · 8 · 8 · 8        standings 2 rows each (football D1/D1 = 1 pt each; cricket W1/L1)
+PASS: 5 sports scored concurrently, 40 writes, 40 win-probability deliveries, no cross-sport rows
+```
+
+**The first run failed loudly, and that was the valuable part:** all 40 fired at once rejected **27 of 40** with
+`Unable to start a transaction in the given time` and one `expired transaction (5148 ms)`. Prisma's pool is about
+`2 × CPUs + 1` (13 here) with a 5-second interactive-transaction timeout, so 40 simultaneous interactive transactions
+queue past it. At 8 in flight the same work completes in ~1.1 s (≈27 ms/event) with no rejections. That ceiling is
+now written into `MULTI_SPORT_ARCHITECTURE.md` §14 rather than hidden behind a smaller test.
+
+Three more real defects the runs found: **tennis emitted no feed events** (its rallies carry `points = 0`, and the
+feed condition was `points > 0` - 4 of 5 sports produced deliveries); **finalisation set both winner columns** (FK
+violation; a winner is a SeasonClub *or* an Entrant); and **cricket refuses a delivery to the non-batting side**
+(`NOT_BATTING` ×4 - the engine was right, the test was wrong). Cleanup also had to be fixed (season clubs before
+clubs) and made non-fatal, and the 20 leftover competitions from the crashed runs were removed by SQL.
