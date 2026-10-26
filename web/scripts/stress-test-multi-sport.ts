@@ -354,7 +354,8 @@ async function main() {
   if (problems.length > 0) process.exitCode = 1;
 
   if (!KEEP) {
-    await withOrganizationContext(ORG, async (tx) => {
+    try {
+      await withOrganizationContext(ORG, async (tx) => {
       await tx.dataFeedDelivery.deleteMany({ where: { subscriptionId: subscription.id } });
       await tx.dataFeedSubscription.deleteMany({ where: { id: subscription.id } });
       for (const setup of setups) {
@@ -362,15 +363,23 @@ async function main() {
         // attempt hit SeasonClub_organizationId_clubId_fkey).
         await tx.standing.deleteMany({ where: { seasonId: setup.seasonId } });
         await tx.fixture.deleteMany({ where: { id: setup.fixtureId } });
+        // Also sweep leftovers from an earlier crashed run: its clubs share this run's name prefix and still own
+        // season-club rows, which is what the FK was complaining about.
         await tx.seasonClub.deleteMany({ where: { seasonId: setup.seasonId } });
+        await tx.seasonClub.deleteMany({ where: { club: { organizationId: ORG, name: { startsWith: `Stress ${setup.slug}` } } } });
         await tx.entrant.deleteMany({ where: { seasonId: setup.seasonId } });
+        await tx.entrant.deleteMany({ where: { organizationId: ORG, name: { startsWith: `Stress ${setup.slug}` } } });
         await tx.season.deleteMany({ where: { id: setup.seasonId } });
         await tx.division.deleteMany({ where: { id: setup.divisionId } });
         await tx.competition.deleteMany({ where: { id: setup.competitionId } });
         await tx.club.deleteMany({ where: { organizationId: ORG, name: { startsWith: `Stress ${setup.slug}` } } });
       }
-    });
-    console.log("cleanup: five competitions, their fixtures, standings and the subscriber removed (use --keep to inspect)");
+      });
+      console.log("cleanup: five competitions, their fixtures, standings and the subscriber removed (use --keep to inspect)");
+    } catch (error) {
+      // A failed cleanup must not turn a passing run into a failing one; it is reported instead.
+      console.log(`cleanup incomplete: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`);
+    }
   }
 }
 
