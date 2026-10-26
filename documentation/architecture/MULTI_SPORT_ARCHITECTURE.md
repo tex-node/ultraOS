@@ -456,3 +456,45 @@ One Next.js application, two shells, strict context switching:
 | A3 | Payment provider selected (F5 external dependency, owner + date) | `Open` | TBD |
 
 Until A1/A2 are met, no F-phase work starts and no schema change for F-phases is authored.
+
+---
+
+## 14. Concurrency evidence: five sports, one organization, measured (streak v14)
+
+This section is the first empirical answer to "can the engine run several sports at once without data bleeding", and
+it is repeated here from `scripts/stress-test-multi-sport.ts` so the claim can be re-run rather than believed.
+
+**The test.** Five competitions are created in one organization — basketball, football, tennis, volleyball, cricket —
+each with a live game. Forty scoring deliveries are fired with bounded concurrency (8 in flight), interleaved by
+sport so all five games are genuinely in flight together. Basketball goes through its own dedicated scorer; the other
+four through `applyScoringDelivery` and their scoring module. Each delivery takes the `FOR UPDATE` lock on its **own**
+fixture, so five fixtures mean five independent lock chains.
+
+**Result (staging, LBCL organization):**
+
+```
+scores          basketball 8-9 · football 4-4 · tennis 0-0 · volleyball 0-0 · cricket 27-0   (all FINAL)
+wp deliveries   8 · 8 · 8 · 8 · 8        (one per accepted scoring write, per game)
+standings       2 rows each: basketball W1/L1, football D1/D1 (1 pt each), cricket W1/L1, tennis/volleyball 0-0
+Elo             computed from the five finals; the two winners lead, the four losers trail
+PASS: 5 sports scored concurrently, 40 writes, 40 win-probability deliveries, no cross-sport rows
+```
+
+**What the test found, which is more valuable than the pass:**
+
+1. **The connection pool is the concurrency ceiling, not the engine.** Firing all 40 at once rejected **27 of 40**
+   with `Unable to start a transaction in the given time` / `expired transaction (5148 ms)`: Prisma's pool is roughly
+   `2 × CPUs + 1` (13 on the 6-core host) and its interactive-transaction timeout is 5 seconds, so 40 simultaneous
+   interactive transactions queue past it. At 8 in flight the same 40 writes complete in ~1.1 s (≈27 ms/event) with
+   zero rejections. **A venue running several courts is fine; a burst of 40 simultaneous writes is not** — that is a
+   capacity statement this document previously did not contain.
+2. **Rally-point sports emitted no score changes.** Tennis records every rally with `points = 0` (its match score
+   moves in sets), so the feed's `points > 0` condition emitted nothing for tennis — 4 of 5 sports produced
+   win-probability deliveries. The condition now also looks at the score before/after and at `tennisPoints`.
+3. **A winner is a SeasonClub *or* an Entrant.** The first finalisation attempt set both columns and violated a FK;
+   the engine's own rule (the same one the Elo table enforces with a CHECK) is one subject per result.
+4. **Cricket refuses an illegal delivery rather than accepting it.** Four deliveries aimed at the non-batting side
+   came back `NOT_BATTING`; the test now asks the innings config who is batting.
+
+The honest limit: this proves the **engine and the feed** under concurrent multi-sport load on one host. It does not
+prove behaviour under a real broadcast volume of writes, and it does not exercise the vision or partner paths.
