@@ -1,4 +1,5 @@
 import "server-only";
+import { assertWithinPlan } from "@/lib/plans";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -76,6 +77,8 @@ export async function createApiKey(
 ): Promise<CreatedApiKey> {
   const trimmed = args.name.trim();
   if (trimmed.length < 3) throw new Error("Give the key a name of at least 3 characters.");
+  // Plan enforcement (streak v16, Prompt 3): FREE has no API keys, PRO has 5, ENTERPRISE unlimited.
+  await assertWithinPlan(tx, args.organizationId, "apiKeys");
   const { rawKey, keyHash, prefix } = generateApiKey();
   const created = await tx.apiKey.create({
     data: { organizationId: args.organizationId, name: trimmed.slice(0, 120), keyHash, prefix, tier: args.tier, createdById: args.userId },

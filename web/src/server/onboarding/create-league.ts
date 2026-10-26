@@ -1,4 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { assertWithinPlan } from "@/lib/plans";
 import { getSportDefinition } from "@/lib/sports/registry";
 import { isIndividualSport } from "@/lib/sports/fixture-sides";
 
@@ -76,6 +77,10 @@ export async function createLeague(
   const names = input.entrantNames.map((name) => name.trim()).filter(Boolean);
   if (names.length < 2) throw new Error("A league needs at least two participants.");
   if (input.entrantNames.length > 64) throw new Error("That is a lot of participants for one wizard run (max 64).");
+
+  // Plan enforcement (streak v16, Prompt 3): a FREE organization may run exactly one competition. Checked before
+  // anything is created so a refused wizard leaves no rows behind.
+  if (input.organizationId) await assertWithinPlan(tx, input.organizationId, "competitions");
 
   const sport = await tx.sport.findFirst({ where: { slug: definition.slug }, select: { id: true } });
   if (!sport) throw new Error(`The sport ${definition.slug} is not seeded in this database.`);

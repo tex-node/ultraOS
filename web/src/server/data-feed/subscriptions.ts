@@ -1,4 +1,5 @@
 import "server-only";
+import { assertWithinPlan } from "@/lib/plans";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { randomBytes } from "node:crypto";
@@ -85,6 +86,8 @@ export async function createFeedSubscription(
   args: { organizationId: string; userId: string; name: string; webhookUrl: string; events: FeedEventType[] },
 ): Promise<{ id: string; secret: string }> {
   if (args.events.length === 0) throw new Error("Pick at least one event.");
+  // Plan enforcement (streak v16, Prompt 3): FREE has no webhooks, PRO has 5, ENTERPRISE unlimited.
+  await assertWithinPlan(tx, args.organizationId, "webhooks");
   if (!/^https?:\/\//i.test(args.webhookUrl)) throw new Error("The webhook URL must start with http:// or https://.");
   const secret = generateSecret();
   const created = await tx.dataFeedSubscription.create({
