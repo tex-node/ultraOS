@@ -12022,3 +12022,83 @@ GET /admin/setup-wizard (no session)         -> 307 (redirect to login, as desig
   path for highlights has not been built.
 - The pool default of 40 is right for this host's 100-connection server when one instance bursts; a second instance
   bursting at the same time would need `PRISMA_POOL_SIZE` lowered.
+
+## 2026-10-26 - Streak v16 / Prompt 1: highlights go to R2, and the switch that was never on
+
+The `file://` URL was two problems, and the second was much larger than the brief.
+
+**The clip's own asset write was ad hoc.** `storeMediaBytes` in a new `media-blob.ts` now puts arbitrary video bytes
+through the same storage decision as every other asset and returns the provider's public URL; when the provider cannot
+produce one, the loader falls back to the app's real `/media/assets/<id>/file` route rather than an absolute path.
+
+**Neither environment had `MEDIA_STORAGE_PROVIDER` set.** `configuredProvider()` therefore returned
+`LOCAL_PERSISTENT_STORAGE` **in production too**, even though production held a complete set of R2 credentials (account,
+endpoint, keys, bucket, public base URL). Every asset - logos, profile photos, score sheets - has been written to local
+disk. The gateway is now explicit on both environments, staging received the R2 credentials it lacked, both were
+backed up (`.bak-<timestamp>`) and restarted.
+
+```
+probing: https://pub-e130aa56d5b242f68e0574ce9e065d59.r2.dev/originals/highlight_clip/…/1793040813921-….mp4
+ffprobe: h264 · 1280x720 · 300 frames · duration=10.000000
+stored URL -> 206 · video/mp4
+PASS: a confirmed observation produced a playable 10.0s clip, linked to the fixture and rendered on the match centre
+```
+
+Two other things had to be fixed to get there: the verifier probed an empty path when `publicUrl` was null (fixed to
+probe the local object), and importing `media-storage` in a script dragged in `authorization → next/navigation → React`
+and died with `react.createContext is not a function` - which is why the byte storage now lives in a framework-free
+module with no Next imports.
+
+## 2026-10-26 - Streak v16 / Prompt 2: a competition is addressed by its tenant
+
+`/t/[slug]` resolved its competition inside the **default public organization**, so any league created for another
+tenant was a 404 (v15 hit exactly that). The route is now `/t/[organizationSlug]/[competitionSlug]`: organization from
+the URL, competition inside it, and every internal link updated (homepage cards, wizard result, layout basePath,
+fixtures tab, and the vanity route's shared tabs import).
+
+```
+GET /t/lagos-basketball-community-league/lbcl           -> 200 (37,379 bytes)
+GET /t/lagos-basketball-community-league/lbcl/fixtures -> 200
+GET /t/neon-ultra/ultra-basketball                     -> 200 (32,266 bytes)
+GET /t/lbcl (the old single-segment URL)               -> 404
+```
+
+The old shape is gone rather than aliased: two URLs for one resource is how a stale bookmark becomes a support ticket,
+and the new shape is the only one any link now generates.
+
+## 2026-10-26 - Streak v16 / Prompt 3: plans, enforced where the resource is created
+
+`Organization` gained `plan` (FREE/PRO/ENTERPRISE) and `stripeCustomerId`. The migration says why the usual tenant
+checklist does not apply: **Organization is the tenant boundary**, so there is no cross-tenant read to isolate. Existing
+organizations are **grandfathered to ENTERPRISE** - they already use API keys, several competitions and webhooks, and
+switching them to FREE would have silently switched features off.
+
+`src/lib/plans.ts` holds the limits in one table and one `assertWithinPlan()`, called from the three places a billable
+resource is created: API keys, feed subscriptions, and `createLeague`. One function, because a limit enforced in one path
+and forgotten in another is exactly the failure mode.
+
+```
+plan: ENTERPRISE · competitions 5/∞   → forced FREE: competitions 5/1
+  second competition (wizard service): blocked · "The FREE plan allows 1 competition(s). Upgrade to add more."
+  API key on FREE:  blocked · "… 0 API key(s) …"
+  webhook on FREE:  blocked · "… 0 webhook subscription(s) …"
+  API key on PRO:   allowed
+PASS: a refused attempt writes nothing
+```
+
+`/settings/billing` shows the plan, each limit with a usage bar, and every tier. The upgrade button is **disabled with a
+tooltip** saying billing is not connected: a button that pretended to charge would be worse than an honest placeholder.
+
+## 2026-10-26 - Streak v16 / Prompt 4: the OBS overlay
+
+`/broadcast/overlay/[fixtureId]` renders only the scorebug and the win-probability bar, over a transparent body
+(`TransparentBody` is required because `globals.css` paints `body` opaque), refreshing every 3s from server state.
+
+```
+GET /broadcast/overlay/<fixture> -> 200 (12,392 bytes)
+  transparent body rule: 1 · win probability bar: 1 · shell leakage: 0
+  rendered: PVC1 3 – 0 PVC4 · LIVE · Set 1
+```
+
+The capture console gained a **Copy OBS URL** button beside the embed one, generated from the current origin so a
+staging link never ends up in a production stream.
