@@ -11871,3 +11871,10 @@ DataFeedEventType has VISION_EVENT_CONFIRMED: 1
   numbers are in `MULTI_SPORT_ARCHITECTURE.md` §14, and no pool tuning was attempted.
 - The stress test's own cleanup still reports `cleanup incomplete` on a stale FK; the leftovers were removed by SQL
   and the message is non-fatal.
+
+**Post-script to Prompt 5 - three files the host was running but the repo was not.** `git status` after the final
+deploy showed `services/vision/{api/analyze.py, core/run_lifecycle.py, workers/tasks.py}` still modified. During the
+Prompt 2 correction I copied them to the host to fix the analyzer-naming bug and then verified against the host copy,
+so the *running* service recorded `yolov8n-person` while the repository still called every run `stub-analyzer` - the
+exact mismatch this streak set out to remove, reintroduced by my own workflow. They are committed now (`23e7ee7`) and
+merged; both branches and `main` agree with what the host executes.
