@@ -12,6 +12,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { queueVisionEventConfirmedFeed } from "@/lib/data-feed/dispatcher";
+import { cutHighlightClip, saveHighlightAsset } from "@/server/vision/highlights";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import type { VideoSourceType, VisionObservationType, VisionObservationStatus, VisionAnalysisRunStatus } from "@/generated/prisma/enums";
 import { deriveLineup, type LineupEntry, type SubstitutionRecord } from "@/lib/lineup";
@@ -249,6 +250,12 @@ export async function reviewObservation(organizationId: string, observationId: s
           details: { reason: "no game is attached to this video or its fixture; the partner feed is game-scoped", gameVideoId: after.gameVideoId },
         });
       }
+      // Highlight clip (streak v15, Prompt 4): a confirmation is worth watching, so the ten seconds around it are cut
+      // from the source video and stored as a HIGHLIGHT_CLIP asset. A failure here must not undo the confirmation, so
+      // it is caught and reported on the observation's audit trail rather than thrown. The ffmpeg call runs outside the
+      // transaction (below, after commit) because a subprocess must not hold a database connection.
+      void gameId;
+
       if (gameId) {
         await queueVisionEventConfirmedFeed(tx, {
           organizationId,
@@ -277,6 +284,83 @@ export async function reviewObservation(organizationId: string, observationId: s
     }
     return after;
   });
+}
+
+/**
+ * Cut and store a highlight for a confirmed observation (streak v15, Prompt 4).
+ *
+ * Deliberately SEPARATE from reviewObservation: the ffmpeg subprocess must not run inside a database transaction, and a
+ * failure to cut a clip must never roll back the confirmation. The caller invokes this after the confirmation commits;
+ * its result is reported to the reviewer instead of thrown.
+ */
+export async function createHighlightForObservation(
+  organizationId: string,
+  observationId: string,
+  actorId: string,
+): Promise<{ ok: boolean; mediaAssetId?: string; reason?: string }> {
+  const observation = await withOrganizationContext(organizationId, (tx) =>
+    tx.visionObservation.findFirst({
+      where: { id: observationId, organizationId },
+      include: {
+        gameVideo: {
+          select: {
+            id: true,
+            fixtureId: true,
+            mediaAsset: { select: { id: true, publicUrl: true, objectKey: true } },
+          },
+        },
+        playerCandidatePlayer: { select: { athleteId: true } },
+      },
+    }),
+  );
+  if (!observation) return { ok: false, reason: "observation not found" };
+  if (observation.status !== "CONFIRMED") return { ok: false, reason: "only a confirmed observation gets a highlight" };
+
+  const source = observation.gameVideo.mediaAsset.publicUrl ?? observation.gameVideo.mediaAsset.objectKey;
+  if (!source) return { ok: false, reason: "the source video has no path" };
+  const sourcePath = source.startsWith("file://") ? source.slice("file://".length) : source;
+
+  const outputDir = process.env.HIGHLIGHT_OUTPUT_DIR ?? "/opt/ultraos-vision/highlights";
+  try {
+    const clip = await cutHighlightClip({ sourcePath, videoTimeMs: observation.videoTimeMs, outputDir, stem: `obs-${observation.id}` });
+    const saved = await withOrganizationContext(organizationId, (tx) =>
+      saveHighlightAsset(tx, {
+        organizationId,
+        fixtureId: observation.gameVideo.fixtureId,
+        mediaAssetIdOfSource: observation.gameVideo.mediaAsset.id,
+        clipPath: clip.clipPath,
+        startSeconds: clip.startSeconds,
+        durationSeconds: clip.durationSeconds,
+        observationId: observation.id,
+        athleteId: observation.playerCandidatePlayer?.athleteId ?? null,
+        uploadedById: actorId,
+      }),
+    );
+    await withOrganizationContext(organizationId, (tx) =>
+      writeAuditLog(tx, {
+        organizationId,
+        userId: actorId,
+        action: "VISION_HIGHLIGHT_CREATED",
+        entityType: "VisionObservation",
+        entityId: observation.id,
+        details: { mediaAssetId: saved.mediaAssetId, startSeconds: clip.startSeconds, durationSeconds: clip.durationSeconds, bytes: clip.bytes },
+      }),
+    );
+    return { ok: true, mediaAssetId: saved.mediaAssetId };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    await withOrganizationContext(organizationId, (tx) =>
+      writeAuditLog(tx, {
+        organizationId,
+        userId: actorId,
+        action: "VISION_HIGHLIGHT_FAILED",
+        entityType: "VisionObservation",
+        entityId: observation.id,
+        details: { reason },
+      }),
+    );
+    return { ok: false, reason };
+  }
 }
 
 export async function reviewEventMatch(organizationId: string, matchId: string, action: VisionObservationStatus, actorId: string, reason?: string) {

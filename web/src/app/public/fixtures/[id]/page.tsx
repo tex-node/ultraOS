@@ -25,6 +25,7 @@ import { buildGameStarCard } from "@/lib/analytics/cards/player-cards";
 import { auth } from "@/auth";
 import { mvpCandidates, castMvpVote, hasVoted } from "@/server/mvp/votes";
 import { MvpVoteSection } from "./mvp-vote-section";
+import { loadFixtureHighlights } from "@/server/vision/highlights";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -77,6 +78,9 @@ export default async function Match({ params }: { params: Promise<{ id: string }
   // Fan MVP voting (streak v12, Prompt 4): only after a FINAL game, and only for the three performers the box score
   // puts forward. Voting needs a signed-in user, because one vote per person is the point.
   const session = await auth();
+  // Highlights (streak v15, Prompt 4): clips cut from the game video around confirmed vision observations.
+  const highlights = await withOrganizationContext(organizationId, (tx) => loadFixtureHighlights(tx, organizationId, id));
+
   const mvp = await withOrganizationContext(organizationId, async (tx) => {
     const loaded = await tx.game.findUnique({ where: { fixtureId: id }, select: { id: true } });
     if (!loaded) return { candidates: [], voted: false, gameId: null as string | null };
@@ -114,6 +118,28 @@ export default async function Match({ params }: { params: Promise<{ id: string }
                 <p className="mt-2 text-lg font-black">
                   {factor.winnerValue} <span className="text-sm font-normal text-text-3">vs {factor.loserValue}</span>
                 </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {highlights.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="text-lg font-bold tracking-tight sm:text-xl">Highlights</h2>
+          <p className="mt-1 text-xs text-text-3">Clips cut automatically around a vision event a reviewer confirmed.</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {highlights.map((clip) => (
+              <div key={clip.id} className="rounded-lg border border-line bg-ink-800 p-3">
+                <p className="text-sm font-semibold text-text-1">{clip.title ?? "Highlight"}</p>
+                <p className="mt-1 text-xs text-text-3">
+                  {clip.source?.startsWith("vision:") ? "From a confirmed vision event" : "Highlight"} · {(clip.byteSize / 1024).toFixed(0)} KB
+                </p>
+                {clip.publicUrl ? (
+                  <video controls preload="metadata" className="mt-2 w-full rounded" src={clip.publicUrl} aria-label={clip.title ?? "Highlight clip"} />
+                ) : (
+                  <p className="mt-2 text-xs text-text-3">No playable URL recorded.</p>
+                )}
               </div>
             ))}
           </div>

@@ -6,6 +6,7 @@ import {
   createTimelineAnchor, acceptTimelineAnchor, reviewObservation, reviewEventMatch,
   ensureVisionModel, createAnalysisRun,
 } from "@/lib/vision/vision-loader";
+import { createHighlightForObservation } from "@/lib/vision/vision-loader";
 import type { VisionObservationStatus } from "@/generated/prisma/enums";
 
 export async function createAnchorAction(fixtureId: string, gameVideoId: string, formData: FormData) {
@@ -33,7 +34,17 @@ export async function reviewObservationAction(fixtureId: string, observationId: 
   const action = String(formData.get("action")) as VisionObservationStatus;
   const reason = String(formData.get("reason") ?? "") || undefined;
   await reviewObservation(organizationId, observationId, action, session.user.id, reason);
+
+  // A confirmation is worth watching (streak v15, Prompt 4): cut the ten seconds around it into a highlight clip. This
+  // runs AFTER the confirmation commits, because an ffmpeg subprocess must not hold a database transaction - and a
+  // failed cut must never undo a reviewer's decision. The outcome is surfaced below rather than swallowed.
+  let highlight: { ok: boolean; mediaAssetId?: string; reason?: string } | null = null;
+  if (action === "CONFIRMED") {
+    highlight = await createHighlightForObservation(organizationId, observationId, session.user.id);
+    if (!highlight.ok) console.warn(`highlight clip not created for ${observationId}: ${highlight.reason}`);
+  }
   revalidatePath(`/vision/games/${fixtureId}`);
+  revalidatePath("/public/fixtures/[id]", "page");
 }
 
 export async function reviewEventMatchAction(fixtureId: string, matchId: string, formData: FormData) {

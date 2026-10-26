@@ -628,6 +628,8 @@ enum MediaAssetPurpose {
   DRAFT_VIDEO
   DRAFT_AUDIO
   CONTENT_ASSET
+  // Streak v15, Prompt 4: a clip cut from a game video around a confirmed vision observation.
+  HIGHLIGHT_CLIP
   // G.21: a registered game video (full game, camera ISO, broadcast program, etc.) - see
   // GameVideo. MediaAsset already handled DRAFT_VIDEO's storage/playback needs; this reuses the
   // exact same model rather than a second file-storage system.
