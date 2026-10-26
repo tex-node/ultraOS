@@ -12102,3 +12102,56 @@ GET /broadcast/overlay/<fixture> -> 200 (12,392 bytes)
 
 The capture console gained a **Copy OBS URL** button beside the embed one, generated from the current origin so a
 staging link never ends up in a production stream.
+
+## 2026-10-26 - Streak v16 / Prompt 5: final sync - 49/49 DB, both environments, main merged
+
+**Roadmaps**: `MULTI_SPORT_ROADMAP.md` records that the media layer finally uses R2, that tournaments are addressed by
+tenant, that plans are enforced at creation, and the OBS overlay. `COACH_INTELLIGENCE_ROADMAP.md` records that
+highlights are cloud media and that the provider switch - not the clip - was the real defect.
+
+**Suites**
+```
+npm test               1022 tests, 1021 pass, 0 fail  (1 pre-existing skip)
+npm run test:component   26 tests, 26 pass
+npm run test:db          49 tests, 49 pass (391 s, serialized, scratch clone)
+canonical-write ratchet  4 suppressions (ceiling 4)
+```
+
+**Deploys**
+| environment | release | migrations | smoke |
+| --- | --- | --- | --- |
+| staging | `933d5a9` | `20261026140000_organization_plans` | 7/7 PASS, 0 errors |
+| production | `release-933d5a9` | `20261026140000_organization_plans` + `20261027120000_event_results`, behind a verified backup `…pre_v16_20261026T193058Z.dump` (sha256 `cbaac1dc…`) | 7/7 PASS, 0 errors |
+
+**Production verified after the deploy**
+```
+GET /api/v1/live                       -> 200
+Organization.plan column present       -> 1
+org plans: ENTERPRISE=2
+20261026140000_organization_plans      -> applied
+GET /t/neon-ultra/ultra-basketball     -> 200
+```
+
+**One thing to be precise about:** the production deploy also applied `20261027120000_event_results`, which **is not
+mine**. It already existed in the repository (`ALTER TABLE "Event" ADD COLUMN "results" JSONB`, additive and nullable)
+and had never been applied to production; a deploy applies whatever is pending, so it went in with this one. Recording
+it here because a migration with my release attached to it should not be left unexplained.
+
+**What this streak actually changed**
+- Media storage uses R2 at last: `MEDIA_STORAGE_PROVIDER` was unset in **every** environment, so production had been
+  writing every asset to local disk while holding unused R2 credentials. Highlight clips now upload and play from a
+  real HTTPS URL (206, video/mp4).
+- `/t/<organizationSlug>/<competitionSlug>`: a partner league is a working link, and the old shape 404s.
+- Plans (FREE/PRO/ENTERPRISE) are enforced in one function at the three creation points, with a billing page that
+  refuses to pretend payments exist.
+- A transparent OBS overlay with the scorebug and win-probability bar, plus a Copy OBS URL button in the console.
+
+**Known gaps carried forward**
+- Billing has no payment provider: the upgrade button is disabled on purpose, and `stripeCustomerId` is a column with
+  nothing writing it yet.
+- Existing organizations are grandfathered to ENTERPRISE; there is no admin UI to change a plan (only the database or
+  the migration).
+- Assets created before this streak are still on local disk under the old provider - no backfill to R2 was attempted,
+  so `/media/assets/<id>/file` remains their only route.
+- The OBS overlay serves the default public organization only (like `/live`); a partner-tenant overlay needs the same
+  organization-in-URL treatment that `/t/` just received.
