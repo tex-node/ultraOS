@@ -34,7 +34,9 @@ export async function generateMetadata(): Promise<Metadata> {
   const league = session?.user?.organizationName ?? null;
   return {
     metadataBase: new URL(process.env.AUTH_URL ?? "http://localhost:3000"),
-    title: league ? `${league} · UltraOS` : "Neon Ultra Tournament Management System",
+    // Anonymous visitors get the PLATFORM's name, not a league's (streak v24 sweep). "Neon Ultra Tournament Management
+    // System" was the pre-multi-tenant title and it leaked onto every sign-in page.
+    title: league ? `${league} · UltraOS` : "UltraLeagueOS · Tournament management system",
     description: league ? `${league} on UltraLeagueOS - fixtures, live scoring and league operations.` : "Tournament administration and game-day operations.",
     appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "UltraOS" },
   };
