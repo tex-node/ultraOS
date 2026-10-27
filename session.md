@@ -12982,3 +12982,42 @@ A second, smaller finding from the same spec: the workspace sidebar printed **"N
 every tenant**, so a league's own console was branded with the platform's demo league. `WorkspaceShell` takes an optional
 organization name/context now and the league dashboard passes its own; pages that do not know their organization keep the
 platform default until they are swept, which is listed as a known gap rather than fixed everywhere in one pass.
+
+## 2026-10-27 - Streak v22 / Prompt 3: the live key is off staging, and the guard is in three places
+
+**The remediation went further than the brief asked**, because the guard refused the very next deploy and that was
+correct: staging was still carrying production's `sk_live_` key.
+
+1. **`BACHS_SANDBOX_KEY` slot** added to `deploy/README.md` and `.env.example`, with the rule stated in the env file's own
+   comment: staging must never carry `sk_live_*`.
+2. **`instrumentation.register()`** calls `assertBillingSafety()`, which throws `LiveKeyInNonProductionError` before the
+   server accepts a request.
+3. **`/root/deploy.sh`** exits **78** before building when `APP_ENV=staging` and the key starts with `sk_live_`.
+4. **Six unit tests** pin the decision: staging by `APP_ENV`, by a loopback `AUTH_URL`, through the legacy `BACH_IO` name,
+   production allowed, sandbox allowed, no key allowed.
+
+Then the key itself:
+
+```
+staging before: BACH_IO=…6ge7DI   (sk_live_…, the same key as production)
+staging after : BACHS_SANDBOX_KEY=""   # staging must never carry sk_live_*
+                BACHS_MOCK=1           # every checkout goes to the mock provider
+                APP_ENV=staging        # so the guard has something to check
+any sk_live_ in the file: 0 (the one match left is the comment that says not to)
+deploy: smoke 7/7, 0 errors, release bf1e1c6
+```
+
+**Both sides proven, against a BUILT tree** (the source tree has no `.next` after a deploy):
+
+```
+APP_ENV=staging BACHS_KEY=sk_live_…  -> Failed to prepare server: [LiveKeyInNonProductionError] REFUSING TO START:
+                                        APP_ENV=staging is using a LIVE Bachs key… · serves nothing (000)
+BACHS_MOCK=1 (the deployed staging)  -> /api/v1/live 200
+```
+
+Two bugs in my own guard, found by running it rather than reading it: `deploy.sh` runs under `set -u` and my first version
+referenced `$APP_ENV` unguarded (line 141: `APP_ENV: unbound variable`), which aborted a deploy; and `BACHS_MOCK=1` had to
+be exempted, because a test environment that keeps the variable for the ticketing integration otherwise cannot start at
+all. **One honest nuance:** the server does not *exit* on the refusal - Next keeps the process alive after the
+instrumentation hook fails - so the accurate statement is that it never serves a request. The deploy guard is what makes
+the process exit, with code 78.
