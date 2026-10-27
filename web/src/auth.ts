@@ -8,7 +8,7 @@ import { primaryRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { sessionVersionMatches } from "@/lib/session-version";
 import { upsertRoleAssignment } from "@/lib/user-roles";
-import { resolveActiveOrganizationId } from "@/lib/tenant-context";
+import { resolveActiveOrganizationId, resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
 
 const credentialsSchema = z.object({
   email: z.string().email().transform((value) => value.toLowerCase()),
@@ -39,7 +39,10 @@ async function getSessionUser(email: string) {
     .$queryRaw<{ roles: string[] | null }[]>`SELECT app_resolve_user_roles(${user.id}) AS roles`
     .then((rows) => rows[0]?.roles ?? [])
     .catch(() => [] as string[]);
-  const roles = (resolvedRoles.length > 0 ? resolvedRoles : user.roles.map((assignment) => assignment.role)) as UserRole[];
+  // No RLS-blind fallback: if the function returns nothing the user genuinely holds no grants, and the legacy column is
+  // the only other source of truth. Reading the relation here would look like a fallback while silently seeing only the
+  // default organization's grants, which is exactly how the v22 privilege escalation happened.
+  const roles = (resolvedRoles.length > 0 ? resolvedRoles : [user.role]) as UserRole[];
   return {
     id: user.id,
     name: user.name,
@@ -84,12 +87,18 @@ async function upsertGoogleUser(user: { email?: string | null; name?: string | n
   // only source of truth (see resolveActiveOrganizationId). A genuinely platform-level grant
   // (organizationId: null) is reserved for accounts explicitly provisioned as cross-org
   // operators, never the default for an ordinary sign-up.
-  const organization = await prisma.organization.findUnique({ where: { slug: "neon-ultra" } });
-  await upsertRoleAssignment(prisma, {
-    userId: createdOrUpdated.id,
-    role: UserRole.FAN,
-    organizationId: organization?.id ?? null,
-  });
+  // The default organization is resolved through the documented helper rather than a string literal buried in the sign-in
+  // path (streak v23 audit), and the grant is written INSIDE its tenant context: UserRoleAssignment is RLS-FORCED, so the
+  // insert only succeeded before because the hardcoded org happened to BE the policy's fallback default. Any other
+  // organization would have been silently refused.
+  const organization = await resolveDefaultPublicOrganization();
+  await withOrganizationContext(organization.id, (tx) =>
+    upsertRoleAssignment(tx, {
+      userId: createdOrUpdated.id,
+      role: UserRole.FAN,
+      organizationId: organization.id,
+    }),
+  );
 
   return getSessionUser(email);
 }

@@ -19,7 +19,7 @@ export default async function DuplicateReviewPage({ searchParams }: { searchPara
   } catch {
     return <OperationsShell user={session.user}><main className="mx-auto max-w-3xl px-6 py-16"><h1 className="text-3xl font-semibold">Access required</h1></main></OperationsShell>;
   }
-  const report = await duplicateIdentityReport();
+  const report = await duplicateIdentityReport(organizationId);
   const [approvedPlayerGroups, cohortAnalysis] = await withOrganizationContext(organizationId, (tx) => Promise.all([
     approvedPlayerDuplicateGroups(tx, organizationId),
     draftCohortAnalysis(tx, organizationId),

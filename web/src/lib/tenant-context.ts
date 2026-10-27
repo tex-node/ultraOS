@@ -18,23 +18,12 @@ export async function resolveActiveOrganizationId(userId: string): Promise<strin
     .catch(() => [] as { organization_id: string | null }[]);
   if (resolved[0]?.organization_id) return resolved[0].organization_id;
 
-  // Fallback for a database that has not had that migration yet: the rows this role can see are at least the default
-  // organization's, which is better than failing to sign in at all.
-  const membership = await prisma.userRoleAssignment.findFirst({
-    where: { userId, organizationId: { not: null }, revokedAt: null },
-    select: { organizationId: true },
-    orderBy: { grantedAt: "asc" },
-  });
-  if (membership?.organizationId) return membership.organizationId;
-
-  const grant = await prisma.gameControlGrant.findFirst({
-    where: { userId, revokedAt: null },
-    select: { organizationId: true },
-    orderBy: { createdAt: "asc" },
-  });
-  return grant?.organizationId ?? null;
+  // NO Prisma fallback, deliberately (streak v23 audit). The v21 version fell back to a bare read when the function
+  // returned nothing, which is the same RLS-blind pattern the function exists to replace: against a non-default
+  // organization it answers "no membership", and the caller cannot tell that apart from a real absence. A database
+  // without the migration now returns null - honest - and the migration is part of every deploy.
+  return null;
 }
-
 export class OrganizationNotFoundError extends Error {
   constructor(slug: string) {
     super(`No active league found for "${slug}".`);

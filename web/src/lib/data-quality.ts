@@ -80,29 +80,33 @@ export type ApprovedPlayerDuplicateGroup = {
   }[];
 };
 
-export async function duplicateIdentityReport() {
-  const [userEmails, athleteEmails, staffEmails, athleteNames, staffNames] = await Promise.all([
-    prisma.$queryRaw<{ email: string; count: bigint }[]>`
+export async function duplicateIdentityReport(organizationId: string) {
+  // Athlete and Staff are RLS-FORCED (streak v23 audit): the first version of this function ran these five queries with a
+  // bare `prisma` call, so with no tenant context the policy resolved to the platform default organization and every
+  // other league's duplicates were invisible - the report said "no duplicates" for exactly the leagues that had them.
+  // The four tenant tables are read inside the caller's context now; User is global and stays outside.
+  const { userEmails, athleteEmails, staffEmails, athleteNames, staffNames } = await withOrganizationContext(organizationId, async (tx) => ({
+    userEmails: await prisma.$queryRaw<{ email: string; count: bigint }[]>`
       SELECT lower("email") AS email, COUNT(*) AS count FROM "User"
       GROUP BY lower("email") HAVING COUNT(*) > 1
     `,
-    prisma.$queryRaw<{ email: string; count: bigint }[]>`
+    athleteEmails: await tx.$queryRaw<{ email: string; count: bigint }[]>`
       SELECT lower("email") AS email, COUNT(*) AS count FROM "Athlete"
       WHERE "email" IS NOT NULL GROUP BY lower("email") HAVING COUNT(*) > 1
     `,
-    prisma.$queryRaw<{ email: string; count: bigint }[]>`
+    staffEmails: await tx.$queryRaw<{ email: string; count: bigint }[]>`
       SELECT lower("email") AS email, COUNT(*) AS count FROM "Staff"
       WHERE "email" IS NOT NULL GROUP BY lower("email") HAVING COUNT(*) > 1
     `,
-    prisma.$queryRaw<{ name: string; count: bigint }[]>`
+    athleteNames: await tx.$queryRaw<{ name: string; count: bigint }[]>`
       SELECT lower("firstName" || ' ' || "lastName") AS name, COUNT(*) AS count FROM "Athlete"
       GROUP BY lower("firstName" || ' ' || "lastName") HAVING COUNT(*) > 1
     `,
-    prisma.$queryRaw<{ name: string; count: bigint }[]>`
+    staffNames: await tx.$queryRaw<{ name: string; count: bigint }[]>`
       SELECT lower("name") AS name, COUNT(*) AS count FROM "Staff"
       GROUP BY lower("name") HAVING COUNT(*) > 1
     `,
-  ]);
+  }));
 
   return {
     userEmails: userEmails.map((row) => ({ email: row.email, count: Number(row.count) })),
