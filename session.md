@@ -13270,3 +13270,28 @@ session exists, so they are platform-branded by nature. The public portal header
 "Season Zero" in their eyebrows - those are the platform operator's own screens for its own league, and making them
 tenant-aware needs each page to resolve and pass its organization. That is a mechanical sweep, listed as the remaining
 BLOCKED item in `ROADMAP_CLOSE.md` rather than implied to be done.
+
+## 2026-10-27 - Streak v23 / Prompt 4: the handover document, checked line by line
+
+`documentation/HANDOVER.md` is written for someone who arrives cold: what the platform is, current state, environments
+(URLs, app roots, services, env files, database, Node, media, backups), the deploy command, the test commands, where things
+live, the tenant pattern, the operational gaps, and the read-first order.
+
+Every claim in it was then checked against the host rather than assumed:
+
+```
+npm test / test:component / test:db / test:e2e          all four scripts exist
+scripts/e2e-prepare.ts, e2e-tenant-prepare.ts, 7 specs   all present
+deploy/ops/deploy-with-log.sh, verify-tenant-table.sh   present
+/root/deploy.sh, /root/smoke-test.sh                    present
+8 documentation links + a screenshot                    all present
+https://app.neonultra.ng/                               200
+staging :4120 /api/v1/live                              200
+node v22.22.2 · both services active · backup timer active
+```
+
+**One claim failed and is now corrected in the document:** the vision worker. I had written it up as "a separate service",
+which reads as though it is running; it is **not running and has no systemd unit** — nothing listens on 8010 (the 8000
+listener is an unrelated Kong gateway). The venv and the code are in place and the inference was measured, but starting it
+is a manual step today, and the handover now says that and names it as the remaining infrastructure piece rather than
+implying a working background service.
