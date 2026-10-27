@@ -6,6 +6,7 @@ import { MissingOrganizationContextError } from "@/lib/authorization";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { loadPlanUsage, PLAN_LIMITS, type PlanName } from "@/lib/plans";
 import { bachsBillingConfigured } from "@/lib/bachs-billing";
+import { mockBachsEnabled } from "@/lib/bachs-mock";
 import { startCheckoutAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   // Billing is "configured" only when a Bachs key exists. A button that throws on click is worse than a sentence that
   // says why it cannot work yet (streak v18: Bachs, not Stripe).
   const billingConfigured = bachsBillingConfigured();
+  // Test mode is a visible state, not a silent fallback (streak v19, Prompt 1): with no Bachs key the upgrade buttons
+  // go to a mock checkout, and the page says so above the fold rather than letting someone believe a payment ran.
+  const testMode = !billingConfigured && mockBachsEnabled();
 
   return (
     <OperationsShell user={session.user}>
@@ -40,6 +44,16 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           On the <b className="text-text-1">{PLAN_LABEL[usage.plan]}</b> plan
           {usage.bachsCustomerId ? ` · Bachs customer ${usage.bachsCustomerId}` : " · no payment method on file"}.
         </p>
+
+        {testMode ? (
+          <div className="mt-4 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2">
+            <p className="text-xs font-bold uppercase tracking-wider text-warn">Test mode · mock Bachs</p>
+            <p className="mt-1 text-xs text-text-2">
+              No Bachs API key is configured in this environment, so upgrades use a local mock checkout. No money moves.
+              The webhook it fires is real and correctly signed, so a plan change here is a real plan change.
+            </p>
+          </div>
+        ) : null}
 
         {query.error ? (
           <p className="mt-4 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">{query.error}</p>
@@ -85,11 +99,11 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 </ul>
                 {plan === usage.plan ? (
                   <p className="mt-3 text-[10px] font-bold uppercase tracking-wide text-brand-300">Current plan</p>
-                ) : billingConfigured ? (
+                ) : billingConfigured || testMode ? (
                   <form action={startCheckoutAction}>
                     <input type="hidden" name="plan" value={plan} />
                     <button type="submit" className="mt-3 w-full rounded-lg bg-brand-400 px-3 py-1.5 text-xs font-bold text-ink-900">
-                      Upgrade to {PLAN_LABEL[plan]}
+                      {testMode ? `Test upgrade to ${PLAN_LABEL[plan]}` : `Upgrade to ${PLAN_LABEL[plan]}`}
                     </button>
                   </form>
                 ) : (
@@ -104,6 +118,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             {billingConfigured
               ? "Checkout is handled by Bachs, settled in naira; the plan changes when its webhook confirms payment, not when the button is clicked."
               : "This deployment has no Bachs key, so upgrades are shown as a message rather than a button that would fail. Plan limits are enforced where the resource is created, so they apply to the API, the wizard and the webhook console alike."}
+            {testMode ? " A mock checkout is available above: it fires a real signed webhook, so the plan change it causes is genuine." : ""}
           </p>
         </section>
       </main>

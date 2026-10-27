@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requirePermissionWithOrganization } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 import { bachsBillingConfigured, createSubscriptionCheckout } from "@/lib/bachs-billing";
+import { createMockCheckout, mockBachsEnabled } from "@/lib/bachs-mock";
 
 // Start a Bachs Checkout Session for a plan (streak v18, Prompt 1; replaces the v17 Stripe action).
 //
@@ -19,7 +20,12 @@ export async function startCheckoutAction(formData: FormData): Promise<void> {
   if (plan !== "PRO" && plan !== "ENTERPRISE") fail("Pick a paid plan.");
 
   const { session, organizationId } = await requirePermissionWithOrganization("operations:manage");
-  if (!bachsBillingConfigured()) fail("Billing not configured: BACHS_KEY is not set in this environment.");
+  if (!bachsBillingConfigured()) {
+    // No key: use the mock provider (streak v19, Prompt 1) so the flow is testable rather than merely described.
+    if (!mockBachsEnabled()) fail("Billing not configured: BACHS_KEY is not set in this environment.");
+    const token = createMockCheckout({ organizationId, plan });
+    redirect(`/mock-checkout/${encodeURIComponent(token)}`);
+  }
 
   const productId = plan === "PRO" ? process.env.BACHS_PRODUCT_PRO : process.env.BACHS_PRODUCT_ENTERPRISE;
   if (!productId) fail(`Billing not configured: ${plan === "PRO" ? "BACHS_PRODUCT_PRO" : "BACHS_PRODUCT_ENTERPRISE"} is not set.`);
