@@ -24,6 +24,9 @@ export function assessBillingSafety(env: Record<string, string | undefined> = pr
   const scope = deploymentScope();
   const key = env.BACHS_KEY ?? env.BACH_IO ?? "";
   if (scope === "production") return { ok: true };
+  // BACHS_MOCK=1 means every checkout goes to the mock provider, so a live key sitting in the file cannot charge anyone.
+  // Without this exemption a test environment that keeps the variable for the ticketing integration could not start.
+  if (env.BACHS_MOCK === "1") return { ok: true };
   if (key.startsWith("sk_live_")) return { ok: false, reason: new LiveKeyInNonProductionError(scope).message };
   return { ok: true };
 }
