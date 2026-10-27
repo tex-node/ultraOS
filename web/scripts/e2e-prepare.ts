@@ -62,6 +62,12 @@ async function main() {
     if (!row) {
       row = await tx.competition.create({ data: { organizationId: ORG, sportId: sport.id, name: "E2E Open Registration", slug }, select: { id: true } });
     }
+    // A competition needs a DIVISION before a fixture can point at one - createLeague() does this, but this script
+    // creates its competition directly, and the first run failed here with "No record was found for a query".
+    const division = await tx.division.findFirst({ where: { competitionId: row.id }, select: { id: true } });
+    if (!division) {
+      await tx.division.create({ data: { organizationId: ORG, competitionId: row.id, name: "E2E Division", slug: "e2e" } });
+    }
     const openSeason = await tx.season.findFirst({ where: { competitionId: row.id, status: { in: ["ACTIVE", "DRAFT"] } }, select: { id: true } });
     if (!openSeason) {
       await tx.season.create({
