@@ -94,10 +94,21 @@ async function main() {
     for (const old of previous) await tx.fixture.delete({ where: { id: old.id } });
 
     const division = await tx.division.findFirstOrThrow({ where: { competitionId: competition.id }, select: { id: true } });
+    const sport = await tx.sport.findFirstOrThrow({ where: { slug: "football" }, select: { id: true } });
     const season = await tx.season.findFirstOrThrow({ where: { competitionId: competition.id }, select: { id: true } });
     const venue = await tx.venue.findFirstOrThrow({ where: { organizationId: ORG }, select: { id: true } });
-    const sides = await tx.seasonClub.findMany({ where: { seasonId: season.id }, select: { id: true }, take: 2 });
-    if (sides.length < 2) throw new Error("that competition needs two season clubs before a fixture can exist");
+    // Two clubs, created here rather than assumed: the e2e competition exists only for these specs, so it owns its
+    // participants. A fixture without two sides is not a fixture.
+    const sides: { id: string }[] = await tx.seasonClub.findMany({ where: { seasonId: season.id }, select: { id: true }, take: 2 });
+    while (sides.length < 2) {
+      const index = sides.length + 1;
+      const club = await tx.club.create({
+        data: { organizationId: ORG, sportId: sport.id, name: `E2E Home ${index}`, shortName: `E2E${index}${Date.now().toString(36).slice(-2).toUpperCase()}` },
+        select: { id: true },
+      });
+      const seasonClub = await tx.seasonClub.create({ data: { organizationId: ORG, seasonId: season.id, clubId: club.id, divisionId: division.id }, select: { id: true } });
+      sides.push({ id: seasonClub.id });
+    }
 
     const created = await tx.fixture.create({
       data: {
