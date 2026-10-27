@@ -12758,3 +12758,26 @@ GET /api-docs                                -> 200
 - The end-to-end proof drives services, not forms: a broken form→action wiring would not be caught by it. A headless
   browser pass over the wizard, the registration form and the capture console is the next investment.
 - Staging still holds the live Bachs key - the banner now shouts about it, but a sandbox key has to be issued at Bachs.
+
+## 2026-10-27 - Streak v21 / Prompt 1: Node 22, proven on a copy before anyone restarts a service
+
+`documentation/runbooks/NODE_22_UPGRADE.md` is written from measurement, not from a blog post. Node 22.22.2 was installed
+**side by side** at `/opt/node22` (checksum verified) precisely so the running services were never at risk, and the
+suites plus a full build and serve were run against a COPY of the staging tree.
+
+| Step | Node 20 (the host today) | Node 22.22.2 (measured) |
+| --- | --- | --- |
+| `npm ci` | succeeds with `EBADENGINE` | **731 packages in 20 s**, no engine warnings |
+| `npm test` | 1022 · 1021 pass · 1 skip | **identical** |
+| `npm run test:component` | **cannot run at all** | **26 tests · 26 pass** |
+| `next build` | works (needs the 6 GB heap from v21) | **212 s · 4.97 GB peak RSS** |
+| `next start` | — | `/api/v1/live` 200 · `/` 200 · `/api-docs` 200 · 0 error lines |
+
+The number that decides the plan is the build's **4.97 GB peak**, not the tests: the deploy script allows 6 GB on an
+11 GB host that builds two environments, so the runbook's warning is "do not build staging and production
+concurrently", not "upgrade the tests".
+
+**Honesty about what this is:** the host still runs Node 20. `/opt/node22` is installed and unused, the switch is a
+maintenance-window decision because it restarts both services, and the runbook says so in a section titled "What is
+still not done" rather than implying the upgrade happened. The component suite therefore still exits 2 on the host - by
+design, and now with a documented path to fix it.
