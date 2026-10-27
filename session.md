@@ -13295,3 +13295,92 @@ which reads as though it is running; it is **not running and has no systemd unit
 listener is an unrelated Kong gateway). The venv and the code are in place and the inference was measured, but starting it
 is a manual step today, and the handover now says that and names it as the remaining infrastructure piece rather than
 implying a working background service.
+
+## 2026-10-27 - Streak v23 / Prompt 5: the production deploy failed, and the reason was the environment I gave it
+
+The prompt asked for the full suite and both deploys. The suite was green:
+
+```
+npm test              1033 collected · 1032 pass · 0 fail · 1 pre-existing skip   (+5 from the RLS audit)
+npm run test:component  26 / 26
+npm run test:db         52 / 52 (390 s, scratch clone)                            (+3 from the RLS audit)
+npm run test:e2e         7 / 7 against the deployed staging build
+```
+
+**The production deploy failed, exit 1** - and the wrapper from Prompt 1 is the reason it was visible at all:
+
+```
+[deploy] next build
+⨯ Failed to load next.config.ts
+Error: Cannot find module '@serwist/turbopack'
+exit status: 1 · transcript: deploy-production-20261027T183441Z.log
+```
+
+The cause was **my own pipeline**, and it is the same class of mistake Prompt 1 was about:
+
+1. The script that ran the e2e specs sourced **staging's** `web.env` (`set -a; . …/web.env; set +a`) in the same shell.
+2. Staging's `web.env` contains **`NODE_ENV="production"`**.
+3. Ten lines later the same shell invoked the **production** deploy, which inherited that variable.
+4. `npm ci` therefore ran with `NODE_ENV=production`, **omitted devDependencies** (344 packages instead of 731), and
+   `next build` died on `@serwist/turbopack`, which `next.config.ts` imports and which is a devDependency.
+
+The evidence for that reading is the package counts: staging's deploy installed **731**, the failed production deploy
+**344**, both from the same commit. `deploy.sh` printed the BOM error on line 1 too (`\ufeff#!` from a Python rewrite in
+v22, harmless to execution but wrong), which is now stripped.
+
+**Two fixes, in the two places the problem lives:**
+
+- `deploy.sh` now runs `unset NODE_ENV` before anything else, and the BOM is gone.
+- `deploy/ops/deploy-with-log.sh` runs the deploy **hermetically**: `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/root
+  TERM=dumb`. A deploy must not depend on what happened to be exported in the terminal that started it.
+
+**Proven rather than assumed**, by deliberately poisoning the caller with the exact variable that broke it:
+
+```
+caller NODE_ENV=production (the wrapper must ignore it)
+[deploy] done: 39f24bf · exit status: 0 · 378 lines
+added 731 packages in 18s          <- full tree, despite the caller
+SMOKE OK
+production -> release-39f24bf-20261027T183706Z · /api/v1/live 200
+```
+
+Both transcripts are in `deploy-logs/`: the failure (`deploy-production-FAILED-…`, 3 KB, 53 lines) and the success
+(`deploy-production-hermetic-…`, 13 KB, 378 lines). A deploy that reports failure only when someone keeps its output is
+exactly what v22 lost; this streak keeps it.
+
+## 2026-10-27 - PROJECT STATUS: LAUNCH READY
+
+**State:** `39f24bf` on production, the same commit on staging, `main` merged, Node 22.22.2 on both services.
+
+```
+npm test 1033 (1032 pass, 1 pre-existing skip) · test:component 26 · test:db 52 · test:e2e 7
+canonical-write ratchet 4/4
+staging:   SMOKE OK, 0 errors · production: SMOKE OK, 0 errors
+```
+
+**What v23 leaves behind**
+
+- The "silent deploy" is explained and cannot recur: the wrapper keeps every transcript, propagates the deploy's own exit
+  status, and runs in a clean environment. Three transcripts are committed, including one under `bash -x`.
+- The RLS bootstrap pattern is audited, two more bare reads are fixed, two vestigial fallbacks are gone, and a ratchet in
+  `npm test` plus a database proof in `test:db` keeps it that way.
+- A tenant's sidebar, tab title and footer name **their own league** (verified on a second organisation: zero occurrences
+  of "Neon Ultra").
+- `documentation/HANDOVER.md` lets someone pick this up in thirty minutes, with every command and link checked.
+
+**Five items need a human. Nothing else does.**
+
+1. **Issue a Bachs sandbox key** and put it on staging (`BACHS_SANDBOX_KEY`, drop `BACHS_MOCK=1`). The real subscription
+   checkout has never run against Bachs; the mock and the webhook signature are proven.
+2. **Set `BACHS_PRODUCT_PRO` and `BACHS_PRODUCT_ENTERPRISE`** in production (product ids from the Bachs dashboard). Without
+   them a real upgrade fails before reaching the provider.
+3. **Start the vision worker under systemd.** Nothing listens on 8010; the venv (`/opt/ultraos-vision/venv`), the code and
+   the weights are in place. Video analysis only runs when someone starts it by hand.
+4. **Finish the branding sweep** on the platform operator's own screens: `portal-shell.tsx` still prints "NEON ULTRA" and
+   `gameday` / `live` / `broadcast` / `launch-readiness` say "Season Zero". Cosmetic, mechanical: each page must resolve and
+   pass its organization.
+5. **Decide the platform's public brand.** The login and password-reset pages say "Neon Ultra" because they render before a
+   session exists; whether that stays is a product decision, not a bug.
+
+**Read next:** `documentation/HANDOVER.md`, then `documentation/ROADMAP_CLOSE.md` (every phase DONE or BLOCKED with its
+evidence), then the last three entries above.
