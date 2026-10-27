@@ -80,10 +80,28 @@ async function main() {
     await prisma.mediaAssetUsage.deleteMany({ where: { organizationId: organization.id } });
     await prisma.mediaAssetVariant.deleteMany({ where: { organizationId: organization.id } });
     await prisma.mediaAsset.deleteMany({ where: { organizationId: organization.id } });
-    await prisma.organization.delete({ where: { id: organization.id } }).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      console.log(`    (could not delete organization: ${message.replace(/\s+/g, " ").slice(0, 220)})`);
-    });
+    // The dependency order above was written by hand and missed Venue, then would have missed the next table. Rather than
+    // keep guessing, let the DATABASE say what is still referenced: a failed delete names the constraint
+    // (`<Table>_organizationId_fkey`), we delete that table's rows for this organization and try again. Ten rounds is far
+    // more than this schema needs, and anything that does not look like an organization foreign key is rethrown, so a
+    // real problem cannot hide behind the loop.
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      try {
+        await prisma.organization.delete({ where: { id: organization.id } });
+        console.log(`    removed ${organization.slug} (${attempt} dependency round(s) needed)`);
+        break;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const match = /`([A-Za-z_][A-Za-z0-9_]*)_organizationId_fkey`/.exec(message);
+        if (!match) {
+          console.log(`    (could not delete organization: ${message.replace(/\s+/g, " ").slice(0, 200)})`);
+          break;
+        }
+        const table = match[1];
+        const deleted = await prisma.$executeRawUnsafe(`DELETE FROM "${table}" WHERE "organizationId" = $1`, organization.id).catch(() => 0);
+        console.log(`    cleared ${deleted} row(s) from ${table}`);
+      }
+    }
   }
 
   console.log("");
