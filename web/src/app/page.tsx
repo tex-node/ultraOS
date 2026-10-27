@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PortalShell } from "@/app/components/portal-shell";
+import { auth } from "@/auth";
 import { filterHubTournaments } from "@/lib/discovery-hub";
 import { TOURNAMENT_STATUS_STYLE, seasonDisplayStatus, tournamentStatusFromSeasons } from "@/lib/tournament-subsite";
 import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
@@ -18,6 +19,11 @@ function sideName(seasonClub: { club: { name: string } } | null, entrant: { name
 // filters, quick actions. Every link resolves to a real page — no dead ends.
 export default async function DiscoveryHub({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const query = await searchParams;
+  // Launch polish (streak v19, Prompt 4): the homepage now answers two questions in the same place - "find your game"
+  // for a fan, and "host one" for an organizer. A signed-in user with no organization is sent straight at the wizard
+  // rather than at a signup form they have already completed.
+  const session = await auth();
+  const signedInWithoutOrganization = Boolean(session?.user && !session.user.organizationId);
   const sport = query.sport ?? "all";
   const city = query.city ?? "all";
   const q = (query.q ?? "").trim();
@@ -200,6 +206,32 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
   return (
     <PortalShell>
       <main className="mx-auto max-w-6xl px-6 pb-16">
+        <section className="mt-6 rounded-xl border border-brand-400/30 bg-gradient-to-br from-brand-400/[.10] to-transparent p-6 sm:p-8">
+          <p className="text-xs uppercase tracking-[.3em] text-brand-300">For organizers</p>
+          <h2 className="mt-2 font-display text-2xl font-bold sm:text-3xl">Host a tournament</h2>
+          <p className="mt-2 max-w-2xl text-sm text-text-2">
+            Run a league on UltraLeagueOS: fixtures, live scoring, standings, athlete passports and a partner data feed.
+            Set up a competition in five steps - no scripts, no spreadsheet imports.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {signedInWithoutOrganization ? (
+              <Link href="/admin/setup-wizard" className="rounded-lg bg-brand-400 px-4 py-2 text-sm font-bold text-ink-900 transition hover:bg-brand-300">
+                Set up your league
+              </Link>
+            ) : (
+              <Link href="/signup?role=organizer" className="rounded-lg bg-brand-400 px-4 py-2 text-sm font-bold text-ink-900 transition hover:bg-brand-300">
+                Host a tournament
+              </Link>
+            )}
+            <Link href="/api-docs" className="rounded-lg border border-line px-4 py-2 text-sm text-text-2 transition hover:border-brand-400/40 hover:text-white">
+              See the API
+            </Link>
+          </div>
+          {signedInWithoutOrganization ? (
+            <p className="mt-2 text-xs text-text-3">You are signed in without a league yet - the wizard creates one, with its fixtures, in a single step.</p>
+          ) : null}
+        </section>
+
         <section id="live" className="pt-10">
           <p className="text-xs uppercase tracking-[.3em] text-brand-400">{liveAcross.length > 0 ? "Live now" : "Coming up"}</p>
           <h1 className="mt-2 font-display text-4xl font-bold sm:text-5xl">Find your game</h1>

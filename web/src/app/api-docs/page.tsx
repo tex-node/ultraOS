@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { auth } from "@/auth";
 import { FEED_HEADERS } from "@/lib/data-feed/signature";
 
 export const dynamic = "force-static";
@@ -40,7 +41,12 @@ function Section({ id, title, children }: { id: string; title: string; children:
   );
 }
 
-export default function ApiDocsPage() {
+export default async function ApiDocsPage() {
+  // Launch polish (streak v19, Prompt 4): the docs end in a next step rather than a dead end. A signed-in operator goes
+  // to their key console; a visitor goes to signup. The CTA is decided on the server, so it cannot be wrong for a user
+  // whose session exists but whose render happened before hydration.
+  const session = await auth();
+  const keyHref = session?.user ? "/settings/api-keys" : "/signup";
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
       <p className="text-xs uppercase tracking-[.2em] text-info">Developer portal</p>
@@ -69,6 +75,15 @@ export default function ApiDocsPage() {
         <Code>{`GET https://<league-host>/api/v1/games/<fixtureId>/live-feed
 accept: application/json`}</Code>
       </Section>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-brand-400/30 bg-brand-400/[.06] px-4 py-3">
+        <p className="text-sm text-text-2">
+          Ready to build? A key is issued per partner organization, and takes a minute.
+        </p>
+        <Link href={keyHref} className="rounded-lg bg-brand-400 px-3 py-1.5 text-xs font-bold text-ink-900 transition hover:bg-brand-300">
+          {session?.user ? "Get an API key" : "Create an account to get a key"}
+        </Link>
+      </div>
 
       <Section id="auth" title="Authentication and the public/private boundary">
         <p>
