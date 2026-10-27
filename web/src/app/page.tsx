@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PortalShell } from "@/app/components/portal-shell";
 import { auth } from "@/auth";
+import { isCoachingAssistantEnabled } from "@/lib/coaching/feature-flag";
 import { filterHubTournaments } from "@/lib/discovery-hub";
 import { TOURNAMENT_STATUS_STYLE, seasonDisplayStatus, tournamentStatusFromSeasons } from "@/lib/tournament-subsite";
 import { resolveDefaultPublicOrganization, withOrganizationContext } from "@/lib/tenant-context";
@@ -24,6 +25,9 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
   // rather than at a signup form they have already completed.
   const session = await auth();
   const signedInWithoutOrganization = Boolean(session?.user && !session.user.organizationId);
+  // The coaching stack is behind a feature flag (a missing flag means OFF), and its routes 404 while it is off. Linking
+  // to a 404 from the homepage is worse than not showing the card: the card appears only where the stack actually runs.
+  const coachingEnabled = isCoachingAssistantEnabled();
   const sport = query.sport ?? "all";
   const city = query.city ?? "all";
   const q = (query.q ?? "").trim();
@@ -269,12 +273,23 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
             <p className="mt-1 text-sm text-text-2">Official live data feeds, win probability, and webhook integrations.</p>
             <span className="mt-3 inline-block text-xs text-brand-300 underline">Read the API docs →</span>
           </Link>
-          <Link href="/coaching" className="group rounded-lg border border-line bg-ink-800 p-5 transition hover:border-brand-400/40">
-            <p className="text-xs uppercase tracking-[.25em] text-brand-300">For coaches</p>
-            <h2 className="mt-2 font-display text-xl font-bold text-text-1 group-hover:text-white">Coaching intelligence</h2>
-            <p className="mt-1 text-sm text-text-2">AI-powered coaching plans, selection advisors, and athlete passports.</p>
-            <span className="mt-3 inline-block text-xs text-brand-300 underline">Open the coaching stack →</span>
-          </Link>
+          {coachingEnabled ? (
+            <Link href="/coaching" className="group rounded-lg border border-line bg-ink-800 p-5 transition hover:border-brand-400/40">
+              <p className="text-xs uppercase tracking-[.25em] text-brand-300">For coaches</p>
+              <h2 className="mt-2 font-display text-xl font-bold text-text-1 group-hover:text-white">Coaching intelligence</h2>
+              <p className="mt-1 text-sm text-text-2">AI-powered coaching plans, selection advisors, and athlete passports.</p>
+              <span className="mt-3 inline-block text-xs text-brand-300 underline">Open the coaching stack →</span>
+            </Link>
+          ) : (
+            <div className="rounded-lg border border-line bg-ink-800 p-5">
+              <p className="text-xs uppercase tracking-[.25em] text-brand-300">For coaches</p>
+              <h2 className="mt-2 font-display text-xl font-bold text-text-1">Coaching intelligence</h2>
+              <p className="mt-1 text-sm text-text-2">AI-powered coaching plans, selection advisors, and athlete passports.</p>
+              <p className="mt-3 text-[11px] text-text-3">
+                Not enabled on this deployment (COACHING_ASSISTANT_ENABLED is off), so there is no page to open here yet.
+              </p>
+            </div>
+          )}
         </section>
 
         <section id="live" className="pt-10">
