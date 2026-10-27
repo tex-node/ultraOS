@@ -12696,3 +12696,65 @@ about rows in an outbox - which is why the first version, pointing at an unreach
 What is NOT covered, stated rather than implied: the three browser forms are server actions, so the proof calls the
 services they call. A defect in the *wiring* between a form and its action (a renamed field, a missing hidden input)
 would not be caught here; a headless browser pass over those three forms is the next investment.
+
+### Correction to the Prompt 3 note above
+
+I wrote that `/coaching` 404'd on staging *because* `COACHING_ASSISTANT_ENABLED` was off there. **That was wrong.**
+Staging has the flag **on** (`COACHING_ASSISTANT_ENABLED=true` in `shared/web.env`, and in the service process). The 404
+came from `requireCoachingViewer()`: it calls `notFound()` when there is no session, so the page was a dead end for
+**signed-out visitors** - which is exactly who clicks a public homepage link. The homepage correctly took the
+"coaching enabled" branch and linked there, and the visitor got a 404.
+
+So the coaching card did not need gating on the flag (the flag is on in both environments); the *guard* needed to send an
+anonymous visitor somewhere useful. It now redirects to `/login?callbackUrl=/coaching`, while the flag being off still
+404s - a dark stack should not advertise itself. Verified after deploy: production `/coaching -> 307
+http://127.0.0.1:4110/login?callbackUrl=%2Fcoaching`, staging the same.
+
+The flag-gated card is kept anyway: it is correct for a deployment that does turn the stack off, and it costs nothing.
+
+## 2026-10-27 - Streak v20 / Prompt 5: final sync - suites on the host, both environments, main merged
+
+**Suites, run ON THE HOST (Node v20.20.2)** - the point of Prompt 1:
+```
+npm test (unit)      1022 collected · 1021 pass · 0 fail · 1 pre-existing skip   (21 s)
+npm run test:component  refuses with an actionable message (Node 20 cannot run jsdom/undici; next requires ^22.22.2)
+npm run test:db       49 tests · 49 pass (398 s, scratch clone)
+canonical-write ratchet  4 suppressions (ceiling 4)
+```
+On the workstation (Node 24) the component suite runs: **26/26 pass**.
+
+**Deploys**
+| environment | release | migrations | smoke |
+| --- | --- | --- | --- |
+| staging | `9411d2f` | up to date | 7/7 PASS, 0 errors |
+| production | `release-9411d2f` | up to date, behind a verified backup `…pre_v20_20261027T133736Z.dump` (sha256 `c4bc614d…`) | 7/7 PASS, 0 errors |
+
+**Production verified after the deploy**
+```
+GET /                                        -> 200
+  "Supported sports" present                 -> 1
+  "For sportsbooks" present                  -> 1
+  href="/coaching" present                   -> 1
+GET /coaching (signed out)                   -> 307 -> /login?callbackUrl=%2Fcoaching
+GET /api-docs                                -> 200
+```
+
+**What this streak actually changed**
+- The test suites finally run where they are deployed, with the Node-version glob/path difference handled explicitly and
+  the component suite refusing honestly rather than passing silently.
+- A live Bachs key outside production is now impossible to miss, with a detection that does not rely on `NODE_ENV`.
+- The homepage names all eight sports and both partner audiences, and its one link into the coaching stack works for a
+  visitor who is not signed in.
+- `documentation/FINAL_LAUNCH_PROOF.md` records a whole league end to end, including eight signed webhook deliveries
+  received by a real HTTP endpoint.
+
+**Known gaps carried forward**
+- **The host runs Node 20 while the framework declares `^22.22.2`.** The component suite and anything else that needs
+  jsdom/undici cannot run there, and `next` prints `EBADENGINE` on every install. Upgrading the host is the fix and is an
+  infrastructure change, not a code one.
+- **A second organization could never be created** before this streak (globally unique public-id prefixes). Fixed and
+  proven, but every existing database has only the prefixes its organizations happened to get; new ones are derived from
+  the slug.
+- The end-to-end proof drives services, not forms: a broken form→action wiring would not be caught by it. A headless
+  browser pass over the wizard, the registration form and the capture console is the next investment.
+- Staging still holds the live Bachs key - the banner now shouts about it, but a sandbox key has to be issued at Bachs.
