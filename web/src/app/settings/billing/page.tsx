@@ -7,6 +7,7 @@ import { withOrganizationContext } from "@/lib/tenant-context";
 import { loadPlanUsage, PLAN_LIMITS, type PlanName } from "@/lib/plans";
 import { bachsBillingConfigured } from "@/lib/bachs-billing";
 import { mockBachsEnabled } from "@/lib/bachs-mock";
+import { billingSafetyWarning, deploymentScope } from "@/lib/deployment-safety";
 import { startCheckoutAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +35,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   // Test mode is a visible state, not a silent fallback (streak v19, Prompt 1): with no Bachs key the upgrade buttons
   // go to a mock checkout, and the page says so above the fold rather than letting someone believe a payment ran.
   const testMode = !billingConfigured && mockBachsEnabled();
+  // A live key on a non-production deployment (streak v20, Prompt 2): red, above everything, because it is the one
+  // banner on this page whose absence caused a real risk.
+  const safetyWarning = billingSafetyWarning();
+  const scope = deploymentScope();
 
   return (
     <OperationsShell user={session.user}>
@@ -44,6 +49,16 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           On the <b className="text-text-1">{PLAN_LABEL[usage.plan]}</b> plan
           {usage.bachsCustomerId ? ` · Bachs customer ${usage.bachsCustomerId}` : " · no payment method on file"}.
         </p>
+
+        {safetyWarning ? (
+          <div className="mt-4 rounded-lg border-2 border-danger bg-danger/15 px-4 py-3" role="alert">
+            <p className="text-xs font-bold uppercase tracking-wider text-danger">{safetyWarning.message}</p>
+            <p className="mt-1 text-[11px] text-text-2">
+              Environment: {scope}. This page is reachable to operators of this deployment, who could start a checkout
+              believing it is a test.
+            </p>
+          </div>
+        ) : null}
 
         {testMode ? (
           <div className="mt-4 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2">

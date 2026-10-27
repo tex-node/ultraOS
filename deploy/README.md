@@ -31,7 +31,7 @@ placeholder values and comments.
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | sign-in |
 | `R2_*` | media storage (or `MEDIA_STORAGE_PROVIDER=LOCAL_PERSISTENT_STORAGE` + `MEDIA_LOCAL_ROOT`) |
 | `SMTP_*` / `EMAIL_FROM` | transactional email |
-| `BACH_API_BASE` / `BACH_IO` / `BACH_WEBHOOK` | payments |
+| `BACH_API_BASE` / `BACH_IO` / `BACH_WEBHOOK` | payments. **Staging must use a SANDBOX key** (`sk_sandbox_…` or the sandbox dashboard's key), never the production `sk_live_…` one - see the warning below. |
 
 **Feature flags — a missing flag means OFF, which is how the coaching stack shipped dark for a day**
 
@@ -151,3 +151,21 @@ Database rollback is a restore from a verified backup (see the migration runbook
 - The VPS has ~6 GB of usable RAM; builds use `--max-old-space-size=4096` to avoid the TypeScript
   step OOM-ing.
 - The script never prints env values.
+
+### Payments: staging must never hold a live Bachs key
+
+Both environments read `BACHS_KEY`, falling back to the legacy name `BACH_IO`. Until 2026-10-27 **staging held the same
+`sk_live_…` key as production**, which means a checkout created on staging was a real Bachs checkout and a curious click
+could have charged a real customer. What prevented it was only that `BACHS_PRODUCT_PRO` / `BACHS_PRODUCT_ENTERPRISE`
+were unset, so the action failed before reaching the network - a configuration accident, not a control.
+
+Rules:
+
+1. **Staging**: set `BACHS_KEY` (or `BACH_IO`) to a sandbox key, and set `BACHS_MOCK=1` when no sandbox key exists yet.
+   `/settings/billing` shows a red warning while a live key is detected outside production.
+2. **Production**: the live key belongs here, together with `BACHS_PRODUCT_PRO`, `BACHS_PRODUCT_ENTERPRISE` and
+   `BACHS_WEBHOOK_SECRET`.
+3. A key is rotated by updating `shared/web.env` and restarting the service - never by editing code.
+
+The check is `NODE_ENV`-independent on purpose: `next start` sets `NODE_ENV=production` on staging too, so the detection
+uses `APP_ENV`, then a loopback `AUTH_URL`/`NEXTAUTH_URL`, then `NODE_ENV` as the last resort.
