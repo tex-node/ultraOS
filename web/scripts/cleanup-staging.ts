@@ -72,6 +72,9 @@ async function main() {
     // actually blocked the first run (every organization has audit history from its own creation). The error message
     // prints in full instead of its first line, because Prisma puts the table name on the second line and a blank
     // first line told us nothing.
+    // PublicIdCounter is the row that actually blocks the delete (found by running the DELETE and reading the error):
+    // one counter per organization per entity, created the first time the org allocates a public id.
+    await prisma.publicIdCounter.deleteMany({ where: { organizationId: organization.id } });
     await prisma.userRoleAssignment.deleteMany({ where: { organizationId: organization.id } });
     await prisma.auditLog.deleteMany({ where: { organizationId: organization.id } });
     await prisma.mediaAssetUsage.deleteMany({ where: { organizationId: organization.id } });
