@@ -12914,3 +12914,28 @@ browser specs (staging) 4 passed: registration ×2, live scoring, setup wizard
 - A customer onboarding guide whose every link was requested against the deployed build (and one dead link removed).
 - Staging cleaned to its two real leagues, backups verified running, and a handoff entry that says what is proven and
   what is not.
+
+## 2026-10-27 - Streak v22 / Prompt 1: Node 22 is live on the host
+
+The runbook was executed, with one change: instead of editing systemd units or reinstalling the distro package,
+`/usr/local/bin/{node,npm,npx,corepack}` now symlink to `/opt/node22/bin/*`. systemd's default PATH puts `/usr/local/bin`
+ahead of `/usr/bin`, so both services pick it up without touching a unit file, and **nothing was replaced** -
+`/usr/bin/node` is still Node 20, which makes the rollback four `rm`s and a restart.
+
+```
+before : v20.20.2 · /usr/bin/node · npm 10.8.2
+after  : v22.22.2 · /usr/local/bin/node -> /opt/node22/bin/node · npm 10.9.7
+services: ultraos-web + ultraos-staging-web both exe=/opt/node22/bin/node, /api/v1/live 200 on both
+```
+
+```
+                        staging tree        production tree
+npm ci                  731 pkg / 22 s      731 pkg / 23 s   (no EBADENGINE)
+npm test                1022 · 1021 pass    1022 · 1021 pass
+npm run test:component  26 / 26 pass        26 / 26 pass      <- the suite Node 20 could not run at all
+deploy                  smoke 7/7, 0 errors smoke 7/7, 0 errors
+```
+
+The component suite passing on the host is the item that has been carried in "known gaps" since v20. It is closed.
+`NODE_22_UPGRADE.md` now records the exact procedure used and the rollback line, and its "what is still not done" section
+is replaced by "what was actually done".

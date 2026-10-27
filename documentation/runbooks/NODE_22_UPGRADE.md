@@ -122,11 +122,23 @@ in place forever — it is 120 MB and touches nothing.
 | The deploy script | `deploy.sh` calls `npx next build` and `npm ci` through `PATH`. | Nothing to change for option B; option A needs `PATH` in the unit *and* in the shell that runs `deploy.sh`. |
 | **Node 20-only dependencies** | None found: package.json declares no `engines` floor of its own, and every direct dependency installed and ran under 22. | The suites are the check: 1022 unit + 26 component + 49 DB. |
 
-## What is still not done
+## What was actually done (streak v22, option C - symlinks)
 
-The host **still runs Node 20**. This runbook proves the upgrade works; flipping the switch is a maintenance-window
-decision because it restarts both services. Until then:
+The switch used neither systemd `Environment=PATH` nor a reinstall: `/usr/local/bin/{node,npm,npx,corepack}` are symlinks
+to `/opt/node22/bin/*`, and systemd's default `PATH` puts `/usr/local/bin` ahead of `/usr/bin`. Nothing was replaced -
+`/usr/bin/node` is still the distro Node 20 - so the rollback is `rm /usr/local/bin/{node,npm,npx,corepack}` and a
+restart.
 
-- `npm run test:component` exits 2 on the host with its explanation (by design, streak v20),
-- every `npm ci` prints `EBADENGINE`,
-- `/opt/node22` sits unused.
+Verified after the switch, on the host:
+
+| Check | Result |
+| --- | --- |
+| `node --version` (interactive + services) | v22.22.2 · both service PIDs resolve to `/opt/node22/bin/node` |
+| `npm ci` in staging and production trees | 731 packages in 22 s / 23 s, no `EBADENGINE` |
+| `npm test` | 1022 collected · 1021 pass · 1 pre-existing skip · 0 fail (both trees) |
+| `npm run test:component` | **26/26 pass (both trees)** - the suite that could not run on Node 20 |
+| deploy both environments | builds under Node 22, migrations up to date, smoke 7/7, 0 errors |
+| `/api/v1/live` | 200 on staging and production after the restart |
+
+**Rollback if anything misbehaves:** `rm /usr/local/bin/{node,npm,npx,corepack} && systemctl restart ultraos-web.service
+ultraos-staging-web.service`. The Node 20 install is untouched, so this is a 5-second revert to a known state.
