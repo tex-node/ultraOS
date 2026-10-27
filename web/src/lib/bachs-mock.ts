@@ -21,6 +21,12 @@ export type MockCheckout = {
 };
 
 export function mockBachsEnabled(): boolean {
+  // Two ways in, and no others:
+  //   * no key at all - the original case, where the real flow cannot run;
+  //   * BACHS_MOCK=1 - a deliberate opt-in, because BOTH environments actually hold a LIVE key (under the legacy
+  //     BACH_IO name) and a test environment therefore cannot be inferred from "the key is missing".
+  // A live key is NEVER silently overridden: without BACHS_MOCK=1, the real checkout is used even if it will fail.
+  if (process.env.BACHS_MOCK === "1") return true;
   return !bachsConfig()?.apiKey;
 }
 
