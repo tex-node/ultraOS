@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 
@@ -21,11 +22,15 @@ export default async function RegistrationSubmittedPage({
 
   let summary: { name: string; competitionName: string; status: string } | null = null;
   if (query.application) {
-    const application = await prisma.application.findUnique({
-      where: { id: query.application },
-      select: { submittedData: true, status: true, organization: { select: { slug: true } } },
-    });
-    if (application && application.organization.slug === organizationSlug) {
+    // Application is RLS-protected too, so it is read inside the tenant the URL names. An unknown slug resolves to no
+    // organization and therefore to no application - the reference alone must not reveal another tenant's record.
+    const organization = await prisma.organization.findFirst({ where: { slug: organizationSlug }, select: { id: true } });
+    const application = organization
+      ? await withOrganizationContext(organization.id, (tx) =>
+          tx.application.findFirst({ where: { id: query.application }, select: { submittedData: true, status: true } }),
+        )
+      : null;
+    if (application) {
       const data = (application.submittedData ?? {}) as Record<string, unknown>;
       summary = {
         name: `${String(data.firstName ?? "")} ${String(data.lastName ?? "")}`.trim(),

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import { RegistrationForm } from "../registration-form";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,11 @@ export default async function PlayerRegistrationPage({
   });
   if (!organization) notFound();
 
-  const competition = await prisma.competition.findFirst({
+  // Competition is a TENANT table with RLS forced. A bare prisma query here runs with app.current_org_id unset, which
+  // the policy resolves to the platform default organization - so an LBCL competition is invisible and this page 404s
+  // for every real league. The tenant context is not optional for a public page; it is what proves which tenant is
+  // being read.
+  const competition = await withOrganizationContext(organization.id, (tx) => tx.competition.findFirst({
     where: { organizationId: organization.id, slug: competitionSlug, isActive: true },
     select: {
       id: true,
@@ -39,7 +44,7 @@ export default async function PlayerRegistrationPage({
         select: { id: true, name: true, startDate: true, status: true },
       },
     },
-  });
+  }));
   if (!competition) notFound();
 
   const season = competition.seasons[0] ?? null;
