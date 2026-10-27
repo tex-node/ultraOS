@@ -68,8 +68,19 @@ async function main() {
       await tx.competition.deleteMany({ where: { organizationId: organization.id } });
       await tx.club.deleteMany({ where: { organizationId: organization.id } });
     });
+    // Rows that reference the organization with ON DELETE RESTRICT have to go first, and AuditLog is the one that
+    // actually blocked the first run (every organization has audit history from its own creation). The error message
+    // prints in full instead of its first line, because Prisma puts the table name on the second line and a blank
+    // first line told us nothing.
     await prisma.userRoleAssignment.deleteMany({ where: { organizationId: organization.id } });
-    await prisma.organization.delete({ where: { id: organization.id } }).catch((error) => console.log(`    (could not delete organization: ${(error as Error).message.split("\n")[0]})`));
+    await prisma.auditLog.deleteMany({ where: { organizationId: organization.id } });
+    await prisma.mediaAssetUsage.deleteMany({ where: { organizationId: organization.id } });
+    await prisma.mediaAssetVariant.deleteMany({ where: { organizationId: organization.id } });
+    await prisma.mediaAsset.deleteMany({ where: { organizationId: organization.id } });
+    await prisma.organization.delete({ where: { id: organization.id } }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`    (could not delete organization: ${message.replace(/\s+/g, " ").slice(0, 220)})`);
+    });
   }
 
   console.log("");
@@ -116,7 +127,10 @@ async function main() {
     for (const user of doomedUsers) {
       await prisma.userRoleAssignment.deleteMany({ where: { userId: user.id } });
       await prisma.auditLog.deleteMany({ where: { userId: user.id } }).catch(() => null);
-      await prisma.user.delete({ where: { id: user.id } }).catch((error) => console.log(`  (kept ${user.email}: ${(error as Error).message.split("\n")[0]})`));
+      await prisma.user.delete({ where: { id: user.id } }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.log(`  (kept ${user.email}: ${message.replace(/\s+/g, " ").slice(0, 200)})`);
+      });
     }
   }
 
