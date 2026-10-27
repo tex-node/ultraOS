@@ -8,6 +8,18 @@ import { prisma } from "@/lib/prisma";
 // scripts/phase1-stage5-backfill-role-organization.ts - so null here should not occur for an
 // active account; it is not silently mapped to a default).
 export async function resolveActiveOrganizationId(userId: string): Promise<string | null> {
+  // This runs at SIGN-IN, before any tenant context exists - it is how the context gets chosen. UserRoleAssignment and
+  // GameControlGrant both have RLS ENABLED and FORCED, so a normal query here sees only the platform default organization
+  // and returns null for a member of any other league. That is exactly what the browser specs found: an LBCL admin signed
+  // in and every page answered "No league yet". app_resolve_user_organization() is the one deliberate, one-column RLS
+  // bypass (migration 20261028160000) and answers only "which organization does this user belong to".
+  const resolved = await prisma
+    .$queryRaw<{ organization_id: string | null }[]>`SELECT app_resolve_user_organization(${userId}) AS organization_id`
+    .catch(() => [] as { organization_id: string | null }[]);
+  if (resolved[0]?.organization_id) return resolved[0].organization_id;
+
+  // Fallback for a database that has not had that migration yet: the rows this role can see are at least the default
+  // organization's, which is better than failing to sign in at all.
   const membership = await prisma.userRoleAssignment.findFirst({
     where: { userId, organizationId: { not: null }, revokedAt: null },
     select: { organizationId: true },
@@ -15,10 +27,6 @@ export async function resolveActiveOrganizationId(userId: string): Promise<strin
   });
   if (membership?.organizationId) return membership.organizationId;
 
-  // A game-control grant also puts the user inside an organization: an admin can hand someone one
-  // tournament's games without them holding any role grant, and they still need an organization
-  // context to sign in and reach the console. Without this, the Access dashboard's grants were
-  // unusable for anyone who was not already a member.
   const grant = await prisma.gameControlGrant.findFirst({
     where: { userId, revokedAt: null },
     select: { organizationId: true },
