@@ -7,6 +7,7 @@ import { applyScoringDelivery } from "../src/server/scoring/applyScoringDelivery
 import { recalculateStandings } from "@/lib/standings-recalculate";
 import { ensureAthletePublicId } from "@/lib/public-ids";
 import { createFeedSubscription } from "@/server/data-feed/subscriptions";
+import { allocateOrganizationPrefixes } from "@/lib/organization-prefixes";
 import { drainFeedDeliveries } from "@/lib/data-feed/dispatcher";
 
 // THE FINAL END-TO-END PROOF (streak v20, Prompt 4).
@@ -62,8 +63,11 @@ async function main() {
   if (!JSON_OUT) console.log(`\n=== FINAL END-TO-END PROOF · ${organizationName} ===\n`);
 
   // 1. A brand-new organization.
+  // Creating an organization by hand hits the same prefix constraint the wizard does, which is the point: the proof
+  // goes through the same allocation a new tenant does, not around it.
+  const prefixes = await prisma.$transaction((tx) => allocateOrganizationPrefixes(tx, organizationSlug));
   const organization = await prisma.organization.create({
-    data: { name: organizationName, slug: organizationSlug, plan: "ENTERPRISE" },
+    data: { name: organizationName, slug: organizationSlug, plan: "ENTERPRISE", ...prefixes },
     select: { id: true, name: true, slug: true },
   });
   record("organization created", true, `${organization.name} (${organization.slug})`);

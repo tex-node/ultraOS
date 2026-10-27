@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { assertWithinPlan } from "@/lib/plans";
+import { allocateOrganizationPrefixes } from "@/lib/organization-prefixes";
 import { getSportDefinition } from "@/lib/sports/registry";
 import { isIndividualSport } from "@/lib/sports/fixture-sides";
 
@@ -89,7 +90,16 @@ export async function createLeague(
   let organizationId = input.organizationId ?? null;
   if (!organizationId) {
     const existing = await tx.organization.findFirst({ where: { slug: input.organizationSlug }, select: { id: true } });
-    organizationId = existing?.id ?? (await tx.organization.create({ data: { name: input.organizationName, slug: input.organizationSlug }, select: { id: true } })).id;
+    organizationId = existing?.id ?? (await tx.organization.create({
+      data: {
+        name: input.organizationName,
+        slug: input.organizationSlug,
+        // Without these, the SECOND organization on a database fails on the global @unique default ("UBA"): the
+        // public-id prefix is per-tenant but its uniqueness is platform-wide, so it has to be allocated, not defaulted.
+        ...(await allocateOrganizationPrefixes(tx, input.organizationSlug)),
+      },
+      select: { id: true },
+    })).id;
   }
   const slug = `${input.competitionName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now().toString(36)}`;
 
