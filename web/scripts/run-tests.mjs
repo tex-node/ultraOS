@@ -15,6 +15,8 @@ import { spawn } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 
+const NODE_MAJOR = Number(process.versions.node.split(".")[0]);
+
 const SUITES = {
   unit: { roots: ["src/lib"], ext: ".test.ts", flags: [] },
   component: { roots: ["src/app"], ext: ".test.tsx", flags: ["--test-force-exit"] },
@@ -26,6 +28,18 @@ const suite = SUITES[suiteName];
 if (!suite) {
   console.error(`Unknown suite "${suiteName}". Use --suite=unit or --suite=component.`);
   process.exit(1);
+}
+
+// The component suite renders React into jsdom, and jsdom pulls in undici, which on Node 20 throws while constructing
+// CacheStorage. That is not a bug in these tests: this repository's own framework requires Node ^22.22.2, and the host
+// runs v20. Rather than surface a stack trace that looks like a broken test - or, worse, skip the suite so a deploy
+// believes it passed - the runner says what is wrong and what to do.
+if (suiteName === "component" && NODE_MAJOR < 22) {
+  console.error(
+    `test:component needs Node >= 22 (this is v${process.versions.node}). jsdom/undici cannot initialise on Node 20, ` +
+      "and next itself declares node ^22.22.2. Run this suite on a Node 22 machine, or upgrade the host.",
+  );
+  process.exit(2);
 }
 
 /** @param {string} directory @returns {string[]} */
@@ -49,11 +63,13 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-// The runner treats a positional argument as a GLOB. A Next.js dynamic-segment directory contains square brackets
-// ("src/app/games/[fixtureId]/..."), which the matcher reads as a character class and silently matches nothing - the
-// live-score-capture suite contributed ZERO tests that way while the run still reported success. "[[]" is the standard
-// way to write a literal "[" in a glob, and it is what makes those three tests run again.
-const globEscape = (file) => file.replace(/\[/g, "[[]");
+// The runner changed contracts between Node majors: Node 20 takes positional arguments as literal PATHS, Node 22+
+// takes them as GLOBS. A Next dynamic-segment directory ("src/app/games/[fixtureId]/...") is therefore either a path
+// that exists or a character class that matches nothing, depending on the version - the live-score-capture suite
+// contributed ZERO tests on Node 22 with the raw path, and "Could not find" on Node 20 with the escaped one. So the
+// escaping is decided by the runtime, not by taste.
+const escapeForGlob = NODE_MAJOR >= 22;
+const globEscape = (file) => (escapeForGlob ? file.split("[").join("[[]") : file);
 
 // No --conditions=react-server here, deliberately: the database suites need it (they import server modules under the
 // server condition), but these suites exercise client-adjacent code and React components, and adding it made six unit
