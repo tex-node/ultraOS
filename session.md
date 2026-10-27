@@ -12833,3 +12833,61 @@ Every route in it was requested against the deployed build and recorded: public 
 `/login` (a real route behind auth), and the CSV export `401` without a session. **One link failed and was removed:**
 `/stats` is a `404` - the analytics screens are `/admin/data-quality` and `/games/<fixtureId>/stats`. The guide names that
 mistake explicitly rather than quietly omitting it.
+
+## 2026-10-27 - Streak v21 / Prompt 4: a clean staging, and backups that are actually running
+
+**`scripts/cleanup-staging.ts` did not exist** - the v18 brief referred to it as if it did. It does now, and writing it
+was instructive: the first three runs failed on foreign keys.
+
+1. `AuditLog` (every organization has audit history from its own creation) - and the first error message printed **blank**,
+   because Prisma puts the blocking table on the second line and I was printing the first.
+2. `PublicIdCounter` - found by running the `DELETE` by hand and reading the constraint name
+   (`PublicIdCounter_organizationId_fkey`): every organization that ever allocated a public id has a counter row.
+3. `Venue` - and at this point hand-writing the deletion order was clearly the wrong approach, so the script now **lets the
+   database name the dependency**: a failed delete reports `<Table>_organizationId_fkey`, the script clears that table's
+   rows for the organization and retries (up to ten rounds), and rethrows anything that is not an organization foreign key.
+
+```
+before: 5 organizations (neon-ultra, lagos-basketball-community-league, 3 × proof-league-*)
+        LBCL also carried 10 test competitions (4 × tennis-verify-*, 5 × e2e-wizard-*, 1 × e2e-open-registration)
+apply : cleared 1 row from Venue, removed each proof league; removed all 10 test competitions; 1 test user removed
+after : 2 organizations · 11 competitions (10 Neon Ultra + 1 LBCL) · 61 fixtures · 393 users
+```
+
+**Backups, verified rather than assumed:** `ultraos-backup.timer` is **active**, last run 2026-10-27 02:03 CET produced
+`/var/backups/ultraleagueos/ultraos-20261027-010338.dump`, next run 2026-10-28 02:01. `ultraos-staging-backup.timer` runs
+too. Separately, every deploy in this project takes a pre-deploy dump into `/var/backups/ultraleagueos-production/`, so
+today's four are on disk (1.1 MB each).
+
+## 2026-10-27 - PROJECT HANDOFF
+
+**What was built.** A multi-sport league platform: organisations and competitions across nine sports, fixture generation,
+live scoring with sport-aware rules, standings, athlete passports, coaching intelligence behind a flag, AI vision with
+highlight clips, a partner data feed with signed webhooks and HMAC-verified deliveries, ticketing with Bachs payments,
+SaaS plans with enforced limits, and admin tooling for all of it.
+
+**Verified, not claimed.** At handoff: **1022 unit tests** (1021 pass, 1 pre-existing skip) and **49 database tests** run on
+the host; **26 component tests** pass on Node 22 (the host is Node 20 and the runner says so); **4 browser tests** pass
+against the deployed staging build (registration ×2, live scoring, setup wizard); the canonical-write ratchet is **4/4**;
+and `documentation/FINAL_LAUNCH_PROOF.md` records a complete league — organization, ten registered players, a round robin,
+a finalised match, eight signed webhook deliveries, standings and an export.
+
+**The bugs that mattered most**, each found by verification rather than by reading:
+
+- `Organization.idPrefixAthlete` defaults to a globally unique `"UBA"`, so onboarding could create exactly **one**
+  organization per database. Fixed by allocating prefixes from the slug.
+- **No user of a non-default organization could sign in usefully**: the session's organization was resolved before any
+  tenant context existed, and RLS hid every other organization's memberships. Fixed with a SECURITY DEFINER function that
+  answers that one question.
+- The registration **action** read the competition outside the tenant context, so every real league's form said "not open
+  for registration" while the page looked fine.
+- The public registration form **did not work before hydration** — a fast tap on a slow phone produced an error instead of
+  a registration.
+- `MEDIA_STORAGE_PROVIDER` was never set in any environment, so production had been writing every asset to local disk with
+  a complete, unused set of R2 credentials.
+
+**Known gaps at handoff.** The host runs Node 20 while the framework declares `^22.22.2` — `documentation/runbooks/NODE_22_UPGRADE.md`
+proves the upgrade works (component suite 26/26, build 212 s at 4.97 GB peak) but the switch is a maintenance-window
+decision. Staging still holds a **live** Bachs key (a red banner now says so; a sandbox key must be issued at Bachs). The
+end-to-end proof drives services rather than forms — the browser specs now cover the three critical forms, but the proof
+itself still has that gap by design.
