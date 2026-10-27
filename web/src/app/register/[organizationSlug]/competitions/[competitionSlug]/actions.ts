@@ -81,10 +81,15 @@ export async function registerPlayerAction(formData: FormData): Promise<void> {
 
   // The competition must exist, belong to the organization in the URL, and be open. Checked here rather than trusted
   // from the form: the ids come from a public page and a public page can be edited.
-  const context = await prisma.competition.findFirst({
-    where: { id: input.competitionId, slug: competitionSlug, isActive: true, organization: { slug: organizationSlug } },
-    select: { id: true, name: true, organizationId: true, seasons: { where: { id: input.seasonId }, select: { id: true, name: true } } },
-  });
+  // INSIDE the tenant context: Competition is RLS-forced, so an unscoped read here sees only the platform default
+  // organization and a league's own competition looks like it does not exist - which is exactly the "not open for
+  // registration" a browser test hit while the page and the row were both perfectly fine.
+  const context = await withOrganizationContext(input.organizationId, (tx) =>
+    tx.competition.findFirst({
+      where: { id: input.competitionId, slug: competitionSlug, isActive: true, organization: { slug: organizationSlug } },
+      select: { id: true, name: true, organizationId: true, seasons: { where: { id: input.seasonId }, select: { id: true, name: true } } },
+    }),
+  );
   if (!context || context.organizationId !== input.organizationId || context.seasons.length === 0) {
     backWithError(organizationSlug, competitionSlug, "That competition is not open for registration.");
   }
