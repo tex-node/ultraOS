@@ -66,23 +66,26 @@ def video_path_for(game_video_id: str) -> str:
     The database stores where a video lives; the analyzer must not guess. A file:// URL or an absolute
     path is used directly, anything else is treated as a local object key.
     """
+    # SECURITY DEFINER (migration 20261028180000): this runs before the worker knows the owning organization, and
+    # both tables are RLS-forced, so a bare join saw only the platform default organization.
     with connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT m."publicUrl", m."objectKey"
-                FROM "GameVideo" v
-                JOIN "MediaAsset" m ON m."id" = v."mediaAssetId"
-                WHERE v."id" = %s
-                """,
-                (game_video_id,),
-            )
+            cur.execute("SELECT organization_id, public_url, object_key FROM app_vision_video_source(%s)", (game_video_id,))
             row = cur.fetchone()
     if not row:
         raise ValueError(f"no GameVideo/MediaAsset for {game_video_id}")
-    public_url, object_key = row
+    _organization_id, public_url, object_key = row
     candidate = public_url or object_key
-    return candidate[len("file://") :] if candidate.startswith("file://") else candidate
+    if candidate.startswith("file://"):
+        return candidate[len("file://") :]
+    if candidate.startswith("/"):
+        # An absolute path was stored (the legacy demo rows are file:///tmp/...), so use it as given.
+        return candidate
+    # A relative object key is resolved against the mounted media root (streak v24). Without this the worker looked for
+    # "originals/<org>/video/<sha>.mp4" relative to /app and every real ingest failed with "cannot open video".
+    from app.core.config import get_settings
+
+    return os.path.join(get_settings().vision_media_root, candidate)
 
 
 class YOLOAnalyzer(Analyzer):
@@ -181,7 +184,9 @@ class YOLOAnalyzer(Analyzer):
             if detection.track_id is not None:
                 by_track.setdefault(detection.track_id, []).append(detection)
 
-        with connection() as conn:
+        # Scoped to the owning organization: VisionTrack/VisionObservation are RLS-forced, so an unscoped insert
+        # is refused (or lands in the default organization) exactly like the reads were.
+        with connection(organization_id) as conn:
             with conn.cursor() as cur:
                 track_ids: dict[int, str] = {}
                 for track_id, items in by_track.items():
@@ -233,9 +238,11 @@ class YOLOAnalyzer(Analyzer):
 
     @staticmethod
     def _organization_for(game_video_id: str) -> str:
+        # SECURITY DEFINER (migration 20261028180000): GameVideo is RLS-forced and this runs before the worker knows
+        # which organization the video belongs to - the question it is trying to answer.
         with connection() as conn:
             with conn.cursor() as cur:
-                cur.execute('SELECT "organizationId" FROM "GameVideo" WHERE id = %s', (game_video_id,))
+                cur.execute("SELECT organization_id FROM app_vision_video_source(%s)", (game_video_id,))
                 row = cur.fetchone()
         if not row:
             raise ValueError(f"no GameVideo {game_video_id}")

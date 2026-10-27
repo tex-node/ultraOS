@@ -54,7 +54,7 @@ export default async function SeasonZeroCoachSelectionPage() {
         <Link className="text-sm text-text-2" href="/coaches/assignments">Back to coach operations</Link>
         <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[.2em] text-brand-400">Season Zero</p>
+            <p className="text-xs uppercase tracking-[.2em] text-brand-400">League operations</p>
             <h1 className="mt-2 text-3xl font-semibold">Coach selection review</h1>
             <p className="mt-2 text-sm text-text-2">Approved coach applications are the source. Mark only coaches explicitly selected by league operations. Selecting a coach requires an explicit MEN or WOMEN draft division — it is never inferred.</p>
             <Link className="mt-3 inline-block text-sm text-brand-400" href="/coaches/photos/import">Bulk coach photo import →</Link>

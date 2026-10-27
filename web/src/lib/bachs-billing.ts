@@ -46,6 +46,10 @@ export function bachsSdk(): Bachs {
   const config = bachsConfig();
   if (!config) throw new Error("Bachs is not configured: set BACHS_KEY (or BACH_IO).");
   if (!cachedClient) {
+    // NO baseURL passthrough by default: the SDK derives the host from the key prefix (sk_sandbox_ -> sandbox-api.bachs.io,
+    // sk_live_ -> api.bachs.io) and refuses a mismatch. Passing a base URL "for convenience" is how a sandbox key got sent
+    // to the production host and answered 401 Invalid API key (streak v24, Prompt 1). Only an EXPLICIT BACHS_API_BASE
+    // (a proxy, a test server) overrides it; the legacy BACH_API_BASE does not, because it defaults to the production host.
     cachedClient = new Bachs({ apiKey: config.apiKey, ...(process.env.BACHS_API_BASE ? { baseURL: process.env.BACHS_API_BASE } : {}) });
   }
   return cachedClient;

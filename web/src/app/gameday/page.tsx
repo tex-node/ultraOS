@@ -170,7 +170,7 @@ export default async function GameDayControlCenter() {
       <main className="mx-auto max-w-6xl px-6 py-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[.2em] text-brand-400">Season Zero · Game Day</p>
+            <p className="text-xs uppercase tracking-[.2em] text-brand-400">Game Day</p>
             <h1 className="mt-1 text-3xl font-bold">Game Day Control Center</h1>
             <p className="mt-1 text-sm text-text-3">NIS Outdoor Court, Surulere · 15 Aug 2026</p>
           </div>

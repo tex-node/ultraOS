@@ -30,7 +30,8 @@ export async function PortalShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto max-w-7xl px-6 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Link href="/" className="font-display font-bold tracking-tight">
-              NEON ULTRA
+              {/* Platform name, not a league's: this shell serves every tenant's public pages (streak v24 sweep). */}
+              UltraLeagueOS
             </Link>
             <Link
               href="/admin"

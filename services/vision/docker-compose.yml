@@ -12,6 +12,10 @@ services:
     image: ${VISION_IMAGE:-ultraos-vision:dev}
     env_file:
       - .env
+    # The app's media directory, read-only (streak v24): a MediaAsset objectKey is stored relative to it, and without the
+    # mount the analyzer looked for the file inside the image and failed with "cannot open video".
+    volumes:
+      - ${VISION_MEDIA_DIR:?set VISION_MEDIA_DIR in .env}:/media:ro
     ports:
       - "${VISION_API_PORT:-8000}:8000"
     depends_on:
@@ -34,6 +38,8 @@ services:
     command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=1
     env_file:
       - .env
+    volumes:
+      - ${VISION_MEDIA_DIR:?set VISION_MEDIA_DIR in .env}:/media:ro
     depends_on:
       - vision-redis
     restart: unless-stopped

@@ -29,7 +29,7 @@ export default async function LaunchReadinessPage() {
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[.22em] text-brand-400">Season Zero Launch</p>
+            <p className="text-xs uppercase tracking-[.22em] text-brand-400">Launch readiness</p>
             <h1 className="mt-2 text-3xl font-semibold">Launch Readiness</h1>
             <p className="mt-2 text-sm text-text-2">Generated {new Date(report.generatedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}. Sensitive applicant details are excluded.</p>
           </div>

@@ -26,13 +26,13 @@ export default async function LoginPage({
     <main className="grid min-h-screen place-items-center bg-ink-900 px-6 py-12 text-text-1">
       <section className="w-full max-w-md rounded-lg border border-line bg-ink-800 p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-brand-400">
-          Neon Ultra
+          UltraLeagueOS
         </p>
         <h1 className="mt-4 font-display text-3xl font-bold tracking-tight">
           Tournament management system
         </h1>
         <p className="mt-3 text-sm leading-6 text-text-2">
-          Sign in with an authorized Season Zero operations account.
+          Sign in to your league workspace.
         </p>
         <div className="mt-8">
           <GoogleAuthButton callbackUrl={callbackUrl} label="Sign in with Google" />

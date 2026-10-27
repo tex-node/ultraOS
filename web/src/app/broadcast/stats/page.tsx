@@ -114,7 +114,7 @@ export default async function BroadcastStats() {
           <CommentatorCommandCenter key={fixture.id} fixture={{ ...fixture, homeSeasonClub: fixture.homeSeasonClub!, awaySeasonClub: fixture.awaySeasonClub! }} model={liveModels[i]} />
         ))}
 
-        <Section title="Season Zero Snapshot">
+        <Section title="League Snapshot">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {pulse.map((c) => (
               <div key={c.key} className="rounded-md border border-line bg-ink-800 p-3">

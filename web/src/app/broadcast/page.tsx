@@ -64,7 +64,7 @@ export default async function BroadcastHub() {
       <main className="mx-auto max-w-6xl px-6 py-10">
         <h1 className="text-2xl font-bold">Broadcast &amp; Media</h1>
         <p className="mt-1 text-sm text-text-3">
-          Everything for turning Season Zero stats into shareable game stories, broadcast graphics, and commentator material — all in one place.
+          Everything for turning league stats into shareable game stories, broadcast graphics, and commentator material — all in one place.
         </p>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-3">

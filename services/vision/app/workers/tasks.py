@@ -46,14 +46,14 @@ def analyze_video(self, game_video_id: str, organization_id: str, requested_by_i
     model_version = getattr(analyzer, "version", STUB_MODEL_VERSION) or STUB_MODEL_VERSION
     model_id = ensure_model(organization_id, model_key, model_version)
     run_id = create_run(game_video_id, organization_id, requested_by_id, model_id)
-    mark_processing(run_id)
+    mark_processing(organization_id, run_id)
     try:
         result = analyzer.analyze(game_video_id, run_id)
     except Exception as exc:  # noqa: BLE001 - any analyzer failure must land on the run row
         logger.exception("analyze failed", extra={"run_id": run_id})
-        mark_failed(run_id, str(exc))
+        mark_failed(organization_id, run_id, str(exc))
         raise
-    mark_completed(run_id, result.observation_count)
+    mark_completed(organization_id, run_id, result.observation_count)
     logger.info("analyze completed", extra={"run_id": run_id, "note": result.note})
     return run_id
 
@@ -64,18 +64,28 @@ def _fallback_requester(organization_id: str) -> str:
     passed through from the Next.js app."""
     from app.core.db import connection
 
+    # BUG FIXED (streak v24): this queried "User"."organizationId", a column that has never existed - User is the global
+    # account table and membership lives in UserRoleAssignment. Every video without an explicit requester therefore killed
+    # the poller with psycopg.errors.UndefinedColumn, which in turn killed the worker task for that video. The fallback now
+    # reads the global User table only (no RLS, no cross-tenant read): the earliest active SUPER_ADMIN is the platform
+    # operator who owns the ingest, which is exactly the audit trail a fallback should leave.
     with connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT id FROM "User"
-                WHERE "organizationId" = %s
+                WHERE "isActive" = true AND role = 'SUPER_ADMIN'
                 ORDER BY "createdAt" ASC
                 LIMIT 1
-                """,
-                (organization_id,),
+                """
             )
             row = cur.fetchone()
+    if not row:
+        # A deployment with no active SUPER_ADMIN cannot attribute a run; say so instead of writing a null FK.
+        with connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT id FROM "User" WHERE "isActive" = true ORDER BY "createdAt" ASC LIMIT 1')
+                row = cur.fetchone()
     if not row:
         raise RuntimeError(f"NO_REQUESTER_FOUND_FOR_ORG:{organization_id}")
     return row[0]

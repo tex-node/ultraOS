@@ -59,7 +59,7 @@ export default async function PublicLive() {
     return (
       <PortalShell>
         <main className="mx-auto max-w-6xl px-6 py-10">
-          <p className="text-xs uppercase tracking-[.2em] text-brand-400">Season Zero · Live</p>
+          <p className="text-xs uppercase tracking-[.2em] text-brand-400">Live</p>
           <h1 className="mt-2 font-display text-3xl font-bold">Match centre</h1>
           <p className="mt-3 text-text-2">No game is live right now.</p>
 
@@ -138,7 +138,7 @@ export default async function PublicLive() {
   return (
     <PortalShell>
       <main className="mx-auto max-w-6xl px-6 py-10">
-        <p className="text-xs uppercase tracking-[.2em] text-brand-400">Season Zero · Live</p>
+        <p className="text-xs uppercase tracking-[.2em] text-brand-400">Live</p>
         <h1 className="mt-2 font-display text-3xl font-bold">Match centre</h1>
         <LiveRefresher />
         <div className="mt-8 grid gap-6 md:grid-cols-2">
