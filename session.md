@@ -12391,3 +12391,54 @@ three pruned assets still serve: 200 image/jpeg 50,188 / 172,043 / 30,559 bytes 
 
 The 34 kept files are **variants** (a different table, `MediaAssetVariant`), which the script deliberately does not
 match: it only deletes what it can prove is redundant, and a variant's cloud copy follows a different key.
+
+## 2026-10-27 - Streak v18 / Prompt 5: final sync - 49/49 DB, both environments, main merged
+
+**Roadmaps**: `MULTI_SPORT_ROADMAP.md` records the Bachs move (with the RLS rejection that came out of it), the tracked
+config table and the prune; `COACH_INTELLIGENCE_ROADMAP.md` records that the media disk is clean (13.77 MB reclaimed,
+verified live before deletion).
+
+**Suites**
+```
+npm test               1022 tests, 1021 pass, 0 fail  (1 pre-existing skip)
+npm run test:component   26 tests, 26 pass
+npm run test:db          49 tests, 49 pass (403 s, scratch clone)
+canonical-write ratchet  4 suppressions (ceiling 4)
+```
+
+**Deploys**
+| environment | release | migrations | smoke |
+| --- | --- | --- | --- |
+| staging | `4821272` | `20261028120000_bachs_customer_id`, `…_system_actor`, `…_system_config` | 7/7 PASS, 0 errors |
+| production | `release-4821272` | same three, behind a verified backup `…pre_v18_20261027T091944Z.dump` (sha256 `ee3ab8b8…`) | 7/7 PASS, 0 errors |
+
+**Production verified after the deploy**
+```
+GET /api/v1/live                          -> 200
+Organization.bachsCustomerId column       -> 1     (stripeCustomerId -> 0, renamed not duplicated)
+SystemConfig rows                         -> 1 · media.storageProvider="LOCAL_PERSISTENT_STORAGE"
+system actor row                          -> 1
+migration system_config                   -> applied
+GET /admin/data-quality (no session)      -> 307
+GET /admin/settings (no session)          -> 307
+POST /api/webhooks/bachs (unsigned)       -> 400
+local media files after the prune         -> 34 (variant files; 17 originals removed, 13.77 MB)
+```
+
+**One state worth being explicit about:** the seeded `SystemConfig` row says `LOCAL_PERSISTENT_STORAGE`, while both
+hosts set `MEDIA_STORAGE_PROVIDER=CLOUDFLARE_OBJECT_STORAGE` in their environment. The environment wins by design, so
+the effective provider is R2 and `/admin/settings` shows "decided by: MEDIA_STORAGE_PROVIDER (environment)". The database
+value is the fallback for a host that does not set the variable; switching it in the UI has no effect until the variable
+is removed, and the page says so rather than pretending otherwise.
+
+**Known gaps carried forward**
+- Bachs checkout is implemented against the SDK's real API but has never been exercised against a live key: no
+  `BACHS_KEY` exists in either environment, so `bachsBillingConfigured()` is false and the billing page shows the
+  "not configured" state. What WAS proven is the webhook (signature verification and both event types) and the plan
+  write path it drives.
+- The ticketing webhook (`/api/bachs/webhook`) and the billing webhook (`/api/webhooks/bachs`) are two URLs for one
+  provider. That is deliberate - they handle disjoint event types - but a Bachs dashboard now needs both registered.
+- `scripts/prune-local-media.ts` does not match `MediaAssetVariant` keys, so 34 variant files (3.3 MB) remain on disk by
+  design. Extending it is a small job with a larger verification surface.
+- The data-quality integrity checks cover player points and period sums only; the batch verifier's assists/rebounds
+  comparisons are informational there and were not ported.
