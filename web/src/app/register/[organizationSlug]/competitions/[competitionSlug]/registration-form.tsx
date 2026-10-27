@@ -1,12 +1,16 @@
-"use client";
+import { SubmitButton } from "@/app/components/submit-button";
+import { registerPlayerAction } from "./actions";
 
-import { useActionState } from "react";
-import { registerPlayerAction, type RegistrationResult } from "./actions";
-
-// The public registration form (streak v19, Prompt 2).
+// The public registration form (streak v21, Prompt 2).
 //
-// Deliberately a plain form with a server action: no client-side router state to lose, and every validation that matters
-// (age, competition openness, duplicate application) runs on the server where it cannot be skipped.
+// A PLAIN server-action form, deliberately: no useActionState, no client state, nothing that has to hydrate before it
+// works. The first version used useActionState and rendered
+//   action="javascript:throw new Error('React form unexpectedly submitted.')"
+// until React hydrated - which a fast tap on a slow phone turns into a visible error, and which the browser spec caught
+// by submitting before the action existed. Errors now arrive as ?error= on the page (see the page component), and the
+// pending state comes from useFormStatus inside SubmitButton, which degrades to a normal submit button.
+//
+// Validation that matters (age, competition openness, duplicates) still runs on the server where it cannot be skipped.
 export function RegistrationForm({
   organizationId,
   competitionId,
@@ -22,16 +26,13 @@ export function RegistrationForm({
   competitionSlug: string;
   competitionName: string;
 }) {
-  const [result, action, pending] = useActionState<RegistrationResult | null, FormData>(
-    (previous, formData) => registerPlayerAction(organizationSlug, competitionSlug, previous, formData),
-    null,
-  );
-
   return (
-    <form action={action} className="rounded-lg border border-line bg-ink-800 p-5">
+    <form action={registerPlayerAction} className="rounded-lg border border-line bg-ink-800 p-5">
       <input type="hidden" name="organizationId" value={organizationId} />
       <input type="hidden" name="competitionId" value={competitionId} />
       <input type="hidden" name="seasonId" value={seasonId} />
+      <input type="hidden" name="organizationSlug" value={organizationSlug} />
+      <input type="hidden" name="competitionSlug" value={competitionSlug} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-xs text-text-3">
@@ -84,13 +85,9 @@ export function RegistrationForm({
         administrator reviews it before you are registered - it is not automatic.
       </p>
 
-      {result && !result.ok ? (
-        <p className="mt-3 rounded border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">{result.error}</p>
-      ) : null}
-
-      <button type="submit" disabled={pending} className="mt-4 w-full rounded-lg bg-brand-400 px-4 py-2.5 text-sm font-bold text-ink-900 disabled:opacity-50">
-        {pending ? "Submitting…" : "Submit registration"}
-      </button>
+      <SubmitButton className="mt-4 w-full rounded-lg bg-brand-400 px-4 py-2.5 text-sm font-bold text-ink-900 disabled:opacity-50">
+        Submit registration
+      </SubmitButton>
     </form>
   );
 }

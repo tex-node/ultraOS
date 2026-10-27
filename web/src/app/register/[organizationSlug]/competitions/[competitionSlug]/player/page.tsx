@@ -13,10 +13,14 @@ export const dynamic = "force-dynamic";
 // names a competition "League".
 export default async function PlayerRegistrationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ organizationSlug: string; competitionSlug: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const { organizationSlug, competitionSlug } = await params;
+  // Errors now arrive as a redirect (streak v21) so the form works before hydration; this is where they surface.
+  const { error } = await searchParams;
 
   const organization = await prisma.organization.findFirst({
     where: { slug: organizationSlug, status: "ACTIVE" },
@@ -60,6 +64,12 @@ export default async function PlayerRegistrationPage({
         {organization.name} · {competition.sport.name}
         {season ? ` · ${season.name}` : ""}
       </p>
+
+      {error ? (
+        <p role="alert" className="mt-4 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
+          {error}
+        </p>
+      ) : null}
 
       {season ? (
         <div className="mt-6">

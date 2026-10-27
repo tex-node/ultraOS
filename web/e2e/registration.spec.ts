@@ -31,10 +31,8 @@ test.describe("public player registration", () => {
     await page.locator('input[name="position"]').fill("Guard");
     await page.locator('select[name="gender"]').selectOption("FEMALE");
 
-    // WAIT FOR HYDRATION before submitting. A click on a server-action form that has not hydrated makes the browser
-    // submit natively, and React renders action="javascript:throw new Error(...)" - which is what the first run of this
-    // spec hit. Next adds a hidden $ACTION_ID_* input once the action is live, so that is the signal to wait for.
-    await expect(page.locator('input[name^="$ACTION_ID_"]')).toHaveCount(1, { timeout: 20_000 });
+    // No hydration wait any more: the form is a plain server-action form on purpose, so it posts even before React
+    // hydrates. Getting here used to require an $ACTION_ID_ hidden input that useActionState never renders.
     await page.getByRole("button", { name: /submit registration/i }).click();
 
     // The receipt is a real page, reachable without a session, and it shows the reference.
@@ -49,10 +47,8 @@ test.describe("public player registration", () => {
   test("a missing required field is refused by the browser, not silently submitted", async ({ page }) => {
     await page.goto(`/register/${ORG_SLUG}/competitions/${COMPETITION_SLUG}/player`);
     await page.locator('input[name="firstName"]').fill("OnlyFirst");
-    // WAIT FOR HYDRATION before submitting. A click on a server-action form that has not hydrated makes the browser
-    // submit natively, and React renders action="javascript:throw new Error(...)" - which is what the first run of this
-    // spec hit. Next adds a hidden $ACTION_ID_* input once the action is live, so that is the signal to wait for.
-    await expect(page.locator('input[name^="$ACTION_ID_"]')).toHaveCount(1, { timeout: 20_000 });
+    // No hydration wait any more: the form is a plain server-action form on purpose, so it posts even before React
+    // hydrates. Getting here used to require an $ACTION_ID_ hidden input that useActionState never renders.
     await page.getByRole("button", { name: /submit registration/i }).click();
     // Still on the form: required fields block submission client-side.
     await expect(page.locator('input[name="email"]')).toBeVisible();

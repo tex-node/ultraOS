@@ -35,8 +35,11 @@ const registrationInput = z.object({
   guardianPhone: z.string().trim().max(40).optional(),
 });
 
-export type RegistrationResult = { ok: true; applicationId: string; emailed: boolean } | { ok: false; error: string };
-
+// A plain server action bound by <form action={...}> rather than useActionState, so the form WORKS BEFORE HYDRATION.
+// A public registration page is exactly where a slow phone first meets the product, and the first version rendered
+// action="javascript:throw new Error('React form unexpectedly submitted.')" until React hydrated - a real user tapping
+// fast got an error, and the browser test that caught it was told to wait for a hidden input that useActionState never
+// renders. Errors now come back as a redirect with ?error=, which needs no client state at all.
 function ageOn(dob: Date, on: Date): number {
   let age = on.getUTCFullYear() - dob.getUTCFullYear();
   const monthDiff = on.getUTCMonth() - dob.getUTCMonth();
@@ -44,12 +47,13 @@ function ageOn(dob: Date, on: Date): number {
   return age;
 }
 
-export async function registerPlayerAction(
-  organizationSlug: string,
-  competitionSlug: string,
-  _previous: RegistrationResult | null,
-  formData: FormData,
-): Promise<RegistrationResult> {
+function backWithError(organizationSlug: string, competitionSlug: string, message: string): never {
+  redirect(`/register/${organizationSlug}/competitions/${competitionSlug}/player?error=${encodeURIComponent(message)}`);
+}
+
+export async function registerPlayerAction(formData: FormData): Promise<void> {
+  const organizationSlug = String(formData.get("organizationSlug") ?? "");
+  const competitionSlug = String(formData.get("competitionSlug") ?? "");
   const raw = Object.fromEntries(formData.entries());
   const parsed = registrationInput.safeParse({
     organizationId: String(raw.organizationId ?? ""),
@@ -66,14 +70,14 @@ export async function registerPlayerAction(
     guardianPhone: raw.guardianPhone ? String(raw.guardianPhone) : undefined,
   });
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ") };
+    backWithError(organizationSlug, competitionSlug, parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "));
   }
   const input = parsed.data;
 
   const dateOfBirth = new Date(`${input.dateOfBirth}T00:00:00.000Z`);
-  if (Number.isNaN(dateOfBirth.getTime())) return { ok: false, error: "That date of birth is not a real date." };
+  if (Number.isNaN(dateOfBirth.getTime())) backWithError(organizationSlug, competitionSlug, "That date of birth is not a real date.");
   const age = ageOn(dateOfBirth, new Date());
-  if (age < 8 || age > 70) return { ok: false, error: `A player must be between 8 and 70 (that date of birth makes them ${age}).` };
+  if (age < 8 || age > 70) backWithError(organizationSlug, competitionSlug, `A player must be between 8 and 70 (that date of birth makes them ${age}).`);
 
   // The competition must exist, belong to the organization in the URL, and be open. Checked here rather than trusted
   // from the form: the ids come from a public page and a public page can be edited.
@@ -82,7 +86,7 @@ export async function registerPlayerAction(
     select: { id: true, name: true, organizationId: true, seasons: { where: { id: input.seasonId }, select: { id: true, name: true } } },
   });
   if (!context || context.organizationId !== input.organizationId || context.seasons.length === 0) {
-    return { ok: false, error: "That competition is not open for registration." };
+    backWithError(organizationSlug, competitionSlug, "That competition is not open for registration.");
   }
   const season = context.seasons[0];
 
@@ -98,7 +102,7 @@ export async function registerPlayerAction(
     }),
   );
   if (duplicate) {
-    return { ok: false, error: "There is already an application for this email in that season. Check your email for its status." };
+    backWithError(organizationSlug, competitionSlug, "There is already an application for this email in that season. Check your email for its status.");
   }
 
   const created = await withOrganizationContext(input.organizationId, async (tx) => {
