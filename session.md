@@ -12939,3 +12939,46 @@ deploy                  smoke 7/7, 0 errors smoke 7/7, 0 errors
 The component suite passing on the host is the item that has been carried in "known gaps" since v20. It is closed.
 `NODE_22_UPGRADE.md` now records the exact procedure used and the rollback line, and its "what is still not done" section
 is replaced by "what was actually done".
+
+## 2026-10-27 - Streak v22 / Prompt 2: the multi-tenant spec found a privilege escalation
+
+`e2e/multi-tenant-auth.spec.ts` provisions two disposable organizations - **through `createLeague()`, the wizard's own
+service** - with an admin in each and a dual-role user, then signs in through the real form.
+
+```
+✓ an Org A admin sees Org A, and only Org A
+✓ an Org B admin sees Org B - not A, and not "No league yet"
+✓ a user with roles in BOTH orgs gets one deterministic context (Org A dashboard 200, Org B 404)
+3 passed (5.0s)
+```
+
+Getting there took three failures, and the third one was the find.
+
+**The first two were the spec's fault** and are recorded because each made the test lie: the tenant dashboard's `h1` is
+inside `main` while the shell has its own heading (an unscoped heading locator is ambiguous), and the fixture granted
+`SUPER_ADMIN` - which the dashboard deliberately allows to read ANY league, so asserting a 404 was asserting something the
+product never promised. The fixture now grants `LEAGUE_OPERATOR`, which is what a real league administrator has.
+
+**The third was a real privilege escalation.** With that realistic role, the cross-tenant assertion still got `200`, and
+the session said `roles: ["SUPER_ADMIN", "FAN"]` for a user whose only grant was `LEAGUE_OPERATOR`:
+
+- `getSessionUser()` reads roles through the RLS-forced `UserRoleAssignment` relation **at sign-in, before any tenant
+  context exists**. The policy resolves to the platform default organization, so every grant a real league operator holds
+  was invisible and `roles` came back **empty**.
+- The code then falls back: `roles: roles.length > 0 ? roles : [user.role, UserRole.FAN]` - the legacy `User.role` column.
+  For any account ever created as `SUPER_ADMIN` that means **a league operator signs in as a platform administrator**, and
+  can open any other league's dashboard by editing the URL.
+- v21 fixed the ORGANIZATION half of this with `app_resolve_user_organization()`. This is the other half, and the same
+  mechanism applies for the same reason: the question cannot be answered by a scoped query because the scope is what is
+  being determined. `app_resolve_user_roles()` (migration `20261028170000`) is SECURITY DEFINER, returns role names only,
+  and is granted to the same three roles in the same file.
+
+```
+before: session roles ["SUPER_ADMIN","FAN"] · /admin/e2e-tenant-b/dashboard -> 200 (Org B's data, from Org A's session)
+after : session roles ["LEAGUE_OPERATOR"]   · own dashboard 200 · the other tenant 404
+```
+
+A second, smaller finding from the same spec: the workspace sidebar printed **"Neon Ultra" and "Season Zero · 2026" for
+every tenant**, so a league's own console was branded with the platform's demo league. `WorkspaceShell` takes an optional
+organization name/context now and the league dashboard passes its own; pages that do not know their organization keep the
+platform default until they are swept, which is listed as a known gap rather than fixed everywhere in one pass.
