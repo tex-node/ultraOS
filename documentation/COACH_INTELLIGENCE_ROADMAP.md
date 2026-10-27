@@ -409,3 +409,9 @@ coaches" link - until the guard learned to redirect to sign-in instead.
 
 `documentation/CUSTOMER_ONBOARDING.md` documents every route a new coach or operator touches, with the response each one
 returns, and `documentation/runbooks/NODE_22_UPGRADE.md` records the Node 22 upgrade that the component suite needs.
+
+## Closed 2026-10-27
+
+I1-I6 are DONE (see `documentation/ROADMAP_CLOSE.md` for the evidence behind each). BLOCKED: a coach-facing walkthrough of
+the selection advisor written against the live UI - the operator path is documented in `CUSTOMER_ONBOARDING.md`, the
+coach path is not.

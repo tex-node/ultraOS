@@ -32,3 +32,13 @@
   and a public form that only worked after hydration.
 - **Staging is representative again**: two organizations, 11 competitions, and a cleanup script that discovers foreign-key
   order from the database rather than from a hand-written list.
+
+
+## Status at close (2026-10-27)
+
+See `documentation/ROADMAP_CLOSE.md` for the phase-by-phase status with the evidence behind each line. In one paragraph:
+the multi-sport engine, the live console, standings, Elo, the partner feed, vision and highlights are DONE and covered by
+tests that run on the deploy host; the onboarding wizard's **new organization** path was broken until v22 and is now
+covered by a browser test that creates a real league; tenant isolation is proven by a browser test that tries to cross
+between two organizations. The one BLOCKED item is cosmetic - the workspace shell still prints the platform's league name
+on pages that do not pass their own - and the one external BLOCKED item is a real Bachs sandbox key.

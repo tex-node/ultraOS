@@ -202,3 +202,9 @@ All questions resolved 2026-09-13. Full decisions and rationale are in `document
 - Changing a decision in the architecture (D1–D3) requires re-acceptance (Gate G0) before dependent phases continue.
 - Phase exit criteria may not be weakened; if a criterion cannot be met, record a `Blocked` status with the reason and an owner.
 - Every change to this file updates `last_updated` and is committed with the work it describes.
+
+## Closed 2026-10-27
+
+Every phase in this roadmap is **DONE** except the workspace-branding sweep, which is **BLOCKED (partial)** with its
+reason recorded in `documentation/ROADMAP_CLOSE.md` - that file is the authoritative status list, and it names the tests
+or reproductions behind each line rather than a percentage.
