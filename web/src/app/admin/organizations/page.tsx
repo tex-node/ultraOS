@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
@@ -55,7 +56,7 @@ export default async function AdminOrganizationsPage() {
                 return (
                   <tr key={organization.id} className="border-t border-line">
                     <td className="px-4 py-2">
-                      <p className="text-text-1">{organization.name}</p>
+                      <Link href={`/admin/organizations/${organization.id}`} className="text-text-1 underline">{organization.name}</Link>
                       <p className="font-mono text-[10px] text-text-3">/{organization.slug}</p>
                     </td>
                     <td className="px-4 py-2">

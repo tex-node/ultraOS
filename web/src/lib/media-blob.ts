@@ -104,6 +104,16 @@ export async function storeObject(provider: MediaStorageProvider, key: string, b
 }
 
 /**
+ * The provider to write with, resolved through system-config so a database setting can stand in for a missing
+ * environment variable (streak v18, Prompt 2). Kept async and awaited by the write path; configuredProvider() is still
+ * exported for code that only needs to REPORT what the environment says.
+ */
+export async function resolveStoreProvider(): Promise<MediaStorageProvider> {
+  const { resolveMediaProvider } = await import("@/lib/system-config");
+  return (await resolveMediaProvider()).provider;
+}
+
+/**
  * Store arbitrary bytes as a media asset and return the provider's public URL (or null).
  *
  * Video has to go through the same storage decision as images - R2 when configured, local disk otherwise - without the
@@ -121,7 +131,7 @@ export async function storeMediaBytes(input: {
   source?: string | null;
   visibility?: MediaVisibility;
 }): Promise<{ id: string; objectKey: string; publicUrl: string | null; storageProvider: MediaStorageProvider }> {
-  const provider = configuredProvider();
+  const provider = await resolveStoreProvider();
   const key = safeObjectKey({ purpose: input.purpose, uploadedById: input.uploadedById, mimeType: input.mimeType });
   const storedPublicUrl = await storeObject(provider, key, input.bytes, input.mimeType);
   const asset = await input.tx.mediaAsset.create({

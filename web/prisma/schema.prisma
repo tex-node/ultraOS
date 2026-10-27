@@ -5174,3 +5174,18 @@ enum OrganizationPlan {
   PRO
   ENTERPRISE
 }
+
+// Streak v18, Prompt 2: platform configuration that used to live only in an untracked env file.
+//
+// Deliberately NOT tenant-scoped: MEDIA_STORAGE_PROVIDER is a property of the deployment, not of an organization, so a
+// row here applies to every tenant and there is no organizationId to isolate. Access is gated in the application
+// (SUPER_ADMIN only) rather than by a policy, and the table holds no tenant data.
+model SystemConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String?
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
