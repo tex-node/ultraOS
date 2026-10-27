@@ -150,7 +150,7 @@ async function main() {
       organizationId: organization.id,
       userId: actorUserId,
       name: "Final proof subscriber",
-      webhookUrl: "http://127.0.0.1:9/proof-unreachable",
+      webhookUrl: arg("webhook-url") ?? "http://127.0.0.1:9/proof-unreachable",
       events: ["SCORE_CHANGED", "WIN_PROBABILITY_UPDATED"],
     }),
   );
