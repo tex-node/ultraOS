@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import type { CoachingViewer } from "@/lib/coaching/access";
 import { isCoachingAssistantEnabled } from "@/lib/coaching/feature-flag";
@@ -24,7 +24,10 @@ const currentViewer = cache(async (): Promise<CoachingViewer | null> => loadCoac
 export async function requireCoachingViewer(): Promise<CoachingViewer> {
   if (!isCoachingAssistantEnabled()) notFound();
   const viewer = await currentViewer();
-  if (!viewer) notFound();
+  // Signed OUT is not the same as missing (streak v20): the homepage now links "For coaches" to /coaching, and a 404 is
+  // what a visitor without a session used to get - a dead end reached from a public page. They are sent to sign in and
+  // returned to the hub. The flag being off stays a 404, because a dark stack should not advertise itself.
+  if (!viewer) redirect(`/login?callbackUrl=${encodeURIComponent("/coaching")}`);
   return viewer;
 }
 
