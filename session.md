@@ -13162,3 +13162,111 @@ b86d712  docs(session): Prompt 2 - the multi-tenant spec and the privilege escal
    filtered by my own grep. Worth one unfiltered run before the next release.
 
 <!-- v23: deploy-reliability investigation -->
+
+## 2026-10-27 - Streak v23 / Prompt 1: the silent deploy was my pipeline, not the script
+
+The investigation started with a hypothesis and ended with a demonstration.
+
+**`deploy.sh` does not swallow errors.** It runs under `set -euo pipefail` (line 22), it exits 2 on an unknown flag and 78
+on the new billing guard, and the only `|| true` in it are on `prisma migrate status` *probes*, where a failure is
+information rather than an abort.
+
+**The v22 artefact reproduced exactly.** The command I had been running was
+
+```bash
+ssh host "bash /root/deploy.sh ... | grep -E 'SMOKE|done:' | tail -2"
+```
+
+and the exit status of that pipeline is **grep's**, not the deploy's:
+
+```
+deploy.sh --not-a-real-flag | grep 'SMOKE OK|done:'   -> exit 1   (grep: nothing matched)
+deploy.sh --not-a-real-flag                          -> exit 2   (the deploy: it failed, as it should)
+```
+
+A deploy that fails before printing a matching line is indistinguishable from one that printed nothing. That is what
+"the retry worked" was: the retry was the first run whose output happened to match.
+
+**Two unfiltered deploys, both committed as evidence:**
+
+| log | lines | result |
+| --- | --- | --- |
+| `deploy-logs/deploy-20261027T175230Z.log` | 395 | SMOKE OK, `done: 3451015` |
+| `deploy-logs/deploy-traced-20261027T175620Z.log` (`bash -x`) | 629 | SMOKE OK, `done: 3451015`, traced to the final `echo` |
+
+**The permanent fix is `deploy/ops/deploy-with-log.sh`**: it runs the deploy with no pipe, writes the whole transcript to
+`deploy-logs/deploy-<env>-<timestamp>.log`, prints the last five lines, and **exits with the deploy's own status**. It was
+exercised as shipped, from a fresh clone of the remote:
+
+```
+deploy → staging · log → …/deploy-staging-20261027T180148Z.log
+SMOKE OK · [deploy] done: 1e90b53
+exit status: 0 · transcript: 368 lines
+```
+
+One more thing this prompt produced, unintentionally: an `ssh` connection was **reset by the host** mid-session
+(`kex_exchange_identification: read: Connection reset`) and worked again 25 seconds later. That is the other half of why
+a filtered pipeline is dangerous - the transport can fail, and a filter turns a transport failure into a blank screen
+too.
+
+## 2026-10-27 - Streak v23 / Prompt 2: auditing the RLS bootstrap pattern
+
+The audit script listed the ~~90~~ 91 tables with **RLS enabled and forced**, every `$queryRaw`/`$executeRaw` call site,
+and the modules that run before a tenant context exists. Of those:
+
+- **Correct by design**: `resolve_api_key()` (SECURITY DEFINER, revoked from PUBLIC, granted to the three roles),
+  `app_resolve_user_roles()`, `app_resolve_user_organization()`, and every `$queryRaw` inside a `withOrganizationContext`
+  callback (`public-ids.ts`, `admin-offline-intake.ts`, `set_config`).
+- **Correct and global**: `prisma.$queryRaw`SELECT 1``, the `_prisma_migrations` probe, and the `User`-only queries
+  (User has no RLS policy).
+- **Two real instances of the pattern, both fixed:**
+  1. **`duplicateIdentityReport()`** read `Athlete` and `Staff` with a bare `prisma` call. Both are RLS-forced, so the
+     duplicate review page answered for the platform default organization only - a league WITH duplicates was told it had
+     none. It now runs inside the caller's context, and `/data-quality/duplicates` passes its organization.
+  2. **`upsertGoogleUser()`** hardcoded `slug: "neon-ultra"` for every new sign-up's FAN grant and inserted it with the
+     platform client. That worked only because the hardcoded organization happened to BE the policy's fallback default;
+     any other organization would have been silently refused. It resolves the default through
+     `resolveDefaultPublicOrganization()` and inserts inside that organization's context.
+
+**Two vestigial fallbacks removed.** v21/v22 left "if the function returns nothing, do a bare read" fallbacks in
+`resolveActiveOrganizationId()` and `getSessionUser()`. Those are the same blind pattern the functions exist to replace -
+they look like a safety net while silently answering for the default organization. Both now return the honest answer
+(null membership / the legacy role column) instead of a scoped guess.
+
+**The audit is a ratchet, in two halves:**
+
+- `src/lib/security/rls-bootstrap-audit.test.ts` (5 tests, part of `npm test`) asserts the SOURCE: roles come from
+  `app_resolve_user_roles`, organization from `app_resolve_user_organization`, API keys from `resolve_api_key`, the
+  sign-in grant is scoped to a resolved organization, and no bootstrap module reads a tenant table outside
+  `withOrganizationContext` (comments stripped, so documentation cannot trip it).
+- `src/server/security/rls-bootstrap.test.ts` (part of `test:db`) proves against the DATABASE that the functions are
+  SECURITY DEFINER and that a bare read is **narrower** than the function - the difference that caused both bugs.
+
+## 2026-10-27 - Streak v23 / Prompt 3: the branding sweep, verified on a second league
+
+The session now carries `organizationName` and `organizationSlug` (a cheap read of `Organization`, which is the tenant
+table itself and has no RLS policy, after the SECURITY DEFINER resolver picks the id). Three places use it:
+
+- **the sidebar** - `WorkspaceShell` defaults to the user's own league instead of "Neon Ultra";
+- **the browser tab** - `generateMetadata()` returns `<league> · UltraOS` (the layout grew a metadata function; the
+  static export it replaced is gone);
+- **the footer** - a new workspace footer that names the league.
+
+Created **Test League B** through the wizard's own service with its own admin, signed in as that admin, and read the
+rendered HTML:
+
+```
+session org: Test League B (test-league-b)
+GET /admin/test-league-b/dashboard -> 200
+sidebar        : Test League B
+"Neon Ultra"   : 0 occurrences
+tab title      : Test League B · UltraOS
+footer         : Test League B · running on UltraLeagueOS
+```
+
+**What the sweep did NOT change, and why.** `login`/`forgot-password` still say "Neon Ultra": those pages run before a
+session exists, so they are platform-branded by nature. The public portal header (`portal-shell.tsx`) still prints
+"NEON ULTRA", and the Ultra-Basketball-specific pages (`gameday`, `live`, `broadcast`, `launch-readiness`) still say
+"Season Zero" in their eyebrows - those are the platform operator's own screens for its own league, and making them
+tenant-aware needs each page to resolve and pass its organization. That is a mechanical sweep, listed as the remaining
+BLOCKED item in `ROADMAP_CLOSE.md` rather than implied to be done.
