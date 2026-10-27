@@ -12781,3 +12781,55 @@ concurrently", not "upgrade the tests".
 maintenance-window decision because it restarts both services, and the runbook says so in a section titled "What is
 still not done" rather than implying the upgrade happened. The component suite therefore still exits 2 on the host - by
 design, and now with a documented path to fix it.
+
+## 2026-10-27 - Streak v21 / Prompt 2: three browser specs, and three product bugs they found
+
+`@playwright/test` was already installed with a config and two specs; this added `e2e/registration.spec.ts`,
+`e2e/scoring.spec.ts`, `e2e/wizard.spec.ts`, `scripts/e2e-prepare.ts` (a test admin with a known password, an open
+competition, a LIVE fixture with a game) and `E2E_BASE_URL` support so the specs run against an **already running
+deployment** instead of building a local server.
+
+**Final result, against staging:**
+
+```
+✓ 1 registration › a stranger can register, and the receipt names their application        (1.2s)
+✓ 2 registration › a missing required field is refused by the browser                     (0.5s)
+✓ 3 scoring › an admin signs in and a scoring tap changes the score                       (2.4s)
+✓ 4 wizard › an admin creates a competition through all five steps                        (1.4s)
+4 passed (6.6s)
+```
+
+Getting there was the valuable part. The specs failed **six times**, and only one of those was a bug in the spec:
+
+1. **No league could sign in.** The session's `organizationId` is resolved AT SIGN-IN, before any tenant context exists -
+   and `UserRoleAssignment`/`GameControlGrant` have RLS **ENABLED and FORCED**. With no context the policy resolves to
+   the platform default organization, so a membership in any OTHER league was invisible: `organizationId: null`, and
+   every org-scoped page answered "No league yet". An LBCL admin could not open the capture console or the wizard at all.
+   Fixed with `app_resolve_user_organization()`, a SECURITY DEFINER function that answers one question and returns one id
+   (migration `20261028160000`). `FORCE ROW LEVEL SECURITY` applies to the table owner, so "query as the owner" was never
+   an option.
+2. **The registration action was RLS-blind.** `registerPlayerAction` looked the competition up with a bare `prisma` call,
+   so for any league but the default it found nothing and told the applicant *"That competition is not open for
+   registration"* while the page and the row were both fine. The v20 proof never caught it because it never called the
+   action. It is inside `withOrganizationContext` now.
+3. **The public form did not work before hydration.** `useActionState` rendered
+   `action="javascript:throw new Error('React form unexpectedly submitted.')"` until React hydrated - so a fast tap on a
+   slow phone was an error rather than a registration. It is a plain `<form action={registerPlayerAction}>` now, with
+   `?error=` for failures and `useFormStatus` for the pending state. A public form should never require JavaScript to
+   submit.
+
+The spec bugs are worth recording too, because each one made the test **lie**: `/sign in|log in/` matched the "Sign in
+with Google" button (so the specs launched OAuth and failed three steps later); `Player registration` is an eyebrow
+paragraph, not a heading; the scoring prep reused "any live fixture with a game" and picked up a leftover whose shape the
+console refuses; and the score assertion summed every number on the page, so the clock (`45:00`) made the baseline 45 and
+a goal could never be detected. Each is now pinned by a comment in the spec that says what it cost.
+
+## 2026-10-27 - Streak v21 / Prompt 3: the onboarding guide, checked link by link
+
+`documentation/CUSTOMER_ONBOARDING.md` covers signup, the wizard, the three ways to add players, scoring (live, import,
+broadcast), AI vision, analytics, the sportsbook API and billing, ending in a first-week checklist.
+
+Every route in it was requested against the deployed build and recorded: public pages `200`, gated pages `307` to
+`/login` (a real route behind auth), and the CSV export `401` without a session. **One link failed and was removed:**
+`/stats` is a `404` - the analytics screens are `/admin/data-quality` and `/games/<fixtureId>/stats`. The guide names that
+mistake explicitly rather than quietly omitting it.
