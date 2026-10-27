@@ -12442,3 +12442,100 @@ is removed, and the page says so rather than pretending otherwise.
   design. Extending it is a small job with a larger verification surface.
 - The data-quality integrity checks cover player points and period sums only; the batch verifier's assists/rebounds
   comparisons are informational there and were not ported.
+
+## 2026-10-27 - Streak v19 / Prompt 1: a mock Bachs provider, and a correction to the v18 record
+
+There is no `BACHS_KEY` - but there **is** a live Bachs key in both environments under the legacy name `BACH_IO`
+(`sk_live_b8e0…`, 60 characters). My v18 report said "no `BACHS_KEY` exists anywhere, so billing has never been exercised
+against a live key". That was **wrong in the way that matters**: `bachsConfig()` reads `BACHS_KEY ?? BACH_IO`, so
+`bachsBillingConfigured()` was already true, the billing page was already showing a real Upgrade button, and the gap was
+not "unconfigured" but "configured and never tried". **Both staging and production share that same LIVE key**, which is a
+risk in its own right: a checkout created on staging would be a real Bachs checkout. What stopped a live call is only
+that `BACHS_PRODUCT_PRO`/`_ENTERPRISE` are unset, so the action fails before it reaches the network.
+
+The mock therefore needed an explicit switch rather than an inference:
+
+- `src/lib/bachs-mock.ts`: a checkout is a **signed token in the URL** (HMAC, 30-minute expiry) - nothing to clean up,
+  and a tampered or swapped token is rejected by construction. A live key is never silently overridden.
+- `mockBachsEnabled()` = no key at all **or** `BACHS_MOCK=1` set deliberately.
+- `/mock-checkout/<token>` renders the plan and organization and says "Test mode · mock Bachs checkout" in as many
+  words; "Simulate payment" POSTs a correctly signed `checkout.completed` to **/api/webhooks/bachs**, the real route, so
+  signature verification, the handler, the tenant context and the audit row are all exercised - not bypassed.
+- `/settings/billing` shows a TEST MODE banner above the fold and labels the buttons "Test upgrade to …".
+
+```
+mock enabled: true · signing secret present: true
+token verifies: true · forged signature accepted: false · swapped payload accepted: false
+POST /api/webhooks/bachs -> 200 {"handled":true,"plan":"PRO"}
+after: plan PRO · customer cust_mock_yyoxmh
+audit row for evt_mock_verify_…: by system00000000000000000
+PASS
+GET /mock-checkout/<valid token> -> 200 · "Test mode" · "Simulate payment" · organization + plan rendered
+mock after cleanup -> 404 (disabled again)
+```
+
+## 2026-10-27 - Streak v19 / Prompt 2: a public player registration, and two failures worth more than the feature
+
+`/register/<organizationSlug>/competitions/<competitionSlug>/player` - open to a stranger, addressed by **both** slugs.
+One submission creates two rows, because registration is not approval: an **Athlete** (the person) and a **PLAYER
+Application** (the claim, `SUBMITTED`, for a human to review). The application carries the competition and season in
+`submittedData`, which is where this schema keeps application specifics.
+
+**Failure 1 - the build succeeded and the server did not start.** `Next` refuses two different slug names at the same
+dynamic path position: my `/register/[organizationSlug]/[competitionSlug]` collided with the existing
+`/register/[organizationSlug]/[eventSlug]`. The build passed, the release went live, and **every route returned 500** -
+the smoke test caught it (7 failures) and the deploy aborted. The form now lives under a static segment,
+`/register/[organizationSlug]/competitions/[competitionSlug]/player`: one extra segment, no ambiguity, and the event
+registration untouched. This is the second time in two streaks that the smoke test has been the thing that noticed.
+
+**Failure 2 - a public page 404'd for every real league.** `Competition` is an RLS-forced tenant table, and the page read
+it with a bare `prisma` call, so `app.current_org_id` was unset and the policy resolved to the platform default
+organization: the row existed, the SQL showed it, and the page said 404. The competition and the application lookup now
+run inside `withOrganizationContext`; only the organization itself (the tenant table) is read without it.
+
+```
+GET /register/lagos-basketball-community-league/competitions/lbcl/player -> 200 (15,869 bytes) · 5 form fields · no shell
+unknown competition -> 404 · unknown organization -> 404
+athlete: Verify Registration… · application SUBMITTED (PLAYER, origin APPLICATION)
+linked to season: true · competition: true · position: Guard
+player applications for that season: 0 -> 1
+visible in the admin applications list: true
+PASS
+```
+
+The confirmation email is best effort **and its outcome is recorded** (`emailStatus` in `submittedData`) and shown on the
+receipt page: staging has no SMTP at all, so "check your inbox" there would be a lie, and the page says so instead. One
+bug caught on the way: my first version wrote `submittedData: {...}` wholesale, which would have replaced everything the
+applicant entered with a single email flag. It reads, merges and writes now.
+
+## 2026-10-27 - Streak v19 / Prompt 3: a league dashboard whose numbers are checked twice
+
+`/admin/<organizationSlug>/dashboard`: active vs total competitions, live fixtures with a link straight into the capture
+console, pending applications by type, the last three highlight clips, and revenue (paid ticket orders and their total,
+plus the subscription plan). Every query runs inside the tenant context, and the slug in the URL is checked against the
+session - one league's admin gets a 404 editing the address to another's, while a SUPER_ADMIN may look at any.
+
+```
+organization: Lagos Basketball Community League · plan ENTERPRISE
+  active competitions : 1/5   (independent 1/5)
+  live fixtures       : 1     (independent 1)
+  pending applications: 0     (independent 0)
+  paid ticket orders  : 0     (independent 0)
+  tenant isolation    : isolated: Neon Ultra Basketball League resolves to its own numbers
+PASS
+```
+
+`scripts/league-dashboard-verify.ts` computes every figure twice and fails when a DIFFERENT organization returns this
+one's numbers, because a dashboard that silently reports the wrong tenant is the failure mode worth testing for.
+
+## 2026-10-27 - Streak v19 / Prompt 4: launch polish
+
+The homepage opens with an organizer hero above the fan hero: **Host a tournament** → `/signup?role=organizer`, or
+straight to `/admin/setup-wizard` when the visitor is already signed in without an organization (pointing a signed-in
+person at a signup form they have completed is how a funnel loses people). `/api-docs` ends in a next step:
+"Get an API key" for a signed-in operator, "Create an account to get a key" for a visitor, decided on the server.
+
+```
+GET / -> 200 · "Host a tournament" 1 · /signup?role=organizer 1 · wizard link hidden for a visitor 0 · "Find your game" 1
+GET /api-docs -> 200 · CTA present · href="/signup" 1
+```
