@@ -232,6 +232,51 @@ export default async function DiscoveryHub({ searchParams }: { searchParams: Pro
           ) : null}
         </section>
 
+        {/* Supported sports (streak v20, Prompt 3). The registry is the source of truth: nine sports exist in the engine,
+            and a homepage that names six of them is a homepage that undersells the product. */}
+        <section className="mt-8">
+          <h2 className="text-xs uppercase tracking-[.3em] text-text-3">Supported sports</h2>
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {[
+              { slug: "basketball", label: "Basketball" },
+              { slug: "football", label: "Football" },
+              { slug: "tennis", label: "Tennis" },
+              { slug: "volleyball", label: "Volleyball" },
+              { slug: "cricket", label: "Cricket" },
+              { slug: "baseball", label: "Baseball" },
+              { slug: "table-tennis", label: "Table Tennis" },
+              { slug: "flag-race", label: "Flag Race" },
+            ].map((sport) => (
+              <li key={sport.slug}>
+                <Link
+                  href={`/?sport=${sport.slug}#live`}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-ink-800 px-3 py-1.5 text-xs text-text-2 transition hover:border-brand-400/40 hover:text-white"
+                >
+                  <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-brand-400/80" />
+                  {sport.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* Two audiences with two different questions (streak v20, Prompt 3). Each links to the page that answers it,
+            rather than to a marketing section that does not exist. */}
+        <section className="mt-6 grid gap-4 sm:grid-cols-2">
+          <Link href="/api-docs" className="group rounded-lg border border-line bg-ink-800 p-5 transition hover:border-brand-400/40">
+            <p className="text-xs uppercase tracking-[.25em] text-info">For sportsbooks</p>
+            <h2 className="mt-2 font-display text-xl font-bold text-text-1 group-hover:text-white">Official live data feeds</h2>
+            <p className="mt-1 text-sm text-text-2">Official live data feeds, win probability, and webhook integrations.</p>
+            <span className="mt-3 inline-block text-xs text-brand-300 underline">Read the API docs →</span>
+          </Link>
+          <Link href="/coaching" className="group rounded-lg border border-line bg-ink-800 p-5 transition hover:border-brand-400/40">
+            <p className="text-xs uppercase tracking-[.25em] text-brand-300">For coaches</p>
+            <h2 className="mt-2 font-display text-xl font-bold text-text-1 group-hover:text-white">Coaching intelligence</h2>
+            <p className="mt-1 text-sm text-text-2">AI-powered coaching plans, selection advisors, and athlete passports.</p>
+            <span className="mt-3 inline-block text-xs text-brand-300 underline">Open the coaching stack →</span>
+          </Link>
+        </section>
+
         <section id="live" className="pt-10">
           <p className="text-xs uppercase tracking-[.3em] text-brand-400">{liveAcross.length > 0 ? "Live now" : "Coming up"}</p>
           <h1 className="mt-2 font-display text-4xl font-bold sm:text-5xl">Find your game</h1>
