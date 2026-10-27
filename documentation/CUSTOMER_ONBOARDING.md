@@ -35,6 +35,35 @@ Five steps, one transaction — nothing is written until the last one:
 A knockout pads to a power of two and skips byes; a team sport creates the clubs for you. If anything fails, nothing is
 created — a half-built league is worse than none.
 
+### Dry run: what actually happens when a new organizer follows this guide
+
+This guide was executed end to end on 2026-10-27 (streak v22) as a platform admin creating a brand-new organization,
+**Test League**, with four teams and a round robin, then scoring one match. The screenshots below are from that run.
+
+![The wizard with all five steps filled in](screenshots/onboarding-01-wizard.png)
+![Created 4 participants and 6 fixtures](screenshots/onboarding-02-created.png)
+![The public tournament page](screenshots/onboarding-03-tournament.png)
+
+What the run produced: **4 teams · 6 fixtures** (a four-team single round robin is 3+2+1), the tournament at
+`/t/test-league/test-league-cup-mvqxrc9x`, and one match scored **2-1** to a final with standings updated
+(Dry Run United P1 W1 3pts · Dry Run City P1 L1).
+
+**Friction the run exposed, all of it now fixed or written down here:**
+
+1. **Creating a new organization through the wizard did not work.** Step 5 hung with an empty alert: the league was being
+   built inside the caller's tenant context, and `Competition`/`Division`/`Season`/`Club` are all row-level-secured, so
+   every insert for the new league was refused. Fixed: the organization is created first, then the league is built inside
+   its own context. **If you are on an older build, create the organization before using the wizard.**
+2. **The competition slug is not clean.** `/t/test-league/test-league-cup-mvqxrc9x` - a short suffix keeps slugs unique
+   across seasons. Do not guess the URL; use the "Open the tournament site" link the wizard prints.
+3. **The sidebar says "Neon Ultra / Season Zero · 2026" on pages that do not yet know their organization** (the wizard is
+   one). The league dashboard shows your own league name; the rest of the shell is being swept. Cosmetic, but do not
+   mistake it for a different account - the page content is yours.
+4. **`/stats` does not exist** - the analytics screens are `/admin/data-quality` (league-wide) and
+   `/games/<fixtureId>/stats` (one match).
+5. **A new organization starts on the FREE plan** (one competition, no API keys, no webhooks). `/settings/billing` shows
+   the limits and the upgrade path; a platform admin can raise the plan at `/admin/organizations`.
+
 ## 3. Add players — three ways, pick one
 
 | Route | For | Notes |

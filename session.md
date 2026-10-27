@@ -13021,3 +13021,27 @@ be exempted, because a test environment that keeps the variable for the ticketin
 all. **One honest nuance:** the server does not *exit* on the refusal - Next keeps the process alive after the
 instrumentation hook fails - so the accurate statement is that it never serves a request. The deploy guard is what makes
 the process exit, with code 78.
+
+## 2026-10-27 - Streak v22 / Prompt 4: the onboarding dry run, and it caught a broken first step
+
+`e2e/onboarding-dry-run.spec.ts` follows `CUSTOMER_ONBOARDING.md` as a new organizer: sign in, the wizard, **four teams**,
+a round robin, the public tournament page - with screenshots at each step. Then one match scored (2-1, final, standings
+updated) through the service the console calls.
+
+```
+✓ a new organizer creates a league, adds four teams and scores a match (3.1s)
+tournament url: /t/test-league/test-league-cup-mvqxrc9x
+created: 4 teams · 6 fixtures · scored 2-1 → FINAL
+standings: Dry Run United P1 W1 3pts · Dry Run City P1 L1
+screenshots: 6, three committed under documentation/screenshots/
+```
+
+**The dry run's first attempt failed at the very last step, and that was the point of doing it.** Clicking "Create league"
+for a NEW organization hung with an empty alert. The wizard built the league inside the **caller's** tenant context, and
+while `Organization` is not row-level-secured, `Competition`, `Division`, `Season` and `Club` all are - so the policy
+refused every insert for the new league. The four v20/v21 proofs created organizations directly in the database and never
+went through this path, which is why a first-customer action was broken while every test was green.
+
+Fixed by creating the organization first (it needs no context) and building the league inside the new organization's own
+context. The guide now carries the five friction points the run exposed, including that slug suffix and the remaining
+platform-branding leak in the shell.
