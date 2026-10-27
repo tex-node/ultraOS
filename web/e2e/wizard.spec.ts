@@ -20,7 +20,8 @@ test.describe("setup wizard", () => {
     await page.goto("/login");
     await page.locator('input[name="email"]').fill(EMAIL!);
     await page.locator('input[name="password"]').fill(PASSWORD!);
-    await page.getByRole("button", { name: /sign in|log in/i }).first().click();
+    // "Access system", not /sign in| log in/ - see the note in scoring.spec.ts: that regex matches "Sign in with Google".
+    await page.getByRole("button", { name: /access system/i }).click();
     await expect(page.locator('input[name="password"]')).toHaveCount(0, { timeout: 20_000 });
 
     await page.goto("/admin/setup-wizard");

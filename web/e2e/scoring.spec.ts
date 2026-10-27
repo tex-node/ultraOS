@@ -19,9 +19,12 @@ test.describe("live scoring console", () => {
     await page.goto("/login");
     await page.locator('input[name="email"]').fill(EMAIL!);
     await page.locator('input[name="password"]').fill(PASSWORD!);
-    await page.getByRole("button", { name: /sign in|log in/i }).first().click();
-    // A signed-in page has the shell; the login form should be gone.
-    await expect(page.locator('input[name="password"]')).toHaveCount(0, { timeout: 20_000 });
+    // The sign-in button is labelled "Access system". An earlier version matched /sign in|log in/, which selected
+    // "Sign in with Google" - so the spec clicked OAuth and never authenticated, and the test failed three steps later
+    // pointing at the wrong thing. A browser test that cannot log in must say so at the click, not after the redirect.
+    await page.getByRole("button", { name: /access system/i }).click();
+    // Wait for the credential POST to land: the login form disappearing means NextAuth issued a session.
+    await expect(page.locator('input[name="password"]')).toHaveCount(0, { timeout: 25_000 });
 
     await page.goto(`/games/${FIXTURE_ID}/live`);
     await expect(page.getByText(/live|score|period/i).first()).toBeVisible({ timeout: 20_000 });

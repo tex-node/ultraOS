@@ -19,7 +19,10 @@ test.describe("public player registration", () => {
     const email = `e2e-player-${stamp}@example.test`;
 
     await page.goto(`/register/${ORG_SLUG}/competitions/${COMPETITION_SLUG}/player`);
-    await expect(page.getByRole("heading", { name: /player registration/i })).toBeVisible();
+    // "Player registration" is an eyebrow paragraph and the competition name is the h1 - asserting the heading with the
+    // eyebrow's text is what made the first version of this spec fail on a page that was in fact correct.
+    await expect(page.getByText("Player registration", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
     await page.locator('input[name="firstName"]').fill("E2E");
     await page.locator('input[name="lastName"]').fill(`Player${stamp.slice(-4)}`);
@@ -45,6 +48,9 @@ test.describe("public player registration", () => {
     await page.getByRole("button", { name: /submit registration/i }).click();
     // Still on the form: required fields block submission client-side.
     await expect(page.locator('input[name="email"]')).toBeVisible();
-    await expect(page.getByRole("heading", { name: /player registration/i })).toBeVisible();
+    // "Player registration" is an eyebrow paragraph and the competition name is the h1 - asserting the heading with the
+    // eyebrow's text is what made the first version of this spec fail on a page that was in fact correct.
+    await expect(page.getByText("Player registration", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   });
 });
