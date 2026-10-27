@@ -35,8 +35,12 @@ mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/deploy-$ENVIRONMENT-$(date -u +%Y%m%dT%H%M%SZ).log"
 
 echo "deploy → $ENVIRONMENT · log → $LOG"
-# No pipe between the deploy and the file: the log is the deploy's own stdout+stderr, and $? below is the deploy's.
-bash /root/deploy.sh \
+# HERMETIC. The deploy runs with a minimal environment, because the caller's can silently change what it does: in v23 a
+# shell that had sourced STAGING's web.env (which sets NODE_ENV=production) invoked the PRODUCTION deploy, `npm ci`
+# then omitted devDependencies, and `next build` died on the dev-only @serwist/turbopack. A deploy must not depend on
+# what happened to be exported in the terminal that started it.
+env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/root TERM=dumb \
+  bash /root/deploy.sh \
   --app-root "$APP_ROOT" \
   --service "$SERVICE" \
   --env-file "$APP_ROOT/shared/web.env" \
