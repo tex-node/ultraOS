@@ -12539,3 +12539,58 @@ person at a signup form they have completed is how a funnel loses people). `/api
 GET / -> 200 · "Host a tournament" 1 · /signup?role=organizer 1 · wizard link hidden for a visitor 0 · "Find your game" 1
 GET /api-docs -> 200 · CTA present · href="/signup" 1
 ```
+
+### A finding from Prompt 5 worth its own paragraph
+
+`npm test` and `npm run test:component` **cannot collect their tests on the deploy host**, because both scripts pass a
+quoted glob (`"src/lib/*.test.ts"`) to `tsx --test`, and the host runs Node 20, which treats that as a literal path:
+`Could not find '/opt/ultraos-staging/source/web/src/lib/*.test.ts'`. On Node 22 (this workstation) the glob is expanded
+and the same command runs 1022 tests. So the two JavaScript suites are green where they actually run, and the server
+cannot run them at all - a gap in the harness, not in the code, and one that my own pipeline grep had been hiding
+(the command's error output did not match the pattern I filtered for).
+
+The counts below are therefore from the workstation; `test:db` (the suite that needs a database) runs on the host and
+passed there.
+
+## 2026-10-27 - Streak v19 / Prompt 5: final sync - 49/49 DB, both environments, main merged
+
+**Suites**
+```
+npm test               1022 tests, 1021 pass, 1 pre-existing skip, 0 fail   (workstation, Node 22)
+npm run test:component   26 tests, 26 pass                                  (workstation)
+npm run test:db          49 tests, 49 pass (406 s, scratch clone, on the host)
+canonical-write ratchet  4 suppressions (ceiling 4)
+```
+
+**Deploys**
+| environment | release | migrations | smoke |
+| --- | --- | --- | --- |
+| staging | `cd78b36` | up to date | 7/7 PASS, 0 errors |
+| production | `release-cd78b36` | up to date, behind a verified backup `…pre_v19_20261027T121451Z.dump` (sha256 `f9e3b37a…`) | 7/7 PASS, 0 errors |
+
+**Production verified after the deploy**
+```
+GET /                                                        -> 200
+GET /api-docs                                                -> 200
+GET /register/neon-ultra/competitions/ultra-basketball/player -> 200
+GET /admin/neon-ultra/dashboard (no session)                 -> 307
+GET /mock-checkout/garbage                                   -> 404  (mock disabled: a live key exists)
+```
+
+**What this streak actually changed**
+- Billing is testable without a live key: a mock provider whose Simulate Payment fires a genuinely signed webhook at the
+  real route, behind an explicit `BACHS_MOCK=1` because a live key really is configured.
+- Public player registration creates an athlete and a reviewable application, with the email outcome recorded rather
+  than assumed.
+- A per-organization league dashboard whose figures are checked twice, tenant included.
+- The homepage invites organizers, and the API docs end in a next step.
+
+**Known gaps carried forward**
+- **Both environments share one LIVE Bachs key** (`BACH_IO=sk_live_b8e0…`). A checkout created on staging is a real
+  Bachs checkout. The only thing preventing an accidental charge today is that `BACHS_PRODUCT_PRO/_ENTERPRISE` are
+  unset; issuing a sandbox key for staging and setting the product ids is the next billing job.
+- `npm test` / `test:component` cannot run on the host (Node 20 vs a quoted test glob) - see the paragraph above.
+- Staging carries leftover `tennis-verify-*` competitions from the v15 tennis runs; they are harmless but they are the
+  first thing a "pick a competition" query finds.
+- The registration form requires gender and preferred hand because `Athlete` does; the brief listed five fields, so the
+  public form is two fields longer than asked, and unset gender is not representable in the schema.
