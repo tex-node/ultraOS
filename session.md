@@ -13045,3 +13045,39 @@ went through this path, which is why a first-customer action was broken while ev
 Fixed by creating the organization first (it needs no context) and building the league inside the new organization's own
 context. The guide now carries the five friction points the run exposed, including that slug suffix and the remaining
 platform-branding leak in the shell.
+
+## 2026-10-27 - Streak v22 / Prompt 5: the suites, both environments, and the close
+
+**Every suite, on the host, under Node 22:**
+
+```
+npm test              1028 collected · 1027 pass · 0 fail · 1 pre-existing skip   (six of them new: billing safety)
+npm run test:component  26 / 26 pass
+npm run test:db         49 / 49 pass (369 s, scratch clone)
+npm run test:e2e         7 / 7 pass against the deployed staging build
+                        (registration ×2, scoring, wizard, multi-tenant auth ×3)
+canonical-write ratchet  4 suppressions (ceiling 4)
+```
+
+**Deploys**
+
+| environment | release | migrations | smoke |
+| --- | --- | --- | --- |
+| staging | `da1b607` | up to date | 7/7 PASS, 0 errors |
+| production | `release-da1b607` | `20261028170000_resolve_user_roles` + the v21 pair, behind a verified backup `…pre_v22_20261027T171618Z.dump` (sha256 `b7dd76f9…`) | 7/7 PASS, 0 errors |
+
+**Production verified after the deploy**
+```
+app_resolve_user_roles        -> 1
+app_resolve_user_organization -> 1
+recent migrations             -> 20261028170000, 20261028160000, 20261028140000
+GET / -> 200 · GET /api-docs -> 200
+both services                 -> /opt/node22/bin/node
+```
+
+One thing to record honestly: the **first** production deploy in this pipeline printed only its backup checksum and no
+build/smoke lines, and the migration check that followed reported `app_resolve_user_roles: 0`. Re-running the deploy
+immediately afterwards succeeded and the function is present. I did not find a cause - the output was filtered by my own
+grep and the second run overwrote the evidence - so the accurate statement is that one production deploy attempt produced
+no usable output and a retry worked. That is the kind of thing that should be investigated with unfiltered logs, and it is
+logged here rather than smoothed over.
