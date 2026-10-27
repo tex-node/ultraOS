@@ -13081,3 +13081,82 @@ immediately afterwards succeeded and the function is present. I did not find a c
 grep and the second run overwrote the evidence - so the accurate statement is that one production deploy attempt produced
 no usable output and a retry worked. That is the kind of thing that should be investigated with unfiltered logs, and it is
 logged here rather than smoothed over.
+
+## 2026-10-27 - PROJECT HANDOFF (final)
+
+**State:** both environments run `da1b607` on **Node 22.22.2**, `main` is at `42303df` and will be fast-forwarded to the
+v22 head at the end of this streak. Everything below was run, not inferred.
+
+### The suites, all on the host, all green
+
+```
+npm test                1028 collected · 1027 pass · 0 fail · 1 pre-existing skip
+npm run test:component    26 / 26
+npm run test:db           49 / 49
+npm run test:e2e           7 / 7  (registration ×2, scoring, wizard, multi-tenant auth ×3)
+canonical-write ratchet    4 / 4
+```
+
+### What v22 changed
+
+- **Node 22 executed.** `/usr/local/bin/{node,npm,npx,corepack}` → `/opt/node22/bin/*`, ahead of `/usr/bin` in systemd's
+  default PATH, with nothing replaced (rollback: four `rm`s and a restart). The item carried in every "known gaps" list
+  since v20 is closed: the component suite now runs on the host.
+- **A privilege escalation, found and fixed.** `getSessionUser()` read the user's roles through the RLS-forced
+  `UserRoleAssignment` relation **at sign-in, before any tenant context exists**; the policy fell back to the platform
+  default organization, `roles` came back empty, and the code fell back to the legacy `User.role` column. A league
+  operator whose account had ever been created as `SUPER_ADMIN` signed in **as a platform administrator** and could open
+  any other league's dashboard by editing the URL. `app_resolve_user_roles()` (migration `20261028170000`) answers that
+  question the same way v21's `app_resolve_user_organization()` answers the organization one.
+- **The wizard could not create a new organization.** The league was built inside the *caller's* tenant context, so every
+  `Competition`/`Division`/`Season`/`Club` insert was refused by RLS and step 5 hung with an empty alert. Found by doing
+  the onboarding dry run, fixed by creating the organization first and building the league inside its own context.
+- **The live Bachs key is off staging**, replaced by `BACHS_MOCK=1` plus a `BACHS_SANDBOX_KEY` slot. Two guards enforce
+  it: the server refuses to serve (`instrumentation.register()`), the deploy exits 78, and six unit tests pin the
+  decision. The mitigation exempts `BACHS_MOCK=1`, because a test environment without a sandbox key must still run.
+- **Roadmaps closed** in `documentation/ROADMAP_CLOSE.md`, phase by phase, each line naming its evidence.
+
+### Exact commits (newest first)
+
+```
+a732110  docs(roadmaps): close every phase as DONE or BLOCKED (with reason)
+ce45180  docs(session): Prompt 5 - every suite green on the host, both environments on da1b607
+da1b607  docs(onboarding): the dry run, its screenshots, and the five friction points it found
+7f0a44a  fix(wizard): a NEW organization is created before its league, or RLS refuses every row
+bb3fb3f  test(e2e): the onboarding dry run, with screenshots
+47e99ac  docs(deploy): the BACHS_SANDBOX_KEY slot, and the refusal that enforces it
+d8be459  docs(session, deploy): Prompt 3 - the live key is off staging and the guard is in three places
+bf1e1c6  feat(billing): refuse to deploy or boot a live key outside production, and let BACHS_MOCK exempt it
+0605e74  feat(billing): a live key outside production stops the server, not just a banner
+b86d712  docs(session): Prompt 2 - the multi-tenant spec and the privilege escalation it found
+9941b24  test(e2e): prove the dual-role context by what it can open, not by a label
+67c884b  fix(auth): resolve the user's ROLES the same way as their organization
+170bb54  fix(e2e): a league admin is a LEAGUE_OPERATOR, not a platform SUPER_ADMIN
+29cad60  fix(shell): the workspace sidebar names the league you are in, not Neon Ultra
+398a6b6  test(e2e): two tenants, two admins, and the isolation between them
+894613b  feat(infra): execute the Node 22 upgrade on the host
+```
+
+### Current state of the two environments
+
+| | staging | production |
+| --- | --- | --- |
+| release | `release-da1b607` | `release-da1b607` |
+| node | `/opt/node22/bin/node` | `/opt/node22/bin/node` |
+| migrations | up to date | up to date (latest `20261028170000_resolve_user_roles`) |
+| smoke | 7/7, 0 errors | 7/7, 0 errors |
+| payments | `BACHS_MOCK=1` (no live key) | live key, `BACHS_PRODUCT_*` unset |
+| organizations | 2 (neon-ultra, lbcl) + the e2e fixtures | 2 |
+
+### Known gaps, in priority order
+
+1. **No Bachs sandbox key.** Staging runs the mock provider; the real checkout has still never been executed against
+   Bachs. Issue a sandbox key, set `BACHS_SANDBOX_KEY`, drop `BACHS_MOCK`.
+2. **`BACHS_PRODUCT_PRO` / `_ENTERPRISE` are unset in production**, so a real upgrade would fail before reaching Bachs.
+   These are product ids from the Bachs dashboard.
+3. **The workspace shell still prints the platform league name on pages that do not pass their own** (the wizard, the
+   generic dashboard). Cosmetic; the sweep is mechanical.
+4. **`e2e/onboarding-dry-run.spec.ts` is not in the default e2e run** - it creates a real organization and takes ~4 s. It
+   is run deliberately, not on every deploy.
+5. **One production deploy attempt in this streak produced no output and a retry worked.** Unresolved; the evidence was
+   filtered by my own grep. Worth one unfiltered run before the next release.
