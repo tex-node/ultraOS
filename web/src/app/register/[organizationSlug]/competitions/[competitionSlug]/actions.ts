@@ -173,7 +173,7 @@ export async function registerPlayerAction(
     });
   }).catch((error) => console.error("could not record the email outcome", error));
 
-  redirect(`/register/${organizationSlug}/${competitionSlug}/submitted?application=${created.application.id}&emailed=${emailed ? "1" : "0"}`);
+  redirect(`/register/${organizationSlug}/competitions/${competitionSlug}/submitted?application=${created.application.id}&emailed=${emailed ? "1" : "0"}`);
 }
 
 async function sendConfirmation(to: string, name: string, competitionName: string, seasonName: string, applicationId: string, orgSlug: string, competitionSlug: string): Promise<boolean> {
@@ -185,7 +185,7 @@ async function sendConfirmation(to: string, name: string, competitionName: strin
   if (!host || !user || !password || !from || !Number.isFinite(port) || port === 0) return false;
 
   const baseUrl = (process.env.APP_BASE_URL ?? process.env.NEXTAUTH_URL ?? "").replace(/\/$/, "");
-  const statusUrl = `${baseUrl}/register/${orgSlug}/${competitionSlug}/submitted?application=${applicationId}`;
+  const statusUrl = `${baseUrl}/register/${orgSlug}/competitions/${competitionSlug}/submitted?application=${applicationId}`;
   const text = [
     `Hello ${name},`,
     "",
