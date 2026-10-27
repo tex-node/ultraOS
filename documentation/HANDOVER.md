@@ -104,10 +104,25 @@ Verify with `deploy/ops/verify-tenant-table.sh <table>`, **as the app role**.
 
 ## 7. Operational gaps — what a human has to do
 
-1. **No Bachs sandbox key.** Staging runs `BACHS_MOCK=1`; the real subscription checkout has never been executed against
-   Bachs. Issue a sandbox key, put it in `BACHS_SANDBOX_KEY` on staging, remove `BACHS_MOCK`.
-2. **`BACHS_PRODUCT_PRO` / `BACHS_PRODUCT_ENTERPRISE` are unset in production**, so a real upgrade fails before reaching
-   Bachs. Both are product ids from the Bachs dashboard.
+**CLOSED in v24:** the Bachs sandbox key is on staging (`BACH_IO=sk_sandbox_…`, `BACHS_MOCK` removed, live-key banner
+gone); the vision worker runs under Docker Compose with the real analyzer (`/health` → `yolov8n-person`); the branding
+sweep is finished (login, public header, operator page labels, page titles); Node 22 is the host default.
+
+1. **`BACHS_PRODUCT_PRO` / `BACHS_PRODUCT_ENTERPRISE` do not exist anywhere in `cred/`.** They are the only thing between
+   the "Upgrade" button and Bachs: the sandbox key authenticates and the SDK targets `sandbox-api.bachs.io`, but
+   `createSubscriptionCheckout()` stops with "No Bachs product configured for PRO". Read both ids off the Bachs dashboard
+   (Products) and set them in staging and production. The key itself lacks the `products:read` scope, so they cannot be
+   listed through the API.
+2. **The sandbox checkout has therefore never completed a payment.** Once the product ids exist: click Upgrade on staging,
+   pay with `4242 4242 4242 4242`, and confirm the webhook flips `Organization.plan` to PRO.
+3. **The vision worker is not under systemd.** It is `docker compose` in `services/vision` with
+   `restart: unless-stopped`, so it survives a crash but not a reboot unless compose is started again. A unit that runs
+   `docker compose up -d` at boot is the remaining infrastructure piece.
+4. **No footage with people in it.** The pipeline was proved end to end on synthetic clips; the orange-circle clip
+   correctly produced **zero** observations (there are no people in it), so the "confirm an observation → HIGHLIGHT_CLIP →
+   R2 → public match centre" leg has not been exercised with a real detection. The first real game video closes it.
+5. **Bachs live product ids.** Production has the live key; the two live product ids are missing for the same reason as
+   (1).
 3. **The public portal header and the Ultra-Basketball operator pages still carry platform/demo naming**
    (`portal-shell.tsx` prints "NEON ULTRA"; `gameday`, `live`, `broadcast`, `launch-readiness` say "Season Zero"). A new
    organisation's own workspace, tab title and footer are correct — this is the remaining mechanical sweep.

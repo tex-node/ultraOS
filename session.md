@@ -13462,3 +13462,59 @@ Fixes 2-4 are the **same RLS bootstrap pattern** the web app hit in v21 and v22,
 `app_vision_ready_videos()`, `app_vision_video_source()` and `app_vision_ensure_model()` are SECURITY DEFINER, granted in
 the same migration (`20261028180000`), and verified as the app role. `connection(organization_id)` sets
 `app.current_org_id` for the writes, exactly as `withOrganizationContext` does on the web side.
+
+## 2026-10-27 - Streak v24 / Prompt 3: the pipeline runs, and it told the truth with zero observations
+
+**What was proved.** A 10-second synthetic clip (300 frames, 1280x720, 30 fps) was generated, ingested
+(`GameVideo READY_FOR_ANALYSIS`, `MediaAsset` registered, probe sha256 `fa941da1…`), picked up by the poller, analysed by
+the **real** `yolov8n-person` analyzer in the container, and the run completed:
+
+```
+ingest        → GameVideo cmvr3pas10001jikksrq0d0qy · READY_FOR_ANALYSIS
+poller        → VisionAnalysisRun 3581e77b… · model yolov8n-person (NOT stub)
+analyse       → PROCESSING at t=30s → COMPLETED at t=65s, 300 frames
+observations  → 0
+```
+
+**Zero is the correct answer.** The clip contains two orange circles, no people; the analyzer's own docstring says a
+synthetic orange circle is expected to produce nothing (see `documentation/vision/VISION_EMPIRICAL_REPORT.md`). A pipeline
+that invented observations here would be lying, and the one thing this project has been consistent about is that it does
+not do that.
+
+**What was NOT proved: the confirm → highlight → R2 → match centre leg.** It needs at least one observation, and there is
+no footage with people in it on this host: `scripts/generate_person_clip.py` requires a `--source` video, the host has
+none, and the public sample image I tried to fetch returned 15 bytes (no usable input). Five demo rows from v14 pointed at
+`file:///tmp/*.mp4` files that no longer exist; they blocked the poller (it takes the oldest first) and were retired with
+`analysisEligible = false`, which is why the first three attempts of this prompt analysed the wrong video.
+
+**Four bugs, each of which would have hidden the next one:**
+1. `"User"."organizationId"` does not exist → the poller died for every video without a requester.
+2. Lifecycle writes had no tenant context → RLS refused `VisionAnalysisRun` updates.
+3. `video_path_for()` treated a stored object key as a path → "cannot open video" for a file that was on disk.
+4. `VisionModel` is globally keyed but tenant-scoped → the upsert from a second organization was refused
+   (`new row violates row-level security policy (USING expression)`).
+
+Also worth recording: the **first image built was stale** (its `analyzer.py` md5 differed from the checkout, and
+`get_analyzer('yolov8n-person')` raised "Unknown VISION_ANALYZER"). A `--no-cache` rebuild matched the checkout exactly
+(same md5, verified), which is how a 300-frame run can be trusted to have used the current code.
+
+## 2026-10-27 - Streak v24 / Prompt 4: production, and the branding sweep finished
+
+**Production** already carried the live `sk_live_…` key and no `BACHS_MOCK`; the live product ids are missing for the same
+reason as the sandbox ones (§Prompt 1), so there was nothing to add there beyond a restart, which the deploy did.
+
+**Branding** - the sweep is done for everything a tenant or a stranger sees:
+
+| surface | before | after |
+| --- | --- | --- |
+| `/login` eyebrow | Neon Ultra | UltraLeagueOS |
+| `/login` subtitle | "authorized Season Zero operations account" | "Sign in to your league workspace." |
+| `<title>` signed out | Neon Ultra Tournament Management System | UltraLeagueOS · Tournament management system |
+| `<title>` signed in | league name (v23) | unchanged |
+| public portal header | NEON ULTRA | UltraLeagueOS |
+| `/forgot-password` | Neon Ultra | UltraLeagueOS |
+| gameday / live / launch-readiness / broadcast eyebrows | "Season Zero · …" | "Game Day", "Live", "Launch readiness", "League Snapshot" |
+
+Verified on the deployed build: `/login` contains **no** "Neon Ultra" and one "UltraLeagueOS", and the public header
+renders "UltraLeagueOS". Pages that *discuss the platform''s own Season Zero dataset* (the `data-quality/season-zero-*`
+review screens) still name it, because that is what those pages are about.
