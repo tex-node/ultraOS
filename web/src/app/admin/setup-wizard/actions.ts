@@ -7,6 +7,7 @@ import { withOrganizationContext } from "@/lib/tenant-context";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { createLeague } from "@/server/onboarding/create-league";
+import { allocateOrganizationPrefixes } from "@/lib/organization-prefixes";
 
 // The wizard's single submit (streak v15, Prompt 3).
 //
@@ -53,24 +54,41 @@ export async function createLeagueAction(_previous: SetupWizardResult | null, fo
   }
 
   try {
-    const result = await withOrganizationContext(
-      organizationId,
-      (tx) =>
-        createLeague(tx, {
-          organizationId: wantsNewOrganization ? null : organizationId,
-          organizationName: input.newOrganizationName ?? "",
-          organizationSlug: input.newOrganizationSlug ?? "",
-          sportSlug: input.sportSlug,
-          competitionName: input.competitionName,
-          entrantNames: input.participants,
-          format: input.format,
-          gamesPerPairing: input.gamesPerPairing === 2 ? 2 : 1,
-          startDate: new Date(`${input.startDate}T09:00:00.000Z`),
-          matchDayOffsetDays: 7,
-        }),
-      // Creating a NEW organization crosses the tenant boundary by definition, so that one path uses the platform
-      // client; the row it creates is then owned by the new organization and every later read is tenant-scoped.
-      wantsNewOrganization ? prisma : undefined,
+    // Creating a NEW organization cannot happen inside the CALLER's tenant context (streak v22, found by the onboarding
+    // dry run): the organization row itself is not RLS-scoped, but everything createLeague writes next - Competition,
+    // Division, Season, Club - is, and the policy checks the row's organizationId against app.current_org_id. With the
+    // caller's context set, every insert for the new league was refused. So the organization is created first (it needs
+    // no context), and the league is built INSIDE the new organization's own context.
+    let targetOrganizationId = organizationId;
+    if (wantsNewOrganization) {
+      const existing = await prisma.organization.findUnique({ where: { slug: input.newOrganizationSlug! }, select: { id: true } });
+      const created = existing
+        ? existing
+        : await prisma.organization.create({
+            data: {
+              name: input.newOrganizationName!,
+              slug: input.newOrganizationSlug!,
+              plan: "FREE",
+              ...(await allocateOrganizationPrefixes(prisma, input.newOrganizationSlug!)),
+            },
+            select: { id: true },
+          });
+      targetOrganizationId = created.id;
+    }
+
+    const result = await withOrganizationContext(targetOrganizationId, (tx) =>
+      createLeague(tx, {
+        organizationId: targetOrganizationId,
+        organizationName: input.newOrganizationName ?? "",
+        organizationSlug: input.newOrganizationSlug ?? "",
+        sportSlug: input.sportSlug,
+        competitionName: input.competitionName,
+        entrantNames: input.participants,
+        format: input.format,
+        gamesPerPairing: input.gamesPerPairing === 2 ? 2 : 1,
+        startDate: new Date(`${input.startDate}T09:00:00.000Z`),
+        matchDayOffsetDays: 7,
+      }),
     );
 
     await withOrganizationContext(result.organizationId, (tx) =>
