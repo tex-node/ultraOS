@@ -30,7 +30,16 @@ async function getSessionUser(email: string) {
     return null;
   }
 
-  const roles = user.roles.map((assignment) => assignment.role);
+  // The roles come from a SECURITY DEFINER function, not from the included relation (streak v22): UserRoleAssignment is
+  // RLS-forced and this runs before any tenant context exists, so the include saw ONLY platform grants and roles outside
+  // the default organization - every grant a real league operator holds - were invisible. `roles` came back empty and the
+  // fallback below used the legacy `User.role` column, which for an account created as SUPER_ADMIN meant a league
+  // operator signed in as a platform administrator. See migration 20261028170000.
+  const resolvedRoles = await prisma
+    .$queryRaw<{ roles: string[] | null }[]>`SELECT app_resolve_user_roles(${user.id}) AS roles`
+    .then((rows) => rows[0]?.roles ?? [])
+    .catch(() => [] as string[]);
+  const roles = (resolvedRoles.length > 0 ? resolvedRoles : user.roles.map((assignment) => assignment.role)) as UserRole[];
   return {
     id: user.id,
     name: user.name,
