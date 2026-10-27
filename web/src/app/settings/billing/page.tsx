@@ -5,7 +5,7 @@ import { hasPermission } from "@/lib/permissions";
 import { MissingOrganizationContextError } from "@/lib/authorization";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { loadPlanUsage, PLAN_LIMITS, type PlanName } from "@/lib/plans";
-import { stripeConfigured } from "@/lib/stripe";
+import { bachsBillingConfigured } from "@/lib/bachs-billing";
 import { startCheckoutAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -27,9 +27,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   if (!hasPermission(session.user.roles, "operations:manage")) redirect("/dashboard");
 
   const usage = await withOrganizationContext(session.user.organizationId, (tx) => loadPlanUsage(tx, session.user.organizationId!));
-  // Billing is "configured" only when a Stripe key exists. A button that throws on click is worse than a sentence that
-  // says why it cannot work yet (streak v17, Prompt 2).
-  const billingConfigured = stripeConfigured();
+  // Billing is "configured" only when a Bachs key exists. A button that throws on click is worse than a sentence that
+  // says why it cannot work yet (streak v18: Bachs, not Stripe).
+  const billingConfigured = bachsBillingConfigured();
 
   return (
     <OperationsShell user={session.user}>
@@ -38,7 +38,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <h1 className="mt-2 text-2xl font-bold">Plan and usage</h1>
         <p className="mt-1 text-sm text-text-2">
           On the <b className="text-text-1">{PLAN_LABEL[usage.plan]}</b> plan
-          {usage.stripeCustomerId ? ` · Stripe customer ${usage.stripeCustomerId}` : " · no payment method on file"}.
+          {usage.bachsCustomerId ? ` · Bachs customer ${usage.bachsCustomerId}` : " · no payment method on file"}.
         </p>
 
         {query.error ? (
@@ -46,7 +46,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         ) : null}
         {query.upgraded ? (
           <p className="mt-4 rounded-lg border border-brand-400/40 bg-brand-400/10 px-3 py-2 text-xs text-brand-300">
-            {'Payment received. The plan changes when the Stripe webhook confirms it - refresh in a moment if it still shows the old one.'}
+            {'Payment received. The plan changes when the Bachs webhook confirms it - refresh in a moment if it still shows the old one.'}
           </p>
         ) : null}
 
@@ -94,7 +94,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                   </form>
                 ) : (
                   <p className="mt-3 rounded-lg border border-line px-3 py-1.5 text-[11px] text-text-3">
-                    Billing not configured: no Stripe key in this environment.
+                    Billing not configured: no Bachs key in this environment.
                   </p>
                 )}
               </div>
@@ -102,8 +102,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           </div>
           <p className="mt-2 text-xs text-text-3">
             {billingConfigured
-              ? "Checkout is handled by Stripe; the plan changes when its webhook confirms payment, not when the button is clicked."
-              : "This deployment has no Stripe key, so upgrades are shown as a message rather than a button that would fail. Plan limits are enforced where the resource is created, so they apply to the API, the wizard and the webhook console alike."}
+              ? "Checkout is handled by Bachs, settled in naira; the plan changes when its webhook confirms payment, not when the button is clicked."
+              : "This deployment has no Bachs key, so upgrades are shown as a message rather than a button that would fail. Plan limits are enforced where the resource is created, so they apply to the API, the wizard and the webhook console alike."}
           </p>
         </section>
       </main>

@@ -11,12 +11,15 @@ export type BachsConfig = {
 };
 
 export function bachsConfig(): BachsConfig | null {
-  const apiKey = process.env.BACH_IO;
+  // Two names for the same pair, because both exist: BACH_IO/BACH_WEBHOOK are what the ticketing integration was built
+  // with (F5.3), BACHS_KEY/BACHS_WEBHOOK_SECRET are what streak v18 documents in .env.example. Reading both means an
+  // environment configured either way works, and neither has to be renamed under a running deployment.
+  const apiKey = process.env.BACHS_KEY ?? process.env.BACH_IO;
   if (!apiKey) return null;
   return {
-    apiBase: (process.env.BACH_API_BASE ?? "https://api.bachs.io").replace(/\/$/, ""),
+    apiBase: (process.env.BACHS_API_BASE ?? process.env.BACH_API_BASE ?? "https://api.bachs.io").replace(/\/$/, ""),
     apiKey,
-    webhookSecret: process.env.BACH_WEBHOOK ?? "",
+    webhookSecret: process.env.BACHS_WEBHOOK_SECRET ?? process.env.BACH_WEBHOOK ?? "",
   };
 }
 

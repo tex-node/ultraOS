@@ -4792,7 +4792,7 @@ model Organization {
   // default is FREE (a new signup starts on the free tier) and the migration grandfathers existing organizations to
   // ENTERPRISE so nothing already running loses a feature.
   plan                      OrganizationPlan               @default(FREE)
-  stripeCustomerId          String?
+  bachsCustomerId           String?
   // Phase 1 Stage 5.4A: wired up in public-ids.ts. PublicIdCounter's sequence allocation is
   // tenant-local (each org allocates 1, 2, 3... independently, never advancing another org's
   // counter) - the formatted external id's platform-wide uniqueness now rests entirely on no two

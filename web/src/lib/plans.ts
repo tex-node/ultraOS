@@ -66,7 +66,7 @@ export async function assertWithinPlan(
 
 export type PlanUsage = {
   plan: PlanName;
-  stripeCustomerId: string | null;
+  bachsCustomerId: string | null;
   usage: Record<PlanResource, { used: number; limit: number | null }>;
 };
 
@@ -74,7 +74,7 @@ export type PlanUsage = {
 export async function loadPlanUsage(tx: Prisma.TransactionClient, organizationId: string): Promise<PlanUsage> {
   const organization = await tx.organization.findUniqueOrThrow({
     where: { id: organizationId },
-    select: { plan: true, stripeCustomerId: true },
+    select: { plan: true, bachsCustomerId: true },
   });
   const plan = organization.plan as PlanName;
   const [apiKeys, competitions, webhooks] = await Promise.all([
@@ -84,7 +84,7 @@ export async function loadPlanUsage(tx: Prisma.TransactionClient, organizationId
   ]);
   return {
     plan,
-    stripeCustomerId: organization.stripeCustomerId,
+    bachsCustomerId: organization.bachsCustomerId,
     usage: {
       apiKeys: { used: apiKeys, limit: PLAN_LIMITS[plan].apiKeys },
       competitions: { used: competitions, limit: PLAN_LIMITS[plan].competitions },
