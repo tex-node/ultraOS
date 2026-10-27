@@ -31,7 +31,7 @@ export default async function LeagueDashboardPage({ params }: { params: Promise<
   if (!data) notFound();
 
   return (
-    <OperationsShell user={session.user}>
+    <OperationsShell user={session.user} organizationName={data.organization.name} organizationContext={`${data.activeCompetitions} active competition${data.activeCompetitions === 1 ? "" : "s"}`}>
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <p className="text-xs uppercase tracking-[.2em] text-brand-400">League dashboard</p>
         <h1 className="mt-2 text-2xl font-bold">{data.organization.name}</h1>

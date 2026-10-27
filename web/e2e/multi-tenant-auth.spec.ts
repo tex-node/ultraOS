@@ -30,7 +30,9 @@ test.describe("multi-tenant authentication", () => {
     await signIn(page, A.email!);
     const response = await page.goto(`/admin/${A.slug}/dashboard`);
     expect(response?.status(), "Org A's own dashboard").toBe(200);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText(/E2E Tenant A/i);
+    // Scope to main: the shell has its own heading (now the league name), so an unscoped heading locator is ambiguous -
+    // which is what made the first version of this spec fail on a page that was in fact correct.
+    await expect(page.locator("main h1").first()).toContainText(/E2E Tenant A/i);
 
     // The other tenant's dashboard must NOT be reachable by editing the URL: the session is scoped to A.
     const other = await page.goto(`/admin/${B.slug}/dashboard`);
@@ -41,7 +43,7 @@ test.describe("multi-tenant authentication", () => {
     await signIn(page, B.email!);
     const response = await page.goto(`/admin/${B.slug}/dashboard`);
     expect(response?.status(), "Org B's own dashboard").toBe(200);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText(/E2E Tenant B/i);
+    await expect(page.locator("main h1").first()).toContainText(/E2E Tenant B/i);
     await expect(page.getByText(/No league yet/i)).toHaveCount(0);
 
     const other = await page.goto(`/admin/${A.slug}/dashboard`);
@@ -55,7 +57,7 @@ test.describe("multi-tenant authentication", () => {
     // documented behaviour (resolveActiveOrganizationId), so the assertion pins WHICH tenant wins rather than pretending
     // a switcher exists: Org A, because that grant was created first by the preparation script.
     await page.goto("/dashboard");
-    const landing = await page.evaluate(() => document.body.innerText);
+    const landing = await page.locator("body").innerText();
     const saysA = /E2E Tenant A/i.test(landing);
     const saysB = /E2E Tenant B/i.test(landing);
     expect(saysA || saysB, "the dashboard must belong to one of the two tenants, not to neither").toBe(true);

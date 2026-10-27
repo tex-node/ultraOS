@@ -87,7 +87,22 @@ function isAdmin(user: WorkspaceUser) {
 
 // Organizer workspace shell: sidebar navigation on desktop, compact top bar below lg.
 // Same props contract as the legacy operations header so pages adopt it unchanged.
-export function WorkspaceShell({ children, user }: { children: React.ReactNode; user: WorkspaceUser }) {
+export function WorkspaceShell({
+  children,
+  user,
+  organizationName,
+  organizationContext,
+}: {
+  children: React.ReactNode;
+  user: WorkspaceUser;
+  // Which league this workspace belongs to. The sidebar used to print "Neon Ultra" and "Season Zero · 2026" for EVERY
+  // tenant - a multi-tenancy branding leak the multi-tenant auth spec caught (streak v22). Pages that know their
+  // organization pass it; everything else keeps the platform default until it is swept.
+  organizationName?: string;
+  organizationContext?: string | null;
+}) {
+  const workspaceName = organizationName ?? "Neon Ultra";
+  const workspaceContext = organizationContext ?? "Season Zero · 2026";
   const admin = Boolean(isAdmin(user));
   const roles = user.roles?.length ? user.roles : [user.role];
   const visible = (link: NavLink) => !link.adminOnly || admin || (link.roles ?? []).some((role) => roles.includes(role));
@@ -101,12 +116,12 @@ export function WorkspaceShell({ children, user }: { children: React.ReactNode; 
         <div className="flex items-center justify-between gap-4 px-5 py-4">
           <div>
             <Link className="font-display font-semibold tracking-tight" href="/admin">
-              Neon Ultra
+              {workspaceName}
             </Link>
             <p className="text-[10px] uppercase tracking-[0.22em] text-brand-400">Organizer workspace</p>
             {/* Season/competition context chip (handoff shells §Workspace). */}
             <p className="mt-1 inline-block rounded-full border border-line px-2 py-0.5 text-[10px] uppercase tracking-wider text-text-2">
-              Season Zero · 2026
+              {workspaceContext}
             </p>
           </div>
           <form
