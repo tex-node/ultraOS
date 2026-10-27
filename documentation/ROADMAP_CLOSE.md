@@ -54,3 +54,16 @@ Status of every phase, as of the final streak. `DONE` means there is a test or a
 | Bachs sandbox key | **BLOCKED (external)** | staging runs `BACHS_MOCK=1`; a real checkout has never run against Bachs. |
 | `BACHS_PRODUCT_PRO` / `_ENTERPRISE` in production | **BLOCKED (external)** | unset; a real upgrade fails before reaching Bachs. |
 | Handover document | **DONE** | `documentation/HANDOVER.md`, every command and link checked against the host (one claim corrected: the vision worker) |
+## Addendum — streak v24 (2026-10-27): operational launch
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Bachs sandbox key on staging | **DONE** | `BACH_IO=sk_sandbox_…`, `BACHS_MOCK` removed, live-key banner absent, SDK reports environment `sandbox` |
+| Bachs product ids (`BACHS_PRODUCT_PRO`, `_ENTERPRISE`) | **BLOCKED (external)** | not present in `cred/`; `createSubscriptionCheckout` stops with "No Bachs product configured for PRO". The key also lacks the `products:read` scope, so they cannot be listed through the API - read them off the Bachs dashboard |
+| A completed sandbox payment (4242…) | **BLOCKED** | depends on the product ids above |
+| Vision worker deployed | **DONE** | 4 containers Up; `/health` → `{"status":"ok","analyzer":"yolov8n-person","database_configured":true,"storage_configured":true}` |
+| Vision worker under systemd | **BLOCKED** | `docker compose` with `restart: unless-stopped` survives crashes, not reboots |
+| Vision pipeline end to end | **PARTIAL** | ingest → poller → real YOLO analyzer → COMPLETED on a 300-frame clip; **0 observations**, the correct answer for a clip with no people |
+| Confirm → HIGHLIGHT_CLIP → R2 → match centre | **BLOCKED** | needs one real detection; this host has no footage with people in it |
+| Branding sweep | **DONE** | `/login`, public header, password reset, page titles and four operator eyebrows verified on the deployed build |
+| Node 22 default on the host | **DONE** (v22) | `/opt/node22/bin/node`, both services |

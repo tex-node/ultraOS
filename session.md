@@ -13518,3 +13518,50 @@ reason as the sandbox ones (§Prompt 1), so there was nothing to add there beyon
 Verified on the deployed build: `/login` contains **no** "Neon Ultra" and one "UltraLeagueOS", and the public header
 renders "UltraLeagueOS". Pages that *discuss the platform''s own Season Zero dataset* (the `data-quality/season-zero-*`
 review screens) still name it, because that is what those pages are about.
+
+## 2026-10-27 - PROJECT STATUS: PLATFORM LAUNCHED
+
+Honest form of the claim: **the platform is live and serving both environments on `f723650`/`ce01efe`, the vision worker
+runs with the real analyzer, staging is on the Bachs sandbox, and the branding is a tenant''s own. Two things are not
+proven and are named below rather than papered over: a completed sandbox payment (no product ids) and a confirmed
+observation producing a highlight clip (no footage with people).**
+
+**Commits, newest first**
+
+```
+ce01efe  docs(session, handover): v24 prompts 3-4
+966b498  docs(session): v24 prompts 1-2
+f723650  fix(branding): the anonymous page title is the platform's name
+cedecbb  chore: remove unrelated untracked files swept into the previous commit
+b9df1e8  feat(branding,vision,billing): branding sweep, vision RLS fixes, sandbox base URL
+```
+
+**Suites (host, Node 22.22.2)**
+```
+npm test                1033 · 1032 pass · 0 fail · 1 pre-existing skip
+npm run test:component    26 / 26
+npm run test:db           52 / 52
+npm run test:e2e           7 / 7
+canonical-write baseline   4 suppressions (ceiling 4)
+```
+
+**The three environments**
+
+| | production | staging | vision |
+| --- | --- | --- | --- |
+| release | `f723650` (`/opt/ultraleagueos`) | `f723650` (`/opt/ultraos-staging`) | `ultraos-vision:dev` |
+| health | `/api/v1/live` 200, smoke 7/7, 0 errors | `/api/v1/live` 200, smoke 7/7, 0 errors | `/health` 200, analyzer `yolov8n-person` |
+| node | 22.22.2 | 22.22.2 | python 3.12 (container) |
+| payments | live key, **product ids missing** | sandbox key, **product ids missing** | - |
+| containers | - | - | api · worker · beat · redis, all Up |
+
+**What needs a human (five items, in order)**
+
+1. **Create/read the Bachs product ids** and set `BACHS_PRODUCT_PRO` + `BACHS_PRODUCT_ENTERPRISE` in both env files. Until
+   then the Upgrade button reports "No Bachs product configured for PRO", and no payment can be taken.
+2. **Run one sandbox payment** (card `4242 4242 4242 4242`) once the ids exist, and confirm `Organization.plan` flips to
+   PRO via the webhook.
+3. **Start the vision stack at boot**: a systemd unit running `docker compose up -d` in `services/vision` (the containers
+   are already health-checked and restart on crash).
+4. **Feed it one real game video.** That is the only missing input for the confirm → highlight → R2 → match centre proof.
+5. **Decide the live product ids** for production (same ids or live counterparts), then repeat (2) with a real card.
