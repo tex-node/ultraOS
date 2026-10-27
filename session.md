@@ -12594,3 +12594,105 @@ GET /mock-checkout/garbage                                   -> 404  (mock disab
   first thing a "pick a competition" query finds.
 - The registration form requires gender and preferred hand because `Athlete` does; the brief listed five fields, so the
   public form is two fields longer than asked, and unset gender is not representable in the schema.
+
+## 2026-10-27 - Streak v20 / Prompt 1: the test suite runs where it is deployed
+
+`npm test` passed two quoted globs to `tsx --test`. Node 21+ expands them; the Node 20 the VPS runs treats them as
+literal paths and the run dies with `Could not find '/opt/.../src/lib/*.test.ts'` - exit 1, no tests collected. The
+command in the README had therefore never run on the machine that matters, and **my own pipeline grep hid the error**
+because the failure text did not match the pattern I filtered for.
+
+`scripts/run-tests.mjs` enumerates the trees (as `run-db-tests.mjs` already did for the database suites) and spawns the
+runner with real paths: `npm test` → `--suite=unit`, `npm run test:component` → `--suite=component`.
+
+Two things only running it could reveal:
+
+- **The runner's contract changed between Node majors.** Node 20 takes positional arguments as literal PATHS, Node 22+
+  takes them as GLOBS. A Next dynamic-segment directory (`src/app/games/[fixtureId]/…`) is therefore either a real path
+  or a character class depending on the version: with the raw path on Node 22 the live-score-capture suite contributed
+  **zero tests** while the run still reported success, and with the escaped `[[]` form Node 20 said `Could not find`.
+  The escaping is now decided by the runtime.
+- **`--conditions=react-server` belongs to the DB suites only.** Adding it here (copying run-db-tests) made six unit
+  tests and every component test fail. The two runners differ on purpose.
+
+```
+HOST (Node v20.20.2):  npm test -> 1022 collected · 1021 pass · 1 skipped · 0 fail (21 s)
+WORKSTATION (Node 24): npm test -> 1022 · 1021 pass · 1 skip   npm run test:component -> 26/26
+```
+
+**The component suite still cannot run on the host, and the runner now says so.** jsdom pulls in undici, which throws
+constructing `CacheStorage` on Node 20 - and this repository's own framework declares `node ^22.22.2`. Rather than print a
+stack trace that reads like a broken test, or skip the suite so a deploy believes it passed, it exits 2 with:
+*"test:component needs Node >= 22 (this is v20.20.2) … Run this suite on a Node 22 machine, or upgrade the host."*
+Upgrading the host's Node is the real fix and is outside a code change; npm has been warning `EBADENGINE` on every
+install for weeks.
+
+## 2026-10-27 - Streak v20 / Prompt 2: the live key gets a warning, and the warning gets a test
+
+Both environments held the same `sk_live_` Bachs key under the legacy `BACH_IO`. `/settings/billing` now shows a red
+banner outside production, and `deploy/README.md` plus `.env.example` state that staging must use a sandbox key.
+
+**The obvious check would never have fired.** `next start` sets `NODE_ENV=production` on staging too, so
+`NODE_ENV !== "production"` is false on the one host that holds a key it should not. `deploymentScope()` reads
+`APP_ENV`, then a **loopback `AUTH_URL`** (staging is `http://127.0.0.1:4120`), then `NODE_ENV` as a last resort.
+
+```
+scenario                                          scope        key      warns  expected
+staging (loopback AUTH_URL) + live key            staging      live     true   true
+staging (APP_ENV=staging) + live key              staging      live     true   true
+production + live key                             production   live     false  false
+staging + sandbox key                             staging      sandbox  false  false
+staging + no key                                  staging      none     false  false
+legacy BACH_IO live on a loopback host            staging      live     true   true
+NODE_ENV alone must NOT mark loopback as production staging    live     true   true
+```
+
+In the deployed environment: `scope=staging key=live warns=true`, and with a session minted by the app's own NextAuth,
+`GET /settings/billing -> 200 (32,994 bytes)` with **both** banner strings in the HTML. A warning nobody sees is the same
+as no warning, which is how the live key survived two streaks.
+
+## 2026-10-27 - Streak v20 / Prompt 3: the homepage names the product
+
+Supported sports (all eight named, each linking into the discovery filter), **For sportsbooks** → `/api-docs`, **For
+coaches** → `/coaching`. Rendered: every label present, `/api-docs` 200, `/?sport=tennis` 200.
+
+**One dead link, caught by checking rather than assuming:** `/coaching` returned **404** on staging, because the stack is
+behind `COACHING_ASSISTANT_ENABLED` and a missing flag means OFF. The card now renders its content as text with a
+one-line explanation when the flag is off, and links only where the page exists. Production (flag on) links.
+
+## 2026-10-27 - Streak v20 / Prompt 4: the final end-to-end proof
+
+`scripts/final-end-to-end-proof.ts` + `scripts/proof-webhook-receiver.mjs`, documented in full in
+`documentation/FINAL_LAUNCH_PROOF.md`.
+
+```
+PASS  organization created           Proof League mvqpxaeg (proof-league-mvqpxaeg)
+PASS  football round robin created   2 clubs · 2 fixtures (home and away)
+PASS  10 players registered          10 athletes · 10 PLAYER applications on season cmvqpxan…
+PASS  partner subscription created   subscribed to SCORE_CHANGED + WIN_PROBABILITY_UPDATED
+PASS  match played and finalised     3-1 · fixture FINAL
+PASS  SCORE_CHANGED emitted          4 deliveries · drain attempted 8, delivered 8, retried 0
+PASS  WIN_PROBABILITY_UPDATED        4 deliveries
+PASS  standings updated              Proof City P1 W1 D0 L0 pts3 · Proof Rovers P1 W0 D0 L1 pts0
+PASS  league exported                2 fixtures serialised
+PASS: 9 steps
+```
+
+The receiver recorded **8 deliveries** (`SCORE_CHANGED` ×4, `WIN_PROBABILITY_UPDATED` ×4), a signature header on every
+one, payload keys `id, type, sentAt, game, event`. "Webhook delivered" is a fact about HTTP requests that arrived, not
+about rows in an outbox - which is why the first version, pointing at an unreachable URL, was not good enough.
+
+**Two defects found before a customer could hit them, both worth more than the proof itself:**
+
+1. **A second organization could never be created.** `Organization.idPrefixAthlete`/`.idPrefixStaff` are globally unique
+   with defaults `"UBA"`/`"UBS"`, and the onboarding wizard created organizations without supplying them - so the first
+   tenant on a database worked and **every subsequent one failed** with a unique-constraint error. Self-serve onboarding
+   was broken for precisely the customers it exists for. Fixed by `allocateOrganizationPrefixes()`: derived from the
+   slug, extended with a counter until free, inside the creating transaction.
+2. **Football never finalised.** The first run reported `3-1 · fixture LIVE`, so standings were all zeros: the last goal
+   does not end a match and standings count `FINAL` fixtures only. The proof now sends `GAME_ENDED` and closes the
+   fixture with exactly one winner column, as the capture console does.
+
+What is NOT covered, stated rather than implied: the three browser forms are server actions, so the proof calls the
+services they call. A defect in the *wiring* between a form and its action (a renamed field, a missing hidden input)
+would not be caught here; a headless browser pass over those three forms is the next investment.
