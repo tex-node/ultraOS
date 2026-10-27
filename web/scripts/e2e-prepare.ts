@@ -81,11 +81,11 @@ async function main() {
   // 3. A LIVE fixture with a game, for the scoring spec. Reuses one that is already live if present, because a second
   // live fixture would make the spec's "the score changed" assertion ambiguous about which one moved.
   const fixture = await withOrganizationContext(ORG, async (tx) => {
-    const live = await tx.fixture.findFirst({
-      where: { organizationId: ORG, status: "LIVE", game: { isNot: null } },
-      select: { id: true },
-    });
-    if (live) return { id: live.id, created: false };
+    // A DEDICATED fixture, always. The first version reused "any live fixture with a game", which picked up a leftover
+    // from an earlier streak whose sport/competitor shape the console refuses - so the spec navigated to a 404 and
+    // reported "no scoring buttons". Reusing unknown state is how a test lies to you.
+    const previous = await tx.fixture.findMany({ where: { organizationId: ORG, divisionId: (await tx.division.findFirstOrThrow({ where: { competitionId: competition.id }, select: { id: true } })).id, status: "LIVE" }, select: { id: true } });
+    for (const old of previous) await tx.fixture.delete({ where: { id: old.id } });
 
     const division = await tx.division.findFirstOrThrow({ where: { competitionId: competition.id }, select: { id: true } });
     const season = await tx.season.findFirstOrThrow({ where: { competitionId: competition.id }, select: { id: true } });

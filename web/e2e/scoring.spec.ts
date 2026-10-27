@@ -26,8 +26,11 @@ test.describe("live scoring console", () => {
     // Wait for the credential POST to land: the login form disappearing means NextAuth issued a session.
     await expect(page.locator('input[name="password"]')).toHaveCount(0, { timeout: 25_000 });
 
-    await page.goto(`/games/${FIXTURE_ID}/live`);
-    await expect(page.getByText(/live|score|period/i).first()).toBeVisible({ timeout: 20_000 });
+    const consoleResponse = await page.goto(`/games/${FIXTURE_ID}/live`);
+    // A 404 here means the fixture is not one the console accepts (sport shape, competitors, or no game) - worth failing
+    // on its own line, because "no scoring buttons" is what a wrong-fixture 404 looks like from three steps away.
+    expect(consoleResponse?.status(), "the capture console must render for the prepared fixture").toBe(200);
+    await expect(page.getByRole("button", { name: /access system/i })).toHaveCount(0);
 
     // Read the score before, score a basket, read it after: the assertion is a DELTA, not a fixed number, so the test
     // does not depend on what the fixture's score happened to be.
