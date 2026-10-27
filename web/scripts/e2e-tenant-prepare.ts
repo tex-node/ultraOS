@@ -57,26 +57,30 @@ async function ensureTenant(label: "a" | "b", competitorName: string): Promise<T
   const passwordHash = await bcrypt.hash(PASSWORD, 10);
   const user = await prisma.user.upsert({
     where: { email },
-    create: { email, name: `E2E Tenant ${label.toUpperCase()} Admin`, passwordHash, emailVerified: new Date(), isActive: true, role: "SUPER_ADMIN" },
+    // LEAGUE_OPERATOR, not SUPER_ADMIN: a league administrator is not a platform administrator, and the dashboard
+  // deliberately lets a SUPER_ADMIN read ANY league (that is what platform admin means). Granting SUPER_ADMIN here is
+  // what made the first version of the spec assert a 404 it had no right to expect - the page was behaving as designed.
+  create: { email, name: `E2E Tenant ${label.toUpperCase()} Admin`, passwordHash, emailVerified: new Date(), isActive: true, role: "LEAGUE_OPERATOR" },
     update: { passwordHash, isActive: true },
     select: { id: true },
   });
   await prisma.userRoleAssignment.deleteMany({ where: { userId: user.id } });
-  await prisma.userRoleAssignment.create({ data: { userId: user.id, role: "SUPER_ADMIN", organizationId: organization.id } });
+  await prisma.userRoleAssignment.create({ data: { userId: user.id, role: "LEAGUE_OPERATOR", organizationId: organization.id } });
 
   // A member of BOTH tenants, for the "which one wins" case.
   if (label === "b") {
     const bothEmail = "e2e-tenant-both@ultraleagueos.test";
     const both = await prisma.user.upsert({
       where: { email: bothEmail },
-      create: { email: bothEmail, name: "E2E Both Admin", passwordHash, emailVerified: new Date(), isActive: true, role: "SUPER_ADMIN" },
+      create: { email: bothEmail, name: "E2E Both Admin", passwordHash, emailVerified: new Date(), isActive: true, role: "LEAGUE_OPERATOR" },
       update: { passwordHash, isActive: true },
       select: { id: true },
     });
     await prisma.userRoleAssignment.deleteMany({ where: { userId: both.id } });
     const tenantA = await prisma.organization.findUniqueOrThrow({ where: { slug: `${TAG}-a` }, select: { id: true } });
-    await prisma.userRoleAssignment.create({ data: { userId: both.id, role: "SUPER_ADMIN", organizationId: tenantA.id } });
-    await prisma.userRoleAssignment.create({ data: { userId: both.id, role: "SUPER_ADMIN", organizationId: organization.id } });
+    // A has the OLDER grant, so it is the one resolveActiveOrganizationId() picks - which is what the third test pins.
+    await prisma.userRoleAssignment.create({ data: { userId: both.id, role: "LEAGUE_OPERATOR", organizationId: tenantA.id } });
+    await prisma.userRoleAssignment.create({ data: { userId: both.id, role: "LEAGUE_OPERATOR", organizationId: organization.id } });
   }
 
   return { slug: organization.slug, name, email, orgId: organization.id, competitionSlug: league.slug, sessionClubId: seasonClub?.id ?? null };
