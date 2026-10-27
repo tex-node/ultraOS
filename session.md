@@ -13405,3 +13405,60 @@ deploy-logs/deploy-production-merged-…log            main deployed to producti
 
 The lesson generalises: a claim about evidence is only true if `git ls-files` agrees. `git ls-files deploy-logs` now lists
 all six.
+
+## 2026-10-27 - Streak v24 / Prompts 1-2: the sandbox key, and the vision worker is running
+
+### Prompt 1: staging is on the Bachs sandbox, and the checkout is blocked on one missing thing
+
+The staging environment now holds the **sandbox** key (`sk_sandbox_…`, 63 chars, from `cred/sandbox.txt`) in `BACH_IO`,
+with `BACHS_MOCK` removed. The key was moved to the host through a file and shredded after use; it was never printed here,
+in a commit, or in a command line.
+
+```
+/settings/billing      live-key banner: 0 · "Test mode": 0 · "Upgrade to Pro" present
+SDK environment        sandbox        (it derives the host from the key prefix)
+products.list          FAILED: API key missing required scope: products:read
+createSubscriptionCheckout   FAILED: No Bachs product configured for PRO: set BACHS_PRODUCT_PRO
+```
+
+**The product ids do not exist in `cred/`.** `sandbox.txt` contains exactly one line (`key = sk_sandbox_…`);
+`gateway_env.txt` contains `BACH_IO` (the live key) and `BACH_WEBHOOK`; nothing anywhere matches
+`BACHS_PRODUCT_PRO|ENTERPRISE|prod_`. Both are needed before a checkout can be created, and the key itself lacks the
+`products:read` scope, so the ids cannot be discovered through the API either - they have to be read off the Bachs
+dashboard. **That means the "complete a sandbox payment with 4242…" step cannot be executed yet**, and I am not going to
+claim otherwise. What *is* proved: the key authenticates, the SDK targets the sandbox host, the banner is gone, and the
+only thing standing between the button and Bachs is `BACHS_PRODUCT_PRO`.
+
+One real bug found on the way: `bachs-billing.ts` passed `BACH_API_BASE` (legacy, `https://api.bachs.io`) to the SDK as a
+base URL, which sent the *sandbox* key to the *production* host and produced `401 Invalid API key`. The SDK derives the
+host from the key and refuses a mismatch; the passthrough is now limited to an explicit `BACHS_API_BASE`.
+
+### Prompt 2: the vision stack is up, with the real analyzer
+
+```
+docker compose ps   vision-api Up (healthy) · vision-worker Up · vision-beat Up · vision-redis Up
+/health              {"status":"ok","analyzer":"yolov8n-person","database_configured":true,"storage_configured":true}
+```
+
+Getting there took four small infrastructure facts and four real bugs, all documented because they would each have
+blocked the next person:
+
+**Infrastructure.** Postgres listens on loopback only and the app database is published on **127.0.0.1:55411** (not 5432,
+which is an unrelated Supabase instance). Containers cannot reach host loopback, so a socat forwarder
+(`ultraos-pg-bridge.service`) listens on the docker bridge `172.17.0.1:5433` and forwards to it; the vision `DATABASE_URL`
+drops Prisma's `?schema=public` (not valid for libpq/psycopg) and points at the bridge. The app's media directory is
+mounted read-only at `/media`.
+
+**Bugs, found by running the pipeline:**
+1. `_fallback_requester()` queried `"User"."organizationId"` - a column that has never existed (User is global; membership
+   lives in `UserRoleAssignment`). Every video without an explicit requester killed the poller.
+2. `_update()`/`mark_completed()` wrote to `VisionAnalysisRun` with no tenant context, so RLS refused them.
+3. `video_path_for()` returned the stored **object key** as if it were a path, so every ingest died with
+   "cannot open video" even though the file was on disk.
+4. `VisionModel` is keyed **globally** (`key` unique) while its rows are tenant-scoped, so an upsert from a second
+   organization tried to update another organization's row and was refused with `USING expression`.
+
+Fixes 2-4 are the **same RLS bootstrap pattern** the web app hit in v21 and v22, in a third codebase:
+`app_vision_ready_videos()`, `app_vision_video_source()` and `app_vision_ensure_model()` are SECURITY DEFINER, granted in
+the same migration (`20261028180000`), and verified as the app role. `connection(organization_id)` sets
+`app.current_org_id` for the writes, exactly as `withOrganizationContext` does on the web side.
