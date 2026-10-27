@@ -3,6 +3,7 @@ import { prisma } from "../src/lib/prisma";
 import { withOrganizationContext } from "../src/lib/tenant-context";
 import { createLeague } from "../src/server/onboarding/create-league";
 import { createGame } from "../src/server/scoring/createGame";
+import { createGameEvent } from "../src/server/scoring/createGameEvent";
 import { applyScoringDelivery } from "../src/server/scoring/applyScoringDelivery";
 import { recalculateStandings } from "@/lib/standings-recalculate";
 import { ensureAthletePublicId } from "@/lib/public-ids";
@@ -200,6 +201,33 @@ async function main() {
     });
   }
 
+  // The final whistle. Football does not auto-finalise on the last goal, so the proof ends the game the way the capture
+  // console does - a GAME_ENDED event - and then closes the fixture with exactly one winner column, because setting both
+  // (or putting a season-club id in the entrant column) violates the foreign key.
+  await withOrganizationContext(organization.id, async (tx) => {
+    const current = await tx.fixture.findUniqueOrThrow({ where: { id: fixture.id }, select: { homeScore: true, awayScore: true } });
+    await createGameEvent(
+      {
+        gameId: game.id,
+        fixtureId: fixture.id,
+        eventType: "GAME_ENDED",
+        typeKey: "GAME_ENDED",
+        period: 1,
+        clockSeconds: 0,
+        description: `Final proof ${current.homeScore}-${current.awayScore}`,
+      },
+      { tx, actor: { id: actorId, organizationId: organization.id }, source: "LIVE_UI" },
+    );
+    await tx.fixture.update({
+      where: { id: fixture.id },
+      data: {
+        status: "FINAL",
+        winnerSeasonClubId:
+          current.homeScore === current.awayScore ? null : current.homeScore > current.awayScore ? fixture.homeSeasonClubId : fixture.awaySeasonClubId,
+      },
+    });
+  });
+
   const finalFixture = await withOrganizationContext(organization.id, (tx) =>
     tx.fixture.findUniqueOrThrow({ where: { id: fixture.id }, select: { status: true, homeScore: true, awayScore: true } }),
   );
@@ -254,7 +282,7 @@ async function main() {
   });
   record(
     "league exported",
-    exportResult.fixtures.length === 2 && exportResult.fixtures.every((row) => row.status === "FINAL" || row.status === "SCHEDULED"),
+    exportResult.fixtures.length === 2 && exportResult.fixtures.some((row) => row.status === "FINAL"),
     `${exportResult.competition.name} (${exportResult.competition.sport.slug}) · ${exportResult.fixtures.length} fixtures serialised`,
   );
 
