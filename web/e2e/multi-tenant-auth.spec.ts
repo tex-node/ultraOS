@@ -53,15 +53,15 @@ test.describe("multi-tenant authentication", () => {
   test("a user with roles in BOTH orgs gets one deterministic context, and no switcher exists", async ({ page }) => {
     await signIn(page, BOTH!);
 
-    // There is no organisation switcher in this product. The session resolves the OLDEST org-scoped grant, which is
-    // documented behaviour (resolveActiveOrganizationId), so the assertion pins WHICH tenant wins rather than pretending
-    // a switcher exists: Org A, because that grant was created first by the preparation script.
-    await page.goto("/dashboard");
-    const landing = await page.locator("body").innerText();
-    const saysA = /E2E Tenant A/i.test(landing);
-    const saysB = /E2E Tenant B/i.test(landing);
-    expect(saysA || saysB, "the dashboard must belong to one of the two tenants, not to neither").toBe(true);
-    expect(saysA && saysB, "a single session must not show two tenants at once").toBe(false);
-    console.log(`dual-role user resolved to ${saysA ? "Tenant A" : "Tenant B"} (oldest grant wins; no switcher exists)`);
+    // There is no organisation switcher in this product, so "which tenant does this session belong to" has one answer and
+    // it must be deterministic: resolveActiveOrganizationId() takes the OLDEST grant, which the preparation script makes
+    // Org A. The proof is not a label on a page - it is which tenant's dashboard the session is ALLOWED to open.
+    const aStatus = (await page.goto(`/admin/${A.slug}/dashboard`))?.status();
+    const bStatus = (await page.goto(`/admin/${B.slug}/dashboard`))?.status();
+    console.log(`dual-role user: Org A dashboard -> ${aStatus}, Org B dashboard -> ${bStatus}`);
+
+    expect([aStatus, bStatus].filter((status) => status === 200).length, "exactly one tenant must be reachable").toBe(1);
+    expect(aStatus, "the OLDEST grant wins, and that is Org A").toBe(200);
+    expect(bStatus, "the other tenant must be refused, not shown").toBe(404);
   });
 });
