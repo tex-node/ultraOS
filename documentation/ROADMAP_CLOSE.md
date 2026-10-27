@@ -41,3 +41,16 @@ Status of every phase, as of the final streak. `DONE` means there is a test or a
 | Staging representative of production | **DONE** | 2 organizations, 11 competitions after the v21 cleanup |
 | Backups | **DONE** | `ultraos-backup.timer` active, nightly dumps plus a pre-deploy dump per release |
 | Onboarding guide verified end to end | **DONE** | dry run with screenshots; five friction points corrected in the guide |
+
+## Addendum — streak v23 (2026-10-27)
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| The v22 "silent deploy" | **RESOLVED** | root cause: the pipeline's exit status was grep's, not the deploy's; demonstrated, not assumed. Two unfiltered transcripts in `deploy-logs/`, one under `bash -x`, and `deploy/ops/deploy-with-log.sh` now keeps the log and propagates the deploy's status |
+| RLS bootstrap pattern audited | **DONE** | 91 RLS-forced tables enumerated, every `$queryRaw`/`$executeRaw` classified; two bare reads fixed (`duplicateIdentityReport`, `upsertGoogleUser`), two vestigial fallbacks removed; static ratchet (5 tests in `npm test`) plus a database proof in `test:db` |
+| Workspace branding for a tenant | **DONE** | Test League B: sidebar, tab title and footer all read "Test League B", 0 occurrences of "Neon Ultra" |
+| Public portal header + Ultra-Basketball operator pages still platform/demo-named | **BLOCKED (partial)** | `portal-shell.tsx` prints "NEON ULTRA"; `gameday`, `live`, `broadcast`, `launch-readiness` say "Season Zero". Mechanical sweep: each page must resolve and pass its organization. Cosmetic. |
+| Vision worker running under systemd | **BLOCKED** | nothing listens on 8010; the venv and code are in place. Needs a unit file - the last infrastructure piece. |
+| Bachs sandbox key | **BLOCKED (external)** | staging runs `BACHS_MOCK=1`; a real checkout has never run against Bachs. |
+| `BACHS_PRODUCT_PRO` / `_ENTERPRISE` in production | **BLOCKED (external)** | unset; a real upgrade fails before reaching Bachs. |
+| Handover document | **DONE** | `documentation/HANDOVER.md`, every command and link checked against the host (one claim corrected: the vision worker) |
