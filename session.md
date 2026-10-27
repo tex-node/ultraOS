@@ -12290,3 +12290,104 @@ caller's `NODE_OPTIONS`; the host has 11 GB and both environments built cleanly 
 - The deploy-time `MEDIA_STORAGE_PROVIDER` fix lives in the environment files, not in code: a new environment must set
   it, and nothing validates that at boot beyond `validateMediaConfiguration()`.
 - Local files were deliberately left on disk after the backfill; reclaiming that space is a separate, backed-up job.
+
+## 2026-10-27 - Streak v18 / Prompt 1: Stripe out, Bachs in - and the discovery that shaped it
+
+**The repo already integrated Bachs.** `src/lib/bachs.ts` (phase F5.3, hand-rolled over `fetch`) serves ticketing, with
+`/api/bachs/webhook` handling `collection.succeeded` and `refund.paid`. So this was not "add a payment provider" - it was
+"move subscription billing onto the provider already in use", and doing it any other way would have left two competing
+integrations of the same gateway.
+
+- `stripe` package and all its code removed; `Organization.stripeCustomerId` **renamed** to `bachsCustomerId` (a RENAME,
+  never a drop-and-add: the habit of dropping a column to "rename" it is how data disappears on the untested host).
+- `@bachs/sdk` installed and used for **subscription** checkout; ticketing keeps its amount-based helper. Two payment
+  shapes, two modules, because one function trying to be both is how this gets vague.
+- `/api/webhooks/bachs` verifies with the SDK's own `constructEvent` (V2 header, HMAC over `"<t>.<raw body>"`), applies
+  `checkout.completed` and `subscription.cancelled`, acknowledges anything else with 200.
+- A real **SYSTEM user row** (`system00000000000000000`, inactive, no password, guarded by a CHECK) so `AuditLog.userId`
+  keeps its foreign key and a webhook-driven plan change is auditable.
+
+**The brief's parameter names do not exist in the real SDK.** There is no `settlement` and no `billing: "subscription"`:
+the equivalents are `billing_currency: "NGN"` and a PRODUCT that Bachs treats as a subscription. The code uses the real
+API; this note is the record of the difference rather than a silent reinterpretation.
+
+**Two defects found by running it:**
+
+1. The first signed delivery returned **500** after changing the plan: *"new row violates row-level security policy for
+   table AuditLog"*. The audit insert ran outside `withOrganizationContext`, so `app.current_org_id` was unset. RLS did
+   its job on a write I had placed outside the tenant pattern. My verification script had missed it because it connects
+   as the **owner role** (which bypasses RLS) while the app connects as the app role.
+2. The deploy failed three times, each for a real reason: a stale `src/lib/stripe.ts` still tracked in git (my local
+   deletion was never staged), a stale `scripts/stripe-webhook-verify.ts` that the build type-checks, and a lock file
+   npm would not accept. **And a fourth, self-inflicted**: to regenerate the lock I cloned from the *deploy checkout*,
+   which has a modified working tree - so the regenerated `package.json` silently dropped `@bachs/sdk` and `xlsx`. Caught
+   by reading the diff, reverted, re-applied only the `@swc/helpers` pin. Never clone the deploy checkout.
+
+```
+column renamed            : bachsCustomerId=1 · stripeCustomerId=0
+system actor              : system@ultraleagueos.local active=false
+stripe package            : gone · /api/webhooks/stripe removed · @bachs/sdk present
+unsigned POST             : 400 (no signature)
+wrongly signed            : 400 "Webhook signature does not match."
+correctly signed          : 200 {"handled":true,"plan":"PRO"} · customer cust_v18_rls
+audit                     : ORG_UPGRADED_BY_BACHS by system00000000000000000 · evt_v18_rls_…
+ticketing webhook         : 401 unsigned (unchanged handler still guarding its own URL)
+PASS
+```
+
+## 2026-10-27 - Streak v18 / Prompt 2: configuration that can be seen
+
+`SystemConfig` (not tenant-scoped, and the migration says why: it is deployment configuration, not tenant data) with a
+seeded `media.storageProvider` row and GRANTs to all three roles in the same file. `resolveMediaProvider()` answers in a
+documented order - **environment variable, then SystemConfig, then the built-in default** - and reports which source
+answered. `storeMediaBytes()` awaits it, so the database value actually governs uploads instead of decorating a page.
+
+`/admin/settings` shows the provider in force, the source, and a present/missing list for every R2 credential. Switching
+to R2 while a credential is missing is **refused**, not saved: the original bug was assets landing locally with nobody
+noticing, and a toggle that accepts an impossible value would bring it back wearing a different hat.
+
+```
+media.storageProvider = "LOCAL_PERSISTENT_STORAGE" (seeded row)
+grants: ultraos:SELECT, ultraos_app:SELECT, ultraos_staging:SELECT
+read as app role: 1
+GET /admin/settings -> 307 (no session)
+```
+
+## 2026-10-27 - Streak v18 / Prompt 3: linking an organization to Bachs
+
+`/admin/organizations/[id]` adds the Billing section: the Bachs customer id (editable, `cust_`-format checked, audited
+against the admin who set it), the plan with its usage, and a **Generate checkout link** button for PRO and ENTERPRISE.
+
+```
+before: plan ENTERPRISE · customer cust_v18_rls
+after : customer cust_v18_admin_test · plan ENTERPRISE
+audit : <admin id> · {"bachsCustomerId":"cust_v18_admin_test"}
+format gate rejects "not-a-customer-id": true
+PASS
+```
+
+## 2026-10-27 - Streak v18 / Prompt 4: data quality, and reclaiming the disk
+
+`/admin/data-quality` (SUPER_ADMIN) queries, never asserts: final games, result-source and record-origin breakdowns, the
+box-score verification rate (`Game.statisticsVerifiedAt` - the field the schema has for it), highlight clips, and two
+integrity checks that mirror `scripts/data/verify-batch.mjs` against the database. A side with **no** box score is kept
+out of the mismatch count: missing data and wrong data are different problems, and conflating them makes a report nobody
+trusts.
+
+One correction worth recording: the score lives on the **Fixture**, not the Game. My first version selected
+`game.homeScore`, which does not exist - caught by the type checker before it could produce a dashboard of zeroes.
+
+`scripts/prune-local-media.ts` deletes a local file only when the asset is on R2, its URL is https under the configured
+base, **and that URL answers 200/206 right now** - because "the column says R2" is a claim, not a proof.
+
+```
+staging : 63 files, 0 deletable (no asset there is on R2 - staging was never backfilled, so nothing is provably safe)
+production before: 51 files · 18 MB · 17 assets on R2 · 0 local
+dry run : 17 of 51 would be deleted (13.77 MB)
+apply   : 17 deleted · 13.77 MB reclaimed · 34 kept ("no MediaAsset row for this key" = variant files)
+after   : 34 files · 3.3 MB                                   (backup: media-pre-prune_20261027T090812Z.tar.gz, 17 MB)
+three pruned assets still serve: 200 image/jpeg 50,188 / 172,043 / 30,559 bytes from pub-e130…r2.dev
+```
+
+The 34 kept files are **variants** (a different table, `MediaAssetVariant`), which the script deliberately does not
+match: it only deletes what it can prove is redundant, and a variant's cloud copy follows a different key.
