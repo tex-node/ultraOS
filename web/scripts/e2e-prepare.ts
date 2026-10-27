@@ -38,10 +38,20 @@ async function main() {
     update: { passwordHash, isActive: true, emailVerified: new Date() },
     select: { id: true, email: true },
   });
-  const existingRole = await prisma.userRoleAssignment.findFirst({ where: { userId: user.id, role: "SUPER_ADMIN", organizationId: null }, select: { id: true } });
-  if (!existingRole) {
+  // TWO grants, and the second is the one that matters: a platform-wide SUPER_ADMIN has organizationId = null in its
+  // session, so every org-scoped page answers "No league yet". The specs must sign in as somebody who belongs to the
+  // league they are testing, which is also what a real operator is. resolveActiveOrganizationId() takes the OLDEST
+  // org-scoped grant, so this user belongs to exactly one organization - the one under test.
+  const platformRole = await prisma.userRoleAssignment.findFirst({ where: { userId: user.id, role: "SUPER_ADMIN", organizationId: null }, select: { id: true } });
+  if (!platformRole) {
     await prisma.userRoleAssignment.create({ data: { userId: user.id, role: "SUPER_ADMIN", organizationId: null } });
   }
+  const orgRole = await prisma.userRoleAssignment.findFirst({ where: { userId: user.id, role: "SUPER_ADMIN", organizationId: ORG }, select: { id: true } });
+  if (!orgRole) {
+    await prisma.userRoleAssignment.create({ data: { userId: user.id, role: "SUPER_ADMIN", organizationId: ORG } });
+  }
+  // Any other org-scoped grant would send the session to a different league depending on grant order.
+  await prisma.userRoleAssignment.deleteMany({ where: { userId: user.id, organizationId: { not: null, notIn: [ORG] } } });
 
   // 2. An open competition. Reused by slug so a re-run does not create another one.
   const organization = await prisma.organization.findUniqueOrThrow({ where: { id: ORG }, select: { slug: true, name: true } });
