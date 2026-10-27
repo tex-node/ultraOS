@@ -1,8 +1,9 @@
 import { Bachs } from "@bachs/sdk";
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { systemActorId } from "@/lib/system-actor";
 import { bachsConfig } from "@/lib/bachs";
+import { withOrganizationContext } from "@/lib/tenant-context";
 import type { PlanName } from "@/lib/plans";
 
 // Subscription billing through Bachs (streak v18, Prompt 1).
@@ -17,6 +18,9 @@ import type { PlanName } from "@/lib/plans";
 //   checkoutSessions.create({ product_cart: [{ product_id, quantity }], billing_currency, metadata, success_url, ... })
 // There is no `settlement` argument and no `billing: "subscription"` - the settlement currency is `billing_currency`
 // and "subscription" is a property of the PRODUCT configured in the Bachs dashboard.
+
+// withOrganizationContext takes a PrismaClient; the webhook passes the app singleton, the tests pass an isolated one.
+type PrismaClientLike = PrismaClient;
 
 export function bachsBillingConfigured(): boolean {
   const config = bachsConfig();
@@ -126,12 +130,22 @@ export async function applyBachsBillingEvent(
     if (!organizationId) return { handled: false, reason: "the event carries no organizationId" };
 
     const customerId = typeof data.customer_id === "string" ? data.customer_id : undefined;
-    const updated = await prisma.organization.updateMany({
-      where: { id: organizationId },
-      data: { plan, ...(customerId ? { bachsCustomerId: customerId } : {}) },
-    });
+    // The write AND its audit row run inside the tenant context. Writing the audit row outside it fails with
+    // "new row violates row-level security policy for table AuditLog" - which is precisely what happened on the first
+    // signed delivery to staging: the plan changed and the response was a 500, because app.current_org_id was unset.
+    const updated = await withOrganizationContext(
+      organizationId,
+      async (tx) => {
+        const result = await tx.organization.updateMany({
+          where: { id: organizationId },
+          data: { plan, ...(customerId ? { bachsCustomerId: customerId } : {}) },
+        });
+        if (result.count > 0) await auditPlanChange(tx, organizationId, plan, event);
+        return result;
+      },
+      prisma as unknown as PrismaClientLike,
+    );
     if (updated.count === 0) return { handled: false, reason: `no organization ${organizationId}` };
-    await auditPlanChange(prisma, organizationId, plan, event);
     return { handled: true, organizationId, plan };
   }
 
@@ -140,8 +154,14 @@ export async function applyBachsBillingEvent(
     if (!customerId) return { handled: false, reason: "the event carries no customer_id" };
     const organization = await prisma.organization.findFirst({ where: { bachsCustomerId: customerId }, select: { id: true } });
     if (!organization) return { handled: false, reason: `no organization for customer ${customerId}` };
-    await prisma.organization.update({ where: { id: organization.id }, data: { plan: "FREE" } });
-    await auditPlanChange(prisma, organization.id, "FREE", event);
+    await withOrganizationContext(
+      organization.id,
+      async (tx) => {
+        await tx.organization.update({ where: { id: organization.id }, data: { plan: "FREE" } });
+        await auditPlanChange(tx, organization.id, "FREE", event);
+      },
+      prisma as unknown as PrismaClientLike,
+    );
     return { handled: true, organizationId: organization.id, plan: "FREE" };
   }
 
