@@ -12891,3 +12891,26 @@ proves the upgrade works (component suite 26/26, build 212 s at 4.97 GB peak) bu
 decision. Staging still holds a **live** Bachs key (a red banner now says so; a sandbox key must be issued at Bachs). The
 end-to-end proof drives services rather than forms — the browser specs now cover the three critical forms, but the proof
 itself still has that gap by design.
+
+## 2026-10-27 - Streak v21 / Prompt 5: final sync
+
+**Roadmaps**: `MULTI_SPORT_ARCHITECTURE.md` and `COACH_INTELLIGENCE_ROADMAP.md` carry the streak entry; the Node 22
+runbook and the customer onboarding guide live in `documentation/`.
+
+**Suites, run ON THE HOST** (Node v20.20.2 - the point of Prompt 1):
+```
+npm test (unit)       1022 collected · 1021 pass · 0 fail · 1 pre-existing skip
+npm run test:component  refuses with its Node 22 explanation (and passes 26/26 under /opt/node22)
+npm run test:db        49 tests · 49 pass (scratch clone)
+canonical-write ratchet 4 suppressions (ceiling 4)
+browser specs (staging) 4 passed: registration ×2, live scoring, setup wizard
+```
+
+**What this streak actually changed**
+- The test suites run on the deploy host at last, and the Node 22 upgrade is measured rather than described.
+- Three browser specs that click real buttons - and the **three product bugs** they found: login-time organization
+  resolution was blind to every non-default league, the registration action was RLS-blind, and the public form did not
+  work before hydration.
+- A customer onboarding guide whose every link was requested against the deployed build (and one dead link removed).
+- Staging cleaned to its two real leagues, backups verified running, and a handoff entry that says what is proven and
+  what is not.
