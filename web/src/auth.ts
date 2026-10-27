@@ -43,6 +43,15 @@ async function getSessionUser(email: string) {
   // the only other source of truth. Reading the relation here would look like a fallback while silently seeing only the
   // default organization's grants, which is exactly how the v22 privilege escalation happened.
   const roles = (resolvedRoles.length > 0 ? resolvedRoles : [user.role]) as UserRole[];
+
+  // The league's own name and slug, so a shell can print "Test League B" instead of a hardcoded "Neon Ultra" (streak
+  // v23). Organization is the tenant table itself and is NOT RLS-scoped, so this read is safe before any context exists;
+  // the id it needs comes from the SECURITY DEFINER resolver, which is the part that could not be a scoped query.
+  const organizationId = await resolveActiveOrganizationId(user.id);
+  const organization = organizationId
+    ? await prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true, slug: true } })
+    : null;
+
   return {
     id: user.id,
     name: user.name,
@@ -50,7 +59,9 @@ async function getSessionUser(email: string) {
     image: user.image,
     role: primaryRole(roles.length > 0 ? roles : [user.role]),
     roles: roles.length > 0 ? roles : [user.role, UserRole.FAN],
-    organizationId: await resolveActiveOrganizationId(user.id),
+    organizationId,
+    organizationName: organization?.name ?? null,
+    organizationSlug: organization?.slug ?? null,
     sessionVersion: user.sessionVersion,
   };
 }
@@ -157,6 +168,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.role = sessionUser.role;
           token.roles = sessionUser.roles;
           token.organizationId = sessionUser.organizationId;
+          token.organizationName = sessionUser.organizationName;
+          token.organizationSlug = sessionUser.organizationSlug;
           token.sessionVersion = sessionUser.sessionVersion;
         }
         return token;
@@ -169,6 +182,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = user.role;
         token.roles = user.roles;
         token.organizationId = user.organizationId;
+        token.organizationName = user.organizationName;
+        token.organizationSlug = user.organizationSlug;
         token.sessionVersion = typeof user.sessionVersion === "number" ? user.sessionVersion : 0;
       }
       return token;
@@ -201,6 +216,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           )
         : [token.role as UserRole];
       session.user.organizationId = typeof token.organizationId === "string" ? token.organizationId : null;
+      session.user.organizationName = typeof token.organizationName === "string" ? token.organizationName : null;
+      session.user.organizationSlug = typeof token.organizationSlug === "string" ? token.organizationSlug : null;
       return session;
     },
   },

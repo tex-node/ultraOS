@@ -1,4 +1,5 @@
 import "./globals.css";
+import { auth } from "@/auth";
 import { ServiceWorkerRegistrar } from "./components/service-worker-registrar";
 import type { Metadata, Viewport } from "next";
 import { Inter, Space_Grotesk, Geist_Mono } from "next/font/google";
@@ -26,16 +27,18 @@ const geistMono = Geist_Mono({
 // "http://localhost:4110" reverse-proxy target in production, not the public domain a social
 // crawler can actually reach. AUTH_URL is already the established env var for "this app's real
 // public URL" (used the same way in the QR code route).
-export const metadata: Metadata = {
-  metadataBase: new URL(process.env.AUTH_URL ?? "http://localhost:3000"),
-  title: "Neon Ultra Tournament Management System",
-  description: "Tournament administration and game-day operations.",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "UltraOS",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  // Streak v23 sweep: the browser tab named the platform's demo league for EVERY tenant. The session carries the user's
+  // own league now, so the title is theirs; an anonymous visitor (or a user with no league) gets the platform name.
+  const session = await auth();
+  const league = session?.user?.organizationName ?? null;
+  return {
+    metadataBase: new URL(process.env.AUTH_URL ?? "http://localhost:3000"),
+    title: league ? `${league} · UltraOS` : "Neon Ultra Tournament Management System",
+    description: league ? `${league} on UltraLeagueOS - fixtures, live scoring and league operations.` : "Tournament administration and game-day operations.",
+    appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "UltraOS" },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: "#0b100e",

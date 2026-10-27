@@ -7,6 +7,9 @@ export type WorkspaceUser = {
   name?: string | null;
   role: string;
   roles?: string[];
+  /** The league this session belongs to (streak v23). Optional so tests and legacy call sites keep compiling. */
+  organizationName?: string | null;
+  organizationSlug?: string | null;
 };
 
 type NavLink = { href: string; label: string; adminOnly?: boolean; roles?: string[] };
@@ -101,8 +104,10 @@ export function WorkspaceShell({
   organizationName?: string;
   organizationContext?: string | null;
 }) {
-  const workspaceName = organizationName ?? "Neon Ultra";
-  const workspaceContext = organizationContext ?? "Season Zero · 2026";
+  // Streak v23 sweep: the session now carries the user's own league name, so the default is THEIR league rather than the
+  // platform's demo competition. The prop still wins when a page knows better (e.g. a dashboard for a different slug).
+  const workspaceName = organizationName ?? user.organizationName ?? "Neon Ultra";
+  const workspaceContext = organizationContext ?? (user.organizationSlug ? null : "Season Zero · 2026");
   const admin = Boolean(isAdmin(user));
   const roles = user.roles?.length ? user.roles : [user.role];
   const visible = (link: NavLink) => !link.adminOnly || admin || (link.roles ?? []).some((role) => roles.includes(role));
@@ -156,6 +161,11 @@ export function WorkspaceShell({
       </aside>
       <div className="min-w-0 pb-16 lg:pb-0">
         {children}
+        {/* The footer names the league too (streak v23 sweep): a tenant-facing page should not end with the platform's demo
+            competition, which is what every workspace used to do. */}
+        <footer className="mx-auto mt-10 max-w-6xl px-4 pb-6 text-[11px] text-text-3 sm:px-6">
+          {workspaceName} · running on UltraLeagueOS
+        </footer>
         <WorkspaceBottomNav />
       </div>
     </div>
