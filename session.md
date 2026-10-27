@@ -13160,3 +13160,5 @@ b86d712  docs(session): Prompt 2 - the multi-tenant spec and the privilege escal
    is run deliberately, not on every deploy.
 5. **One production deploy attempt in this streak produced no output and a retry worked.** Unresolved; the evidence was
    filtered by my own grep. Worth one unfiltered run before the next release.
+
+<!-- v23: deploy-reliability investigation -->
