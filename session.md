@@ -13384,3 +13384,24 @@ staging:   SMOKE OK, 0 errors · production: SMOKE OK, 0 errors
 
 **Read next:** `documentation/HANDOVER.md`, then `documentation/ROADMAP_CLOSE.md` (every phase DONE or BLOCKED with its
 evidence), then the last three entries above.
+
+### Correction to Prompt 1 above
+
+I wrote that the two unfiltered deploy transcripts were "committed as evidence". **They were not.** `.gitignore` ends with a
+blanket `*.log` rule, so `git add deploy-logs` staged nothing and the earlier commit contained only the wrapper script.
+The files existed on disk; the claim that they were in the repository was false.
+
+Fixed in this streak: `.gitignore` now re-includes `deploy-logs/` (with a comment saying why - a blanket log rule is
+exactly how the v22 evidence disappeared), and **six transcripts are committed**:
+
+```
+deploy-logs/deploy-20261027T175230Z.log              unfiltered production deploy, 395 lines, SMOKE OK
+deploy-logs/deploy-traced-20261027T175620Z.log       the same under bash -x, 629 lines
+deploy-logs/deploy-staging-20261027T184050Z.log      staging through the wrapper, 381 lines
+deploy-logs/deploy-production-FAILED-…log            the FAILED production deploy, 3 KB - the evidence that matters
+deploy-logs/deploy-production-hermetic-…log          the retry under env -i, 378 lines, 731 packages
+deploy-logs/deploy-production-merged-…log            main deployed to production, 381 lines
+```
+
+The lesson generalises: a claim about evidence is only true if `git ls-files` agrees. `git ls-files deploy-logs` now lists
+all six.
