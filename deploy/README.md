@@ -31,7 +31,7 @@ placeholder values and comments.
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | sign-in |
 | `R2_*` | media storage (or `MEDIA_STORAGE_PROVIDER=LOCAL_PERSISTENT_STORAGE` + `MEDIA_LOCAL_ROOT`) |
 | `SMTP_*` / `EMAIL_FROM` | transactional email |
-| `BACH_API_BASE` / `BACH_IO` / `BACH_WEBHOOK` | payments. **Staging must use a SANDBOX key** (`sk_sandbox_…` or the sandbox dashboard's key), never the production `sk_live_…` one - see the warning below. |
+| `BACH_API_BASE` / `BACHS_KEY` / `BACHS_SANDBOX_KEY` / `BACHS_WEBHOOK_SECRET` | payments. **Staging must use `BACHS_SANDBOX_KEY`** (a sandbox key, `sk_sandbox_…`), never the production `sk_live_…` one. Since v22 the server refuses to start and the deploy refuses to run when `APP_ENV=staging` and the key is `sk_live_…`; `BACHS_MOCK=1` is the supported way to run a test environment with no sandbox key at all. Legacy names `BACH_IO` / `BACH_WEBHOOK` are still read. |
 
 **Feature flags — a missing flag means OFF, which is how the coaching stack shipped dark for a day**
 
