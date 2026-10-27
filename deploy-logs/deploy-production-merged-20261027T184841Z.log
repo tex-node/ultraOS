@@ -1,0 +1,381 @@
+[deploy] app-root=/opt/ultraleagueos service=ultraos-web.service ref=origin/main migrate=1
+From github.com-ultraos:tex-node/ultraOS
+   df919e0..36a8662  main       -> origin/main
+   39f24bf..36a8662  ops/reconcile-backup-design -> origin/ops/reconcile-backup-design
+Previous HEAD position was 39f24bf fix(deploy): run the deploy in a hermetic environment
+HEAD is now at 36a8662 docs(session): v23 Prompt 5 - the deploy failure and its cause, then PROJECT STATUS: LAUNCH READY
+Removing web/.next/
+Removing web/next-env.d.ts
+Removing web/node_modules/
+Removing web/src/generated/
+[deploy] source at 36a8662
+[deploy] npm ci
+npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+npm warn deprecated rimraf@2.7.1: Rimraf versions prior to v4 are no longer supported
+npm warn deprecated lodash.isequal@4.5.0: This package is deprecated. Use require('node:util').isDeepStrictEqual instead.
+npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+npm warn deprecated fstream@1.0.12: This package is no longer supported.
+npm warn deprecated uuid@8.3.2: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+
+added 731 packages in 20s
+[deploy] prisma generate
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+
+✔ Generated Prisma Client (7.8.0) to ./src/generated/prisma in 2.65s
+
+[deploy] prisma migrate status (pre-flight)
+
+110 migrations found in prisma/migrations
+
+Database schema is up to date!
+[deploy] next build
+▲ Next.js 16.2.9 (Turbopack)
+- Experiments (use with caution):
+  · serverActions
+
+  Creating an optimized production build ...
+Turbopack build encountered 1 warnings:
+./next.config.ts
+Encountered unexpected file in NFT list
+A file was traced that indicates that the whole project was traced unintentionally. Somewhere in the import trace below, there are:
+- filesystem operations (like path.join, path.resolve or fs.readFile), or
+- very dynamic requires (like require('./' + foo)).
+To resolve this, you can
+- remove them if possible, or
+- only use them in development, or
+- make sure they are statically scoped to some subfolder: path.join(process.cwd(), 'data', bar), or
+- add ignore comments: path.join(/*turbopackIgnore: true*/ process.cwd(), bar)
+
+Import trace:
+  App Route:
+    ./next.config.ts
+    ./src/lib/media-blob.ts
+    ./src/lib/media-storage.ts
+    ./src/app/media/assets/[assetId]/file/route.ts
+
+
+✓ Compiled successfully in 27.7s
+  Running TypeScript ...
+  Finished TypeScript in 2.0min ...
+  Collecting page data using 5 workers ...
+  Generating static pages using 5 workers (0/79) ...
+  Generating static pages using 5 workers (19/79) 
+  Generating static pages using 5 workers (39/79) 
+  Generating static pages using 5 workers (59/79) 
+○ (serwist) Using esbuild to bundle the service worker.
+✓ (serwist) 101 precache entries (13906.54 KiB)
+✓ Generating static pages using 5 workers (79/79) in 889ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /[vanitySlug]
+├ ƒ /[vanitySlug]/fixtures
+├ ƒ /[vanitySlug]/highlights
+├ ƒ /[vanitySlug]/insights
+├ ƒ /~offline
+├ ƒ /access
+├ ƒ /account
+├ ƒ /admin
+├ ƒ /admin/[organizationSlug]/dashboard
+├ ƒ /admin/data-quality
+├ ƒ /admin/organizations
+├ ƒ /admin/organizations/[id]
+├ ƒ /admin/settings
+├ ƒ /admin/setup-wizard
+├ ƒ /announcements
+├ ○ /api-docs
+├ ƒ /api/auth/[...nextauth]
+├ ƒ /api/auth/error
+├ ƒ /api/bachs/webhook
+├ ƒ /api/broadcast/games/[gameId]
+├ ƒ /api/broadcast/program
+├ ƒ /api/content/[kind]/[id]
+├ ƒ /api/cron/drain-feeds
+├ ƒ /api/draft-events/[draftEventId]/state
+├ ƒ /api/games/[id]
+├ ƒ /api/games/[id]/box-score
+├ ƒ /api/games/[id]/data-capabilities
+├ ƒ /api/games/[id]/snapshot
+├ ƒ /api/games/[id]/snapshot-v2
+├ ƒ /api/public/coaches/[ultraStaffId]
+├ ƒ /api/public/players/[ultraAthleteId]
+├ ƒ /api/qr/[code]
+├ ƒ /api/share/game/[id]
+├ ƒ /api/share/player/[id]
+├ ƒ /api/share/record/[key]
+├ ƒ /api/share/team/[id]
+├ ƒ /api/sponsor-impressions/[id]
+├ ƒ /api/sync/outbox
+├ ƒ /api/v1/broadcast/games/[id]
+├ ƒ /api/v1/clubs/[publicId]
+├ ƒ /api/v1/exports/tournament/[id]
+├ ƒ /api/v1/games/[publicId]
+├ ƒ /api/v1/games/[publicId]/box-score
+├ ƒ /api/v1/games/[publicId]/events
+├ ƒ /api/v1/games/[publicId]/live-feed
+├ ƒ /api/v1/games/[publicId]/snapshot
+├ ƒ /api/v1/live
+├ ƒ /api/v1/players/[publicId]
+├ ƒ /api/v1/seasons/[publicId]/leaders
+├ ƒ /api/v1/seasons/[publicId]/standings
+├ ƒ /api/vision/games/[gameVideoId]/export
+├ ƒ /api/vision/upload
+├ ƒ /api/webhooks/bachs
+├ ƒ /applications
+├ ƒ /applications/[category]
+├ ƒ /applications/export
+├ ƒ /applications/internalization
+├ ƒ /apply
+├ ƒ /apply/[organizationSlug]
+├ ƒ /apply/[organizationSlug]/[role]
+├ ƒ /athletes/[athleteId]/training
+├ ƒ /audit
+├ ƒ /broadcast
+├ ƒ /broadcast/control
+├ ƒ /broadcast/diagnostics
+├ ƒ /broadcast/game/[gameId]/final
+├ ƒ /broadcast/game/[gameId]/four-point-moment
+├ ƒ /broadcast/game/[gameId]/game-story
+├ ƒ /broadcast/game/[gameId]/generic-scorebug
+├ ƒ /broadcast/game/[gameId]/leader
+├ ƒ /broadcast/game/[gameId]/milestone
+├ ƒ /broadcast/game/[gameId]/player-spotlight
+├ ƒ /broadcast/game/[gameId]/record-watch
+├ ƒ /broadcast/game/[gameId]/scorebug
+├ ƒ /broadcast/game/[gameId]/team-comparison
+├ ƒ /broadcast/game/[gameId]/ultra-time
+├ ƒ /broadcast/graphics
+├ ƒ /broadcast/graphics/preview
+├ ƒ /broadcast/overlay/[organizationSlug]/[fixtureId]
+├ ƒ /broadcast/stats
+├ ƒ /check-in
+├ ƒ /check-in/[code]
+├ ƒ /clubs
+├ ƒ /clubs/[id]
+├ ƒ /clubs/[id]/edit
+├ ƒ /clubs/[id]/seasons/new
+├ ƒ /clubs/import
+├ ƒ /clubs/new
+├ ƒ /coaches
+├ ƒ /coaches/[ultraStaffId]
+├ ƒ /coaches/assignments
+├ ƒ /coaches/import
+├ ƒ /coaches/photos/import
+├ ƒ /coaches/season-zero-selection
+├ ƒ /coaching
+├ ƒ /coaching/[seasonClubId]
+├ ƒ /coaching/[seasonClubId]/opponents
+├ ƒ /coaching/[seasonClubId]/opponents/[opponentSeasonClubId]
+├ ƒ /coaching/[seasonClubId]/players/[playerId]
+├ ƒ /coaching/[seasonClubId]/review/[gameId]
+├ ƒ /coaching/[seasonClubId]/squad
+├ ƒ /coaching/[seasonClubId]/squad/setup
+├ ƒ /coaching/[seasonClubId]/training
+├ ƒ /coaching/[seasonClubId]/training/[sessionId]
+├ ƒ /coaching/selection/[fixtureId]
+├ ƒ /competitions
+├ ƒ /competitions/[id]
+├ ƒ /competitions/[id]/schedule
+├ ƒ /competitions/[id]/settings
+├ ƒ /competitions/[id]/sport-rules
+├ ƒ /competitions/[id]/teams
+├ ƒ /competitions/[id]/teams/new
+├ ƒ /competitions/new
+├ ƒ /content
+├ ƒ /content/assets/[slug]
+├ ƒ /content/assets/[slug]/export/[format]
+├ ƒ /content/templates
+├ ƒ /dashboard
+├ ƒ /data-quality/duplicates
+├ ƒ /data-quality/duplicates/[groupId]
+├ ƒ /data-quality/season-zero-production
+├ ƒ /data-quality/season-zero-production/[applicationId]/duplicates
+├ ƒ /data-readiness
+├ ƒ /data-readiness/export
+├ ƒ /demo-mode
+├ ƒ /design
+├ ƒ /display-monitoring
+├ ƒ /display/game/[gameId]/clock
+├ ƒ /documents
+├ ƒ /draft-cohort
+├ ƒ /draft-events
+├ ƒ /draft-events/[draftEventId]
+├ ƒ /draft-events/[draftEventId]/coaches
+├ ƒ /draft-events/[draftEventId]/control
+├ ƒ /draft-events/[draftEventId]/display
+├ ƒ /draft-events/[draftEventId]/player-pool
+├ ƒ /draft-events/[draftEventId]/readiness
+├ ƒ /draft-events/[draftEventId]/squads
+├ ƒ /draft-events/[draftEventId]/squads/[squadId]
+├ ƒ /draft-events/[draftEventId]/squads/new
+├ ƒ /draft-events/new
+├ ƒ /draft-readiness
+├ ƒ /drafts
+├ ƒ /drafts/[id]
+├ ƒ /drafts/[id]/display
+├ ƒ /drafts/new
+├ ƒ /embed/live/[orgSlug]/[fixtureId]
+├ ƒ /equipment
+├ ƒ /events
+├ ƒ /events/[id]
+├ ƒ /events/[id]/debrief
+├ ƒ /events/[id]/registration
+├ ƒ /events/new
+├ ƒ /fixtures
+├ ƒ /fixtures/[id]
+├ ƒ /fixtures/[id]/edit
+├ ƒ /fixtures/new
+├ ƒ /forgot-password
+├ ƒ /gameday
+├ ƒ /gameday/checkin
+├ ƒ /games/[fixtureId]/live
+├ ƒ /games/[fixtureId]/stats
+├ ƒ /games/[fixtureId]/stats/live
+├ ƒ /games/[fixtureId]/stats/reconciliation
+├ ƒ /games/[fixtureId]/stats/reports
+├ ƒ /games/[fixtureId]/stats/reports/box-score
+├ ƒ /games/[fixtureId]/stats/reports/play-by-play
+├ ƒ /games/[fixtureId]/stats/reports/shot-chart
+├ ƒ /games/[fixtureId]/video
+├ ƒ /giesm
+├ ƒ /imports
+├ ƒ /imports/[importJobId]
+├ ƒ /imports/[importJobId]/report
+├ ƒ /imports/template
+├ ƒ /incidents
+├ ƒ /launch-readiness
+├ ƒ /launch-readiness/report
+├ ƒ /leaders
+├ ƒ /live
+├ ƒ /login
+├ ○ /manifest.webmanifest
+├ ƒ /media
+├ ƒ /media/[assetId]
+├ ƒ /media/assets/[assetId]/file
+├ ƒ /media/upload
+├ ƒ /mock-checkout/[token]
+├ ƒ /no-league
+├ ƒ /notifications
+├ ƒ /novelty-matches
+├ ƒ /novelty-matches/[matchId]/live
+├ ƒ /operations
+├ ƒ /operations/matchday
+├ ƒ /orders
+├ ƒ /participants/all-star-roster
+├ ƒ /participants/offline-intake
+├ ƒ /participants/search
+├ ƒ /partner/dashboard
+├ ƒ /player-registrations/[id]/edit
+├ ƒ /players
+├ ƒ /players/[id]
+├ ƒ /players/[id]/edit
+├ ƒ /players/[id]/passport
+├ ƒ /players/[id]/seasons/new
+├ ƒ /players/import
+├ ƒ /players/new
+├ ƒ /players/photos/import
+├ ƒ /profile
+├ ƒ /public
+├ ƒ /public/celebrations
+├ ƒ /public/clubs
+├ ƒ /public/clubs/[id]
+├ ƒ /public/events
+├ ƒ /public/events/[id]
+├ ƒ /public/fixtures
+├ ƒ /public/fixtures/[id]
+├ ƒ /public/orders/[code]
+├ ƒ /public/players
+├ ƒ /public/players/[id]
+├ ƒ /public/share/game/[id]
+├ ƒ /public/share/player/[id]
+├ ƒ /public/share/record/[key]
+├ ƒ /public/share/team/[id]
+├ ƒ /public/standings
+├ ƒ /public/stats
+├ ƒ /public/stats/compare/players
+├ ƒ /public/stats/compare/teams
+├ ƒ /public/stats/players
+├ ƒ /public/stats/records
+├ ƒ /public/tickets/[code]
+├ ƒ /qr-operations
+├ ƒ /register/[organizationSlug]/[eventSlug]
+├ ƒ /register/[organizationSlug]/competitions/[competitionSlug]/player
+├ ƒ /register/[organizationSlug]/competitions/[competitionSlug]/submitted
+├ ƒ /registrations
+├ ƒ /registrations/[id]
+├ ƒ /registrations/export
+├ ƒ /rehearsal/broadcast/[fixtureId]
+├ ƒ /rehearsal/live/[fixtureId]
+├ ƒ /rehearsals
+├ ƒ /runbooks
+├ ƒ /scoreboard/[gameId]
+├ ƒ /scoresheets
+├ ƒ /scoresheets/[importId]/review
+├ ƒ /season-clubs/[id]/edit
+├ ƒ /season-clubs/[id]/roster
+├ ● /serwist/[path]
+│ ├ /serwist/sw.js.map
+│ └ /serwist/sw.js
+├ ƒ /settings/api-keys
+├ ƒ /settings/billing
+├ ƒ /settings/data-feed
+├ ƒ /signup
+├ ƒ /signup/support-club
+├ ƒ /staff-planner
+├ ƒ /staff/[ultraStaffId]
+├ ƒ /standings
+├ ƒ /t/[organizationSlug]/[competitionSlug]
+├ ƒ /t/[organizationSlug]/[competitionSlug]/fixtures
+├ ƒ /tasks
+├ ƒ /training
+├ ƒ /training/[sessionId]
+├ ƒ /training/new
+├ ƒ /tryouts
+├ ƒ /tryouts/[group]
+├ ƒ /tryouts/export
+├ ƒ /tryouts/reconciliation
+├ ƒ /vendors
+├ ƒ /vendors/[id]
+├ ƒ /venue-map
+├ ƒ /vision
+├ ƒ /vision/failures
+├ ƒ /vision/games/[fixtureId]
+├ ƒ /vision/upload
+└ ƒ /vision/videos
+
+
+○  (Static)   prerendered as static content
+●  (SSG)      prerendered as static HTML (uses generateStaticParams)
+ƒ  (Dynamic)  server-rendered on demand
+
+[deploy] creating release /opt/ultraleagueos/releases/release-36a8662-20261027T184506Z
+[deploy] prisma migrate deploy
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+Datasource "db": PostgreSQL database "ultraleagueos", schema "public" at "127.0.0.1:55411"
+
+110 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+[deploy] migrations: up to date
+[deploy] current: /opt/ultraleagueos/releases/release-39f24bf-20261027T183706Z -> /opt/ultraleagueos/releases/release-36a8662-20261027T184506Z
+[deploy] service: active
+[deploy] smoke test
+PASS  club hub                           20552 bytes
+PASS  training week                      16519 bytes
+PASS  athlete passport                   61170 bytes
+PASS  passport provenance                61170 bytes
+PASS  scoresheets queue                  34810 bytes
+PASS  player plan                        43850 bytes
+PASS  selection                          228720 bytes
+-- service: active
+-- errors since the service started this release: 0 (0 auth-token noise, 0 real)
+SMOKE OK
+[deploy] pruning old releases (keep 5)
+[deploy] done: 36a8662

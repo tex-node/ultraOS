@@ -9,3 +9,9 @@ cred/
 # Backup credentials / secrets — never commit
 *DO NOT COMMIT*
 vps-backups-raivstream*.txt
+
+# Deploy transcripts are EVIDENCE, not build noise (streak v23, Prompt 1): deploy/ops/deploy-with-log.sh writes them here
+# and they are the only record of what a deploy actually did. The blanket *.log rule above would hide them, which is
+# exactly how the v22 "silent deploy" lost its evidence - so the directory is re-included after it.
+!deploy-logs/
+!deploy-logs/*.log
