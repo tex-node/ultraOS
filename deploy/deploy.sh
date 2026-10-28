@@ -234,15 +234,31 @@ fi
 echo "[deploy] pruning old releases (keep $KEEP)"
 ls -1dt "$RELEASES"/release-* 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -rf
 
-# Post-deploy hygiene: keep disk growth bounded (~2 GB -> <500 MB per cycle).
+# Post-deploy hygiene: what actually keeps disk flat, measured rather than assumed.
 #
-# Every deploy installs node_modules, a .next build and a release copy; two environments make that ~2 GB per cycle, and the
-# host runs at 70% disk. None of this may fail a deploy that already passed its smoke test, hence `|| true` on each line.
-echo "[deploy] hygiene"
+# MEASURED (2026-10-28, two full cycles = staging + production each): net **7 MB per cycle**, transient peak **+1.35 GB**
+# during a build that is released again afterwards. The thing holding steady state flat is the release window above
+# (`--keep`, default 5 x 1.4 GB); the lines below reclaim the leftovers that are not part of that window.
+#
+# PLACEMENT: after the smoke test, deliberately. The smoke test above already decided whether this deploy is good; if it
+# failed we exited at 5 and cleanup does not matter. This runs last so the tail of the log is the post-cleanup disk state.
+#
+# SAFE TO FAIL: `|| true` on every line. A cleanup that cannot run - /tmp permissions changed, a docker builder version
+# that no longer accepts the filter - is a tidiness problem, not an outage, and it must never turn a green deploy red.
+BUILDER_BEFORE=$(docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null | awk -F'|' '/Build Cache/{print $2}') || true
+CACHE_KB=$(du -sk /opt/ultraos-staging/source/web/node_modules/.cache 2>/dev/null | cut -f1) || true
+echo "[deploy] hygiene (build cache: ${BUILDER_BEFORE:-unknown} · next cache: $(( ${CACHE_KB:-0} / 1024 )) MB)"
+# The web deploy does not run `docker build`, so this prune reclaims nothing for it; it is here because it is the same script
+# and the vision images are built on this host. Harmless when empty, useful after a vision rebuild.
 docker builder prune -f --filter "until=24h" > /dev/null 2>&1 || true
-rm -rf /opt/ultraos-staging/source/node_modules/.cache 2>/dev/null || true
+# TRADEOFF, stated in every deploy log: this is Next's compilation cache. It is ~12 KB today (Next 16 keeps its build in
+# `.next/cache`, which must NOT be deleted), so removing it costs nothing now; if it ever grows, the next build pays 20-40 s
+# and this line is worth commenting out during a heavy development day.
+rm -rf /opt/ultraos-staging/source/web/node_modules/.cache 2>/dev/null || true
+# `*-build*` catches the whole class of scratch directories, not one streak's name (livekey-build, node22-check, …).
+# `-mtime +1` is the real safety net: today's scratch is never touched.
 find /tmp -maxdepth 1 -type d -name "*-build*" -mtime +1 -exec rm -rf {} + 2>/dev/null || true
-# Record the disk state in the deploy log, so growth across deploys is visible instead of discovered as an outage.
+# Header plus the root filesystem only - visible over time, without cluttering the log with every mount.
 df -h / | awk 'NR==1 || /\//'
 
 echo "[deploy] done: $SHA"

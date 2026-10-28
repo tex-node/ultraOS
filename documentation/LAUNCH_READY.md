@@ -93,6 +93,19 @@ du -sh /var/backups/* /var/lib/docker /tmp 2>/dev/null | sort -h | tail -5
 If `/var/backups` is the culprit, the nightly retention (14 daily + 8 weekly, 30 for the vision config) has failed —
 check `systemctl status ultraos-backup.timer` and `journalctl -u ultraos-backup.service`.
 
+**What a deploy costs, measured on 2026-10-28** (two full cycles, staging + production each):
+
+| | value |
+| --- | --- |
+| net growth per cycle | **7 MB** |
+| transient peak during a build | **+1.35 GB**, released again afterwards |
+| what keeps steady state flat | the release window (`--keep 5`, 1.4 GB each = 6.9 GB) |
+| build cache | 0 B — the web deploy does not run `docker build` |
+
+So a deploy needs ~1.5 GB of headroom, not 2 GB of permanent growth. The hygiene block at the end of every deploy (builder
+cache, `node_modules/.cache`, stale `/tmp/*-build*` dirs, then `df -h /`) is belt-and-braces on top of that window, and each
+line is `|| true` so a cleanup can never turn a green deploy red.
+
 **Never** `docker system prune --volumes` blindly: it deletes the `vision-data` volume, which holds in-flight work.
 
 ## 5. "It is really bad" — restore
