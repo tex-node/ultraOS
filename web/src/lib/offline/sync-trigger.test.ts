@@ -29,3 +29,48 @@ test("EventSyncAdapter register/unregister are safe no-ops outside the browser",
   assert.doesNotThrow(() => adapter.register(() => {}));
   assert.doesNotThrow(() => adapter.unregister());
 });
+
+// A5 Step 8 regression: the Chromium adapter must drain IN THE TAB on reconnect, not only ask the service worker to.
+// The bug this pins is subtle and was found by the offline e2e, not by a unit test: BackgroundSyncAdapter.register() was
+// empty, so on Chromium (where createSyncTrigger picks it) nothing ever drained when the network came back.
+test("BackgroundSyncAdapter.register wires an online listener even though it also uses Background Sync", () => {
+  const listeners: Record<string, (() => void)[]> = {};
+  const fakeWindow = {
+    addEventListener: (type: string, handler: () => void) => {
+      (listeners[type] ??= []).push(handler);
+    },
+    removeEventListener: (type: string, handler: () => void) => {
+      listeners[type] = (listeners[type] ?? []).filter((candidate) => candidate !== handler);
+    },
+  };
+  const documentListeners: Record<string, (() => void)[]> = {};
+  const fakeDocument = {
+    visibilityState: "visible",
+    addEventListener: (type: string, handler: () => void) => {
+      (documentListeners[type] ??= []).push(handler);
+    },
+    removeEventListener: (type: string, handler: () => void) => {
+      documentListeners[type] = (documentListeners[type] ?? []).filter((candidate) => candidate !== handler);
+    },
+  };
+  const scope = globalThis as { window?: unknown; document?: unknown };
+  const originalWindow = scope.window;
+  const originalDocument = scope.document;
+  scope.window = fakeWindow;
+  scope.document = fakeDocument;
+  try {
+    const adapter = new BackgroundSyncAdapter();
+    let fired = 0;
+    adapter.register(() => {
+      fired += 1;
+    });
+    assert.equal(listeners.online?.length, 1, "the online listener must be registered");
+    listeners.online![0]!();
+    assert.equal(fired, 1, "reconnecting must drain in the tab");
+    adapter.unregister();
+    assert.equal(listeners.online?.length, 0, "unregister must remove the listener");
+  } finally {
+    scope.window = originalWindow;
+    scope.document = originalDocument;
+  }
+});

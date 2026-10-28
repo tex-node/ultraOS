@@ -31,16 +31,48 @@ function getRegistration(): ServiceWorkerRegistrationWithSync | null {
 export class BackgroundSyncAdapter implements SyncTrigger {
   readonly name = "background-sync";
 
+  // A5 Step 8 BUG FIX (2026-10-28): `register()` used to be an empty method on the theory that the service worker's
+  // `sync` event would do the drain. It does - but only AFTER something calls `registration.sync.register(tag)`, and the
+  // only caller of requestSync() was a manual "Sync now" button. On Chromium, therefore, a tablet that scored offline and
+  // reconnected drained NOTHING until the operator pressed a button: the e2e proof (offline tap -> reconnect -> expect the
+  // score to move) sat at outbox=1 and zero requests to /api/sync/outbox for 30 s.
+  //
+  // Two things now happen in the tab, and the background tag is requested as well so a closed tab is still covered:
+  //   - `online` / `visibilitychange` drain immediately (the same wiring the Safari fallback has);
+  //   - each of those also registers the Background Sync tag, which is what wakes the SW if the tab dies first.
+  private onSync: (() => void) | null = null;
+  private onlineHandler: (() => void) | null = null;
+  private visibilityHandler: (() => void) | null = null;
+
   get supported(): boolean {
     if (typeof navigator === "undefined") return false;
     return "serviceWorker" in navigator && "SyncManager" in globalThis;
   }
 
-  register(): void {
-    // No listener needed: the background sync event is handled in the service worker.
+  register(onSync: () => void): void {
+    if (typeof window === "undefined") return;
+    this.onSync = onSync;
+    const fire = () => {
+      onSync();
+      // Best effort: a browser that refuses the tag is exactly the browser whose listener above still drained.
+      void this.requestSync().catch(() => undefined);
+    };
+    this.onlineHandler = fire;
+    this.visibilityHandler = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) fire();
+    };
+    window.addEventListener("online", this.onlineHandler);
+    document.addEventListener("visibilitychange", this.visibilityHandler);
   }
 
-  unregister(): void {}
+  unregister(): void {
+    if (typeof window === "undefined") return;
+    if (this.onlineHandler) window.removeEventListener("online", this.onlineHandler);
+    if (this.visibilityHandler) document.removeEventListener("visibilitychange", this.visibilityHandler);
+    this.onSync = null;
+    this.onlineHandler = null;
+    this.visibilityHandler = null;
+  }
 
   async requestSync(): Promise<void> {
     if (!this.supported) throw new Error("BACKGROUND_SYNC_UNSUPPORTED");
