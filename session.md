@@ -13759,3 +13759,69 @@ services: active active active
 What the walk changed in the document: the rollback section now names the *previous release* it resolves to, the disk
 section orders the steps (free space first, then investigate) and warns that `prune --volumes` deletes `vision-data`, and
 the restore section insists on restoring into a scratch database first.
+
+## 2026-10-28 - PROJECT HANDOFF — 2026-10-28
+
+**State:** production and staging on `4ddc90b` (then `eb0ba09`, docs only), Node 22.22.2, vision worker running under
+systemd with the real analyzer, both environments smoke 7/7. Every suite green on the host. This is the handoff.
+
+```
+npm test 1039 · 1038 pass · 0 fail · 1 pre-existing skip
+test:component 26 / 26 · test:db 52 / 52 · test:e2e 7 / 7
+canonical-write baseline 4 suppressions (ceiling 4)
+staging 4ddc90b · production 4ddc90b · vision {"status":"ok","analyzer":"yolov8n-person"}
+disk 134 GB of 193 GB (70%) · backup timers active · OOM kills 0
+```
+
+### Retrospective
+
+**Most important bug.** The `UserRoleAssignment` RLS fallback (streak v22) - I agree with your vote, and for a specific
+reason: it is the only bug found in these streaks that was both **silent** and **privilege-escalating**. A league operator
+whose account had ever been created as `SUPER_ADMIN` signed in as a platform administrator and could open another league's
+dashboard by editing the URL. Nothing logged, nothing failed, no page looked wrong. The `idPrefixAthlete` collision broke
+organizations loudly, at the first action, on screen - bad, but self-announcing.
+
+The deeper finding is that it was not one bug but **one class, three times**: `resolveActiveOrganizationId` (v21),
+`getSessionUser` roles (v22), and the vision worker's `GameVideo`/`MediaAsset`/`VisionModel` reads (v24) - the last in a
+different language, by a different author, in the same shape. Reading an RLS-forced table before the tenant context exists
+is the trap; every instance looked correct in isolation.
+
+**Most valuable investment.** Playwright, agreed - it found the escalation in 7.9 seconds because it did the one thing unit
+tests cannot: sign in as two different people and try to break the boundary between them. I would add a close second: the
+`deploy-with-log.sh` wrapper (v23). It converted "one deploy produced no output and a retry worked" into a caught, real
+failure (`NODE_ENV=production` leaked from a sourced staging env file into `npm ci`, 344 packages instead of 731, build
+dead). That class of bug costs a day when you cannot see the output, and about ten minutes when you can.
+
+**What I would do differently.**
+1. **Browser tests from streak one**, for auth and tenant boundaries specifically. The escalation existed long before v22.
+2. **Encode the RLS-bootstrap pattern as a ratchet the moment it first appears** (v21), not two streaks later. It recurred
+   in a third codebase partly because the lesson lived in prose.
+3. **Never filter a deploy, and always run it hermetically.** Both cost me a cycle each, and the root cause of each was my
+   own tooling, not the product.
+4. **Keep configuration outside the checkout from the first day.** v24 lost the vision env file to `git clean -fdx`; v26
+   discovered the stack could not have come back after a reboot. Both would have been prevented by one decision.
+5. **Test the first-customer path earlier.** The wizard's "create a new organization" flow was broken by RLS while every
+   test was green, because the tests created organizations directly in the database.
+
+**Top three risks for the next six months.**
+1. **Bachs is untested where it matters.** The sandbox key authenticates and the SDK targets the sandbox host, but no
+   payment has ever completed, because the product IDs are absent and the key cannot list them. Revenue is one dashboard
+   visit away, and it is also one configuration mistake away from charging a real card on staging.
+2. **Vision has never seen a real game.** The pipeline is proven end to end and the analyzer is real, but every clip so far
+   contained no people, so the confirm → highlight → R2 → match-centre leg has never run on a true detection. A product
+   claim rests on a leg that has not been walked.
+3. **Single host, 70% disk.** Production, staging, two Supabase stacks, Kong and the vision worker share 193 GB. The
+   containment layers bound each workload, but there is no off-host restore that has been exercised, no pager, and a host
+   loss takes the data and its backup if `/var/backups` is on the same disk. `LAUNCH_READY.md` is the manual that assumes a
+   human notices.
+
+### What is left, and whose job it is
+
+| task | owner | urgency |
+| --- | --- | --- |
+| Bachs product IDs from the dashboard, then one sandbox payment with 4242… | you | **high** - blocks revenue |
+| One real game video through Vision | you | medium - unblocks the last unproven claim |
+| Run LBCL Season 2 on the platform | you | **high** - proves the product |
+| Pitch a sportsbook on the data feed | you | medium - proves the market |
+
+The engine is built, tested, hardened, backed up, documented and running. The remaining risk is not code.
