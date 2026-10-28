@@ -115,9 +115,10 @@ sweep is finished (login, public header, operator page labels, page titles); Nod
    listed through the API.
 2. **The sandbox checkout has therefore never completed a payment.** Once the product ids exist: click Upgrade on staging,
    pay with `4242 4242 4242 4242`, and confirm the webhook flips `Organization.plan` to PRO.
-3. **The vision worker is not under systemd.** It is `docker compose` in `services/vision` with
-   `restart: unless-stopped`, so it survives a crash but not a reboot unless compose is started again. A unit that runs
-   `docker compose up -d` at boot is the remaining infrastructure piece.
+3. **CLOSED in v25** — the vision worker is under systemd (`ultraos-vision.service`), its config lives at
+   `/opt/ultraos-vision/vision.env` outside any checkout, its logs rotate (10 MB x 3), its artifacts sit on the
+   `vision-data` volume, and every service has a memory cap. See **`documentation/runbooks/SHARED_VPS_RISK.md`** for what
+   else runs on the shared host and how to spot pressure.
 4. **No footage with people in it.** The pipeline was proved end to end on synthetic clips; the orange-circle clip
    correctly produced **zero** observations (there are no people in it), so the "confirm an observation → HIGHLIGHT_CLIP →
    R2 → public match centre" leg has not been exercised with a real detection. The first real game video closes it.
@@ -144,5 +145,7 @@ sweep is finished (login, public header, operator page labels, page titles); Nod
 4. **`documentation/ROADMAP_CLOSE.md`** — every phase, marked DONE or BLOCKED with the evidence behind it.
 5. **`documentation/FINAL_LAUNCH_PROOF.md`** — a whole league through the stack, with the webhook deliveries it produced.
 6. **`documentation/runbooks/NODE_22_UPGRADE.md`** — how the host moved to Node 22, and how to roll it back.
-7. **`session.md`** — the honest history. Read the last two streaks first; they contain the two security bugs that
+7. **`documentation/runbooks/SHARED_VPS_RISK.md`** — the shared host: co-tenants, the heavy workloads, the three
+   containment layers, and when to move Vision to its own VPS.
+8. **`session.md`** — the honest history. Read the last two streaks first; they contain the two security bugs that
    mattered most (tenant isolation at sign-in, and a privilege escalation through the same policy fallback).

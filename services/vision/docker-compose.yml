@@ -15,6 +15,14 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+volumes:
+  # Vision artifacts that must survive a container being killed or recreated (streak v25, Prompt 2). The worker writes
+  # nothing canonical to disk today - observations and tracks go to Postgres and the clips are uploaded to R2 by the web
+  # app - so this is deliberately the OUTPUT directory the workers use for scratch frames and exported clips, mounted at
+  # /data. A named volume rather than a bind mount: it survives `docker compose down`, is not deleted by `git clean -fdx`,
+  # and can be inspected with `docker run --rm -v ultraos-vision_vision-data:/data alpine ls /data`.
+  vision-data:
+
 services:
   vision-api:
     build:
@@ -26,11 +34,12 @@ services:
     # why nobody noticed). It lives outside any checkout and is named explicitly:
     #   /opt/ultraos-vision/vision.env  ->  VISION_ENV_FILE=/opt/ultraos-vision/vision.env
     env_file:
-      - 
+      - ${VISION_ENV_FILE:-.env}
     # The app's media directory, read-only (streak v24): a MediaAsset objectKey is stored relative to it, and without the
     # mount the analyzer looked for the file inside the image and failed with "cannot open video".
     volumes:
-      - ${VISION_MEDIA_DIR:?set VISION_MEDIA_DIR in .env}:/media:ro
+      - ${VISION_MEDIA_DIR:-/opt/ultraos-staging/shared/media}:/media:ro
+      - vision-data:/data
     ports:
       - "${VISION_API_PORT:-8000}:8000"
     depends_on:
@@ -45,6 +54,11 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
+    # 1 GB: the API loads the model once for a single-frame request and serves health checks; it does not batch.
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   vision-worker:
     build:
@@ -57,13 +71,20 @@ services:
     # why nobody noticed). It lives outside any checkout and is named explicitly:
     #   /opt/ultraos-vision/vision.env  ->  VISION_ENV_FILE=/opt/ultraos-vision/vision.env
     env_file:
-      - 
+      - ${VISION_ENV_FILE:-.env}
     volumes:
-      - ${VISION_MEDIA_DIR:?set VISION_MEDIA_DIR in .env}:/media:ro
+      - ${VISION_MEDIA_DIR:-/opt/ultraos-staging/shared/media}:/media:ro
+      - vision-data:/data
     depends_on:
       - vision-redis
     restart: unless-stopped
     logging: *default-logging
+    # A cap, not a reservation (streak v25, Prompt 3): a runaway worker must be killed by the kernel before it starves
+    # Postgres or the web app on the same host. 2 GB is several times the measured peak for a 300-frame clip.
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 
   vision-redis:
     image: redis:7-alpine
@@ -72,6 +93,11 @@ services:
       - "${VISION_REDIS_PORT:-6380}:6379"
     restart: unless-stopped
     logging: *default-logging
+    # 512 MB: a queue with no persistence needs pointers, not data.
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   vision-beat:
     build:
@@ -84,8 +110,13 @@ services:
     # why nobody noticed). It lives outside any checkout and is named explicitly:
     #   /opt/ultraos-vision/vision.env  ->  VISION_ENV_FILE=/opt/ultraos-vision/vision.env
     env_file:
-      - 
+      - ${VISION_ENV_FILE:-.env}
     depends_on:
       - vision-redis
     restart: unless-stopped
     logging: *default-logging
+    # 256 MB: the scheduler writes a schedule file and sleeps.
+    deploy:
+      resources:
+        limits:
+          memory: 256M

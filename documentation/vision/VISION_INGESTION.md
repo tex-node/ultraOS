@@ -165,3 +165,77 @@ no worker is running - it was not faked.
 - **No timeline alignment.** `VideoTimelineAnchor` rows (mapping video time to game clock) are created in
   the review UI; without a real video there is nothing to anchor.
 - **Celery + Redis are not running on this host.** `services/vision` ships a docker-compose for them.
+
+## Logging & resource limits (streak v25)
+
+The vision stack shares a VPS with production, so it is bounded in three layers. All three live in
+`services/vision/docker-compose.yml` and take effect on `docker compose up -d`.
+
+### 1. Log rotation
+
+Every service uses the `json-file` driver with `max-size: 10m` and `max-file: 3`, defined once as the YAML anchor
+`x-logging` and referenced by `vision-api`, `vision-worker`, `vision-beat` and `vision-redis`. The default driver grows
+without bound: a Celery worker logging at info writes megabytes a day, and an unbounded `docker logs` file is a disk
+outage waiting for a busy week.
+
+Caps: **30 MB per container, 120 MB for the stack.**
+
+Verify:
+
+```bash
+docker inspect ultraos-vision-vision-worker-1 --format '{{json .HostConfig.LogConfig}}'
+# {"Type":"json-file","Config":{"max-file":"3","max-size":"10m"}}
+```
+
+### 2. Durable storage: the `vision-data` volume
+
+Artifacts that must outlive a container are on the named volume `vision-data`, mounted at `/data` in `vision-api` and
+`vision-worker`. A named volume (not a bind mount) survives `docker compose down` and is invisible to `git clean -fdx`.
+
+Verify:
+
+```bash
+docker run --rm -v ultraos-vision_vision-data:/data alpine sh -c 'ls -la /data; df -h /data'
+```
+
+What is *not* on that volume, deliberately: canonical data (Postgres) and published clips (R2, uploaded by the web app).
+The volume is for scratch frames and exported artifacts, so losing it loses work in flight, not records.
+
+### 3. Memory caps
+
+`deploy.resources.limits.memory` per service, so the kernel kills the offending container instead of starving Postgres or
+the web app:
+
+| service | cap | why |
+| --- | --- | --- |
+| `vision-worker` | 2 GB | several times the measured peak for a 300-frame clip at 30 fps |
+| `vision-api` | 1 GB | one model load for a single-frame request; it does not batch |
+| `vision-beat` | 256 MB | writes a schedule file and sleeps |
+| `vision-redis` | 512 MB | pointers only - persistence is disabled |
+
+Verify with `docker stats --no-stream` (the `MEM LIMIT` column shows the cap).
+
+### 4. The env file must not live in the checkout
+
+`docker-compose.yml` reads `${VISION_ENV_FILE:-.env}`. The real file is **`/opt/ultraos-vision/vision.env`**, outside any
+checkout: every web deploy runs `git clean -fdx` in `/opt/ultraos-staging/source`, which deleted the v24 `.env` and left
+the stack unable to recreate itself while its containers kept running. `deploy/ops/vision.env.example` lists the 15
+variables it needs.
+
+`systemctl status ultraos-vision.service` starts the stack at boot with that file.
+
+### 5. ffmpeg on the web server is bounded separately
+
+Highlight clips are cut by the web app (`src/server/vision/highlights.ts`), not by this worker. Since streak v25 that call
+goes through `src/lib/media/ffmpeg.ts`, which sets a hard address-space cap (`ulimit -v`, default 1536 MB) and a watchdog
+(default 120 s) and reports which bound was hit. `FFMPEG_MEMORY_LIMIT_MB` and `FFMPEG_TIMEOUT_MS` tune them.
+
+### Trade-offs: a dedicated VPS for Vision (not done - needs a decision)
+
+| | shared host (today) | dedicated VPS |
+| --- | --- | --- |
+| blast radius | an OOM or disk fill takes the league platform with it | isolation; the worker can be killed alone |
+| cost | £0 extra | one more instance plus its backup and monitoring |
+| network | database and media are local (fast) | the database connection crosses the network; the media mount must be replicated or replaced by R2-only reads |
+| operations | one host to patch, one deploy path | a second host to patch, a second deploy path, and a queue that must tolerate the split |
+| when worth it | now, with the three layers above | when clips are rendered continuously, or when a second customer's volume arrives |

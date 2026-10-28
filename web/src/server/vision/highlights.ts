@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { runFfmpeg } from "@/lib/media/ffmpeg";
 import { mkdir, readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
@@ -15,7 +15,7 @@ import { storeMediaBytes } from "@/lib/media-blob";
 //   * the clip is cut from the ORIGINAL file the analysis read, not from a re-encode of a re-encode;
 //   * a cut that yields no bytes, or an ffmpeg non-zero exit, is an ERROR - never an empty asset that looks like a clip;
 //   * the asset records the window it was cut from, so a reviewer can see exactly which seconds are in the clip.
-const execFileAsync = promisify(execFile);
+
 
 export const HIGHLIGHT_WINDOW_SECONDS = 5;
 
@@ -51,17 +51,24 @@ export async function cutHighlightClip(args: {
   const durationSeconds = HIGHLIGHT_WINDOW_SECONDS * 2;
   const clipPath = join(args.outputDir, `${args.stem}.mp4`);
 
-  await execFileAsync(ffmpegBin(), [
-    "-y",
-    "-loglevel", "error",
-    "-ss", startSeconds.toFixed(3),
-    "-i", args.sourcePath,
-    "-t", durationSeconds.toFixed(3),
-    "-c", "copy",
-    "-avoid_negative_ts", "make_zero",
-    "-movflags", "+faststart",
-    clipPath,
-  ]);
+  // Bounded runner (streak v25, Prompt 1b): a hard address-space cap plus a watchdog, because an unbounded ffmpeg on the
+  // web host can be OOM-killed at multi-gigabyte sizes and take the whole app down with it (16 Oct: 3.5 GB).
+  await runFfmpeg(
+    [
+      "-y",
+      "-loglevel", "error",
+      "-nostdin",
+      "-threads", "2",
+      "-ss", startSeconds.toFixed(3),
+      "-i", args.sourcePath,
+      "-t", durationSeconds.toFixed(3),
+      "-c", "copy",
+      "-avoid_negative_ts", "make_zero",
+      "-movflags", "+faststart",
+      clipPath,
+    ],
+    { binary: ffmpegBin() },
+  );
 
   const info = await stat(clipPath);
   if (info.size <= 0) throw new Error("ffmpeg produced an empty clip");
