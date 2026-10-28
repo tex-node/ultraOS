@@ -23,6 +23,10 @@ test.describe("offline scoring", () => {
   test.skip(!EMAIL || !FIXTURE_ID, "E2E_ADMIN_EMAIL / E2E_FIXTURE_ID are required");
 
   test("a tap taken offline is queued, then replayed so the score changes on reconnect", async ({ page, context }) => {
+    // The reconnect assertion polls by reloading the console, so the default 30 s test budget is not enough: the poll
+    // itself is allowed 60 s (drain interval + replay + reload). Without this line the test times out BEFORE its own poll
+    // does, and reports "the queued tap never reached the server" for a drain that may simply still be in flight.
+    test.setTimeout(150_000);
     await page.goto("/login");
     await page.locator('input[name="email"]').fill(EMAIL!);
     await page.locator('input[name="password"]').fill(PASSWORD!);

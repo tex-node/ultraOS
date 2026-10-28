@@ -60,12 +60,26 @@ export async function POST(request: Request) {
     resolveFixtureIds: (records) => withOrganizationContext(organizationId, (tx) => resolveFixtureIdsToAuthorize(tx, records)),
     checkFixturePermission: (fixtureId) => requireFixturePermission("game:operate", fixtureId).then(() => undefined),
     isAuthorizationError: (error): error is AuthorizationError => error instanceof AuthorizationError,
+    // A5 Step 8 fix (2026-10-28): the replay must run under the caller's tenant context. The idempotency ledger
+    // ("SyncIdempotency") is RLS-forced, so opening a transaction on the bare global client left `app.current_org_id`
+    // unset; the policy fell back to the platform default organization and the claim insert was refused with
+    //   "new row violates row-level security policy for table SyncIdempotency"
+    // (before the grants migration it was "permission denied" instead - both are the same missing context).
+    //
+    // ReplayContext already owns the transaction boundary, so the caller supplies one: `withOrganizationContext` opens
+    // the transaction AND sets the setting, and the adapter hands replay that same client for its `$transaction` call.
+    // Nothing in replay has to know, and there is no second connection that could see a different tenant.
     replay: (record) =>
-      replayOutboxRecord(record, {
-        actor: { id: session.user.id, organizationId },
-        deviceId: parsed.data.deviceId,
-        syncBatchId,
-        prisma,
+      withOrganizationContext(organizationId, (tx) => {
+        const scoped = {
+          $transaction: async <T>(run: (client: typeof tx) => Promise<T>): Promise<T> => run(tx),
+        } as unknown as typeof prisma;
+        return replayOutboxRecord(record, {
+          actor: { id: session.user.id, organizationId },
+          deviceId: parsed.data.deviceId,
+          syncBatchId,
+          prisma: scoped,
+        });
       }),
   });
 
