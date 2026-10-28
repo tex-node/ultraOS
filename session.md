@@ -13825,3 +13825,67 @@ dead). That class of bug costs a day when you cannot see the output, and about t
 | Pitch a sportsbook on the data feed | you | medium - proves the market |
 
 The engine is built, tested, hardened, backed up, documented and running. The remaining risk is not code.
+
+## 2026-10-28 - Streak v27: the hygiene block, audited against the review
+
+The review asked four specific questions about the block. Three of the answers were already yes, one was not - and the
+verification the review demanded changed the block. Audit first, then the measurement, then the correction.
+
+### The block as installed (audited, not assumed)
+
+```
+242:# Post-deploy hygiene …
+246:echo "[deploy] hygiene (build cache: 0B · next cache: 0 MB)"
+247:docker builder prune -f --filter "until=24h" > /dev/null 2>&1 || true
+248:rm -rf …/source/web/node_modules/.cache 2>/dev/null || true
+249:find /tmp -maxdepth 1 -type d -name "*-build*" -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+251:df -h / | awk 'NR==1 || /\//'
+```
+
+- **`|| true` everywhere** - yes, on all three commands, and the deploy's exit status is decided by the smoke test above it.
+  The review is right that this is the most important detail: a cleanup that cannot run is tidiness, not an outage.
+- **`-name "*-build*"`** - yes, the general class, with `-mtime +1` as the actual safety net.
+- **`-exec rm -rf {} +`** - yes, batched.
+- **`df -h / | awk 'NR==1 || /\//'`** - yes, header plus the root filesystem only.
+- **Placement** - after the smoke test (which `exit 5`s on failure at line 232) and after release pruning, so the tail of the
+  log is the post-cleanup state. Confirmed by the log tail of a real deploy: `SMOKE OK` → `pruning old releases` →
+  `hygiene` → `df` → `done`.
+
+### The measurement the review asked for
+
+`df -h /` is too coarse (1 GB), so this used `df --output=used -k`. Two full cycles, staging + production each:
+
+```
+start      133 GB used
+cycle 1    staging + production
+cycle 2    staging + production
+end        133 GB used
+14 MB over 2 cycles  =  7 MB per cycle
+```
+
+Then the number that actually matters for a 70%-full disk - the transient peak, sampled every 3 s during one deploy:
+
+```
+start 136474 MB → peak 137864 MB (+1.35 GB) → after 136461 MB
+```
+
+**So the deploy needs ~1.5 GB of headroom and keeps 7 MB.** And the thing keeping it flat is not the cleanup: it is the
+release window (5 x 1.4 GB = 6.9 GB, pruned by `--keep`). That is worth saying plainly, because a block that gets credit it
+does not deserve is a block nobody tunes later.
+
+### What the measurement corrected
+
+1. **The `.cache` path was wrong - a no-op pointing at a ghost.** The block removed
+   `/opt/ultraos-staging/source/node_modules/.cache`, which does not exist; node_modules lives in `source/web/node_modules`,
+   and that cache is **12 KB** (Next 16 builds into `.next/cache`, 137 MB, which must *not* be deleted). The user's instinct
+   that this line trades build speed for space is right in general and was inverted in practice: it was trading nothing for
+   nothing. Now it points at the real path and logs its size, so the tradeoff is visible if it ever matters.
+2. **`docker builder prune` reclaims nothing for a web deploy** - the web deploy runs `npm ci` + `next build` on the host and
+   never invokes `docker build`, so Build Cache is 0 B. It stays in the script because the vision images are built on the
+   same host, and now says so.
+3. **`until=24h` is therefore not the limiting filter here.** The review's fallback (drop to `until=1h` or remove it) is the
+   right move *if* vision rebuilds ever start stacking within a day; today the prune has nothing to do, so changing the window
+   would be tuning a no-op.
+
+Final state of the block: same four behaviours the review asked for, the correct cache path, the measured numbers in the
+comment, and the tradeoff printed in every deploy log.
