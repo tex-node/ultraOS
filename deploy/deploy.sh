@@ -234,4 +234,15 @@ fi
 echo "[deploy] pruning old releases (keep $KEEP)"
 ls -1dt "$RELEASES"/release-* 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -rf
 
+# Post-deploy hygiene: keep disk growth bounded (~2 GB -> <500 MB per cycle).
+#
+# Every deploy installs node_modules, a .next build and a release copy; two environments make that ~2 GB per cycle, and the
+# host runs at 70% disk. None of this may fail a deploy that already passed its smoke test, hence `|| true` on each line.
+echo "[deploy] hygiene"
+docker builder prune -f --filter "until=24h" > /dev/null 2>&1 || true
+rm -rf /opt/ultraos-staging/source/node_modules/.cache 2>/dev/null || true
+find /tmp -maxdepth 1 -type d -name "*-build*" -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+# Record the disk state in the deploy log, so growth across deploys is visible instead of discovered as an outage.
+df -h / | awk 'NR==1 || /\//'
+
 echo "[deploy] done: $SHA"

@@ -219,8 +219,19 @@ Verify with `docker stats --no-stream` (the `MEM LIMIT` column shows the cap).
 
 `docker-compose.yml` reads `${VISION_ENV_FILE:-.env}`. The real file is **`/opt/ultraos-vision/vision.env`**, outside any
 checkout: every web deploy runs `git clean -fdx` in `/opt/ultraos-staging/source`, which deleted the v24 `.env` and left
-the stack unable to recreate itself while its containers kept running. `deploy/ops/vision.env.example` lists the 15
-variables it needs.
+the stack unable to recreate itself while its containers kept running. `deploy/ops/vision.env.example` lists the variables
+it needs, and `deploy/ops/backup-vision-config.sh` archives it nightly (see §6).
+
+**Always set `VISION_MEDIA_DIR`.** It is required (`${VISION_MEDIA_DIR:?...}`, mounted read-only at `/data/media`); if it is
+unset, the stack refuses to start with a named error rather than silently mounting a wrong path:
+
+```
+error while interpolating services.vision-api.volumes.[]: required variable VISION_MEDIA_DIR is missing a value:
+VISION_MEDIA_DIR must be set. See documentation/runbooks/SHARED_VPS_RISK.md
+```
+
+That matters the day this stack is reused for a production league: a staging default would have pointed the worker at the
+wrong league's files and said nothing. `VISION_MEDIA_ROOT` must equal the mount point (`/data/media`).
 
 `systemctl status ultraos-vision.service` starts the stack at boot with that file.
 
@@ -239,3 +250,29 @@ goes through `src/lib/media/ffmpeg.ts`, which sets a hard address-space cap (`ul
 | network | database and media are local (fast) | the database connection crosses the network; the media mount must be replicated or replaced by R2-only reads |
 | operations | one host to patch, one deploy path | a second host to patch, a second deploy path, and a queue that must tolerate the split |
 | when worth it | now, with the three layers above | when clips are rendered continuously, or when a second customer's volume arrives |
+
+## 6. Backing up the configuration (streak v26)
+
+`deploy/ops/backup-vision-config.sh` tars `/opt/ultraos-vision` - configuration only, excluding the venv, rendered clips
+and model weights - into the nightly backup directory as `vision-env-<UTC>.tar.gz` (mode 0640) with a `.sha256` sidecar and
+30-day retention. It asserts the archive **contains `vision.env`** before it exits successfully: a backup that silently
+omits the one file it exists for is worse than none.
+
+`ultraos-backup.service` (02:00 Africa/Lagos, `Persistent=true`) now runs `/usr/local/sbin/ultraos-backup-all.sh`, which
+does the database dump first and this second; the unit's exit status is the database's.
+
+Two things the first attempt taught:
+
+1. **Directory.** The unit runs as `ultraos`; `/var/backups/ultraleagueos-production` is root-owned (it holds the pre-deploy
+   dumps that `deploy.sh` writes), so writing there failed with *Permission denied*. The archives go to
+   **`/var/backups/ultraleagueos`**, next to the nightly database dumps.
+2. **Permissions.** `vision.env` was `0600 root:root`, so the backup user could not read it - tar exited 2 having skipped
+   exactly the file that mattered. It is now `0640 root:ultraos`: readable by the service group, still not world-readable.
+
+Restore:
+
+```bash
+tar -xzf /var/backups/ultraleagueos/vision-env-<ts>.tar.gz -C /opt       # recreates /opt/ultraos-vision/vision.env
+sha256sum -c /var/backups/ultraleagueos/vision-env-<ts>.tar.gz.sha256     # verify first
+systemctl restart ultraos-vision.service
+```

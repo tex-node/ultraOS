@@ -38,7 +38,7 @@ services:
     # The app's media directory, read-only (streak v24): a MediaAsset objectKey is stored relative to it, and without the
     # mount the analyzer looked for the file inside the image and failed with "cannot open video".
     volumes:
-      - ${VISION_MEDIA_DIR:-/opt/ultraos-staging/shared/media}:/media:ro
+      - ${VISION_MEDIA_DIR:?VISION_MEDIA_DIR must be set. See documentation/runbooks/SHARED_VPS_RISK.md}:/data/media:ro
       - vision-data:/data
     ports:
       - "${VISION_API_PORT:-8000}:8000"
@@ -73,7 +73,7 @@ services:
     env_file:
       - ${VISION_ENV_FILE:-.env}
     volumes:
-      - ${VISION_MEDIA_DIR:-/opt/ultraos-staging/shared/media}:/media:ro
+      - ${VISION_MEDIA_DIR:?VISION_MEDIA_DIR must be set. See documentation/runbooks/SHARED_VPS_RISK.md}:/data/media:ro
       - vision-data:/data
     depends_on:
       - vision-redis
