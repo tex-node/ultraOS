@@ -13565,3 +13565,120 @@ canonical-write baseline   4 suppressions (ceiling 4)
    are already health-checked and restart on crash).
 4. **Feed it one real game video.** That is the only missing input for the confirm → highlight → R2 → match centre proof.
 5. **Decide the live product ids** for production (same ids or live counterparts), then repeat (2) with a real card.
+
+## 2026-10-28 - Streak v25 / Prompt 1: log rotation, and the stack that could not be recreated
+
+**Log rotation** is in `services/vision/docker-compose.yml` as one YAML anchor (`x-logging`: json-file, `max-size: 10m`,
+`max-file: 3`) referenced by all four services - 30 MB per container, 120 MB for the stack - so a new service cannot be
+added without it by accident. Verified on the running containers:
+
+```
+ultraos-vision-vision-api-1     {"max-file":"3","max-size":"10m"}
+ultraos-vision-vision-worker-1  {"max-file":"3","max-size":"10m"}
+ultraos-vision-vision-beat-1    {"max-file":"3","max-size":"10m"}
+ultraos-vision-vision-redis-1   {"max-file":"3","max-size":"10m"}
+```
+
+**The finding that mattered more than the rotation.** Before any of this could be applied, `docker compose down` refused to
+run: *"required variable VISION_MEDIA_DIR is missing a value"*. The v24 `.env` **no longer existed** - every web deploy runs
+`git clean -fdx` in `/opt/ultraos-staging/source`, which deletes untracked files. The containers kept running because their
+configuration is frozen into them at creation, so the breakage was invisible: **the vision stack could not have come back
+after a reboot**, and nobody would have found out until one happened.
+
+Three fixes, in the order they were forced on me:
+
+1. the env file now lives at **`/opt/ultraos-vision/vision.env`** (mode 600), reconstructed from the running worker's own
+   environment rather than retyped - 15 variables, no secret printed;
+2. `docker-compose.yml` reads `${VISION_ENV_FILE:-.env}`, and `deploy/ops/vision.env.example` documents the variables;
+3. `ultraos-vision.service` (systemd, oneshot + RemainAfterExit) runs `docker compose --env-file … up -d` at boot.
+
+**A second failure taught the difference between `env_file:` and interpolation.** `env_file:` feeds the CONTAINER's
+environment; `${VAR}` in `volumes:`/`ports:` is resolved by compose from the shell or `--env-file`, never from `env_file:`.
+So `VISION_ENV_FILE` alone left `${VISION_MEDIA_DIR:?...}` unsatisfied, `down` refused again, and the containers kept their
+old unbounded logs. Fixed by giving the mount a default (`:-/opt/ultraos-staging/shared/media`) **and** passing
+`--env-file`; the variable now also lives inside the file itself so any caller works.
+
+```
+systemctl restart ultraos-vision.service   -> success, active, 4 containers Up in 7.4 s
+/health                                     -> {"status":"ok","analyzer":"yolov8n-person",…}
+```
+
+## 2026-10-28 - Streak v25 / Prompt 2: the volume, proved rather than assumed
+
+`vision-data` is a named volume mounted at `/data` in `vision-api` and `vision-worker`. Proof, done in the order that can
+fail:
+
+```
+write in the worker        -> /data/probe/v25-proof.txt = 2026-10-28T05:15:41Z
+docker kill the worker     -> state: exited
+read from a SEPARATE container while it is down -> 2026-10-28T05:15:41Z
+```
+
+What is deliberately **not** in the volume: canonical data (Postgres) and published clips (R2). The volume holds scratch
+frames and exported artifacts, so losing it loses work in flight, not records.
+
+## 2026-10-28 - Streak v25 / Prompt 3 + 1b: memory caps, and the ffmpeg that killed the host once
+
+Caps are `deploy.resources.limits.memory`, visible in the LIMIT column:
+
+```
+vision-api     59.2MiB / 1GiB       vision-worker  62.9MiB / 2GiB
+vision-beat    50.1MiB / 256MiB     vision-redis    7.3MiB / 512MiB
+```
+
+**Prompt 1b, taken as a real risk rather than a nicety.** The 16 Oct OOM killed an `ffmpeg` at **3.5 GB** - and that ffmpeg
+is spawned by the **web** app (`src/server/vision/highlights.ts`), not by this worker. One unlucky cut could take the
+league platform down with it. `src/lib/media/ffmpeg.ts` now runs every cut under a hard address-space cap (`ulimit -v`,
+default 1536 MB) and a watchdog (default 120 s), and names which bound fired instead of surfacing "Command failed":
+
+```
+FfmpegLimitError(kind: "memory")  -> "ffmpeg exceeded its memory limit (1536 MB). The clip was not produced; retry a
+                                     shorter window or raise FFMPEG_MEMORY_LIMIT_MB deliberately."
+FfmpegLimitError(kind: "timeout") -> "ffmpeg exceeded its time limit (120000 ms) and was killed."
+```
+
+Six tests cover it (`src/lib/media/ffmpeg.test.ts`), including a real hung child killed by the watchdog and a real
+allocation failure classified as memory. The runner is POSIX-capped and cross-platform-tested: on Windows the watchdog
+still applies and the `ulimit` is simply absent, which is why the tests fake the binary with `node -e` rather than `/bin/sh`.
+
+## 2026-10-28 - Streak v25 / Prompt 4: host health, and the honest result of a prune
+
+```
+disk     193 GB, 135 GB used (70%)
+memory   11 GiB total, 4.6 GiB used; swap 11 GiB with 5.1 GiB used
+docker   17 images (15.5 GB, ALL referenced), 30 containers, 24 volumes
+OOM      0 in the last hour, 0 in the kernel log
+/tmp     4.3 GB - and it was ours
+```
+
+`docker system prune -f --volumes` reclaimed **1.04 GB**, not the 15.47 GB "reclaimable" that `docker system df` printed:
+that number counts shared layers, and every image is in use. The real win was `/tmp`, which held **build scratch from my
+own earlier verification runs** (`/tmp/livekey-build` 1.4 G, `/tmp/node22-check` 1.4 G, `/tmp/lockfix` 1.3 G, four deploy
+checkouts). Checked for open handles and mounts (zero), removed:
+
+```
+/tmp        4.3 GB -> 175 MB
+disk        71%   -> 69%
+```
+
+Both environments and the worker were verified afterwards: prod 200, staging 200, `/health` ok. By the end of the streak's
+deploys the disk was back at **70%** - two releases per environment is ~2 GB, which is worth knowing.
+
+## 2026-10-28 - Streak v25 / Prompt 5: the shared-VPS runbook
+
+`documentation/runbooks/SHARED_VPS_RISK.md` records what else runs on the box (two Supabase stacks, Kong on 8000 - which
+is why our database is on `:55411` and the vision API on `:8010`), which of our workloads is heavy, the four containment
+layers, the routine checks, and the escalation path with the dedicated-VPS trade-offs.
+
+## 2026-10-28 - Streak v25 / Prompt 6: the sync
+
+```
+npm test 1039 · 1038 pass · 0 fail · 1 pre-existing skip    (+6 from the ffmpeg bounds)
+test:component 26 / 26 · test:db 52 / 52 · test:e2e 7 / 7
+canonical-write baseline 4 suppressions (ceiling 4)
+staging b2f861e · production b2f861e · smoke 7/7 both · vision healthy · systemd unit active
+```
+
+**What this streak actually bought:** the vision stack can now survive a reboot, its logs cannot fill the disk, its memory
+cannot starve Postgres, its artifacts survive a container, and the ffmpeg that once hit 3.5 GB on the web host is bounded in
+both directions. The disk went from 70% to 69% and stayed healthy through two deploys per environment.
