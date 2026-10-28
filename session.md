@@ -13949,3 +13949,103 @@ triggers action, and the action itself. Two things had to be corrected relative 
 
 Also recorded: the disk is at **71%** after four deploys today (135 GB used), which is the trend the monthly check exists to
 catch - 7 MB per cycle net, 1.35 GB transient per build.
+
+## 2026-10-28 - A5 Steps 5-8: they were already committed, so this streak verified them and fixed what verification found
+
+**First finding, before any code: Steps 5, 6, 7 and 8 are already in the tree and on `main`.**
+
+| step | commit | what it does |
+| --- | --- | --- |
+| 5 | `745eb7b` | `applyScoreEffects` extracted (`src/server/scoring/applyScoreEffects.ts`) |
+| 6 | `4190cfd` | `recordScoreInternal` calls it |
+| 7 | `2324247` | replay's SCORE branch calls it, with `score-effects-parity.test.ts` |
+| 8 | `9098ed7` | `live-score-capture.tsx` + `captureScoreTap` + the console wiring |
+
+So the work was not to write them again - it was to prove them. Two deviations from the brief are worth stating rather than
+hiding: the file is `applyScoreEffects.ts` (camelCase, not `apply-score-effects.ts`) and its signature is
+`(input, ctx: WriteContext)` - no `db` parameter, because the caller owns the transaction boundary. Rewriting a committed,
+tested service to match a spelling in a prompt would have been the wrong trade.
+
+### What verification found: three bugs, none of them visible to the unit suite
+
+**1. The 14-test invocation suite and the parity test are green** (both inside `test:db`'s 52/52):
+
+```
+ok 39 - a valid client-resolved shot (Ultra Time doubled 3PT) is APPLIED with resolvedBy CLIENT and clientObservedAt recorded
+ok 40 - a GameEvent replayed without clientObservedAt still defaults to resolvedBy SERVER
+ok 49 - parity: a home 3PT scores identically through the live path and through offline replay (fixture, event, PlayerStat, TeamStat)
+```
+
+**2. Step 8's drain was a no-op on Chromium** - the real bug this streak found. `createSyncTrigger()` picks
+`BackgroundSyncAdapter` when the browser has Background Sync, and its `register()` was **empty**: the drain was left to the
+service worker's `sync` event, which only fires after something calls `registration.sync.register()`, and the only caller
+was a manual "Sync now" button. So a Chromium tablet that scored offline and reconnected drained **nothing**. The e2e sat
+at `outbox=1` with zero requests to `/api/sync/outbox` for 30 s, which is exactly the kind of silence a unit test cannot
+produce. Fixed in `sync-trigger.ts`: the Chromium adapter now wires the same online/visibilitychange listeners the Safari
+fallback has, and additionally requests the Background Sync tag so a closed tab is still covered. A unit test pins the
+listener wiring.
+
+**3. The replay path had never been exercised against a real database by the app role.** Two failures, in order:
+
+```
+permission denied for table SyncIdempotency
+  -> the P13 migration (20260927120001) created "SyncIdempotency" and "SyncConflictLog" with no GRANTs and no RLS at all
+  -> migration 20261028190000 grants the four DML privileges to all three app roles and puts both tables under the
+     canonical tenant policy; verified as the app role (privileges + RLS forced + an insert/rollback probe inside an org)
+
+new row violates row-level security policy for table SyncIdempotency
+  -> replay opened its transaction on the bare global client, so app.current_org_id was unset and the claim hit the
+     policy's default-organization fallback - the "db injection chain" failure this project has now hit four times
+  -> the route opens the transaction with withOrganizationContext and hands replay that same client; ReplayContext already
+     owned the boundary, so nothing in replay had to change
+```
+
+### The proof
+
+`e2e/offline-scoring.spec.ts`, in a real browser with `context.setOffline(true)` (airplane mode as the page experiences it):
+
+```
+✓ a tap taken offline is queued, then replayed so the score changes on reconnect (7.0s)
+   - "+2" tapped while offline -> "Captured offline ... queued for sync"
+   - the outbox holds exactly one record (read back out of IndexedDB)
+   - the on-screen score deliberately does NOT move while offline
+   - reconnect -> drain posts to /api/sync/outbox -> replay applies the effects -> the console score increases
+   - nothing left pending
+```
+
+Two things were needed to make it runnable and are now committed: `scripts/e2e-prepare-basketball.ts` (the shared
+`e2e-prepare.ts` is football-only, and the console only renders the offline panel for basketball - which is also A5's scope),
+and a 150 s test budget, because the spec's own reconnect poll is allowed 60 s and the default 30 s timeout fired first.
+
+### The final gate
+
+```
+npm test        1040 · 1039 pass · 0 fail · 1 pre-existing skip
+test:component    26 / 26
+test:db           52 / 52   (includes the 14-test invocation suite and the parity test)
+test:e2e           7 / 7    (registration ×2, scoring, wizard, multi-tenant auth ×3)
+test:e2e offline   1 / 1    (the A5 proof above)
+canonical-write    4 suppressions (ceiling 4)
+staging f383da9 · production f383da9 · both smoke 7/7 · production has the grants migration applied
+```
+
+### Two incidents I have to record
+
+**A secret leak into a tool transcript.** A verification script of mine ran `export $(... | xargs)`; when the preparation
+printed nothing, that became a bare `export`, which prints the whole environment - AUTH_SECRET, CRON_SECRET, the Bachs
+sandbox key, the webhook secret and the database password. Nothing reached git or this file, but I rotated **AUTH_SECRET and
+CRON_SECRET on staging** immediately and restarted the service (sessions invalidated, sign-in re-proved by the e2e). Not
+rotated, deliberately: the Bachs sandbox key/webhook (needs the Bachs dashboard) and the production database password (a
+coordinated change across the app, the vision stack and migrate.env). **Both are follow-ups for the owner**, and every
+script in this streak now reads the environment with `set -a; . file; set +a` or an explicit key check.
+
+**A deploy deleted an untracked script.** My first e2e attempt failed because `git clean -fdx` removed
+`scripts/e2e-prepare-basketball.ts` before it was tracked - the same lesson as the vision `.env` in v25. Committing first
+fixed it; the pattern is worth remembering: anything a deploy needs must be in git.
+
+### Status: A5 is closed, with one deliberate gate
+
+The code path is complete and proven on staging. **Production runs the code with the flag off**
+(`NEXT_PUBLIC_OFFLINE_SCORING_ENABLED` is absent there): enabling offline scoring in front of real scorekeepers is a
+product decision, and the honest position after one automated proof is "staging-verified, not production-enabled". Turning
+it on is one env line plus a deploy.
