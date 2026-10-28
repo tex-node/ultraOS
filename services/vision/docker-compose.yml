@@ -4,14 +4,29 @@
 
 name: ultraos-vision
 
+# Log rotation for every container in this stack (streak v25, Prompt 1). The default json-file driver grows without bound:
+# a Celery worker logging at info writes megabytes a day, and this stack shares a VPS with production. 10 MB x 3 files per
+# service caps each container at 30 MB, which is 120 MB for the stack instead of an unbounded `docker logs` source.
+# One anchor, referenced by all four services, so a new service cannot be added without it by accident - and so the
+# numbers live in exactly one place.
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   vision-api:
     build:
       context: .
       dockerfile: Dockerfile
     image: ${VISION_IMAGE:-ultraos-vision:dev}
+    # The env file is NOT committed and must NOT live in a deploy checkout: every deploy runs git clean -fdx, which
+    # deleted the v24 .env and left this stack unable to recreate itself (the running containers kept working, which is
+    # why nobody noticed). It lives outside any checkout and is named explicitly:
+    #   /opt/ultraos-vision/vision.env  ->  VISION_ENV_FILE=/opt/ultraos-vision/vision.env
     env_file:
-      - .env
+      - 
     # The app's media directory, read-only (streak v24): a MediaAsset objectKey is stored relative to it, and without the
     # mount the analyzer looked for the file inside the image and failed with "cannot open video".
     volumes:
@@ -21,6 +36,7 @@ services:
     depends_on:
       - vision-redis
     restart: unless-stopped
+    logging: *default-logging
     # Only the API serves HTTP, so only the API gets a healthcheck. The worker and beat are alive or not -
     # their liveness is the container state plus their logs, not a port probe.
     healthcheck:
@@ -36,13 +52,18 @@ services:
       dockerfile: Dockerfile
     image: ${VISION_IMAGE:-ultraos-vision:dev}
     command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=1
+    # The env file is NOT committed and must NOT live in a deploy checkout: every deploy runs git clean -fdx, which
+    # deleted the v24 .env and left this stack unable to recreate itself (the running containers kept working, which is
+    # why nobody noticed). It lives outside any checkout and is named explicitly:
+    #   /opt/ultraos-vision/vision.env  ->  VISION_ENV_FILE=/opt/ultraos-vision/vision.env
     env_file:
-      - .env
+      - 
     volumes:
       - ${VISION_MEDIA_DIR:?set VISION_MEDIA_DIR in .env}:/media:ro
     depends_on:
       - vision-redis
     restart: unless-stopped
+    logging: *default-logging
 
   vision-redis:
     image: redis:7-alpine
@@ -50,6 +71,7 @@ services:
     ports:
       - "${VISION_REDIS_PORT:-6380}:6379"
     restart: unless-stopped
+    logging: *default-logging
 
   vision-beat:
     build:
@@ -57,8 +79,13 @@ services:
       dockerfile: Dockerfile
     image: ${VISION_IMAGE:-ultraos-vision:dev}
     command: celery -A app.workers.celery_app beat --loglevel=info
+    # The env file is NOT committed and must NOT live in a deploy checkout: every deploy runs git clean -fdx, which
+    # deleted the v24 .env and left this stack unable to recreate itself (the running containers kept working, which is
+    # why nobody noticed). It lives outside any checkout and is named explicitly:
+    #   /opt/ultraos-vision/vision.env  ->  VISION_ENV_FILE=/opt/ultraos-vision/vision.env
     env_file:
-      - .env
+      - 
     depends_on:
       - vision-redis
     restart: unless-stopped
+    logging: *default-logging
