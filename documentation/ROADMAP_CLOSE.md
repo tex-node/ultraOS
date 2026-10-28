@@ -67,3 +67,14 @@ Status of every phase, as of the final streak. `DONE` means there is a test or a
 | Confirm → HIGHLIGHT_CLIP → R2 → match centre | **BLOCKED** | needs one real detection; this host has no footage with people in it |
 | Branding sweep | **DONE** | `/login`, public header, password reset, page titles and four operator eyebrows verified on the deployed build |
 | Node 22 default on the host | **DONE** (v22) | `/opt/node22/bin/node`, both services |
+## Addendum — streak v26 (2026-10-28): handoff
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Vision configuration backed up | **DONE** | `deploy/ops/backup-vision-config.sh` runs inside the 02:00 nightly unit; archive `vision-env-<ts>.tar.gz` (4 KB, 0640) contains `vision.env`, restores byte-identical to `/tmp`, sha256 sidecar verified |
+| Deploy disk growth bounded | **DONE** | post-deploy hygiene block in `deploy.sh` (builder cache, `node_modules/.cache`, stale `/tmp` build dirs) plus `df -h` in the deploy log |
+| Media mount cannot silently default | **DONE** | `${VISION_MEDIA_DIR:?...}` mounted read-only at `/data/media`; unset → named error citing the runbook; set → resolves `…/shared/media -> /data/media`, worker opens a real file |
+| On-call document | **DONE** | `documentation/LAUNCH_READY.md`, 8 sections, every command executed as a stranger would; restore path verified against the newest dump (sha256 OK, 1712 objects) |
+| Shell scripts cannot acquire CRLF again | **DONE** | `.gitattributes` forces LF for `*.sh`, `*.yml`, `Dockerfile`, units — after a CRLF copy broke the live deploy script during this streak |
+| Bachs product IDs | **BLOCKED (external)** | unchanged: not in `cred/`, key lacks `products:read`; needs the dashboard |
+| One real game video for Vision | **BLOCKED (external)** | unchanged: no footage with people on the host |

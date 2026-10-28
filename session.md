@@ -13682,3 +13682,80 @@ staging b2f861e · production b2f861e · smoke 7/7 both · vision healthy · sys
 **What this streak actually bought:** the vision stack can now survive a reboot, its logs cannot fill the disk, its memory
 cannot starve Postgres, its artifacts survive a container, and the ffmpeg that once hit 3.5 GB on the web host is bounded in
 both directions. The disk went from 70% to 69% and stayed healthy through two deploys per environment.
+
+## 2026-10-28 - Streak v26 / Prompts 1-4: backup, deploy hygiene, the strict mount, and the on-call page
+
+### Prompt 1: the one file that keeps Vision alive is now backed up
+
+`/opt/ultraos-vision/vision.env` is not in any checkout by design (a deploy's `git clean -fdx` is how v24 lost it), and it
+was not in any backup either - the nightly unit only ran `pg_dump`. `deploy/ops/backup-vision-config.sh` now archives the
+configuration into the nightly directory, asserts **`vision.env` is inside the archive before it succeeds**, and keeps 30
+days. `ultraos-backup.service` calls a wrapper that runs the database dump first and this second.
+
+```
+/var/backups/ultraleagueos/vision-env-20261028T071920Z.tar.gz   4.0K, mode 640
+ultraos-vision/
+ultraos-vision/vision.env
+restored to /tmp: byte-identical (sha256 match), 16 lines
+unit: success · vision exit: 0 · sha256 sidecar present
+```
+
+**Three failures along the way, each instructive:**
+
+1. *Permission denied* writing to `/var/backups/ultraleagueos-production` - the unit runs as `ultraos`, and that directory
+   is root-owned (it holds the pre-deploy dumps `deploy.sh` writes). The archives go to `/var/backups/ultraleagueos`,
+   beside the nightly database dumps. The prompt said "-production"; the host's permissions disagreed, and the host wins.
+2. `tar: ultraos-vision/vision.env: Cannot open: Permission denied` - the env file was `0600 root:root`, so the backup user
+   could not read **the one file the backup exists for**, and tar exited 2 after archiving everything else. It is now
+   `0640 root:ultraos`: readable by the service group, still not world-readable. That is the only permission widened.
+3. The first archive included the **whole directory**: a 75-second tar of a Python venv and rendered clips. Now `venv`,
+   `highlights`, `*.mp4` and `*.pt` are excluded, and the archive is 4 KB of configuration.
+
+### Prompt 2: deploy growth is bounded, and I broke the deploy script doing it
+
+The hygiene block now runs at the end of every deploy - builder cache (24 h), `node_modules/.cache`, stale `/tmp` build
+directories - each line `|| true` so it can never fail a deploy that already passed its smoke test, plus `df -h` in the log
+so growth is visible over time rather than discovered as an outage.
+
+**I broke `/root/deploy.sh` first.** I copied the repo copy over the live script, and the working tree's CRLF endings made
+bash fail at `case "$1" in`: `syntax error near unexpected token '$'in\r''`. The production deploy script was unusable for
+about two minutes. Recovered from the backup I had taken seconds earlier, then inserted the block with Python so the file's
+own LF endings were preserved, and verified `bash -n`. `.gitattributes` now forces LF for `*.sh`, `*.yml`, `Dockerfile` and
+unit files, so the working tree cannot produce that byte pattern again.
+
+Disk: **134 GB / 70% before, 134 GB / 70% after** - two deploys and the hygiene block in between. The block's own output is
+in the deploy transcripts (`deploy-logs/deploy-production-20261028T073452Z.log`).
+
+### Prompt 3: the media mount cannot silently default any more
+
+`${VISION_MEDIA_DIR:?VISION_MEDIA_DIR must be set. See documentation/runbooks/SHARED_VPS_RISK.md}:/data/media:ro`, with
+`VISION_MEDIA_ROOT=/data/media` following it. Both directions verified:
+
+```
+unset  -> error while interpolating services.vision-api.volumes.[]: required variable VISION_MEDIA_DIR is missing a value:
+          VISION_MEDIA_DIR must be set. See documentation/runbooks/SHARED_VPS_RISK.md
+set    -> bind /opt/ultraos-staging/shared/media -> /data/media (ro=true)
+          worker resolves /data/media/originals/…/fa941da1….mp4 · exists: True
+```
+
+Documented in `VISION_INGESTION.md` §5 and §6, including the restore commands.
+
+### Prompt 4: the on-call page, walked as a stranger
+
+`documentation/LAUNCH_READY.md` (156 lines, 8 sections): the three environments, the two human-only items, the four first
+commands when something is down, the disk-full runbook, the restore path, the weekly five-minute check, who to call, and
+what is knowingly unfinished.
+
+Every command in it was then executed as a stranger would run it:
+
+```
+production /api/v1/live 200 · staging 200 · vision {"status":"ok","analyzer":"yolov8n-person",…}
+journalctl readable · previous release has a web/ tree (rollback target valid)
+docker builder prune ok · /tmp scratch cleared · node_modules/.cache cleared
+newest dump sha256: OK · pg_restore -l: 1712 objects
+services: active active active
+```
+
+What the walk changed in the document: the rollback section now names the *previous release* it resolves to, the disk
+section orders the steps (free space first, then investigate) and warns that `prune --volumes` deletes `vision-data`, and
+the restore section insists on restoring into a scratch database first.
