@@ -13889,3 +13889,63 @@ does not deserve is a block nobody tunes later.
 
 Final state of the block: same four behaviours the review asked for, the correct cache path, the measured numbers in the
 comment, and the tradeoff printed in every deploy log.
+
+## 2026-10-28 - Streak v27b: the monthly growth check, and two of my own numbers corrected
+
+The review asked for one addition to the runbook. Checking the three metrics before writing them down turned up two things
+worth recording.
+
+### The vision backup: confirmed, with a scare worth understanding
+
+The confirmation I was asked for had a false alarm in it. First comparison: **"restore is byte-identical: NO"**. Not a
+corrupt backup - a **stale** one: the newest archive was `07:19:20`, and `vision.env` was last edited at `08:20:06` (the v26
+Prompt 3 change to `VISION_MEDIA_DIR`). A nightly job is *supposed* to be up to a day behind, so the check was measuring the
+wrong thing.
+
+Taking a fresh one through the same unit the timer uses:
+
+```
+vision-env-20261028T082754Z.tar.gz · contains vision.env: 1 · sha256 sidecar: OK
+restored: byte-identical yes · 16 lines · same variable names yes
+unit ExecStart: /usr/local/sbin/ultraos-backup-all.sh · wrapper calls backup-vision-config.sh · last run logged
+```
+
+**Confirmed.** And the scare is now a line in the runbook: if you compare a restored config against a live one and they
+differ, check the timestamps before concluding the backup is broken.
+
+### 460 MB of archives for a 4 KB payload
+
+`du` on the archive directory showed **460 MB** across three files. Two were from the first two attempts, before `venv` and
+`highlights` were excluded - one had **32,337 entries** including rendered clips. Retention is 30 days, so they would have
+sat there for a month. Removed all but the newest: **460 MB → 4 KB**.
+
+That is the same lesson as the deploy cache: a cleanup that is written but never measured is not a cleanup.
+
+### The pre-deploy dump directory had no retention at all
+
+`/var/backups/ultraleagueos-production`: **22 dumps, 88 MB**, growing ~1.1 MB per release, forever. Nothing pruned it - the
+nightly database dumps have retention, the pre-deploy ones did not. `deploy/ops/prune-pre-deploy-dumps.sh` (installed at
+`/usr/local/sbin/`) now keeps the newest 10 and runs in every deploy's hygiene block:
+
+```
+[deploy] hygiene (build cache: 0B · next cache: 0 MB)
+  pre-deploy dumps: 10 kept (limit 10) - nothing to prune
+Filesystem      Size  Used Avail Use% Mounted on
+dev/sda1       193G  135G   58G  71% /
+```
+
+88 MB → **76 MB**, and bounded.
+
+### The monthly check, as written into the runbook
+
+`LAUNCH_READY.md` §6 gained a "Monthly (five minutes)" block with the three metrics, their values today, the threshold that
+triggers action, and the action itself. Two things had to be corrected relative to the review's version:
+
+1. **The media path.** `/opt/ultraos-staging/shared/media/vision/` exists but is **8 KB** of scratch; the videos live in
+   `shared/media/originals/` (**14 MB**, 2 mp4). The check now measures both, and says which one grows.
+2. **The docker threshold.** 15.5 GB of images with "RECLAIMABLE 15.47 GB (99%)" reads like 15 GB of free space; it is
+   shared-layer arithmetic and every image is referenced. `docker system prune` reclaimed **1.04 GB** on this host. The
+   runbook now says so next to the number, because the alternative is someone pressing prune expecting 15 GB and getting 1.
+
+Also recorded: the disk is at **71%** after four deploys today (135 GB used), which is the trend the monthly check exists to
+catch - 7 MB per cycle net, 1.35 GB transient per build.

@@ -258,6 +258,13 @@ rm -rf /opt/ultraos-staging/source/web/node_modules/.cache 2>/dev/null || true
 # `*-build*` catches the whole class of scratch directories, not one streak's name (livekey-build, node22-check, …).
 # `-mtime +1` is the real safety net: today's scratch is never touched.
 find /tmp -maxdepth 1 -type d -name "*-build*" -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+# The pre-deploy dump directory had no retention at all: 22 dumps / 88 MB on 2026-10-28, growing ~1.1 MB per release
+# forever. Keep the newest 10 - see deploy/ops/prune-pre-deploy-dumps.sh for why newest-first is the right end to trim.
+if [[ -f "$SRC/deploy/ops/prune-pre-deploy-dumps.sh" ]]; then
+  bash "$SRC/deploy/ops/prune-pre-deploy-dumps.sh" 2>&1 | sed 's/^/  /' || true
+else
+  bash /usr/local/sbin/prune-pre-deploy-dumps.sh 2>&1 | sed 's/^/  /' || true
+fi
 # Header plus the root filesystem only - visible over time, without cluttering the log with every mount.
 df -h / | awk 'NR==1 || /\//'
 

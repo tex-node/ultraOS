@@ -151,6 +151,38 @@ docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}'
 Expected answers: one `active` per line, the backup timers with a next-run time in the future, zero OOM lines, and the four
 vision containers under their caps (2 G / 1 G / 256 M / 512 M).
 
+### Monthly (five minutes) — the growth checks
+
+```bash
+# 1. Vision media. This is the one that will surprise you: video accumulates silently.
+du -sh /opt/ultraos-staging/shared/media/originals
+du -sh /opt/ultraos-staging/shared/media          # includes variants/ and the vision/ scratch dir
+
+# 2. Container disk. Read TOTAL and ACTIVE together - see the warning below.
+docker system df
+
+# 3. Backups: count and age, not just size.
+ls -la /var/backups/ultraleagueos-production/ | tail -5
+ls -1 /var/backups/ultraleagueos/ultraos-*.dump | wc -l
+```
+
+| metric | today (2026-10-28) | act when | action |
+| --- | --- | --- | --- |
+| `shared/media/originals` | **14 MB** (2 mp4) | **> 50 GB** | Video retention policy: delete source videos older than N days, keep clips on R2 permanently. The media directory is a cache for analysis, not the archive - R2 is. |
+| `docker system df` images | **15.5 GB**, 17 images, 16 active | **> 20 GB** | `docker image prune -a --filter "until=168h"` — but only images no container references can go |
+| `/var/backups/ultraleagueos-production` | **76 MB**, 10 dumps | **> 500 MB** | the keep-10 retention is in every deploy; if it tires, run `/usr/local/sbin/prune-pre-deploy-dumps.sh` |
+| `/var/backups/ultraleagueos` | **23 MB** | > 2 GB | retention is 14 daily + 8 weekly; check `systemctl status ultraos-retention.timer` |
+| vision config archives | **4 KB**, 1 archive | > 20 (30-day retention) | normal |
+
+**The `docker system df` trap.** "RECLAIMABLE 15.47 GB (99%)" does **not** mean 15 GB is free: every image is referenced by
+a container, and the figure counts shared layers. `docker system prune` on 2026-10-28 reclaimed **1.04 GB**. The real
+levers are the release window (`--keep 5`, in every deploy) and, if you ever need it, untagging old images explicitly.
+
+**Why `media/originals` is the metric that matters.** Everything else on this list is bounded by a mechanism that runs
+automatically. Video is bounded only by how much footage gets ingested, and the directory sits on the same 193 GB disk as
+production. At 14 MB today there is no urgency; at 50 GB the decision is whether to keep source video at all, and that
+decision is cheaper to make in advance.
+
 ## 7. Who to call
 
 1. **You** (the owner) — for anything involving Bachs, the Bachs dashboard, DNS, or a payment.
