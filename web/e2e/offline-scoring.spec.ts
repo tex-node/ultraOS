@@ -100,13 +100,20 @@ test.describe("offline scoring", () => {
               request.onerror = () => resolve(null);
             });
             if (!open) return -1;
+            // PENDING, not "rows in the store": a synced record is kept with syncedAt set (that is the local audit trail),
+            // so a raw count never reaches zero. This mirrors the console's own pendingCount predicate.
             return new Promise<number>((resolve) => {
-              const request = open.transaction("outbox", "readonly").objectStore("outbox").count();
-              request.onsuccess = () => resolve(request.result);
+              const request = open.transaction("outbox", "readonly").objectStore("outbox").getAll();
+              request.onsuccess = () =>
+                resolve(
+                  (request.result as { syncedAt?: string; deadLetteredAt?: string }[]).filter(
+                    (record) => !record.syncedAt && !record.deadLetteredAt,
+                  ).length,
+                );
               request.onerror = () => resolve(-1);
             });
           }),
-        { timeout: 30_000, intervals: [1_000], message: "the outbox did not drain after reconnect" },
+        { timeout: 30_000, intervals: [1_000], message: "the outbox still holds a pending record after reconnect" },
       )
       .toBe(0);
   });
