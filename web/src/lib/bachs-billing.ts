@@ -88,7 +88,11 @@ export async function createSubscriptionCheckout(args: {
         ? { email: args.customerEmail, name: args.customerName }
         : null,
     customer_creation: args.existingCustomerId ? undefined : "if_required",
-    reference: `org:${args.organizationId}:${args.plan}`.slice(0, 128),
+    // UNIQUE per attempt (v32c): Bachs enforces uniqueness on `reference`, so `org:<id>:<plan>` made every attempt AFTER
+    // the first fail with "Duplicate reference" - a customer's second upgrade click, or a retry after a failed card, would
+    // be refused before the card form. The organization id stays the second segment, because the webhook falls back to
+    // splitting this string when a provider trims metadata (see resolveOrganization below).
+    reference: `org:${args.organizationId}:${args.plan}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`.slice(0, 128),
     metadata: { organizationId: args.organizationId, plan: args.plan },
     success_url: args.successUrl,
     cancel_url: args.cancelUrl,
