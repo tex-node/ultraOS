@@ -6,14 +6,14 @@ login; everything else is verification you can run as-is.
 **Time:** ~30 minutes (15 reading, 15 doing). **Risk:** medium — the checkout flow is briefly unverified while keys change,
 and one real card charge is part of the proof (refunded).
 
-> **Current state (verified read-only on 2026-10-29).** Production is *not* on fresh live credentials yet:
+> **Current state (verified read-only on 2026-10-29, again at 04:0x).** Production is *not* on fresh live credentials:
 >
 > | item | value today | what it must be |
 > | --- | --- | --- |
 > | `BACH_IO` | `sk_live_b8e…` (60 chars) — the key that has been in the repo's `cred/` since v22 | a **freshly issued** live key |
 > | `BACH_WEBHOOK` / `BACHS_WEBHOOK_SECRET` | `whsec_815c2…` — the original secret from `cred/gateway_env.txt` | a **rolled** secret |
-> | `BACHS_PRODUCT_PRO` | **unset** | `prod_56446cebde334d749591` |
-> | `BACHS_PRODUCT_ENTERPRISE` | **unset** | `prod_c2d1372083f142659f33` |
+> | `BACHS_PRODUCT_PRO` | **unset** | `prod_a2588c7531b24b27ace2` |
+> | `BACHS_PRODUCT_ENTERPRISE` | **unset** | `prod_0cf8f25781df468ebd99` |
 > | `BACHS_MOCK` | unset (never was set in production) | remains unset |
 > | Plans in production | Neon Ultra = ENTERPRISE, LBCL = ENTERPRISE | unchanged by this runbook |
 > | Bachs audit rows in production | **none** | `ORG_UPGRADED_BY_BACHS` + a downgrade after the refund |
@@ -54,7 +54,8 @@ runbook fixes.
 - [ ] The **old** live key (`sk_live_b8e…` in the pre-v29 env) is **revoked** — it has been in a repository's `cred/`
       directory, which is enough for it to be considered compromised.
 - [ ] The **old** webhook secret is **rolled** (see §3).
-- [ ] You know the two product ids: `prod_56446cebde334d749591` (PRO), `prod_c2d1372083f142659f33` (ENTERPRISE).
+- [ ] You know the two **live** product ids: `prod_a2588c7531b24b27ace2` (PRO), `prod_0cf8f25781df468ebd99` (ENTERPRISE).
+      The **TEST** id `prod_582d912f93cf444cb827` is staging-only and must never appear in a production env file.
 
 ---
 
@@ -116,7 +117,8 @@ history, and `history` is a log.
 sudo nano /opt/ultraleagueos/shared/web.env      # or: sudo vim /opt/ultraleagueos/shared/web.env
 ```
 
-Set (or replace) exactly these lines:
+Set (or replace) exactly these lines. The app reads the **legacy** names (`BACH_IO` / `BACH_WEBHOOK`); the newer pair
+(`BACHS_KEY` / `BACHS_WEBHOOK_SECRET`) is also read, so pick one pair and stay consistent:
 
 ```ini
 # the freshly issued live key from §2
@@ -126,9 +128,10 @@ BACH_IO=<NEW_LIVE_KEY>
 # while the legacy name is BACH_WEBHOOK. Set the one the app reads; leave the legacy one alone.
 BACHS_WEBHOOK_SECRET=<NEW_WEBHOOK_SECRET>
 
-# the two live product ids
-BACHS_PRODUCT_PRO=prod_56446cebde334d749591
-BACHS_PRODUCT_ENTERPRISE=prod_c2d1372083f142659f33
+# the two live product ids - CORRECTED 2026-10-29. The ids that were here before
+# (prod_56446… / prod_c2d13…) belong to a different Bachs account and fail with "product not found".
+BACHS_PRODUCT_PRO=prod_a2588c7531b24b27ace2
+BACHS_PRODUCT_ENTERPRISE=prod_0cf8f25781df468ebd99
 ```
 
 And **remove** (or set to `0`) any line reading `BACHS_MOCK=1`. Production has never had it set, so this should be a no-op —
@@ -143,7 +146,7 @@ check anyway.
 Save, then confirm the file says what you think it says — **redacted**:
 
 ```bash
-sudo grep -E '^(BACH_IO|BACHS_WEBHOOK_SECRET|BACHS_PRODUCT_PRO|BACHS_PRODUCT_ENTERPRISE|BACHS_MOCK)=' \
+sudo grep -E '^(BACH_IO|BACH_WEBHOOK|BACHS_WEBHOOK_SECRET|BACHS_PRODUCT_PRO|BACHS_PRODUCT_ENTERPRISE|BACHS_MOCK)=' \
   /opt/ultraleagueos/shared/web.env | sed -E 's/(sk_live_|whsec_)[A-Za-z0-9_-]+/\1***/'
 ```
 
@@ -170,6 +173,9 @@ Then, in the browser on **production**:
 - [ ] `/settings/billing` shows **no** "Test mode" banner.
 - [ ] `/settings/billing` shows **Upgrade to Pro** and **Upgrade to Enterprise**.
 - [ ] Pressing Upgrade **redirects to `https://checkout.bachs.io/…`** (no "No Bachs product configured" error, no 500).
+      **Check the host**: production must land on the live checkout host, staging on the sandbox one. A staging click that
+      reaches the live host is a configuration bug, and a production click that reaches the sandbox host is a key that will
+      never charge.
 
 If the button errors instead of redirecting, `journalctl -u ultraos-web.service -n 50 | grep -i bachs` names the scope or the
 product id that is wrong. Do not proceed to the payment until the redirect works.
@@ -213,7 +219,17 @@ the env does not match the one that signed); a **503** means the webhook is not 
 
 ## 8. Rollback (~2 min)
 
-Any failure in §6 or §7 is a rollback, not a debugging session on live credentials.
+Any failure in §6 or §7 is a rollback, not a debugging session on live credentials. It is a **single file copy**, because
+everything the migration changes lives in that one env file:
+
+| variable | restore to | note |
+| --- | --- | --- |
+| `BACH_IO` | the previous value (from the §4 backup) | the old key must still exist in the dashboard until the migration is confirmed — revoke only after §7 passes |
+| `BACH_WEBHOOK` | the previous value | the dashboard roll cannot be undone, so after a roll both sides must agree again: if you roll back, either re-point the app at the new secret or expect 400s |
+| `BACHS_WEBHOOK_SECRET` | remove it if it was not there before | the app prefers this name over `BACH_WEBHOOK` |
+| `BACHS_PRODUCT_PRO` | remove the line (it was absent) | absence is what produced "No Bachs product configured for PRO" |
+| `BACHS_PRODUCT_ENTERPRISE` | remove the line | same |
+| `BACHS_MOCK` | unchanged (absent) | — |
 
 ```bash
 ssh raivstream

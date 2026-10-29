@@ -29,8 +29,10 @@ curl -s http://127.0.0.1:8010/health   # {"status":"ok","analyzer":"yolov8n-pers
 
 ## 2. The two human-only items
 
-> **State as of 2026-10-29 (verified read-only, hashes compared rather than values):** the Bachs live migration is
-> **partially done**. Production holds a `sk_live_…` key that is *not* the one from `cred/`, but the webhook signing secret
+> **State as of 2026-10-29 04:0x (verified read-only, hashes compared rather than values):** the Bachs live migration has
+> **not happened**. The env file's mtime is **2026-10-26**, the webhook secret is byte-identical to the one in `cred/`, both
+> product ids are absent, and the production audit log contains **zero** Bachs rows. Earlier text in this file called it
+> "partially done" because a live-looking key is present — that key has been in the file since before v22 and is the old one. Production holds a `sk_live_…` key that is *not* the one from `cred/`, but the webhook signing secret
 > is **still the original** (identical hash to `cred/gateway_env.txt`), **neither product id is set**, and production has
 > **zero** `ORG_UPGRADED_BY_BACHS` rows — so no payment has ever completed there. Upgrades cannot work until the product ids
 > are added. The procedure, with the exact commands, is **`runbooks/BACHS_LIVE_MIGRATION.md`**; the secret-rotation
@@ -42,8 +44,11 @@ Nothing in code blocks these; they need a person with a login.
    `BACHS_PRODUCT_ENTERPRISE=prod_c2d1372083f142659f33` are known but **not yet in either env file**; the webhook secret has
    not been rolled. Run `runbooks/BACHS_LIVE_MIGRATION.md` end to end — it includes the ₦100 proof payment and the refund,
    because the redirect only proves the key and only the webhook changes the plan.
-   **Staging status:** product ids are set there, and the checkout attempt now fails one step later with
-   `API key missing required scope: payments:write` — the sandbox key needs that scope before a staging rehearsal is possible.
+   **Staging status:** the TEST product (`prod_582d912f93cf444cb827`) is set for both tiers and the key is a sandbox key,
+   but the checkout is still refused with `API key missing required scope: payments:write`. Issue a sandbox key **with that
+   scope** and the rehearsal in `runbooks/BACHS_LIVE_MIGRATION_COMMANDS.md` becomes runnable end to end.
+   **Product ids (not secrets):** PRO `prod_a2588c7531b24b27ace2`, ENTERPRISE `prod_0cf8f25781df468ebd99`, TEST
+   `prod_582d912f93cf444cb827` (staging only).
 2. **One real game video for Vision.** The worker runs and analyses; every clip so far has been synthetic and produced
    **zero observations**, which is correct for film with no people in it. The confirm → highlight → R2 → match-centre leg
    has never run on a real detection. Record ~10 minutes of a real session, ingest with

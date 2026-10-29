@@ -14283,3 +14283,50 @@ them.
 being replaced — the env file's mtime predates every claim of a migration, the webhook secret is byte-identical to the one in
 `cred/`, both product ids are absent, and no Bachs event has ever reached the audit log. A live-looking `sk_live_…` key has
 been in that file since before v22; it is the old one, not a fresh one.
+
+## 2026-10-29 - Streak v31 / Prompts 4-5: the commands block, the docs, and the close
+
+**Prompt 4 — `documentation/runbooks/BACHS_LIVE_MIGRATION_COMMANDS.md`.** The copy-paste version, eight steps, with three
+corrections to the block as drafted:
+
+- the env file is backed up **and** chmod 600'd, and the database dump is checksummed — a rollback you cannot verify is a
+  second incident;
+- the commands use `docker exec -i` (no `-t`: `-it` fails in any non-interactive context) and `psql` directly rather than
+  `psql` through an interactive shell, and they read the **legacy** variable names (`BACH_IO` / `BACH_WEBHOOK`) because that
+  is what `src/lib/bachs.ts` resolves first in production;
+- the health check is `/api/v1/live`; `/api/health` is 404 on this deployment.
+
+The STEP 6 proof deliberately does not stop at "you were redirected": it requires `ORG_UPGRADED_BY_BACHS` in `auditLog`, then
+STEP 7 requires `ORG_DOWNGRADED_BY_BACHS` after the refund. The redirect proves the card was charged; only the audit row proves
+the platform knows. That distinction is the whole reason this runbook exists.
+
+**Prompt 5 — the close.**
+
+```
+unit        1041 · 1040 pass · 0 fail · 1 pre-existing skip
+component     26 / 26
+db            52 / 52
+e2e            7 / 7
+ratchet        4 suppressions (ceiling 4)
+staging      820b1ea deployed · /api/v1/live 200 · product ids = TEST (both tiers)
+production   70ebec9 · /api/v1/live 200 · product ids 0 · env mtime 2026-10-26 · Bachs audit rows 0
+```
+
+`LAUNCH_READY.md` §2 now says, in the first line, that the migration **has not happened** and why the earlier "partially done"
+wording was wrong (the live-looking key predates v22). The product ids are recorded in `cred/PRODUCT_IDS.md` (gitignored) and
+in the runbook, with the superseded pair named as wrong.
+
+**The final gate, honestly:**
+
+```
+STAGING_TEST_PRODUCT          PASS   prod_582d… on both tiers, sandbox key, guard active
+STAGING_CHECKOUT_PROOF        FAIL   API key missing required scope: payments:write — no checkout, no card, no audit row
+PRODUCTION_STATE_DOCUMENTED   PASS   see the table above
+PRODUCTION_MIGRATION_COMMANDS COMMITTED   BACHS_LIVE_MIGRATION_COMMANDS.md
+PRODUCTION_TOUCHED            NO     env mtime 2026-10-26, release 70ebec9, zero writes
+```
+
+**What remains is three dashboard actions and one card charge**, in this order: issue a sandbox key **with `payments:write`**
+(so staging can rehearse at all), then on production roll the webhook signing secret, add the two live product ids, and take
+the ₦100 charge and refund. `BACHS_LIVE_MIGRATION_COMMANDS.md` is the block to run; `BACHS_LIVE_MIGRATION.md` explains why
+each step exists.
