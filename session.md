@@ -14049,3 +14049,86 @@ The code path is complete and proven on staging. **Production runs the code with
 (`NEXT_PUBLIC_OFFLINE_SCORING_ENABLED` is absent there): enabling offline scoring in front of real scorekeepers is a
 product decision, and the honest position after one automated proof is "staging-verified, not production-enabled". Turning
 it on is one env line plus a deploy.
+
+## 2026-10-29 - Streak v29: the migration is partly done, and the staging rehearsal is blocked by a key scope
+
+**Prompt 1 - product ids on staging, then the checkout proof.** The two ids are now in staging's env:
+
+```
+BACHS_PRODUCT_PRO=prod_56446cebde334d749591
+BACHS_PRODUCT_ENTERPRISE=prod_c2d1372083f142659f33
+staging restarted · /api/v1/live 200
+```
+
+The checkout attempt moved one step and stopped:
+
+```
+organization: test-league-b · checkout FAILED: API key missing required scope: payments:write
+```
+
+That is the honest result of this prompt: **the sandbox key in `cred/sandbox.txt` cannot create a checkout session.** It
+authenticates (the SDK picks the sandbox host, `/settings/billing` renders without the live-key banner) but it was issued
+without the payments scope, so there is no URL to redirect to and no sandbox payment to make. Creating a key with the right
+scope is a dashboard action, i.e. yours; the runbook now calls the scope out explicitly because it is the difference between
+"product ids missing" and "product ids fine, key useless".
+
+**Prompt 2 - `runbooks/BACHS_LIVE_MIGRATION.md`.** Ten sections: pre-flight (including **revoke the old key**, which has been
+sitting in `cred/` since v22), live-key generation with the scope list, webhook secret roll, a backup of the env file *and*
+the database, the exact env edits as placeholders, restart + verification, the ₦100 proof payment and its refund, rollback,
+the post-migration checklist, and "places the same credentials hide". Two corrections came out of actually running the steps:
+
+- the runbook the prompt described tells you to check `/api/health`; that endpoint is **404** on this deployment (verified),
+  the live one is `/api/v1/live` - a runbook that sends you to a 404 manufactures a fake incident;
+- `BACH_API_BASE` must not be touched: v24 lost an afternoon to it sending a sandbox key to the live host (`401`).
+
+**Prompt 3 - `runbooks/ROTATE_SECRETS.md`.** Every secret with its real rotation cost and blast radius, the two places
+people forget (**`/opt/ultraos-vision/vision.env`** holds its own copy of the database URL and R2 credentials;
+**`install-feed-drain-timer.sh`** embeds `CRON_SECRET` in a systemd unit), the first-minute-after-a-leak procedure (revoke
+first, rotate second), the leak-check commands, and the root cause section: an empty `export $(... | xargs)` becomes a bare
+`export`, which prints the whole environment - with the `shellcheck` rules (`SC2046`, `SC2086`, `SC2155`) that would have
+caught it in CI.
+
+The review step asked for one easily-missed step; there are two, and they are now their own subsection: a database-password
+rotation silently breaks the **backup unit** at 02:00 (nothing reads it until then) and the **vision worker** on its next
+restart.
+
+**Prompt 4 - production state, read-only. No production change was made.** The measured state, with hashes compared rather
+than values printed:
+
+| production item | state |
+| --- | --- |
+| `BACH_IO` | `sk_live_…`, 60 chars, hash `9d9a48…` - **not** the key in `cred/` (`dc0a35…`), so it looks freshly issued |
+| `BACH_WEBHOOK` | hash `1993f9…` - **identical** to `cred/gateway_env.txt`, i.e. **not rolled** |
+| `BACHS_WEBHOOK_SECRET` | absent (the app resolves the legacy `BACH_WEBHOOK`) |
+| `BACHS_PRODUCT_PRO` / `_ENTERPRISE` | **absent** |
+| `BACHS_MOCK` | absent (never set in production) |
+| `/api/v1/live` | 200 |
+| orgs | Neon Ultra ENTERPRISE · LBCL ENTERPRISE |
+| audit rows matching `%UPGRAD%`/`%DOWNGRAD%` | **0, ever** |
+
+So v29 ends with production **partially migrated**: the key changed, and the three things that make it work - a rolled
+webhook secret, the two product ids, and one completed payment - are still missing. The exact commands are in
+`runbooks/BACHS_LIVE_MIGRATION.md` §4-§7, ready to copy.
+
+## 2026-10-29 - Streak v30: verification result, and why the gate cannot be marked PASS
+
+v30 asked me to confirm that production is live, has both product ids, a rotated webhook secret, and a refunded $1 payment.
+I ran the checks read-only and **three of the five claims do not hold**:
+
+```
+PRODUCTION_LIVE_KEY              PARTIAL   sk_live_ present and NOT the old cred/ key - but see below
+PRODUCTION_PRODUCT_IDS           FAIL      both absent -> "No Bachs product configured for PRO"
+PRODUCTION_MOCK_DISABLED         PASS      BACHS_MOCK absent
+PRODUCTION_WEBHOOK_SECRET_ROTATED FAIL     hash identical to cred/gateway_env.txt
+PRODUCTION_TEST_PAYMENT          FAIL      zero upgrade audit rows; with no product ids the session cannot be created
+AUDIT_LOG_EVIDENCE               FAIL      no ORG_UPGRADED_BY_BACHS / ORG_DOWNGRADED_BY_BACHS row exists in production
+```
+
+The pattern is consistent and worth naming: **the checkout redirect is not the payment.** A key can be live and the checkout
+can still be unreachable (no product ids), and even a working checkout proves nothing about the plan - the *webhook* writes
+`Organization.plan`, and the webhook's secret is the one thing that has not been rotated. That is precisely the failure mode
+`BACHS_LIVE_MIGRATION.md` §7 exists to catch, and precisely why it insists on the ₦100 charge rather than a redirect.
+
+I did not update the docs to say "COMPLETE". `LAUNCH_READY.md` §2 and `HANDOVER.md` now carry the measured state, with the
+runbook as the path. Nothing in production was changed by this streak: the only writes were to staging's env (product ids)
+and this repository.
