@@ -29,6 +29,13 @@ curl -s http://127.0.0.1:8010/health   # {"status":"ok","analyzer":"yolov8n-pers
 
 ## 2. The two human-only items
 
+> **Checkout fix, 2026-10-29 09:20:** the return URLs were being sent as `http://127.0.0.1:4120/...` because the app fell back
+> to a loopback default when `APP_BASE_URL`/`NEXTAUTH_URL` were unset; Bachs rejects loopback even in sandbox. `publicBaseUrl()`
+> (`src/lib/app-url.ts`) now resolves `NEXT_PUBLIC_APP_URL` and refuses a loopback origin by name, and a real session is created
+> with `success_url=https://app.neonultra.ng/...`. The checkout also had a uniqueness bug: `reference` was
+> `org:<id>:<plan>` and Bachs enforces uniqueness, so any second attempt failed with "Duplicate reference" — it is unique per
+> attempt now.
+>
 > **State as of 2026-10-29 08:35:** the live credentials are **in production and working**. `web.env` mtime is today,
 > `BACH_WEBHOOK` holds the rolled secret (`ee3f5cf5`), both product ids are set, and two real checkout sessions were created
 > on `checkout.bachs.io` for the Neon Ultra organization. Settlement had to move to **USD** (`BACHS_SETTLEMENT_CURRENCY`) —

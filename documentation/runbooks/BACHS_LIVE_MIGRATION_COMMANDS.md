@@ -13,6 +13,35 @@ or a chat.**
 
 ---
 
+## STEP 0b — The return URL must be public (it was not, and Bachs only says "invalid URL")
+
+A checkout session carries `success_url` and `cancel_url`, and the provider sends a browser to them. Bachs **rejects loopback
+URLs even in sandbox**. Until 2026-10-29 every checkout in this app built them from
+`APP_BASE_URL ?? NEXTAUTH_URL ?? "http://127.0.0.1:4120"`; production sets neither of the first two (it uses `AUTH_URL`), so
+`127.0.0.1:4120` was sent and the checkout failed at the card form.
+
+The fix, now in the code: `src/lib/app-url.ts` resolves `NEXT_PUBLIC_APP_URL` -> `APP_BASE_URL` -> `AUTH_URL` -> `NEXTAUTH_URL`,
+skips loopback/private origins, and **throws** if none is public. It never consults the request origin, because behind Caddy
+that is `127.0.0.1`.
+
+In both env files:
+
+```ini
+NEXT_PUBLIC_APP_URL="https://app.neonultra.ng"
+```
+
+Proof after a restart (no charge):
+
+```bash
+cd /opt/ultraleagueos/source/web
+node --conditions=react-server --import tsx scripts/bachs-checkout-url-probe.ts
+# publicBaseUrl() -> https://app.neonultra.ng
+# session created · host=checkout.bachs.io · id=chk_…
+```
+
+And the action logs the origin it hands to Bachs on every click:
+`journalctl -u ultraos-web.service | grep '\[billing\] checkout return origin'`.
+
 ## STEP 0a — Two account facts that block a checkout before the card form
 
 Both were discovered while migrating production on 2026-10-29, and both fail *after* the key and product ids are correct:

@@ -14546,3 +14546,73 @@ PLATFORM_ACCEPTS_REAL_PAYMENTS    READY   configuration verified end to end; onl
 What is left is one human action and its verification: open `/settings/billing` on production, click **Upgrade to Pro**, pay
 the minimum **in USD** (the account cannot settle NGN), then run the audit query — `ORG_UPGRADED_BY_BACHS` is the pass
 condition — refund in the dashboard, and expect `ORG_DOWNGRADED_BY_BACHS`.
+
+## 2026-10-29 - Streak v32c: the loopback return URL, and the "Duplicate reference" behind it
+
+You were right about the cause, and the fix is in, but there was a **second** bug hiding behind the first: fixing the URL made
+Bachs return a new error, `Duplicate reference 'org:<id>:PRO'`.
+
+### The bug you named
+
+Every checkout in the app built its return URLs from
+
+```ts
+const baseUrl = process.env.APP_BASE_URL ?? process.env.NEXTAUTH_URL ?? "http://127.0.0.1:4120";
+```
+
+Production sets neither of the first two (it uses `AUTH_URL`), so the loopback fallback won and Bachs received
+`http://127.0.0.1:4120/settings/billing?upgraded=1`. Bachs rejects loopback **even in sandbox**, and its error names neither
+the URL nor the cause.
+
+`src/lib/app-url.ts` is now the single decision point, used by the billing action, the admin-organization action, both
+ticketing checkouts, the mock checkout (loopback allowed there - the redirect stays inside this app) and the registration
+receipt link:
+
+```
+NEXT_PUBLIC_APP_URL -> APP_BASE_URL -> AUTH_URL -> NEXTAUTH_URL
+loopback / RFC1918 origins are skipped, never silently used;
+if nothing public is configured it throws PublicBaseUrlRequiredError naming the variable to set;
+the request origin is never consulted - behind Caddy it is 127.0.0.1.
+```
+
+`NEXT_PUBLIC_APP_URL="https://app.neonultra.ng"` is set in **both** env files. Staging has no public hostname of its own, so it
+points at the same domain; a sandbox redirect therefore lands on production's login page - documented rather than hidden.
+
+### The bug it uncovered
+
+`reference: \`org:${organizationId}:${plan}\`` is enforced **unique** by Bachs, so the first checkout for an organization
+consumed it and every later attempt failed before the card form:
+
+```
+session FAILED · Duplicate reference 'org:cmt4odhgn0000wokk8fbwr6ro:PRO'
+```
+
+That would have hit a real customer on their *second* upgrade click, or on a retry after a declined card. The reference is now
+unique per attempt (`org:<id>:<plan>:<timestamp><random>`), and the organization id stays the second segment because the webhook
+falls back to splitting this string when a provider trims metadata.
+
+### Proof, on production, without charging anything
+
+```
+publicBaseUrl() -> https://app.neonultra.ng
+success_url would be https://app.neonultra.ng/settings/billing?upgraded=1
+cancel_url  would be https://app.neonultra.ng/settings/billing?cancelled=1
+session created · host=checkout.bachs.io · id=chk_HsJ4…
+
+and the guard, with only a loopback URL configured:
+refused with PublicBaseUrlRequiredError: A public app URL is required for payment redirects: set NEXT_PUBLIC_APP_URL ...
+```
+
+The billing action now logs the origin on every click, so "which URL did we send" is answerable from the journal:
+`journalctl -u ultraos-web.service | grep '\[billing\] checkout return origin'`.
+
+### State
+
+```
+production d8e7abd · staging d8e7abd · both /api/v1/live 200
+unit 1049 (1048 pass, 8 new for app-url) · component 26/26 · db 52/52 · e2e 7/7 · ratchet 4/4
+```
+
+**Still pending, and it is still the only thing pending: the payment.** The checkout now opens on the live host with the right
+return URL; the audit log will not show `ORG_UPGRADED_BY_BACHS` until a card is actually charged. Then refund, and
+`ORG_DOWNGRADED_BY_BACHS` closes it.
