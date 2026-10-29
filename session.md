@@ -14431,3 +14431,47 @@ PLATFORM_ACCEPTS_REAL_PAYMENTS         FAIL   the webhook secret mismatch would 
 The gate is not a formality here: with the dashboard secret rolled and the app still on the old one, the platform is in the
 *worst* intermediate state — it can take a customer's money and be structurally unable to record it. That is worse than the
 pre-migration state, and it is why `BACHS_LIVE_MIGRATION_COMMANDS.md` now opens with that warning.
+
+## 2026-10-29 - Streak v32 / Prompt 4-5: docs, suite, close
+
+**Prompt 4 — docs.** `LAUNCH_READY.md` §2 carries the 04:25 measurement (same mtime, `1993f93c` vs the rolled `ee3f5cf5`,
+product ids absent, zero audit rows) plus the operational warning. `BACHS_LIVE_MIGRATION_COMMANDS.md` now opens with the one
+thing a future operator must know before touching a rolled secret:
+
+> A roll is not undoable. While the dashboard and the app disagree, every inbound webhook fails with **400** — a customer can
+> be charged and the plan will not move.
+
+Nothing else in the runbook needed clarifying; the steps the user has not run yet are the ones already written.
+
+**Prompt 5 — suite (no deploys; nothing in this streak touched the app).**
+
+```
+unit        1041 · 1040 pass · 0 fail · 1 pre-existing skip
+component     26 / 26
+db            52 / 52
+e2e            7 / 7
+ratchet        4 suppressions (ceiling 4)
+production  release 70ebec9 (from v30) · web.env mtime 2026-10-26 19:21:50 · /api/v1/live 200
+```
+
+## Bachs Live Migration — PARTIAL (not complete)
+
+The gate, as measured at 04:25 and again at 04:33:
+
+```
+PRODUCTION_ENV_UPDATED            FAIL   mtime still 2026-10-26 19:21:50
+PRODUCTION_WEBHOOK_SECRET_ROLLED  FAIL   app holds 1993f93c, the rolled secret is ee3f5cf5
+PRODUCTION_PRODUCT_IDS_PRESENT    FAIL   both ABSENT
+REAL_CHECKOUT_PROOF               FAIL   0 rows matching %BACHS%
+REFUND_WEBHOOK_PROOF              FAIL   no downgrade row
+PLATFORM_ACCEPTS_REAL_PAYMENTS    FAIL   the mismatch would reject every delivery
+```
+
+**What is true right now:** the dashboard work exists in `cred/gateway_env.txt` (line 5) and nowhere else. Production's env
+file has not changed since 2026-10-26; the platform can serve pages and take a card, but it would not record the charge. The
+three things that must change are all in one file, and the proof that they worked is one SQL query — `ORG_UPGRADED_BY_BACHS`
+followed by `ORG_DOWNGRADED_BY_BACHS` after the refund.
+
+**What I could not do:** edit production's env (read-only by rule, and it needs the live key value, which only the dashboard
+has), and take the ₦100 charge. Both are yours; the block to paste is in §Prompt 2 above and in
+`BACHS_LIVE_MIGRATION_COMMANDS.md` STEP 1-7.
