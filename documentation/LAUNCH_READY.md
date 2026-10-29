@@ -29,11 +29,12 @@ curl -s http://127.0.0.1:8010/health   # {"status":"ok","analyzer":"yolov8n-pers
 
 ## 2. The two human-only items
 
-> **State as of 2026-10-29 04:25 (re-verified read-only, hashes compared rather than values):** the Bachs live migration has
-> **not happened**. The env file's mtime is still **2026-10-26 19:21:50**, `BACH_WEBHOOK` still hashes to the pre-rotation
-> `1993f93c` while the rolled secret now sitting in `cred/gateway_env.txt` hashes to `ee3f5cf5`, both product ids are still
-> absent, and the audit log still has **zero** Bachs rows. **If the dashboard roll has already happened, inbound webhooks are
-> currently failing with 400** — update the app before taking any payment. The env file's mtime is **2026-10-26**, the webhook secret is byte-identical to the one in `cred/`, both
+> **State as of 2026-10-29 08:35:** the live credentials are **in production and working**. `web.env` mtime is today,
+> `BACH_WEBHOOK` holds the rolled secret (`ee3f5cf5`), both product ids are set, and two real checkout sessions were created
+> on `checkout.bachs.io` for the Neon Ultra organization. Settlement had to move to **USD** (`BACHS_SETTLEMENT_CURRENCY`) —
+> the account has no NGN payment method. **What is still missing is the payment itself**: the audit log has zero
+> `ORG_UPGRADED_BY_BACHS` rows, so no card has been charged through this platform yet. Take the minimum charge, confirm the
+> audit row, refund, confirm the downgrade. The env file's mtime is **2026-10-26**, the webhook secret is byte-identical to the one in `cred/`, both
 > product ids are absent, and the production audit log contains **zero** Bachs rows. Earlier text in this file called it
 > "partially done" because a live-looking key is present — that key has been in the file since before v22 and is the old one. Production holds a `sk_live_…` key that is *not* the one from `cred/`, but the webhook signing secret
 > is **still the original** (identical hash to `cred/gateway_env.txt`), **neither product id is set**, and production has

@@ -13,6 +13,19 @@ or a chat.**
 
 ---
 
+## STEP 0a — Two account facts that block a checkout before the card form
+
+Both were discovered while migrating production on 2026-10-29, and both fail *after* the key and product ids are correct:
+
+1. **The account must be able to charge the settlement currency.** The app asks for NGN by default
+   (`BACHS_SETTLEMENT_CURRENCY ?? "NGN"`). If the Bachs account has no NGN payment method, the session is refused with
+   `No payment method available to this checkout can charge NGN. Ask to be billed in one of: USD`. The fix is either an
+   account change (enable NGN) or one env line: `BACHS_SETTLEMENT_CURRENCY="USD"`. That line is a **business decision** — the
+   platform's prices are in NGN and the processor settles in USD — so decide before flipping it, and delete the line to revert.
+2. **A subscription checkout needs a customer.** `customer_creation: if_required` with no email/name yields
+   `customer is required for a subscription checkout ... a guest record is not`. The billing action passes the signed-in user's
+   email and the organization's name, so the button is fine; a script that calls `createSubscriptionCheckout` must pass both.
+
 ## STEP 0 — Dashboard pre-flight (~10 min, browser)
 
 - [ ] Live API key created **with the scopes `payments:write` and `products:read`** — a key that authenticates but lacks
