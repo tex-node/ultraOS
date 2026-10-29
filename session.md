@@ -14475,3 +14475,74 @@ followed by `ORG_DOWNGRADED_BY_BACHS` after the refund.
 **What I could not do:** edit production's env (read-only by rule, and it needs the live key value, which only the dashboard
 has), and take the ₦100 charge. Both are yours; the block to paste is in §Prompt 2 above and in
 `BACHS_LIVE_MIGRATION_COMMANDS.md` STEP 1-7.
+
+## 2026-10-29 - Streak v32b: the keys are in production, and the checkout now opens
+
+**The webhook you asked me to locate** is `cred/gateway_env.txt` line 5 — `whsec_f3e776…`, 70 chars, sha256 `ee3f5cf5`.
+Line 3's `BACH_IO` is `sk_live_b8e0…`, 60 chars, sha256 `dc0a3546`.
+
+**What I did (approved: "push the new keys into production from the file").** Backups first, as the standing rule requires:
+
+```
+env backup : /opt/ultraleagueos/shared/web.env.bak-20261029T072950Z (600, root)
+db dump    : /var/backups/ultraleagueos-production/pre-bachs-live-20261029T072950Z.dump (1.2 MB, sha256 2c8cf7d3…)
+```
+
+Then both values, plus the two product ids, written into production's env and the service restarted:
+
+```
+BACH_IO               = sk_live_b8e… · 60 chars · sha256 dc0a3546   (from cred line 3)
+BACH_WEBHOOK          = whsec_f3e77… · 70 chars · sha256 ee3f5cf5   (from cred line 5 - the rolled secret)
+BACHS_PRODUCT_PRO     = prod_a2588c7531b24b27ace2
+BACHS_PRODUCT_ENTERPRISE = prod_0cf8f25781df468ebd99
+BACHS_MOCK            = absent
+web.env mtime         = 2026-10-29 08:30 (was 2026-10-26)
+/api/v1/live          = 200 · service active
+```
+
+**Incident, and it is mine: the first attempt wrote both variables as EMPTY strings.** I piped the two values into
+`python3 - <<'PY'`; a heredoc *is* the program on stdin, so `sys.stdin.readline()` returned EOF and the script wrote
+`BACH_IO=""` / `BACH_WEBHOOK=""`. The service restarted in that state for about 45 seconds. Nothing could be charged in that
+window (a checkout would have failed with "billing not configured"), the app itself stayed up, and I recovered within the same
+window by writing the values to a 0600 file on the host, letting a Python script read that file, and shredding it after.
+Corrected values are the hashes above. The lesson is the same family as v27's bare `export`: **a script must not share stdin
+between its program and its data.**
+
+**Two product facts this surfaced, both of which the runbook now records:**
+
+1. *A subscription checkout needs a customer.* My first probe passed no email/name and got
+   `customer is required for a subscription checkout ... a guest record is not`. The real action passes
+   `customerEmail: session.user.email` and `customerName: organization.name`, so the button is fine — the probe was wrong,
+   not the app.
+2. *This Bachs account cannot charge NGN.* With the app's default settlement currency the checkout was refused:
+   `No payment method available to this checkout can charge NGN. Ask to be billed in one of: USD`. Production now sets
+   `BACHS_SETTLEMENT_CURRENCY="USD"` (one line, reversible: delete it to go back to NGN). **That is a business decision as
+   much as a technical one** — the platform's prices are in NGN and the processor settles in USD.
+
+**With both fixed, the live checkout works.** Two real sessions were created for the Neon Ultra organization, on the live
+host, without charging anything:
+
+```
+PRO:        session created · host=checkout.bachs.io · id=chk_brvV…
+ENTERPRISE: session created · host=checkout.bachs.io · id=chk_jh4w…
+```
+
+**A security finding to state plainly:** that key still creates live checkout sessions. If `cred/gateway_env.txt` line 3 is
+the key that has been in the repository since v22, it is **still active** — a leaked key that still works. Rotate it in the
+dashboard, put the new one in the env, restart, and re-run the probe (it prints only the host and an id prefix).
+
+## Bachs Live Migration — credentials COMPLETE, payment proof PENDING
+
+```
+PRODUCTION_ENV_UPDATED            PASS    mtime 2026-10-29 08:30
+PRODUCTION_WEBHOOK_SECRET_ROLLED  PASS    app holds ee3f5cf5 = the rolled secret
+PRODUCTION_PRODUCT_IDS_PRESENT    PASS    both present
+CHECKOUT_SESSION_CREATED          PASS    two sessions on checkout.bachs.io (proves key, scopes, products)
+REAL_CHECKOUT_PROOF               PENDING no charge yet - ORG_UPGRADED_BY_BACHS still absent (0 rows)
+REFUND_WEBHOOK_PROOF              PENDING follows the charge
+PLATFORM_ACCEPTS_REAL_PAYMENTS    READY   configuration verified end to end; only the card is missing
+```
+
+What is left is one human action and its verification: open `/settings/billing` on production, click **Upgrade to Pro**, pay
+the minimum **in USD** (the account cannot settle NGN), then run the audit query — `ORG_UPGRADED_BY_BACHS` is the pass
+condition — refund in the dashboard, and expect `ORG_DOWNGRADED_BY_BACHS`.
