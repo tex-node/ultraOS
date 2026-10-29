@@ -14330,3 +14330,104 @@ PRODUCTION_TOUCHED            NO     env mtime 2026-10-26, release 70ebec9, zero
 (so staging can rehearse at all), then on production roll the webhook signing secret, add the two live product ids, and take
 the ₦100 charge and refund. `BACHS_LIVE_MIGRATION_COMMANDS.md` is the block to run; `BACHS_LIVE_MIGRATION.md` explains why
 each step exists.
+
+## 2026-10-29 - Streak v32 / "locate the new webhook": it is in `gateway_env.txt`, and production does not have it yet
+
+You asked me to locate the new webhook in `cred/gateway_env.txt`. It is there, on **line 5**, and the file was updated today
+(mtime `2026-10-29 03:19:55Z`):
+
+| line | variable | shape | sha256 prefix |
+| --- | --- | --- | --- |
+| 3 | `BACH_IO` | `sk_live_b8e0…`, 60 chars | `DC0A3546` — **unchanged from before** |
+| 5 | `BACH_WEBHOOK` | `whsec_f3e776…`, 70 chars | `EE3F5CF5` — **the new, rolled secret** |
+
+Two consequences worth stating plainly:
+
+1. **The webhook secret in that file is not the one production is using.** Production still hashes to `1993f93c`
+   (`whsec_815c2…`). Until the env edit and restart, every inbound delivery from Bachs will be rejected as a bad signature
+   (the endpoint answers **400**, never 200), so a payment would charge the customer and leave the plan where it is.
+2. **The key in that file is the old one.** `BACH_IO` is still `sk_live_b8e0…` — the key that has been in the repository since
+   v22 and that the runbook says to revoke. If it *has* been revoked in the dashboard, production's current key is dead too;
+   in that case generate a fresh key and put that in the env, not this one. Do not copy a key out of a file when the dashboard
+   can hand you a current one.
+
+## 2026-10-29 - Streak v32 / Prompt 1: Production Bachs State (v32)
+
+Read-only. Hashes and timestamps only; no value was printed.
+
+| check | measured at 04:25 | v31 baseline | verdict |
+| --- | --- | --- | --- |
+| `BACH_IO` | present, `sk_live_b8…`, 60 chars, `9d9a484a` | same | unchanged |
+| `BACH_WEBHOOK` | present, `whsec_815c…`, 70 chars, **`1993f93c`** | `1993f93c` | **still the pre-rotation secret** |
+| `BACHS_WEBHOOK_SECRET` | ABSENT | ABSENT | unchanged |
+| `BACHS_PRODUCT_PRO` | **ABSENT** | ABSENT | **not added** |
+| `BACHS_PRODUCT_ENTERPRISE` | **ABSENT** | ABSENT | **not added** |
+| `BACHS_MOCK` | ABSENT | ABSENT | mock off ✓ |
+| **`web.env` mtime** | **2026-10-26 19:21:50** | identical | **the file has not been edited** |
+| audit rows matching `%BACHS%` | **0** | 0 | no payment has ever reached the app |
+| orgs | Neon Ultra ENTERPRISE · LBCL ENTERPRISE · `bachsCustomerId` **null** | same | no checkout has ever completed |
+| `DataFeedDelivery` (24h) | empty | empty | expected: no partner subscribed |
+| `ultraos-web.service` / `/api/v1/live` | active / 200 | — | app healthy, credentials stale |
+
+**The plain statement:** the dashboard work is not in the app. The env file is byte-for-byte the one from 2026-10-26 (same
+mtime, same secret hash, no product ids), and the database has never seen a Bachs event. Nothing in this streak changed
+production.
+
+## 2026-10-29 - Streak v32 / Prompt 2: the block to paste (chat only, no secrets)
+
+Back up, edit, restart, then prove:
+
+```bash
+ssh raivstream
+TS=$(date -u +%Y%m%dT%H%M%SZ)
+sudo cp /opt/ultraleagueos/shared/web.env "/opt/ultraleagueos/shared/web.env.bak-$TS"
+sudo chmod 600 "/opt/ultraleagueos/shared/web.env.bak-$TS"
+echo "rollback file: web.env.bak-$TS"
+
+sudo nano /opt/ultraleagueos/shared/web.env
+```
+
+Set these four lines (the app resolves the **legacy** names first — `BACH_IO`, `BACH_WEBHOOK`):
+
+```ini
+BACH_IO=<PASTE_LIVE_KEY_FROM_DASHBOARD>
+BACH_WEBHOOK=<PASTE_ROLLED_WEBHOOK_SECRET>
+BACHS_PRODUCT_PRO=prod_a2588c7531b24b27ace2
+BACHS_PRODUCT_ENTERPRISE=prod_0cf8f25781df468ebd99
+```
+
+Remove if present: `BACHS_MOCK=1` (production has never had it).
+
+```bash
+sudo systemctl restart ultraos-web.service
+sleep 3
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:4110/api/v1/live     # 200
+sudo grep -E '^(BACH_IO|BACH_WEBHOOK|BACHS_PRODUCT_PRO|BACHS_PRODUCT_ENTERPRISE|BACHS_MOCK)=' \
+  /opt/ultraleagueos/shared/web.env | sed -E 's/(sk_live_|whsec_)[A-Za-z0-9_-]+/\1***/'
+```
+
+Then the checkout (browser: `/settings/billing` → Upgrade to Pro → ₦100) and **the proof that matters**:
+
+```bash
+sudo docker exec -i ultraos-postgres psql -U ultraos -d ultraleagueos -c \
+  "SELECT action, \"createdAt\" FROM \"AuditLog\" WHERE action LIKE '%BACHS%' ORDER BY \"createdAt\" DESC LIMIT 3;"
+```
+
+`ORG_UPGRADED_BY_BACHS` is the pass condition. A redirect is not.
+
+## 2026-10-29 - Streak v32 / Prompt 3: the closing gate, as measured
+
+Re-ran the Prompt 1 checks after the user's dashboard work. Same answer as Prompt 1, because the app was not edited:
+
+```
+PRODUCTION_ENV_UPDATED                 FAIL   mtime 2026-10-26 19:21:50, unchanged
+PRODUCTION_WEBHOOK_SECRET_ROLLED       FAIL   app holds 1993f93c; the rolled secret is ee3f5cf5
+PRODUCTION_PRODUCT_IDS_PRESENT         FAIL   both ABSENT
+REAL_CHECKOUT_PROOF                    FAIL   0 rows matching %BACHS%
+REFUND_WEBHOOK_PROOF                   FAIL   no downgrade row (nothing to downgrade)
+PLATFORM_ACCEPTS_REAL_PAYMENTS         FAIL   the webhook secret mismatch would swallow every delivery
+```
+
+The gate is not a formality here: with the dashboard secret rolled and the app still on the old one, the platform is in the
+*worst* intermediate state — it can take a customer's money and be structurally unable to record it. That is worse than the
+pre-migration state, and it is why `BACHS_LIVE_MIGRATION_COMMANDS.md` now opens with that warning.

@@ -1,5 +1,10 @@
 # Bachs live migration — the commands
 
+> **Stop and read this if the dashboard secret has already been rolled.** A roll is not undoable, and production is still
+> holding the **pre-rotation** value (`BACH_WEBHOOK` sha256 prefix `1993f93c` as of 2026-10-29 04:2x). While those two
+> disagree, **every inbound webhook fails signature verification with a 400** — a customer can be charged and the plan will
+> not move. Do STEP 3 and STEP 4 now, before taking any payment.
+
 **Read `BACHS_LIVE_MIGRATION.md` first.** This page is only the execution block for someone who already knows why each step
 exists. One SSH session, ~30 minutes, of which ~15 are dashboard actions.
 
