@@ -14211,3 +14211,75 @@ vision pipeline, a coaching assistant, a signed data feed, 1,041 tests, a Playwr
 escalation in under 8 seconds, verified backups for both the database and the vision configuration, bounded logs and memory,
 deploy transcripts that cannot be silently filtered, and now two runbooks for the operations that remain: one for billing, one
 for secrets, both with the failure modes that produced them written down.
+
+## 2026-10-29 - Streak v31 / Prompt 1: staging on the TEST product, and the checkout stops at the key's scope
+
+**Configured as asked.** Staging holds the TEST product for both tiers, because staging only rehearses the PRO button:
+
+```
+BACHS_PRODUCT_PRO=prod_582d912f93cf444cb827
+BACHS_PRODUCT_ENTERPRISE=prod_582d912f93cf444cb827
+BACH_IO prefix: sk_sandbox_… (63 chars)          <- sandbox key, correctly
+startup guard present in the deployed build: yes (4 references to LiveKeyInNonProductionError)
+staging restarted · /api/v1/live 200
+```
+
+**The checkout still cannot be created**, and the reason is not the product id:
+
+```
+organization: test-league-b · checkout FAILED: API key missing required scope: payments:write
+```
+
+That is the third time this error has appeared (v29 was the first) and it is now unambiguous: the sandbox key in
+`cred/sandbox.txt` was issued without the payments scope. It authenticates, the SDK selects the sandbox host, the billing
+page renders — and `createSubscriptionCheckout` is refused before any product is looked up. **No checkout URL exists, so
+the 4242 card step cannot be performed, and no `ORG_UPGRADED_BY_BACHS` row can be produced.** The gate
+`STAGING_CHECKOUT_PROOF` is therefore **FAIL**, not PASS, and the failure is a credential shape the user must fix in the
+dashboard (see `BACHS_LIVE_MIGRATION_COMMANDS.md` STEP 0).
+
+**What I tried instead, and why it is not a substitute.** The app ships a mock provider (`bachs-mock`) that exercises
+checkout token → signed webhook → plan → audit without any network, and it refuses to run while a real key is configured
+("A real BACHS_KEY is configured, so the mock provider is disabled - this script must not be used there"). Forcing it would
+mean unsetting the sandbox key and setting `BACHS_MOCK=1` on staging; that proves the *app-side* half, which v18/v19 already
+proved, and it would not prove anything about Bachs. I left staging on the real sandbox provider rather than manufacture a
+green tick from a mock.
+
+Staging's audit log does contain three Bachs rows from 2026-10-27 (`evt_v18_rls_…`, `evt_bachs_verify_…`) — those are mock-era
+events, not sandbox charges, and they are why `SELECT count(*)` alone is not evidence: the timestamps and event ids distinguish
+them.
+
+## 2026-10-29 - Streak v31 / Prompt 2: the runbook now carries the real ids
+
+`BACHS_LIVE_MIGRATION.md` updated:
+
+- the two **live** ids replaced everywhere (`prod_a2588c7531b24b27ace2`, `prod_0cf8f25781df468ebd99`), with a note that the
+  previous ids (`prod_56446…` / `prod_c2d13…`) belong to a different Bachs account and fail with "product not found";
+- a warning that the **TEST** id `prod_582d912f93cf444cb827` is staging-only;
+- a new verification step: after restart, the upgrade button must redirect to the **live** checkout host on production and
+  the **sandbox** host on staging — a production click that reaches the sandbox host is a key that will never charge;
+- the rollback section rewritten as an exact per-variable table (what each of the five variables restores to, and the one
+  thing a rollback cannot undo: a dashboard secret roll — after rolling, the app must agree with the new secret on both
+  sides).
+
+## 2026-10-29 - Streak v31 / Prompt 3: Production Bachs State (v31)
+
+**Read-only. Nothing in production was changed.** Hashes and timestamps only.
+
+| check | measured | verdict |
+| --- | --- | --- |
+| `BACH_IO` | present, `sk_live_b8e…`, 60 chars, hash prefix `9d9a484a` | a **live** key — but the same prefix documented as leaked in v22 |
+| `BACH_WEBHOOK` | present, `whsec_815c2…`, 70 chars, hash prefix `1993f93c` | **identical hash to `cred/gateway_env.txt`** → **not rolled** |
+| `BACHS_WEBHOOK_SECRET` | ABSENT | the app resolves the legacy name, so this is fine in itself |
+| `BACHS_PRODUCT_PRO` | **ABSENT** | upgrades cannot be created |
+| `BACHS_PRODUCT_ENTERPRISE` | **ABSENT** | same |
+| `BACHS_MOCK` | ABSENT | mock is off ✓ |
+| **`web.env` mtime** | **2026-10-26 19:21:50** | **the file has not been edited since 26 October** — before the v27 leak (28th) and before both migration attempts |
+| newest env backup | `web.env.bak-20261026T182150Z` | no backup was taken for a migration |
+| audit rows matching `%BACHS%` | **0, ever** | no upgrade and no downgrade has ever been recorded |
+| orgs | Neon Ultra ENTERPRISE · LBCL ENTERPRISE · `bachsCustomerId` **null** for both | no checkout has ever completed against this database |
+| `ultraos-web.service` / `/api/v1/live` | active / 200 | the app is healthy; the billing credentials are the gap |
+
+**The plain statement the evidence supports: the live migration has not happened.** Not "partially" in the sense of a key
+being replaced — the env file's mtime predates every claim of a migration, the webhook secret is byte-identical to the one in
+`cred/`, both product ids are absent, and no Bachs event has ever reached the audit log. A live-looking `sk_live_…` key has
+been in that file since before v22; it is the old one, not a fresh one.
