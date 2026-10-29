@@ -29,13 +29,21 @@ curl -s http://127.0.0.1:8010/health   # {"status":"ok","analyzer":"yolov8n-pers
 
 ## 2. The two human-only items
 
+> **State as of 2026-10-29 (verified read-only, hashes compared rather than values):** the Bachs live migration is
+> **partially done**. Production holds a `sk_live_…` key that is *not* the one from `cred/`, but the webhook signing secret
+> is **still the original** (identical hash to `cred/gateway_env.txt`), **neither product id is set**, and production has
+> **zero** `ORG_UPGRADED_BY_BACHS` rows — so no payment has ever completed there. Upgrades cannot work until the product ids
+> are added. The procedure, with the exact commands, is **`runbooks/BACHS_LIVE_MIGRATION.md`**; the secret-rotation
+> procedure (including the two v27 items) is **`runbooks/ROTATE_SECRETS.md`**.
+
 Nothing in code blocks these; they need a person with a login.
 
-1. **Bachs product IDs.** `BACHS_PRODUCT_PRO` and `BACHS_PRODUCT_ENTERPRISE` are unset in both env files, so pressing
-   "Upgrade" reports *"No Bachs product configured for PRO"*. The sandbox key authenticates and the SDK targets
-   `sandbox-api.bachs.io`, and the key lacks the `products:read` scope, so the IDs must be read from the **Bachs dashboard →
-   Products**. After setting them: reboot the service, open `/settings/billing` on staging, upgrade with
-   `4242 4242 4242 4242`, and confirm `Organization.plan` becomes `PRO` (the webhook does that, not the browser).
+1. **Bachs product ids + live credentials.** `BACHS_PRODUCT_PRO=prod_56446cebde334d749591` and
+   `BACHS_PRODUCT_ENTERPRISE=prod_c2d1372083f142659f33` are known but **not yet in either env file**; the webhook secret has
+   not been rolled. Run `runbooks/BACHS_LIVE_MIGRATION.md` end to end — it includes the ₦100 proof payment and the refund,
+   because the redirect only proves the key and only the webhook changes the plan.
+   **Staging status:** product ids are set there, and the checkout attempt now fails one step later with
+   `API key missing required scope: payments:write` — the sandbox key needs that scope before a staging rehearsal is possible.
 2. **One real game video for Vision.** The worker runs and analyses; every clip so far has been synthetic and produced
    **zero observations**, which is correct for film with no people in it. The confirm → highlight → R2 → match-centre leg
    has never run on a real detection. Record ~10 minutes of a real session, ingest with

@@ -8,9 +8,11 @@
 // isn't done - it hasn't started). A season with real FINAL fixtures and more rounds still
 // to come (LBCL) must read ONGOING, never COMPLETED, until its own Season.status says so -
 // an explicit operator decision, never inferred from "every fixture we currently know about
-// happens to be FINAL". A season with zero fixtures at all (registration open, nothing
-// scheduled yet, e.g. GIESM) reads UPCOMING, not DRAFT - DRAFT is reserved for a
-// competition with no seasons at all yet.
+// happens to be FINAL". A season with zero fixtures at all reads UPCOMING while it is still
+// DRAFT or ACTIVE (registration open, nothing scheduled yet, e.g. GIESM before it ran), not
+// DRAFT - DRAFT is reserved for a competition with no seasons at all yet. The same zero-fixture
+// season reads COMPLETED once the operator closes it: a tournament can run on registration and
+// a published podium without ever being scheduled as fixtures (GIESM did exactly that).
 export type TournamentSubSiteStatus = "LIVE" | "UPCOMING" | "ONGOING" | "COMPLETED" | "DRAFT";
 
 export type SeasonFixtureSummary = { fixtureStatuses: readonly string[]; seasonStatus: string };
@@ -23,7 +25,8 @@ export function seasonDisplayStatus({ fixtureStatuses, seasonStatus }: SeasonFix
   if (fixtureStatuses.includes("LIVE")) return "LIVE";
   if (fixtureStatuses.includes("SCHEDULED")) return "UPCOMING";
   if (fixtureStatuses.includes("FINAL")) return seasonStatus === "COMPLETED" ? "COMPLETED" : "ONGOING";
-  return "UPCOMING";
+  // Closed by the operator without a fixture schedule: still finished, never "coming soon".
+  return seasonStatus === "COMPLETED" ? "COMPLETED" : "UPCOMING";
 }
 
 export function tournamentStatusFromSeasons(seasons: readonly SeasonFixtureSummary[]): TournamentSubSiteStatus {

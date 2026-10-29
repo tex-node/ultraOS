@@ -4,6 +4,7 @@ import { SponsorImpression } from "../sponsor-impression";
 import { PublicResourceLocatorType } from "@/generated/prisma/enums";
 import { formatLagosDateTime } from "@/lib/format-datetime";
 import { formatNaira } from "@/lib/money";
+import { parseEventResults } from "@/lib/public/event-results";
 import { prisma } from "@/lib/prisma";
 import {
   locatorMatchesResource,
@@ -13,23 +14,6 @@ import { withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-type EventResultPlacement = { rank?: number; name: string };
-type EventResultCategory = {
-  key?: string;
-  label: string;
-  kind?: string;
-  sport?: string;
-  placements: EventResultPlacement[];
-};
-type EventResults = { publishedAt?: string; categories: EventResultCategory[] };
-
-function parseEventResults(raw: unknown): EventResults | null {
-  if (!raw || typeof raw !== "object") return null;
-  const value = raw as EventResults;
-  if (!Array.isArray(value.categories) || value.categories.length === 0) return null;
-  return value;
-}
 
 export default async function PublicEventPage({
   params,

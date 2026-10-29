@@ -16,6 +16,13 @@ test("a season with no fixtures yet reads upcoming, not draft", () => {
   assert.equal(tournamentStatusFromSeasons([season([], "DRAFT")]), "UPCOMING");
 });
 
+test("an operator-closed season with no fixtures reads completed, not upcoming", () => {
+  // GIESM 2026 ran on registration plus a published podium and was never scheduled as
+  // fixtures; once the operator marked the season COMPLETED the sub-site must say so.
+  assert.equal(tournamentStatusFromSeasons([season([], "COMPLETED")]), "COMPLETED");
+  assert.equal(tournamentStatusFromSeasons([season([], "ACTIVE")]), "UPCOMING");
+});
+
 test("a live fixture in any season dominates every other status", () => {
   assert.equal(
     tournamentStatusFromSeasons([season(["FINAL", "LIVE"], "ACTIVE"), season([], "DRAFT")]),

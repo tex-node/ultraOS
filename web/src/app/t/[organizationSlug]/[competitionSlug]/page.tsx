@@ -4,6 +4,7 @@ import { describeSport, getSportDefinition } from "@/lib/sports/registry";
 import { isIndividualSport } from "@/lib/sports/fixture-sides";
 import { eloForSeasonClubs } from "@/server/analytics/elo-ratings";
 import { buildIndividualStandings, formatRatio, type IndividualStandingInput } from "@/lib/public/individual-standings";
+import { parseEventResults } from "@/lib/public/event-results";
 import { resolveActiveOrganizationBySlug, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,21 @@ export default async function TournamentOverview({ params }: { params: Promise<{
     }),
   );
   if (!competition) notFound();
+
+  // Final results: a tournament can be decided without ever being scheduled as fixtures (GIESM
+  // 2026 ran on registration plus a published podium), so the sub-site reads the same editorial
+  // results the public event page publishes. Nothing is inferred from standings never scored.
+  const publishedResults = (
+    await withOrganizationContext(organization.id, (tx) =>
+      tx.event.findMany({
+        where: { seasonId: { in: competition.seasons.map((season) => season.id) }, status: "COMPLETED" },
+        select: { id: true, name: true, results: true },
+      }),
+    )
+  ).flatMap((event) => {
+    const results = parseEventResults(event.results);
+    return results ? [{ id: event.id, name: event.name, results }] : [];
+  });
 
   const definition = getSportDefinition(competition.sport.slug);
   const formatSummary = definition ? describeSport(definition).formatSummary : null;
@@ -180,6 +196,7 @@ export default async function TournamentOverview({ params }: { params: Promise<{
         </section>
       </div>
 
+      {participants.length > 0 || publishedResults.length === 0 ? (
       <section className="mt-8">
         <h2 className="text-xl font-bold">
           {teams.length > 0 ? "Teams" : "Athletes"} <span className="text-sm font-normal text-text-3">({participants.length})</span>
@@ -214,6 +231,39 @@ export default async function TournamentOverview({ params }: { params: Promise<{
           </div>
         )}
       </section>
+      ) : null}
+
+      {publishedResults.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="text-xl font-bold">Final results</h2>
+          {publishedResults.map((event) => (
+            <div key={event.id} className="mt-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                {event.results.categories.map((category) => (
+                  <article key={category.key ?? category.label} className="rounded-lg border border-line bg-ink-800 p-5">
+                    <h3 className="font-semibold">{category.label}</h3>
+                    <ol className="mt-3 space-y-2">
+                      {(category.placements ?? []).map((placement, index) => (
+                        <li key={`${category.key ?? category.label}-${placement.rank ?? index}`} className="flex items-center gap-3">
+                          <span className="grid h-7 w-7 place-items-center rounded-full bg-white/10 text-xs font-bold text-text-1">
+                            {placement.rank ?? index + 1}
+                          </span>
+                          <span className="text-text-1">{placement.name}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </article>
+                ))}
+              </div>
+              {event.results.publishedAt ? (
+                <p className="mt-3 text-xs text-text-3">
+                  Results published {new Date(event.results.publishedAt).toLocaleDateString()}
+                </p>
+              ) : null}
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       {individualStandings.length > 0 ? (
         <section className="mt-8">
@@ -292,9 +342,11 @@ export default async function TournamentOverview({ params }: { params: Promise<{
       ) : null}
 
       <section className="mt-8 rounded-lg border border-brand-400/20 bg-brand-400/[.04] p-5">
-        <h2 className="font-semibold text-brand-300">Follow the action</h2>
+        <h2 className="font-semibold text-brand-300">{publishedResults.length > 0 ? "Tournament closed" : "Follow the action"}</h2>
         <p className="mt-1 text-sm text-text-2">
-          Fixtures, live scores, standings, and full match pages update automatically as games are scored.
+          {publishedResults.length > 0
+            ? "This tournament has finished. The results above are final; the event page carries the full registered field and podium."
+            : "Fixtures, live scores, standings, and full match pages update automatically as games are scored."}
         </p>
         <Link
           href={`/t/${organizationSlug}/${competition.slug}/fixtures`}

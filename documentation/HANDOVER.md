@@ -104,6 +104,12 @@ Verify with `deploy/ops/verify-tenant-table.sh <table>`, **as the app role**.
 
 ## 7. Operational gaps — what a human has to do
 
+**Bachs live migration — PARTIAL (verified 2026-10-29):** production has a `sk_live_…` key that differs from the one in
+`cred/`, but the webhook signing secret is still the original, neither product id is set, and there is no
+`ORG_UPGRADED_BY_BACHS` row in production. Two runbooks cover the rest: **`runbooks/BACHS_LIVE_MIGRATION.md`** (live keys,
+proof payment, rollback) and **`runbooks/ROTATE_SECRETS.md`** (every secret, the leak procedure, and the `export $(…|xargs)`
+root cause).
+
 **CLOSED in v24:** the Bachs sandbox key is on staging (`BACH_IO=sk_sandbox_…`, `BACHS_MOCK` removed, live-key banner
 gone); the vision worker runs under Docker Compose with the real analyzer (`/health` → `yolov8n-person`); the branding
 sweep is finished (login, public header, operator page labels, page titles); Node 22 is the host default.
@@ -145,7 +151,11 @@ sweep is finished (login, public header, operator page labels, page titles); Nod
 4. **`documentation/ROADMAP_CLOSE.md`** — every phase, marked DONE or BLOCKED with the evidence behind it.
 5. **`documentation/FINAL_LAUNCH_PROOF.md`** — a whole league through the stack, with the webhook deliveries it produced.
 6. **`documentation/runbooks/NODE_22_UPGRADE.md`** — how the host moved to Node 22, and how to roll it back.
-7. **`documentation/runbooks/SHARED_VPS_RISK.md`** — the shared host: co-tenants, the heavy workloads, the three
+7. **`documentation/runbooks/BACHS_LIVE_MIGRATION.md`** — finishing the live migration: keys, webhook secret, product ids, the ₦100
+   proof payment, and the rollback that restores the previous env.
+8. **`documentation/runbooks/ROTATE_SECRETS.md`** — rotating any secret, what breaks while you do, what to do in the first
+   minute after a leak, and how to check whether one already escaped.
+9. **`documentation/runbooks/SHARED_VPS_RISK.md`** — the shared host: co-tenants, the heavy workloads, the three
    containment layers, and when to move Vision to its own VPS.
-8. **`session.md`** — the honest history. Read the last two streaks first; they contain the two security bugs that
+10. **`session.md`** — the honest history. Read the last two streaks first; they contain the two security bugs that
    mattered most (tenant isolation at sign-in, and a privilege escalation through the same policy fallback).

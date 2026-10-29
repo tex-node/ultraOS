@@ -78,3 +78,22 @@ Status of every phase, as of the final streak. `DONE` means there is a test or a
 | Shell scripts cannot acquire CRLF again | **DONE** | `.gitattributes` forces LF for `*.sh`, `*.yml`, `Dockerfile`, units — after a CRLF copy broke the live deploy script during this streak |
 | Bachs product IDs | **BLOCKED (external)** | unchanged: not in `cred/`, key lacks `products:read`; needs the dashboard |
 | One real game video for Vision | **BLOCKED (external)** | unchanged: no footage with people on the host |
+## Addendum — streaks v29/v30 (2026-10-29): billing live-migration prep
+
+One paragraph of state, because everything else in this file is still accurate: the platform runs eight sports with
+multi-tenant isolation, live scoring that works offline on staging, a vision worker with real inference, a signed data feed,
+and a payment path whose **code** is complete and tested but whose **credentials** are only half-migrated. Production holds
+a live-looking `sk_live_…` key that differs from the old one in `cred/`; the webhook signing secret is still the original;
+neither product id is configured; and production has **zero** upgrade/downgrade audit rows, so no real payment has ever
+completed there. The two procedures that close this — and the secret rotation that the v27 leak made mandatory — are written,
+reviewed and committed: `runbooks/BACHS_LIVE_MIGRATION.md` and `runbooks/ROTATE_SECRETS.md`. Offline scoring is proven on
+staging by a browser test and remains behind a build-time flag in production; vision's remaining gap is footage, not code.
+
+| item | final status |
+| --- | --- |
+| Billing code path (checkout, webhook, plan changes) | **DONE** — mock, webhook signature, and audit rows proven on staging |
+| Billing credentials (live key, webhook secret, product ids) | **PARTIAL** — key replaced, the other three pending the runbook |
+| Offline scoring | **STAGING** — one automated proof (tap offline → reconnect → score); production flag off |
+| Vision | **CODE DONE, AWAITING FOOTAGE** — model installed, synthetic verified, zero real detections so far |
+| Data feed | **LIVE** — signed webhooks and `/api-docs` |
+| Billing | **CODE LIVE, CREDENTIALS PENDING** — see the runbook |
