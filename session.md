@@ -14132,3 +14132,33 @@ can still be unreachable (no product ids), and even a working checkout proves no
 I did not update the docs to say "COMPLETE". `LAUNCH_READY.md` §2 and `HANDOVER.md` now carry the measured state, with the
 runbook as the path. Nothing in production was changed by this streak: the only writes were to staging's env (product ids)
 and this repository.
+
+## 2026-10-29 - PROJECT RETROSPECTIVE — 2026-10-29
+
+Written as its own document (`documentation/PROJECT_RETROSPECTIVE.md`) and linked from `HANDOVER.md`, because it is the file
+a maintainer should read before changing anything structural. Its content, in summary:
+
+**What was built.** Eight sports on a multi-tenant core isolated by forced row-level security; a live console that works
+offline and replays through the same effects a live tap uses; a containerised vision pipeline; a coaching assistant; a
+signed sportsbook feed; Bachs billing with a webhook-driven plan ledger. One hardened VPS, verified backups (database *and*
+vision configuration), bounded logs and memory, 1,040 unit / 26 component / 52 database / 8 browser tests.
+
+**The three bugs that mattered.** The `UserRoleAssignment` RLS fallback (v22) — silent privilege escalation, found by
+Playwright in 7.9 s; the `idPrefixAthlete` collision (v20) — self-serve onboarding broken for every organization after the
+first; the Chromium Background Sync no-op (v28) — offline scoring would have queued forever and synced nothing. All three
+lived in the seam between a component and the context it runs in.
+
+**The three investments that paid.** Playwright, because it tests what a scorer actually does; the RLS-bootstrap ratchet
+(v23), because the same bug class recurred three times until it was encoded as tests; `verify-tenant-table.sh`, because
+isolation has to be verified per table *as the app role*.
+
+**What I would do differently.** Add the shellcheck rule after the v25 near-miss, not after the v27 leak; write the two-tenant
+browser spec when multi-tenancy was written; and stop trusting commit messages as evidence — twice they said "committed" or
+"done" when the artefact was missing and the code had live bugs in its seams.
+
+**The three risks.** VPS disk (71%; video is the unbounded part); billing credentials that look live but are not fully
+migrated (unrotated webhook secret, no product ids); and vision having never seen a real game, so the accuracy claim rests on
+synthetic footage.
+
+**Ready to launch.** LBCL Season 2 via the wizard (the path v20 broke and a browser test now covers), a sportsbook pitch with
+`/api-docs`, self-serve onboarding for a new league, and offline scoring proven on staging behind a flag.

@@ -157,5 +157,7 @@ sweep is finished (login, public header, operator page labels, page titles); Nod
    minute after a leak, and how to check whether one already escaped.
 9. **`documentation/runbooks/SHARED_VPS_RISK.md`** — the shared host: co-tenants, the heavy workloads, the three
    containment layers, and when to move Vision to its own VPS.
-10. **`session.md`** — the honest history. Read the last two streaks first; they contain the two security bugs that
+10. **`documentation/PROJECT_RETROSPECTIVE.md`** — the three bugs that mattered, the three investments that paid, what I would
+    do differently, and the risks that remain. Read it before changing anything structural.
+11. **`session.md`** — the honest history. Read the last two streaks first; they contain the two security bugs that
    mattered most (tenant isolation at sign-in, and a privilege escalation through the same policy fallback).
