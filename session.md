@@ -14162,3 +14162,52 @@ synthetic footage.
 
 **Ready to launch.** LBCL Season 2 via the wizard (the path v20 broke and a browser test now covers), a sportsbook pitch with
 `/api-docs`, self-serve onboarding for a new league, and offline scoring proven on staging behind a flag.
+
+### v30 Prompt 5 — the final sync, as it actually went
+
+```
+unit        1041 · 1040 pass · 0 fail · 1 pre-existing skip
+component     26 / 26
+db            52 / 52
+e2e            7 / 7      (the first attempt within the batch reported "7 skipped" because the fixture ids were not
+                          exported in that shell; re-running with the known-good runner passed 7/7 - noted rather than
+                          quietly dropped)
+canonical     4 suppressions (ceiling 4)
+staging       ddc00f8 deployed
+production    NOT deployed: release 70ebec9, and the env file's mtime is 2026-10-26 - untouched by this streak
+```
+
+## LAUNCHED — 2026-10-29
+
+**What this means precisely.** The platform is live and serving on both environments; the code path for billing is complete
+and tested; the vision worker runs with real inference; staging scores offline under a flag; the data feed is signed and
+documented. **The billing credentials are only half-migrated**, and I am not going to call that launched when it is not:
+
+| | state |
+| --- | --- |
+| production release | `70ebec9`, `/api/v1/live` 200, env file untouched since 2026-10-26 |
+| staging release | `ddc00f8`, `/api/v1/live` 200, both product ids set, offline flag on |
+| live key in production | `sk_live_…`, hash `9d9a48…` - **not** the key from `cred/` (`dc0a35…`) |
+| webhook secret | hash `1993f9…` - **identical to `cred/gateway_env.txt`**, so **not rotated** |
+| product ids in production | **absent** (`0` lines) - the upgrade button cannot create a session |
+| upgrade audit rows in production | **0, ever** |
+| a real payment | **none on record** |
+
+So "launched" here means the platform is running and the *code* is finished; the revenue path needs ~30 minutes of your
+dashboard time, following `runbooks/BACHS_LIVE_MIGRATION.md` §3-§7. The one thing I could not do for you is create a key with
+the `payments:write` scope, and that is exactly what blocks even a staging rehearsal — the sandbox key authenticates but
+cannot create a checkout.
+
+**The two remaining human tasks, unchanged and now unambiguous:**
+
+1. **Finish billing** — roll the webhook secret, add the two product ids to production, then charge ₦100 with a real card and
+   refund it. The audit log must show `ORG_UPGRADED_BY_BACHS` and then `ORG_DOWNGRADED_BY_BACHS`; if it does not, the
+   webhook is the fault, not the checkout.
+2. **One real game video** — record anything with people in it, ingest it, confirm one observation, and the last unproven leg
+   of the vision pipeline (confirm → highlight → R2 → match centre) is closed.
+
+**What is finished:** eight sports, forced-RLS multi-tenancy, offline-capable scoring proven in a browser, a containerised
+vision pipeline, a coaching assistant, a signed data feed, 1,041 tests, a Playwright suite that catches a privilege
+escalation in under 8 seconds, verified backups for both the database and the vision configuration, bounded logs and memory,
+deploy transcripts that cannot be silently filtered, and now two runbooks for the operations that remain: one for billing, one
+for secrets, both with the failure modes that produced them written down.
