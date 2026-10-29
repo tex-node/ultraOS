@@ -10,6 +10,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { formDataToRecord } from "@/lib/club-validation";
+import { publicBaseUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/prisma";
 import {
   checkPromoForEvent,
@@ -180,7 +181,7 @@ export async function reserveZone(eventId: string, formData: FormData) {
   // straight to the ticket. The webhook (collection.succeeded) is the source of truth for
   // marking the reservation paid — never this redirect.
   if (ticketCode && reservation.totalKobo > 0 && bachsConfig()) {
-    const baseUrl = (process.env.AUTH_URL ?? "").replace(/\/$/, "");
+    const baseUrl = publicBaseUrl();
     const checkout = await createCheckoutSession({
       amountKobo: reservation.totalKobo,
       reference: `res-${reservation.id}`,

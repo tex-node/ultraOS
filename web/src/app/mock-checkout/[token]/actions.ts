@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { publicBaseUrl } from "@/lib/app-url";
 import { mockCheckoutEventBody, mockSigningSecret, signBachsBody, verifyMockCheckoutToken } from "@/lib/bachs-mock";
 
 // "Simulate Payment" on the mock checkout page (streak v19, Prompt 1).
@@ -10,7 +11,8 @@ import { mockCheckoutEventBody, mockSigningSecret, signBachsBody, verifyMockChec
 // what gets tested is the same thing a live Bachs delivery tests: signature verification, the event handler, the tenant
 // context, the audit row. A shortcut here would have made the one path that matters the one path not covered.
 function appBaseUrl(): string {
-  return (process.env.APP_BASE_URL ?? process.env.NEXTAUTH_URL ?? "http://127.0.0.1:4120").replace(/\/$/, "");
+  // The mock checkout redirects within this app, so loopback is legitimate here (local development, staging over a tunnel).
+  return publicBaseUrl({ allowLoopback: true });
 }
 
 export async function simulatePaymentAction(formData: FormData): Promise<void> {

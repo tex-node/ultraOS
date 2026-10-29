@@ -10,6 +10,7 @@ import {
   remainingInventory,
 } from "@/lib/event-operations";
 import { writeAuditLog } from "@/lib/audit";
+import { publicBaseUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/prisma";
 import { sendSmtpMail } from "@/lib/smtp";
 import {
@@ -202,7 +203,7 @@ export async function createWalletOrder(
   // Paid orders go through the Bachs hosted checkout (F5.3); free orders go straight to the
   // order page. The collection.succeeded webhook is the source of truth for marking paid.
   if (order.totalKobo > 0 && bachsConfig()) {
-    const baseUrl = (process.env.AUTH_URL ?? "").replace(/\/$/, "");
+    const baseUrl = publicBaseUrl();
     const checkout = await createCheckoutSession({
       amountKobo: order.totalKobo,
       reference: `ord-${order.id}`,
@@ -255,7 +256,7 @@ export async function emailTicketQr(ticketCode: string): Promise<{ ok: true } | 
   const recipient = ticket.reservation.user?.email ?? ticket.reservation.guestEmail;
   if (!recipient) return { ok: false, error: "No email address on this booking." };
 
-  const baseUrl = (process.env.AUTH_URL ?? "").replace(/\/$/, "");
+  const baseUrl = publicBaseUrl();
   const link = `${baseUrl}/public/tickets/${ticket.code}`;
   const subject = `Your ${ticket.reservation.event.name} ticket`;
   const text =

@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { requirePermissionWithOrganization } from "@/lib/authorization";
+import { publicBaseUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/prisma";
 import { bachsBillingConfigured, createSubscriptionCheckout } from "@/lib/bachs-billing";
 import { createMockCheckout, mockBachsEnabled } from "@/lib/bachs-mock";
@@ -30,7 +31,8 @@ export async function startCheckoutAction(formData: FormData): Promise<void> {
   const productId = plan === "PRO" ? process.env.BACHS_PRODUCT_PRO : process.env.BACHS_PRODUCT_ENTERPRISE;
   if (!productId) fail(`Billing not configured: ${plan === "PRO" ? "BACHS_PRODUCT_PRO" : "BACHS_PRODUCT_ENTERPRISE"} is not set.`);
 
-  const baseUrl = process.env.APP_BASE_URL ?? process.env.NEXTAUTH_URL ?? "http://127.0.0.1:4120";
+  // Public origin for the redirect Bachs sends a browser to. NOT the request origin: behind Caddy that is 127.0.0.1.
+    const baseUrl = publicBaseUrl();
   const organization = await prisma.organization.findUniqueOrThrow({
     where: { id: organizationId },
     select: { id: true, name: true, bachsCustomerId: true },
@@ -38,6 +40,9 @@ export async function startCheckoutAction(formData: FormData): Promise<void> {
 
   let url: string | null = null;
   try {
+    // Visible in the service log so an operator can SEE which origin the provider will redirect to - the failure this
+    // replaced was a loopback URL that only Bachs could see, in an error that named neither the URL nor the cause.
+    console.info("[billing] checkout return origin", { plan, origin: baseUrl });
     const checkout = await createSubscriptionCheckout({
       organizationId: organization.id,
       plan,

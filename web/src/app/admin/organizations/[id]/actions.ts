@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { publicBaseUrl } from "@/lib/app-url";
 import { bachsBillingConfigured, createSubscriptionCheckout, productIdForPlan } from "@/lib/bachs-billing";
 import type { PlanName } from "@/lib/plans";
 
@@ -63,7 +64,8 @@ export async function generateCheckoutLinkAction(formData: FormData): Promise<vo
     where: { id: organizationId },
     select: { id: true, name: true, bachsCustomerId: true },
   });
-  const baseUrl = process.env.APP_BASE_URL ?? process.env.NEXTAUTH_URL ?? "http://127.0.0.1:4120";
+  // Public origin for the redirect Bachs sends a browser to (see src/lib/app-url.ts).
+  const baseUrl = publicBaseUrl();
   const checkout = await createSubscriptionCheckout({
     organizationId: organization.id,
     plan: plan as PlanName,
