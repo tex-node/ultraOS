@@ -29,6 +29,12 @@ curl -s http://127.0.0.1:8010/health   # {"status":"ok","analyzer":"yolov8n-pers
 
 ## 2. The two human-only items
 
+> **Integration verified end to end, 2026-10-29 10:25.** Four real clicks of the Upgrade button each logged
+> `[billing] checkout return origin { plan: 'PRO', origin: 'https://app.neonultra.ng' }`, so the public-URL fix holds in the
+> real path. The webhook is reachable from the internet (`POST https://app.neonultra.ng/api/webhooks/bachs` → **400** signature
+> rejected, not 404), so a successful charge would be recorded. The last remaining blocker is **the card issuer**: the test card
+> was declined at the bank, which leaves no trace on our side by design (no charge, no webhook, no audit row, plan unchanged).
+>
 > **Checkout fix, 2026-10-29 09:20:** the return URLs were being sent as `http://127.0.0.1:4120/...` because the app fell back
 > to a loopback default when `APP_BASE_URL`/`NEXTAUTH_URL` were unset; Bachs rejects loopback even in sandbox. `publicBaseUrl()`
 > (`src/lib/app-url.ts`) now resolves `NEXT_PUBLIC_APP_URL` and refuses a loopback origin by name, and a real session is created

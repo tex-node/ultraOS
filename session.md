@@ -14616,3 +14616,50 @@ unit 1049 (1048 pass, 8 new for app-url) · component 26/26 · db 52/52 · e2e 7
 **Still pending, and it is still the only thing pending: the payment.** The checkout now opens on the live host with the right
 return URL; the audit log will not show `ORG_UPGRADED_BY_BACHS` until a card is actually charged. Then refund, and
 `ORG_DOWNGRADED_BY_BACHS` closes it.
+
+## 2026-10-29 - Streak v32d: the card was declined at the bank, and what that proves about the integration
+
+Your read is right: the issuer declined it, not Bachs and not the app. The logs make that precise, and they also settle the
+"is the integration actually correct" question with real clicks rather than my probe.
+
+**Four real button clicks, every one with the public origin:**
+
+```
+Oct 29 09:40:33  [billing] checkout return origin { plan: 'PRO', origin: 'https://app.neonultra.ng' }
+Oct 29 09:59:17  [billing] checkout return origin { plan: 'PRO', origin: 'https://app.neonultra.ng' }
+Oct 29 10:00:40  [billing] checkout return origin { plan: 'PRO', origin: 'https://app.neonultra.ng' }
+Oct 29 10:11:18  [billing] checkout return origin { plan: 'PRO', origin: 'https://app.neonultra.ng' }
+```
+
+So the loopback fix holds in the path a customer takes, not just in a script.
+
+**A declined charge leaves exactly the state we want it to leave:** no webhook traffic in the service log, zero `%BACHS%` rows
+in `auditLog`, both organizations still on their previous plan, `bachsCustomerId` still `null` for both. Nothing phantom, no
+half-written subscription, nothing to clean up. That is the correct behaviour: only a verified webhook can change a plan, and a
+declined card never produces one.
+
+**The check that mattered most, and that I had not run before:** can Bachs actually *reach* the webhook from the internet?
+
+```
+POST https://app.neonultra.ng/api/webhooks/bachs  -> 400
+   {"error":"Signature verification failed: Webhook timestamp is missing or invalid."}
+POST http://127.0.0.1:4110/api/webhooks/bachs     -> 400   (same, from inside)
+```
+
+**400, not 404** — the route is exposed through Caddy and rejects an unsigned body exactly as it should. That closes the one
+failure mode where a customer pays and the plan silently never moves. It is now STEP 5a of the runbook, before the payment
+rather than after it.
+
+**Why the decline is likely and what to try.** Nigerian issuers commonly refuse USD/international online charges; that is what
+the `billing_currency` change to USD exposed. A USD virtual card (Wise or similar) or a bank that permits international online
+transactions is the usual workaround. The alternative is asking Bachs to enable **NGN** settlement for the account, after which
+`BACHS_SETTLEMENT_CURRENCY` can go back to NGN and a local card works normally — that is a business/account decision, not a code
+change.
+
+**How to tell a decline from a webhook failure, when it next matters:** look at the **Bachs dashboard**. A declined attempt
+leaves no paid checkout there; a *paid* checkout with an empty `auditLog` is the webhook problem, and then the 400/503/200 table
+in the runbook names the cause (signature mismatch, missing secret, or payload).
+
+**State:** production `d8e7abd`, `/api/v1/live` 200, webhook reachable and verifying, credentials and product ids in place, and
+the single open item unchanged — a successful charge (₦100 or the USD equivalent) followed by a refund, which should leave
+`ORG_UPGRADED_BY_BACHS` and then `ORG_DOWNGRADED_BY_BACHS` in the audit log. Everything on our side of that line is verified.

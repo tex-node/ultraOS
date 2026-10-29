@@ -139,7 +139,35 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:4110/api/v1/live     
 4. If the button reports *"No Bachs product configured for PRO"*, STEP 3 did not take effect (restart it again).
    If it reports a scope error, the key is wrong — go back to STEP 0.
 
-## STEP 6 — Pay ₦100 and prove the app knows (~5 min, browser + SQL)
+## STEP 5a — Before paying, prove Bachs can REACH the webhook (~1 min)
+
+The expensive failure is the quiet one: the customer pays, Bachs delivers, and the route is not reachable - money taken, plan
+unchanged. Check it from outside the box, not from loopback:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://app.neonultra.ng/api/webhooks/bachs \
+  -H 'content-type: application/json' -d '{}'
+# 400 = exposed, and the unsigned body was rejected (correct)
+# 503 = exposed, but the app sees no webhook secret (configuration problem)
+# 404 = Caddy is not routing it - STOP, a payment would never be recorded
+```
+
+## STEP 6 — Pay and prove the app knows (~5 min, browser + SQL)
+
+> **If the card is declined by the issuer**, that is not a platform failure and it is invisible to us by design: no charge, no
+> webhook, no audit row, `Organization.plan` unchanged, `bachsCustomerId` still null. The evidence that the *integration* is
+> fine is in the app log - each click writes the origin it hands to Bachs:
+>
+> ```bash
+> journalctl -u ultraos-web.service --since "1 hour ago" | grep '\[billing\] checkout return origin'
+> # [billing] checkout return origin { plan: 'PRO', origin: 'https://app.neonultra.ng' }
+> ```
+>
+> Nigerian issuers commonly decline USD/international online charges. A USD virtual card (Wise and similar) or a bank that
+> permits international online transactions is the usual fix; the alternative is asking Bachs to enable **NGN** settlement for
+> the account, after which `BACHS_SETTLEMENT_CURRENCY` can go back to NGN. To tell a decline from a webhook failure, look at the
+> **Bachs dashboard**: a declined attempt leaves no paid checkout there; a paid checkout with an empty `auditLog` is a webhook
+> problem - see the 400/503/200 table below.
 
 Pay the minimum with a real card you control. Then:
 
