@@ -149,7 +149,9 @@ fi
 echo "[deploy] next build"
 set -a; # shellcheck disable=SC1090
 . "$ENV_FILE"; set +a
-NODE_OPTIONS="--max-old-space-size=4096" npx next build
+# BUILD_HEAP_MB exists because 4096 is not always enough on this host: the v36 UI build aborted with SIGABRT (V8 heap OOM) at
+# 4 GB on a machine with 8 GB free, twice. The knob keeps the default honest and lets an operator raise it for one deploy.
+NODE_OPTIONS="--max-old-space-size=${BUILD_HEAP_MB:-6144}" npx next build
 
 REL="$RELEASES/release-$SHA-$TS"
 echo "[deploy] creating release $REL"
