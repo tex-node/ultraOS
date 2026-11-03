@@ -62,6 +62,13 @@ const RESULT_BIBS: Record<string, string> = {
   "Sara Testimory": "02",
 };
 
+// The published payload spelled the runner "Sara Testimony"; the venue sheet says "Sara Testimory", and so
+// does the athlete record created by the intake. One person, two spellings - the results are corrected to the
+// spelling the organiser gave in both lists, and the bib then attaches to a name that actually exists.
+const NAME_FIXES: Record<string, string> = {
+  "Sara Testimony": "Sara Testimory",
+};
+
 async function main() {
   const organization = await prisma.organization.findUniqueOrThrow({ where: { id: ORG }, select: { id: true, name: true } });
   console.log(`  organization: ${organization.name}`);
@@ -199,11 +206,17 @@ async function main() {
         ...category,
         gender: category.key?.startsWith("MALE") ? "MALE" : category.key?.startsWith("FEMALE") ? "FEMALE" : category.gender,
         note: category.placements.length <= 2 ? "Only two athletes finished this race." : "Finish times were not captured at the venue; positions are as officially confirmed.",
-        placements: category.placements.map((placement) => ({
-          ...placement,
-          ...(RESULT_BIBS[placement.name] ? { bib: RESULT_BIBS[placement.name] } : {}),
-          ...(!RESULT_BIBS[placement.name] ? { note: "Bib not recorded at intake." } : {}),
-        })),
+        placements: category.placements.map((placement) => {
+          const name = NAME_FIXES[placement.name] ?? placement.name;
+          const bib = RESULT_BIBS[name];
+          return {
+            ...placement,
+            name,
+            ...(bib ? { bib } : {}),
+            // A bib we cannot substantiate is left blank with a reason, never filled in from a guess.
+            ...(!bib ? { note: "Bib not recorded at intake." } : {}),
+          };
+        }),
       };
     }),
   };
