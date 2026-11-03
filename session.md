@@ -14886,3 +14886,74 @@ initial, since the sheet and the roster disagree on order and spelling), and onl
 ~20-line change with a test, after which the remaining twelve games are mechanical: crop, read, validate, ingest.
 
 I would rather hand over twelve sheets and one broken matcher than twelve unverified box scores.
+
+### v34, continued - Game 42 landed, after two more fixes and one near-miss worth recording
+
+The first successful write was **arithmetically perfect and wrong**. It reported:
+
+```
+home: 12/12 rows written · printed 49    away: 11/11 rows written · printed 61
+player stats: 23 rows / 110 pts
+```
+
+and every number reconciled - because the totals were right. The *people* were not. The script resolved a player by shirt
+number first, and this roster's shirt numbers do not match the sheet's:
+
+```
+sheet #7  SUNDAY OBASANYA   ->  roster #7  "Kelvin O"    (10 points to the wrong man)
+sheet #8  MATHEW DANIEL     ->  roster #8  "Nathaniel Ojo"
+sheet #9  MUSA ALFA         ->  roster #9  "Joshua Agbonkese"
+sheet #12 JOHN ITSUKWI      ->  roster #12 "Moyin D"
+sheet #13 MORRIS URENWOKE   ->  roster #13 "John I"
+```
+
+A box score that adds up is not a box score that is true. The rule is now **name first**: exact, then reversed, then a single
+distinctive shared token (which resolves "John Itsukwi" -> "John I" and "Samuel Audu" -> "Samuel O", where the roster only kept
+part of the name), and only then the shirt - logged as `REVIEW` when it happens. Re-run:
+
+```
+home 12/12 · away 11/11 · 23 rows / 110 pts · OGR 49, LFK 61
+```
+
+Three more fixes were needed on the way, all real:
+
+1. **`ensurePlayer` created a second Player** for somebody already on the roster, then failed the whole import on
+   `(seasonClubId, jerseyNumber)`. It now also tries the reversed name and a surname + first initial, and if a shirt is still
+   taken it records the player with an unknown number rather than aborting the game.
+2. **A FINAL fixture was refused.** LBCL games are marked FINAL from a results sheet before anyone transcribes the box score,
+   so "already FINAL" made the statistics unreachable. The guard now distinguishes *has statistics* (supersede) from *has none*
+   (this is the first box score - allowed).
+3. **The batch had the wrong timestamp** (`08:22Z` where the fixture is `09:22Z`), so the importer created a **duplicate
+   fixture**. That was deleted, and the lesson is the one this project keeps relearning: the timezone of `scheduledAt` is part
+   of the identity. Period scores also came out **cumulative** on the first attempt and were reverted; they are stored
+   per-period (14-16, 11-17, 17-14, 7-14) as the October games are.
+
+### What is in the database now
+
+```
+Game 42  Ogra Hoop Kings 49 - 61 Leo Kareem Foundation  (Sun 25 Oct 2026)
+  PlayerStat 23 rows · 110 pts · OGR 49 / LFK 61
+  TeamStat   2 rows  · paint points 58 (26 + 32), fast break 19, bench 46, PPP 0.69 / 0.85
+  Periods    14-16, 11-17, 17-14, 7-14
+  fixtures on that date: 2 (the duplicate was removed; the original two remain)
+```
+
+Top line: Anas Usman 16, Kelvin Dangiwa 10 (5 reb, 5 ast), Ubi Delight 7; for LFK, Obasana Sunday 10, Musa Alfa 9,
+Urenwoke Morrison 9, Samuel O 8, John I 8, Balogun Divine 6 with 5 rebounds and 4 assists.
+
+**Two identity caveats, stated rather than buried:** the sheet's "Chuka Obi" #41 has no exact roster match and landed on
+"Chuka Sampson" by name token (probably the same player, not confirmed), and two Leo Kareem players (Obasana Sunday, Urenwoke
+Morrison) carry no shirt number in the roster at all - their rows are correct by name, but the roster should be tidied.
+
+### State of the intake
+
+```
+1 of 13 games ingested and verified  (Game 42)
+12 remaining: the same crop -> read -> validate -> apply loop, ~20 minutes of reading each
+scripts/lbcl-batch-validate.ts    the gate: it caught 5 of my own reading errors, and would catch a 6th
+scripts/lbcl-apply-box-score.ts   name-first identity, refuses to double-write a game
+scripts/data/lbcl-2026-game42.json  the validated sheet
+```
+
+I would rather deliver one verified game and the tooling that makes the other twelve safe than thirteen boxes of numbers I
+could not stand behind.
