@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { signOut } from "@/auth";
+import { PersonaSwitcher } from "@/app/components/persona-switcher";
 import { WorkspaceNav } from "@/app/components/ui/workspace-nav";
 import { WorkspaceBottomNav } from "@/app/components/ui/workspace-bottom-nav";
+import { resolveViewport } from "@/lib/workspace/session";
+import { sectionsForPersona, type NavSection } from "@/lib/workspace/nav";
 
 export type WorkspaceUser = {
   name?: string | null;
@@ -11,73 +14,6 @@ export type WorkspaceUser = {
   organizationName?: string | null;
   organizationSlug?: string | null;
 };
-
-type NavLink = { href: string; label: string; adminOnly?: boolean; roles?: string[] };
-type NavSection = { label: string; links: NavLink[] };
-
-// Organizer workspace navigation (product roadmap F1/F6). Sections mirror the workspace
-// dashboard; every href is an existing route — this shell only reorganizes, never adds.
-// adminOnly links additionally open to the listed extra roles (least privilege per F6);
-// everyone else keeps exactly the visibility they had before.
-const sections: NavSection[] = [
-  {
-    label: "Live & Game Control",
-    links: [
-      { href: "/gameday", label: "Game Control Board" },
-      { href: "/broadcast", label: "Broadcast" },
-      { href: "/novelty-matches", label: "Exhibition" },
-    ],
-  },
-  {
-    label: "Manage",
-    links: [
-      { href: "/dashboard", label: "Dashboard" },
-      { href: "/demo-mode", label: "Demo Mode" },
-      { href: "/competitions", label: "Tournaments", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
-      { href: "/events", label: "Events & Tickets", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
-      { href: "/launch-readiness", label: "Launch", adminOnly: true },
-    ],
-  },
-  {
-    label: "Tournament",
-    links: [
-      { href: "/fixtures", label: "Fixtures & Stats" },
-      { href: "/standings", label: "Standings" },
-      { href: "/leaders", label: "Leaders" },
-      { href: "/clubs", label: "Clubs" },
-      { href: "/players", label: "Athletes" },
-      { href: "/coaches", label: "Coaches" },
-      { href: "/coaches/season-zero-selection", label: "Coach Selection", adminOnly: true },
-      { href: "/drafts", label: "Drafts" },
-      { href: "/draft-events", label: "Draft Day" },
-      { href: "/applications", label: "Applications", adminOnly: true },
-    ],
-  },
-  {
-    label: "Commerce",
-    links: [
-      { href: "/vendors", label: "Vendors", adminOnly: true, roles: ["VENDOR_MANAGER"] },
-      { href: "/orders", label: "Orders", adminOnly: true, roles: ["VENDOR_MANAGER"] },
-      { href: "/check-in", label: "Gate Scanner" },
-      { href: "/qr-operations", label: "QR Ops", adminOnly: true },
-    ],
-  },
-  {
-    label: "System",
-    links: [
-      { href: "/access", label: "Game-Control Access", adminOnly: true },
-      { href: "/operations", label: "Operations", adminOnly: true },
-      { href: "/content", label: "Content", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
-      { href: "/media", label: "Media", adminOnly: true },
-      { href: "/imports", label: "Imports", adminOnly: true },
-      { href: "/audit", label: "Audit", adminOnly: true },
-      { href: "/data-readiness", label: "Data", adminOnly: true },
-      { href: "/participants/search", label: "Search", adminOnly: true },
-      { href: "/training", label: "Training", adminOnly: true },
-      { href: "/announcements", label: "Announcements", adminOnly: true, roles: ["TOURNAMENT_DIRECTOR"] },
-    ],
-  },
-];
 
 function isAdmin(user: WorkspaceUser) {
   return (
@@ -90,7 +26,7 @@ function isAdmin(user: WorkspaceUser) {
 
 // Organizer workspace shell: sidebar navigation on desktop, compact top bar below lg.
 // Same props contract as the legacy operations header so pages adopt it unchanged.
-export function WorkspaceShell({
+export async function WorkspaceShell({
   children,
   user,
   organizationName,
@@ -108,12 +44,14 @@ export function WorkspaceShell({
   // platform's demo competition. The prop still wins when a page knows better (e.g. a dashboard for a different slug).
   const workspaceName = organizationName ?? user.organizationName ?? "Neon Ultra";
   const workspaceContext = organizationContext ?? (user.organizationSlug ? null : "Season Zero · 2026");
-  const admin = Boolean(isAdmin(user));
-  const roles = user.roles?.length ? user.roles : [user.role];
-  const visible = (link: NavLink) => !link.adminOnly || admin || (link.roles ?? []).some((role) => roles.includes(role));
-  const visibleSections = sections
-    .map((section) => ({ label: section.label, links: section.links.filter(visible) }))
-    .filter((section) => section.links.length > 0);
+  // v36: the sidebar is the ACTIVE viewport's tools, resolved on the server from the session's roles and the switcher cookie.
+  // A coach no longer sees Vendors/Audit; an operator no longer sees the courtside-only links they would never use.
+  const viewport = await resolveViewport();
+  const visibleSections: NavSection[] = sectionsForPersona(viewport.active).map((section) => ({
+    label: section.label,
+    links: section.links.map((link) => ({ href: link.href, label: link.label })),
+    personas: section.personas,
+  }));
 
   return (
     <div className="min-h-screen bg-ink-900 text-text-1 lg:grid lg:grid-cols-[224px_1fr]">
@@ -128,6 +66,9 @@ export function WorkspaceShell({
             <p className="mt-1 inline-block rounded-full border border-line px-2 py-0.5 text-[10px] uppercase tracking-wider text-text-2">
               {workspaceContext}
             </p>
+            <div className="mt-2">
+              <PersonaSwitcher active={viewport.active} available={viewport.available} />
+            </div>
           </div>
           <form
             className="m-0 shrink-0"

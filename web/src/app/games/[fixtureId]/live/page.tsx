@@ -219,6 +219,10 @@ export default async function Live({ params, searchParams }: { params: Promise<{
         <div className="flex justify-between py-3">
           <Link href={`/fixtures/${fixtureId}`} className="text-sm text-text-2">Back to fixture</Link>
           <div className="flex gap-4">
+            {game ? (
+              // Capture mode (v36): the tablet-first viewport with no navigation, for a scorer who only needs the pad.
+              <Link href={`/gameday/console/${fixtureId}`} className="text-sm text-brand-300">Capture mode</Link>
+            ) : null}
             {game ? <Link href={`/games/${fixtureId}/stats`} className="text-sm text-sky-400">Open statistician console</Link> : null}
             {game ? <Link href={`/scoreboard/${game.id}`} className="text-sm text-brand-400">Open scoreboard</Link> : null}
           </div>
