@@ -14957,3 +14957,62 @@ scripts/data/lbcl-2026-game42.json  the validated sheet
 
 I would rather deliver one verified game and the tooling that makes the other twelve safe than thirteen boxes of numbers I
 could not stand behind.
+
+## 2026-11-03 - Streak v35: a second box score, and the intake made repeatable
+
+"These too" was ten more captures: **seven games** the league has played since (Game 41 on 25 Oct, 60 on 30 Oct, 65 and 67 on
+31 Oct, 68, 69 and 70 on 1 Nov) - and **none of them existed in the system at all**, not even as fixtures. So this round needed
+fixture creation as well as statistics.
+
+### Game 68 is in (Ultra Basketball 56 - 100 Cantonment Braves, Sun 1 Nov)
+
+```
+periods     15-21 · 11-27 · 12-21 · 18-31
+player rows 20 · 156 pts  (UTA 56, CTB 100 - both equal the printed totals)
+team stats   2 rows · 156 pts
+```
+
+Top line: Oparaugo Ikay 28, David Udanyi 21, Eli Francis 15, Agindigbadi Wasiu 14, Clinton Koko 14.
+
+### The intake is now a pipeline, not a one-off
+
+```
+scripts/data/lbcl-2026-sheets-gw7.json   a sheet row is 19 numbers; FGM/FGA and PTS are DERIVED
+scripts/lbcl-sheets-to-batch.ts          expands them, and CHECKS them against every printed total
+scripts/lbcl-batch-validate.ts           the independent gate (points identity, made<=attempted, team sums, period sums)
+scripts/lbcl-apply-box-score.ts          writes, name-first identity, refuses to double-write
+```
+
+The builder compares points, FG/2P/3P/FT (made and attempted), rebounds - **including the printed Team/Coach row**, assists,
+turnovers, fouls - and the period sum against each team's printed line. My first reading of Game 68 was wrong in **eleven**
+places (three rebounds, four assists, two turnovers, a free-throw pair and a two-point attempt); the builder named every one,
+and the corrected transcription reconciles exactly.
+
+### Identity, third iteration - and why it kept getting sharper
+
+The names on the venue sheets and the names in the roster diverge more than they agree:
+
+| sheet | roster | how it now resolves |
+| --- | --- | --- |
+| Elemchi Ebiba | Ebuka Elebuchi | fuzzy token (edit distance 2) |
+| Kabir Amr | Amir Kabiru | fuzzy token, words reversed |
+| Emmanuel O | Emmanuel Ofono | trailing initial disambiguates three "Emmanuel"s |
+| Quie A | *nobody* | **created as a new player** - not attributed to the shirt's owner |
+
+That last rule matters most: when there is no name evidence, the script now creates the person from the sheet rather than
+borrowing whoever wears that number. Mislabelling a player is worse than an extra roster entry - and the earlier
+"Sunday Obasanya → Kelvin O" near-miss is exactly what it prevents.
+
+### What still needs doing
+
+```
+done       Game 42 (Ogra 49-61 Leo Kareem)   · Game 68 (Ultra 56-100 Cantonment)
+queued     Game 41 (Ultra 31-43 Raptors) · 43 (Campos 78-65 Cantonment) · 60 (Campos 84-74 LXB)
+           65 (Cantonment 79-58 Ogra) · 67 (White Fire 53-68 Leo Kareem) · 69 (Ogra 72-67 White Fire)
+           70 (LXB 52-73 Raptors)
+```
+
+Each is one crop, one read, one transcription and one validation run - roughly twenty minutes of careful work now that the
+pipeline exists. The remaining seven are not blocked by code; they are blocked by the reading, and I will keep going in that
+order unless the league can supply the Genius Sports CSV/PDF export, which the project already ingests with **zero field
+differences across 32 games** and which would remove the transcription risk entirely.
