@@ -74,18 +74,33 @@ async function main() {
         });
         let written = 0;
         for (const row of team.players) {
+          // IDENTITY, in order of confidence. The first attempt resolved by shirt first and produced a full, arithmetically
+          // perfect box score attributed to the wrong people (Obasana Sunday's 10 points went to "Kelvin O") - the sheet's
+          // numbers and the roster's numbers disagree, so the shirt is the LAST resort, never the first.
           const normalize = (value: string) => value.toLowerCase().replace(/[^a-z]/g, "");
-          const byJersey = row.jerseyNumber === null ? undefined : roster.find((p) => p.jerseyNumber === row.jerseyNumber);
-          const byName = roster.find(
-            (p) => normalize(`${p.athlete.firstName}${p.athlete.lastName}`) === normalize(row.fullName)
-              || normalize(`${p.athlete.lastName}${p.athlete.firstName}`) === normalize(row.fullName),
+          const tokens = (value: string) => value.toLowerCase().split(/[^a-z]+/).filter((token) => token.length >= 4);
+          const rowKey = normalize(row.fullName);
+          const rowTokens = new Set(tokens(row.fullName));
+
+          const byFullName = roster.find(
+            (p) => normalize(`${p.athlete.firstName}${p.athlete.lastName}`) === rowKey
+              || normalize(`${p.athlete.lastName}${p.athlete.firstName}`) === rowKey,
           );
-          const player = byJersey ?? byName;
+          // One distinctive name token (>= 4 letters) shared with the roster row: catches "John Itsukwi" -> "John I" and
+          // "Samuel Audu" -> "Samuel O", where the roster only kept part of the name.
+          const byToken = byFullName
+            ? undefined
+            : roster.filter((p) => tokens(`${p.athlete.firstName} ${p.athlete.lastName}`).some((token) => rowTokens.has(token)));
+          const tokenMatch = byToken && byToken.length === 1 ? byToken[0] : undefined;
+          const byJersey = row.jerseyNumber === null ? undefined : roster.find((p) => p.jerseyNumber === row.jerseyNumber);
+
+          const player = byFullName ?? tokenMatch ?? byJersey;
+          const how = byFullName ? "by name" : tokenMatch ? "by name token" : "by shirt only - REVIEW";
           if (!player) {
             console.log(`  ${side}: no roster match for ${row.fullName} (#${row.jerseyNumber ?? "-"}) - row skipped`);
             continue;
           }
-          console.log(`  ${side} #${row.jerseyNumber ?? "-"} ${row.fullName} -> ${player.athlete.firstName} ${player.athlete.lastName}${byJersey ? " (by shirt)" : " (by name)"} · ${row.points} pts`);
+          console.log(`  ${side} #${row.jerseyNumber ?? "-"} ${row.fullName} -> ${player.athlete.firstName} ${player.athlete.lastName} (${how}) · ${row.points} pts`);
           if (apply) {
             await tx.playerStat.create({
               data: {
