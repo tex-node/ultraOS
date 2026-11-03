@@ -15086,3 +15086,67 @@ is where to look.
   `/coaching/selection`, `/coaching/opponents`, `/coaching/training` entries need those index routes created (today they would
   404 from the sidebar). That is the next PR-sized piece, and it is the one that makes the coach persona real rather than
   merely filtered.
+
+## 2026-11-03 - Streak v37: the flag-race fixtures URL, and the Selection Advisor rebuilt
+
+### `/t/neon-ultra/giesm-2026-flag-race/fixtures` showed nothing - now it shows the race
+
+The competition was created for the venue intake: nineteen athletes, one session, no schedule at all. The fixtures page mapped
+over seasons and rendered whatever fixtures and standings existed - which was nothing - so it produced a 200 with an empty body.
+A page that answers "no data" when the answer is "the race happened, here is who ran and who won" is wrong, not empty.
+
+When no season has a fixture, the page now renders:
+
+```
+Registered athletes (19)          bib, name, division - Wisdom Gambo #01 … Houndealo Felix #17
+Male flag race / Female flag race  the published podium, with bibs and the venue's honest note about finish times
+Back to the tournament overview
+```
+
+The results come from the organization's completed events, **filtered to this competition's sport** - the volleyball podium
+cannot leak onto the flag-race page just because it is stored on the same event. Verified on production:
+
+```
+/t/neon-ultra/giesm-2026-flag-race/fixtures   200 · 49.9 KB
+  Registered athletes (19) · Houndealo Felix · Ekechukwu Isaac · Rita Dickson · Sara Testimory
+```
+
+### The production deploy exited 5, and the app was fine
+
+The release swapped and the service came up; the **smoke test** then failed on one assertion:
+
+```
+FAIL  selection   http=200 missing="Rotation"
+```
+
+That assertion was testing the *old* Selection Advisor. The v37 redesign removed the "Rotation (n)" grouping, so the smoke test
+was looking for a heading that no longer exists - a stale test failing a healthy page. It now asserts "Recommended lineup", and
+re-running it against the live release gives `SMOKE OK` (19 checks, 0 errors in the service log). Worth naming the failure mode:
+the deploy correctly refused to call itself successful, and the fix was to the test, not to the release.
+
+### The Selection Advisor, rebuilt on real evidence
+
+The screen the owner sketched is now the screen coaches get, wired to `buildSelectionAdvice` rather than to mock rows:
+
+- **Recommended lineup** with a verdict chip per player, form and match-fit at a glance;
+- **why / why not** for the selected player: the evidence table (value, percentile, baseline, sample, gate), then the case for
+  and against, each line generated from a real evidence row;
+- **workload and fatigue matrix** for the whole roster;
+- selection is **URL state** (`?inspect=<playerId>`), so the page prints and links exactly as it renders and a coach can send
+  "look at this player" to another coach.
+
+Two contracts survived the redesign deliberately: when the engine reports INSUFFICIENT_DATA no verdict label is rendered at all
+(the banner says why and the list stays ranked), and nothing is invented - a player with no minutes shows `—` for fouls per 36,
+a matchup the engine could not rate reads `N/A`. Six new unit tests pin exactly those absences, and the component tests moved
+from "the view groups by Starters/Rotation/Bench" to "every candidate carries its verdict".
+
+### State
+
+```
+production 313c224 · smoke OK (19 checks) · /api/v1/live 200
+staging 313c224
+unit 1072 pass (+6) · component 26/26 · canonical-write ratchet 4/4
+```
+
+Also in this deploy: the persona-scoped workspace navigation and the capture viewport from the previous streak, which had been
+sitting on staging unverified in production.
