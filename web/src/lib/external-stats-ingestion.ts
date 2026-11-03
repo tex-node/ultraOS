@@ -164,8 +164,26 @@ export async function ensurePlayer(
     select: { id: true, jerseyNumber: true, athlete: { select: { id: true, firstName: true, lastName: true } } },
   });
   const key = normalizeName(input.fullName);
-  const match = roster.find((p) => normalizeName(`${p.athlete.firstName}${p.athlete.lastName}`) === key);
+  const tokens = input.fullName.trim().split(/\s+/).filter(Boolean);
+  const inputSurname = tokens.length > 1 ? tokens[tokens.length - 1] : tokens[0];
+  const inputInitial = tokens[0]?.slice(0, 1)?.toLowerCase() ?? "";
+  // Name first, but not only as one concatenated string: the venue sheet and the roster disagree about order and
+  // spelling ("Obasana Sunday" vs "Sunday Obasanya", "Ibrahim Dal" vs "IBRAHIMDALLAS"), so reversed order and a
+  // surname + first-initial match are accepted too. Creating a second Player for somebody already on the roster is
+  // what produced the jersey-number collision this replaced.
+  const looseness = (firstName: string, lastName: string) =>
+    normalizeName(lastName) === normalizeName(inputSurname) &&
+    firstName.slice(0, 1).toLowerCase() === inputInitial;
+  const match =
+    roster.find((p) => normalizeName(`${p.athlete.firstName}${p.athlete.lastName}`) === key) ??
+    roster.find((p) => normalizeName(`${p.athlete.lastName}${p.athlete.firstName}`) === key) ??
+    roster.find((p) => looseness(p.athlete.firstName, p.athlete.lastName));
   if (match) return { playerId: match.id, created: false as const };
+
+  // A jersey number that is already taken by somebody the name match could not identify is NOT a reason to fail the
+  // whole import: the player is recorded with an unknown number, and the sheet's number stays in the import's source
+  // label. A box score with one unknown shirt beats no box score at all.
+  const jerseyTaken = input.jerseyNumber !== null && roster.some((p) => p.jerseyNumber === input.jerseyNumber);
 
   const [firstName, ...rest] = input.fullName.trim().split(/\s+/);
   const lastName = rest.join(" ") || firstName;
@@ -189,7 +207,7 @@ export async function ensurePlayer(
       position: "Unknown",
       heightCm: 0,
       weightKg: 0,
-      jerseyNumber: input.jerseyNumber,
+      jerseyNumber: jerseyTaken ? null : input.jerseyNumber,
       status: "REGISTERED",
       draftSelectionGroup: "NOT_SELECTED",
     },
