@@ -80,17 +80,33 @@ async function main() {
           const normalize = (value: string) => value.toLowerCase().replace(/[^a-z]/g, "");
           const tokens = (value: string) => value.toLowerCase().split(/[^a-z]+/).filter((token) => token.length >= 4);
           const rowKey = normalize(row.fullName);
-          const rowTokens = new Set(tokens(row.fullName));
+          const rowTokens = tokens(row.fullName);
+          // Levenshtein, capped: rosters keep names the venue sheet spells differently by a letter or two
+          // ("Kabir Amr" vs "Amir Kabiru", "Elemchi Ebiba" vs "Ebuka Elebuchi"), and an exact-token match cannot see that.
+          const distance = (left: string, right: string) => {
+            const rows = left.length + 1;
+            const cols = right.length + 1;
+            const grid = Array.from({ length: rows }, (_, i) => Array.from({ length: cols }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+            for (let i = 1; i < rows; i += 1) {
+              for (let j = 1; j < cols; j += 1) {
+                grid[i][j] = Math.min(grid[i - 1][j] + 1, grid[i][j - 1] + 1, grid[i - 1][j - 1] + (left[i - 1] === right[j - 1] ? 0 : 1));
+              }
+            }
+            return grid[rows - 1][cols - 1];
+          };
+          const similar = (a: string, b: string) => (a === b ? true : a.length >= 4 && b.length >= 4 && distance(a, b) <= 2);
 
           const byFullName = roster.find(
             (p) => normalize(`${p.athlete.firstName}${p.athlete.lastName}`) === rowKey
               || normalize(`${p.athlete.lastName}${p.athlete.firstName}`) === rowKey,
           );
-          // One distinctive name token (>= 4 letters) shared with the roster row: catches "John Itsukwi" -> "John I" and
-          // "Samuel Audu" -> "Samuel O", where the roster only kept part of the name.
+          // Any distinctive token that matches exactly or nearly: catches "John Itsukwi" -> "John I", "Samuel Audu" ->
+          // "Samuel O", and the reorder/typo cases above. Two candidates means it is ambiguous and the shirt is used instead.
           const byToken = byFullName
             ? undefined
-            : roster.filter((p) => tokens(`${p.athlete.firstName} ${p.athlete.lastName}`).some((token) => rowTokens.has(token)));
+            : roster.filter((p) =>
+                tokens(`${p.athlete.firstName} ${p.athlete.lastName}`).some((token) => rowTokens.some((mine) => similar(token, mine))),
+              );
           const tokenMatch = byToken && byToken.length === 1 ? byToken[0] : undefined;
           const byJersey = row.jerseyNumber === null ? undefined : roster.find((p) => p.jerseyNumber === row.jerseyNumber);
 
