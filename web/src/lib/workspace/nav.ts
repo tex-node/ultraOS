@@ -1,5 +1,3 @@
-import type { UserRole } from "@/generated/prisma/enums";
-
 // Persona-scoped navigation (streak v36).
 //
 // WHY. The workspace sidebar was one list for everybody: a coach saw Vendors, Audit, Imports and the draft machinery, and an
@@ -24,8 +22,10 @@ export const PERSONA_LABELS: Record<Persona, string> = {
   fan: "Fan",
 };
 
-/** Which persona each role opens into. A role that is not listed opens the fan viewport, which has no operational tools. */
-const ROLE_PERSONAS: Partial<Record<UserRole, Persona>> = {
+/** Which persona each role opens into. A role that is not listed opens the fan viewport, which has no operational tools.
+ *  Plain strings, not the Prisma enum: this module is imported by a client component (the switcher), and the generated enum
+ *  module is not client-safe. */
+const ROLE_PERSONAS: Record<string, Persona> = {
   SUPER_ADMIN: "admin",
   LEAGUE_OPERATOR: "admin",
   TOURNAMENT_DIRECTOR: "admin",
@@ -49,7 +49,7 @@ const PERSONA_ORDER: Persona[] = ["admin", "coach", "scorer", "scout", "fan"];
 export function personasForRoles(roles: readonly string[]): Persona[] {
   const seen = new Set<Persona>();
   for (const role of roles) {
-    const persona = ROLE_PERSONAS[role as UserRole];
+    const persona = ROLE_PERSONAS[role];
     if (persona) seen.add(persona);
   }
   if (seen.size === 0) seen.add("fan");
