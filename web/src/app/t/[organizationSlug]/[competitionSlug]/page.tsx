@@ -5,6 +5,7 @@ import { isIndividualSport } from "@/lib/sports/fixture-sides";
 import { eloForSeasonClubs } from "@/server/analytics/elo-ratings";
 import { buildIndividualStandings, formatRatio, type IndividualStandingInput } from "@/lib/public/individual-standings";
 import { parseEventResults } from "@/lib/public/event-results";
+import { EventResultsBoard } from "@/app/components/event-results-board";
 import { resolveActiveOrganizationBySlug, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
@@ -235,32 +236,14 @@ export default async function TournamentOverview({ params }: { params: Promise<{
 
       {publishedResults.length > 0 ? (
         <section className="mt-8">
-          <h2 className="text-xl font-bold">Final results</h2>
           {publishedResults.map((event) => (
-            <div key={event.id} className="mt-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                {event.results.categories.map((category) => (
-                  <article key={category.key ?? category.label} className="rounded-lg border border-line bg-ink-800 p-5">
-                    <h3 className="font-semibold">{category.label}</h3>
-                    <ol className="mt-3 space-y-2">
-                      {(category.placements ?? []).map((placement, index) => (
-                        <li key={`${category.key ?? category.label}-${placement.rank ?? index}`} className="flex items-center gap-3">
-                          <span className="grid h-7 w-7 place-items-center rounded-full bg-white/10 text-xs font-bold text-text-1">
-                            {placement.rank ?? index + 1}
-                          </span>
-                          <span className="text-text-1">{placement.name}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </article>
-                ))}
-              </div>
-              {event.results.publishedAt ? (
-                <p className="mt-3 text-xs text-text-3">
-                  Results published {new Date(event.results.publishedAt).toLocaleDateString()}
-                </p>
-              ) : null}
-            </div>
+            <EventResultsBoard
+              key={event.id}
+              results={event.results}
+              title={event.name}
+              showGenderHeadings={false}
+              className="mt-4"
+            />
           ))}
         </section>
       ) : null}
