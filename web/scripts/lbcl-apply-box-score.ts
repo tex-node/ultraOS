@@ -56,7 +56,7 @@ async function main() {
     await withOrganizationContext(organizationId, async (tx) => {
       const fixture = await tx.fixture.findFirst({
         where: { organizationId, scheduledAt: new Date(game.scheduledAt) },
-        select: { id: true, homeSeasonClubId: true, awaySeasonClubId: true, homeScore: true, awayScore: true, game: { select: { id: true } } },
+        select: { id: true, seasonId: true, homeSeasonClubId: true, awaySeasonClubId: true, homeScore: true, awayScore: true, game: { select: { id: true } } },
       });
       if (!fixture?.game) throw new Error(`no fixture+game at ${game.scheduledAt}`);
       const gameId = fixture.game.id;
@@ -107,13 +107,33 @@ async function main() {
             : roster.filter((p) =>
                 tokens(`${p.athlete.firstName} ${p.athlete.lastName}`).some((token) => rowTokens.some((mine) => similar(token, mine))),
               );
-          const tokenMatch = byToken && byToken.length === 1 ? byToken[0] : undefined;
-          const byJersey = row.jerseyNumber === null ? undefined : roster.find((p) => p.jerseyNumber === row.jerseyNumber);
-
-          const player = byFullName ?? tokenMatch ?? byJersey;
-          const how = byFullName ? "by name" : tokenMatch ? "by name token" : "by shirt only - REVIEW";
+          // Several roster entries can share a token ("Emmanuel" three times at CTB); a trailing initial in the sheet name
+          // ("Emmanuel O") picks the right one when it agrees with the roster surname's first letter.
+          let tokenMatch = byToken && byToken.length === 1 ? byToken[0] : undefined;
+          if (!tokenMatch && byToken && byToken.length > 1) {
+            const initial = row.fullName.trim().split(/\s+/).slice(-1)[0];
+            if (initial.length === 1) {
+              const narrowed = byToken.filter((p) => p.athlete.lastName.toUpperCase().startsWith(initial.toUpperCase()));
+              if (narrowed.length === 1) tokenMatch = narrowed[0];
+            }
+          }
+          const player = byFullName ?? tokenMatch;
+          const how = byFullName ? "by name" : tokenMatch ? "by name token" : "NEW player - no roster match";
           if (!player) {
-            console.log(`  ${side}: no roster match for ${row.fullName} (#${row.jerseyNumber ?? "-"}) - row skipped`);
+            // No name evidence at all. Creating the person from the sheet is honest; attributing the line to whoever happens
+            // to wear that shirt number is not - that is how Sunday Obasanya's ten points went to "Kelvin O".
+            if (apply) {
+              const [first, ...rest] = row.fullName.trim().split(/\s+/);
+              const created = await tx.athlete.create({
+                data: { organizationId, firstName: first, lastName: rest.join(" ") || first, gender: game.playerGender, dateOfBirth: new Date("2000-01-01T00:00:00.000Z"), dominantHand: "UNKNOWN", recordOrigin: "IMPORT" },
+              });
+              const newPlayer = await tx.player.create({
+                data: { organizationId, athleteId: created.id, seasonId: fixture.seasonId, seasonClubId: clubId, position: "Unknown", heightCm: 0, weightKg: 0, jerseyNumber: null, status: "REGISTERED", draftSelectionGroup: "NOT_SELECTED" },
+              });
+              await tx.playerStat.create({ data: { organizationId, gameId, playerId: newPlayer.id, seasonClubId: clubId, points: row.points, rebounds: row.offensiveRebounds + row.defensiveRebounds, assists: row.assists, steals: row.steals, blocks: row.blocks, turnovers: row.turnovers, fouls: row.foulsCommitted, minutesPlayed: row.minutesPlayed, fieldGoalsMade: row.fieldGoalsMade, fieldGoalsAttempted: row.fieldGoalsAttempted, twoPointsMade: row.twoPointsMade, twoPointsAttempted: row.twoPointsAttempted, threePointsMade: row.threePointsMade, threePointsAttempted: row.threePointsAttempted, freeThrowsMade: row.freeThrowsMade, freeThrowsAttempted: row.freeThrowsAttempted, offensiveRebounds: row.offensiveRebounds, defensiveRebounds: row.defensiveRebounds, foulsDrawn: row.foulsDrawn, plusMinus: row.plusMinus, efficiency: row.efficiency, didNotPlay: row.didNotPlay ?? false, statSource: "FIBA_LIVESTATS_PDF_IMPORT" } });
+            }
+            console.log(`  ${side} #${row.jerseyNumber ?? "-"} ${row.fullName} -> NEW player (${how}) ? ${row.points} pts`);
+            written += 1;
             continue;
           }
           console.log(`  ${side} #${row.jerseyNumber ?? "-"} ${row.fullName} -> ${player.athlete.firstName} ${player.athlete.lastName} (${how}) · ${row.points} pts`);
