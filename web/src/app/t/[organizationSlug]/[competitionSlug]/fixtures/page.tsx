@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { EventResultsBoard } from "@/app/components/event-results-board";
 import { formatLagosDateTime } from "@/lib/format-datetime";
+import { parseEventResults, type EventResults } from "@/lib/public/event-results";
+import { Prisma } from "@/generated/prisma/client";
 import { resolveActiveOrganizationBySlug, withOrganizationContext } from "@/lib/tenant-context";
 
 export const dynamic = "force-dynamic";
@@ -57,6 +60,7 @@ export default async function TournamentFixtures({ params }: { params: Promise<{
     tx.competition.findFirst({
       where: { organizationId: organization.id, slug: competitionSlug, isActive: true },
       include: {
+        sport: { select: { slug: true, name: true } },
         seasons: {
           include: {
             fixtures: {
@@ -75,12 +79,43 @@ export default async function TournamentFixtures({ params }: { params: Promise<{
                 entrant: { include: { division: true } },
               },
             },
+            entrants: {
+              where: { status: "ACTIVE" },
+              select: { id: true, name: true, seed: true, division: { select: { name: true } } },
+              orderBy: { seed: "asc" },
+            },
           },
         },
       },
     }),
   );
   if (!competition) notFound();
+
+  // A competition can be decided without a single fixture: GIESM's flag race was run on the day, with a published podium and
+  // nineteen registered athletes, and no schedule. The fixtures page used to render an empty shell for that - this section is
+  // what makes it a truthful page instead of a blank one. Results are read from the organization's published events and
+  // filtered to categories of THIS competition's sport, so a volleyball podium never appears on the flag-race page.
+  const sportKey = competition.sport.slug.toUpperCase().replace(/-/g, "_");
+  const publishedResults = competition.seasons.some((season) => season.fixtures.length > 0)
+    ? []
+    : (
+        await withOrganizationContext(organization.id, (tx) =>
+          tx.event.findMany({
+            where: { organizationId: organization.id, status: "COMPLETED", results: { not: Prisma.DbNull } },
+            select: { id: true, name: true, slug: true, results: true },
+          }),
+        )
+      )
+        .flatMap((event): { id: string; name: string; results: EventResults }[] => {
+          const parsed = parseEventResults(event.results);
+          if (!parsed) return [];
+          const categories = parsed.categories.filter((category) => (category.sport ?? "").toUpperCase().replace(/-/g, "_") === sportKey);
+          if (categories.length === 0) return [];
+          return [{ id: event.id, name: event.name, results: { publishedAt: parsed.publishedAt, categories } }];
+        });
+
+  const entrants = competition.seasons.flatMap((season) => season.entrants.map((entrant) => ({ ...entrant, season: season.name })));
+  const noFixtures = competition.seasons.every((season) => season.fixtures.length === 0);
 
   // Public match-page links resolve through locators (publicKey = fixture id).
   const fixtureIds = competition.seasons.flatMap((s) => s.fixtures.map((f) => f.id));
@@ -96,6 +131,45 @@ export default async function TournamentFixtures({ params }: { params: Promise<{
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
+      {noFixtures ? (
+        <>
+          {publishedResults.map((entry) => (
+            <EventResultsBoard key={entry.id} results={entry.results} title={entry.name} showGenderHeadings={false} className="mb-8" />
+          ))}
+          {entrants.length > 0 ? (
+            <section className="mt-8">
+              <h2 className="text-xl font-bold">
+                Registered athletes <span className="text-sm font-normal text-zinc-400">({entrants.length})</span>
+              </h2>
+              <p className="mt-1 text-sm text-zinc-400">
+                {competition.sport.name} ? {entrants.length} entrants. This competition had no scheduled fixtures - it was decided
+                in a single session.
+              </p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {entrants.map((entrant) => (
+                  <div key={entrant.id} className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[.03] px-3 py-2">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white/10 text-xs font-bold text-zinc-300">
+                      {entrant.seed != null ? String(entrant.seed).padStart(2, "0") : "?"}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm text-zinc-100">{entrant.name}</span>
+                      <span className="block text-[11px] text-zinc-500">{entrant.division.name}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+          {publishedResults.length === 0 && entrants.length === 0 ? (
+            <p className="text-zinc-400">Nothing has been published for this competition yet.</p>
+          ) : null}
+          <p className="mt-8 text-sm text-zinc-400">
+            <Link href={`/t/${organizationSlug}/${competitionSlug}`} className="text-emerald-400 underline">
+              Back to the tournament overview
+            </Link>
+          </p>
+        </>
+      ) : null}
       {competition.seasons.length === 0 ? (
         <p className="text-zinc-400">The schedule will appear here once fixtures are generated.</p>
       ) : null}
