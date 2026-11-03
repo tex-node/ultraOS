@@ -209,8 +209,12 @@ async function main() {
         placements: category.placements.map((placement) => {
           const name = NAME_FIXES[placement.name] ?? placement.name;
           const bib = RESULT_BIBS[name];
+          // Strip any note a previous run added, so the reason cannot outlive the fact it described: a
+          // placement that has a bib must not still say "bib not recorded".
+          const { note: previousNote, ...rest } = placement;
+          void previousNote;
           return {
-            ...placement,
+            ...rest,
             name,
             ...(bib ? { bib } : {}),
             // A bib we cannot substantiate is left blank with a reason, never filled in from a guess.
