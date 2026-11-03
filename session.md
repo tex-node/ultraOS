@@ -15150,3 +15150,41 @@ unit 1072 pass (+6) · component 26/26 · canonical-write ratchet 4/4
 
 Also in this deploy: the persona-scoped workspace navigation and the capture viewport from the previous streak, which had been
 sitting on staging unverified in production.
+
+## 2026-11-03 - Streak v38: staging mirrored, so the flag-race page can be previewed there too
+
+Staging and production now run the same release (`8498f3a`, built separately, `SMOKE OK` on both), but they did not hold the same
+content: the flag-race competition and its nineteen athletes existed only in production, where the venue intake was applied. A
+preview environment that 404s the page you just shipped is a preview environment that cannot preview it.
+
+**Applied to staging**, through the same script production used, not by hand:
+
+```
+created competition  GIESM 2026 Flag Race
+created season       2026 · divisions Male / Female
+intake               19 athletes · created 19 · 0 updated
+```
+
+Then the published podium was copied from the production event (4 categories, 1,159 bytes) and the enrichment re-run, which
+added the bibs and the venue notes on staging as well:
+
+```
+staging event now carries: 4 categories · "no published results to enrich" resolved
+```
+
+### Verified on both
+
+```
+production  /t/neon-ultra/giesm-2026-flag-race/fixtures  200 · 49.9 KB · athletes ✓ · podium ✓
+staging     /t/neon-ultra/giesm-2026-flag-race/fixtures  200 · 40.3 KB · athletes ✓ · podium ✓
+/giesm (durable short link)                              200 on both
+releases   8498f3a on both (own timestamps)
+```
+
+The 9 KB size difference is real and worth naming: staging's GIESM event is the older volleyball-only record, so its page carries
+the same flag-race content but not the volleyball team standings that production's championship event also publishes. Staging is
+for previewing layout and behaviour, not for being a byte-identical copy of production's editorial content.
+
+**Why the two databases differ at all, stated once:** staging was never seeded with the league's real results. Everything the
+flag-race work added - the intake, the podium, the enrichment - was applied to production first because that is where the
+competition happened. Mirroring it to staging is a deliberate convenience, not a requirement of the deployment.
