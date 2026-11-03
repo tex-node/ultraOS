@@ -27,10 +27,10 @@ export default async function CoachingSelectionPage({
   searchParams,
 }: {
   params: Promise<{ fixtureId: string }>;
-  searchParams: Promise<{ side?: string }>;
+  searchParams: Promise<{ side?: string; inspect?: string }>;
 }) {
   const { fixtureId } = await params;
-  const { side } = await searchParams;
+  const { side, inspect } = await searchParams;
 
   const viewer = await requireCoachingViewer();
   const fixture = await loadSelectionFixture(fixtureId);
@@ -85,6 +85,7 @@ export default async function CoachingSelectionPage({
         advice={advice}
         minGames={developmentConfig.minGames}
         opponentSetupHref={`/coaching/${opponentSeasonClubId}/squad/setup`}
+        inspectedPlayerId={inspect ?? null}
       />
     </>
   );

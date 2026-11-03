@@ -1,21 +1,30 @@
+import Link from "next/link";
 import type { SelectionAdvice, SelectionCandidateResult } from "@/lib/coaching/selection";
+import {
+  fatigueBand,
+  fatigueLabel,
+  formatFoulsPer36,
+  matchFitPercent,
+  whyBench,
+  whyStart,
+} from "@/lib/coaching/selection-presentation";
 import { Card, ConfidenceChip, Num, SectionTitle } from "./ui";
 
-// The Selection / Rotation Advisor's view (P15 I2-b deliverable 2). A plain server component: no
-// hooks, no client JS, so it renders identically in the browser and in the jsdom/static tests.
+// The Selection / Rotation Advisor (P15 I2-b; redesigned in v37).
 //
-// The one rule this file exists to enforce: THE UI MUST NOT OFFER ADVICE IT DOES NOT TRUST. When the
-// advisor returns INSUFFICIENT_DATA - no player has a qualifying sample, e.g. a club with three games
-// against C1's four-game gate - the page still shows the whole ranked list (a coach needs the squad),
-// but no START/ROTATE/BENCH label appears anywhere, and the banner says why. The engine still has to
-// emit a `recommendation` field per the output contract; this view deliberately ignores it in that
-// state rather than trusting it.
+// WHAT CHANGED. The screen used to be one ranked list. The redesign the owner asked for is a coaching decision surface:
+// the recommended lineup, the workload/fatigue matrix, and - for one selected player - the evidence FOR and AGAINST starting
+// him. It is the same engine, the same numbers; the difference is what a coach can see at a glance.
 //
-// Two degradations, handled separately because they mean different things:
-//   - whole response INSUFFICIENT_DATA  -> no labels at all (above).
-//   - matchupState DEGRADED / INSUFFICIENT_DATA with a usable overall -> labels still shown (form,
-//     availability and load are real evidence), but Matchup reads N/A and the banner names what is
-//     missing and links to the squad setup page for the club whose data is absent.
+// TWO INVARIANTS CARRIED OVER, deliberately:
+//   1. THE UI MUST NOT OFFER ADVICE IT DOES NOT TRUST. When the advisor returns INSUFFICIENT_DATA no START label appears
+//      anywhere, and the banner says why. The engine still emits a recommendation per its output contract; this view ignores
+//      it in that state rather than trusting it.
+//   2. Selection is URL state (`?inspect=<playerId>`), not client state. The screen renders identically in a browser, in the
+//      static tests and in print, and a coach can send "look at this player" to another coach as a link.
+//
+// NOTHING IS FAKE. Every number on this page comes from SelectionCandidateResult. Where the engine had no sample (a player
+// with no minutes, a matchup it could not rate) the screen says so - it never prints a plausible-looking default.
 
 export type SelectionViewProps = {
   seasonClubId: string;
@@ -24,216 +33,290 @@ export type SelectionViewProps = {
   opponentName: string;
   fixture: { scheduledAt: Date; isHome: boolean; status: string };
   advice: SelectionAdvice;
-  // C1's minimum games for any dimension (developmentConfig.minGames) - passed in so the banner can
-  // say "X of 4 required" instead of hard-coding a number in two places.
   minGames: number;
-  // Where to send the coach to fix the opponent's missing position/height data.
   opponentSetupHref: string;
+  /** Which player's evidence panel is open (`?inspect=`), if any. */
+  inspectedPlayerId?: string | null;
 };
 
-const dateFormatter = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const dateFormatter = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const shortDate = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
 
-const RECOMMENDATION_LABEL: Record<SelectionCandidateResult["recommendation"], string> = {
-  START: "START",
-  ROTATE: "ROTATE",
-  BENCH: "BENCH",
+const BAND_TONE: Record<ReturnType<typeof fatigueBand>, string> = {
+  LOW: "border-success/40 text-success",
+  MODERATE: "border-warn/40 text-warn",
+  HIGH: "border-danger/50 text-danger",
+  UNKNOWN: "border-line-strong text-text-3",
 };
 
-function Score({ label, value }: { label: string; value: number | null }) {
+function bandChip(candidate: SelectionCandidateResult) {
+  const band = fatigueBand(candidate.loadScore);
   return (
-    <div className="flex items-baseline justify-between gap-2 text-xs">
-      <span className="text-text-3">{label}</span>
-      <span className="font-semibold text-text-1">{value == null ? "N/A" : <Num>{value}</Num>}</span>
+    <span data-chip="fatigue" className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${BAND_TONE[band]}`}>
+      {fatigueLabel(band)}
+    </span>
+  );
+}
+
+function recommendationChip(candidate: SelectionCandidateResult, trusted: boolean) {
+  if (!trusted) return <span className="text-[10px] uppercase tracking-wide text-text-3">unrated</span>;
+  const tone =
+    candidate.recommendation === "START" ? "border-success/40 text-success" : candidate.recommendation === "ROTATE" ? "border-warn/40 text-warn" : "border-line-strong text-text-3";
+  return (
+    <span
+      data-chip="recommendation"
+      data-recommendation={candidate.recommendation}
+      className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tone}`}
+    >
+      {candidate.recommendation}
+    </span>
+  );
+}
+
+function StatBlock({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
+  return (
+    <div className="rounded-lg border border-line bg-ink-900/60 p-3">
+      <p className="text-[10px] uppercase tracking-[.15em] text-text-3">{label}</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums text-text-1">{value}</p>
+      {hint ? <p className="mt-0.5 text-[10px] text-text-3">{hint}</p> : null}
     </div>
   );
 }
 
-function CandidateRow({ candidate, rank, showRecommendation }: { candidate: SelectionCandidateResult; rank: number; showRecommendation: boolean }) {
-  return (
-    <li data-player={candidate.playerId} className="rounded-md border border-line-subtle bg-ink-700 p-3">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-sm font-semibold text-text-1">
-          <span className="mr-2 text-text-3">{rank}.</span>
-          {candidate.jerseyNumber != null ? <span className="mr-1 text-text-3">#{candidate.jerseyNumber}</span> : null}
-          {candidate.name}
-          {candidate.position ? <span className="ml-2 text-xs font-normal text-text-3">{candidate.position}</span> : null}
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="text-xs text-text-3">
-            <Num>{candidate.gamesPlayed}</Num> games
-          </span>
-          {candidate.hasFormSample ? (
-            <span className="text-sm font-bold text-brand-300">
-              <Num>{candidate.overallScore}</Num>
-            </span>
-          ) : (
-            // A player without a form sample has an overall computed from availability/load alone.
-            // Showing that number would read as a quality score it is not, so it is shown as a dash
-            // and the reason is spelled out.
-            <span className="text-xs text-text-3" title="No form sample yet - this player is ranked below players who have one">
-              no form sample
-            </span>
-          )}
-          {showRecommendation ? (
-            <span
-              data-recommendation={candidate.recommendation}
-              className={`rounded px-2 py-0.5 text-[10px] font-bold tracking-wide ${
-                candidate.recommendation === "START"
-                  ? "bg-brand-400/20 text-brand-300"
-                  : candidate.recommendation === "ROTATE"
-                    ? "bg-info/20 text-info"
-                    : "bg-ink-600 text-text-3"
-              }`}
-            >
-              {RECOMMENDATION_LABEL[candidate.recommendation]}
-            </span>
-          ) : null}
-        </span>
-      </div>
-
-      <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-4">
-        <Score label="Form" value={candidate.formScore} />
-        <Score label="Matchup" value={candidate.matchupScore} />
-        <Score label="Availability" value={candidate.availabilityScore} />
-        <Score label="Load" value={candidate.loadScore} />
-      </div>
-
-      {candidate.whyNot ? <p className="mt-2 text-xs text-text-2">{candidate.whyNot}</p> : null}
-
-      {candidate.evidence.length > 0 ? (
-        <details className="mt-2 text-xs text-text-2">
-          <summary className="cursor-pointer select-none text-info">Evidence</summary>
-          <ul className="mt-2 space-y-2">
-            {candidate.evidence.map((e) => (
-              <li key={e.metric} className="rounded border border-line-subtle p-2">
-                <p className="flex items-baseline justify-between gap-2 text-text-1">
-                  <span className="font-semibold">{e.metric}</span>
-                  <ConfidenceChip confidence={e.confidence} />
-                </p>
-                <p className="mt-1">
-                  Value: {e.playerValueLabel} · percentile <Num>{e.percentile}</Num>
-                </p>
-                <p className="text-text-3">
-                  Baseline: {e.baseline.label} (n=<Num>{e.baseline.peerCount}</Num>, median <Num>{e.baseline.medianLabel}</Num>)
-                </p>
-                <p className="text-text-3">Sample: {e.sample.label}</p>
-                <p className="text-text-3">Gate: {e.gate}</p>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-    </li>
-  );
-}
-
-export function SelectionView({ seasonClubId, seasonClubName, opponentSeasonClubId, opponentName, fixture, advice, minGames, opponentSetupHref }: SelectionViewProps) {
-  const insufficient = advice.status === "INSUFFICIENT_DATA";
-  const matchupDegraded = advice.matchupState === "DEGRADED";
-  const matchupMissing = advice.matchupState === "INSUFFICIENT_DATA";
-  // No labels when the overall advice is not trustworthy (see the header).
-  const showRecommendation = !insufficient;
-
-  const starters = advice.candidates.filter((c) => c.recommendation === "START");
-  const rotation = advice.candidates.filter((c) => c.recommendation === "ROTATE");
-  const bench = advice.candidates.filter((c) => c.recommendation === "BENCH");
-  const maxGames = advice.candidates.reduce((m, c) => Math.max(m, c.gamesPlayed), 0);
+export function SelectionView({ seasonClubName, opponentName, fixture, advice, minGames, opponentSetupHref, inspectedPlayerId }: SelectionViewProps) {
+  const trusted = advice.status === "OK";
+  const starters = trusted ? advice.candidates.filter((candidate) => candidate.recommendation === "START") : [];
+  const inspected = advice.candidates.find((candidate) => candidate.playerId === inspectedPlayerId) ?? starters[0] ?? advice.candidates[0];
+  const candidates = advice.candidates;
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-text-1">Rotation</h1>
-      <p className="mt-1 text-sm text-text-2">
-        {seasonClubName} vs {opponentName} · {dateFormatter.format(fixture.scheduledAt)} · {fixture.isHome ? "home" : "away"}
-      </p>
-
-      {insufficient ? (
-        <div role="status" data-state="insufficient" className="mt-4 rounded-md border border-warn/40 bg-warn/10 p-4 text-sm text-warn">
-          <p className="font-bold">
-            Insufficient games to generate a recommendation (<Num>{maxGames}</Num> of <Num>{minGames}</Num> required).
-          </p>
-          <p className="mt-1">
-            Here is the raw data. No start/rotation advice is shown, because the sample cannot support one - every
-            player&apos;s form reads 0 until they have played {minGames} games this season.
-          </p>
+    <div className="space-y-4">
+      {/* Fixture header: who, when, and the squad this advice is for. */}
+      <Card>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] uppercase tracking-[.2em] text-brand-400">Selection &amp; rotation advisor</p>
+            <h1 className="mt-1 font-display text-2xl font-semibold text-text-1">
+              {seasonClubName} <span className="text-text-3">v</span> {opponentName}
+            </h1>
+            <p className="mt-1 text-sm text-text-2">
+              {dateFormatter.format(fixture.scheduledAt)} · {fixture.isHome ? "home" : "away"} · {fixture.status}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+            <StatBlock label="Squad" value={<Num>{candidates.length}</Num>} hint="players with a season record" />
+            <StatBlock label="Recommended" value={trusted ? <Num>{starters.length}</Num> : "—"} hint={trusted ? "starters by rank" : "not enough sample"} />
+            <StatBlock
+              label="Matchup"
+              value={advice.matchupState === "OK" ? "Rated" : advice.matchupState === "DEGRADED" ? "Partial" : "Matchup is N/A"}
+              hint={advice.matchupState === "OK" ? "against this opponent" : "score renormalized over the components that exist"}
+            />
+          </div>
         </div>
-      ) : null}
+      </Card>
 
-      {!insufficient && matchupDegraded ? (
-        <div role="status" data-state="degraded" className="mt-4 rounded-md border border-warn/40 bg-warn/10 p-3 text-sm text-warn">
-          <p className="font-bold">Matchup is degraded: the opponent&apos;s player positions are not recorded.</p>
-          <p className="mt-1">
-            Matchup therefore scores defensive assignments only, and is shown as a number rather than a position
-            comparison.{" "}
-            <a href={opponentSetupHref} className="underline">
-              Add {opponentName}&apos;s positions and heights
-            </a>{" "}
-            to restore the full comparison.
+      {!trusted ? (
+        <Card className="border-warn/40 bg-warn/[.06]">
+          <p className="text-sm font-semibold text-warn">Insufficient games to generate a recommendation</p>
+          <p className="mt-1 text-sm text-text-2">{advice.insufficientReason ?? "The squad does not have a qualifying sample."}</p>
+          <p className="mt-1 text-xs text-text-3">
+            The ranked list below is still real - it shows what has been measured - but no player is given a verdict
+            until at least {minGames} games are recorded.
           </p>
-        </div>
-      ) : null}
-
-      {!insufficient && matchupMissing ? (
-        <div role="status" data-state="no-matchup" className="mt-4 rounded-md border border-line bg-ink-700 p-3 text-sm text-text-2">
-          <p className="font-bold text-text-1">Matchup is N/A for this game.</p>
-          <p className="mt-1">
-            {advice.notes[0] ?? "There is no opponent game plan to compare against yet."} The overall score is renormalized
-            over form, availability and load, so players are not punished for a missing component.
-          </p>
-        </div>
-      ) : null}
-
-      <SectionTitle>
-        {insufficient ? "Ranked squad (raw data)" : `Starters (${starters.length})`}
-      </SectionTitle>
-      <ul className="space-y-2">
-        {(insufficient ? advice.candidates : starters).map((candidate, index) => (
-          <CandidateRow key={candidate.playerId} candidate={candidate} rank={index + 1} showRecommendation={showRecommendation} />
-        ))}
-      </ul>
-
-      {!insufficient && rotation.length > 0 ? (
-        <>
-          <SectionTitle>Rotation ({rotation.length})</SectionTitle>
-          <ul className="space-y-2">
-            {rotation.map((candidate, index) => (
-              <CandidateRow key={candidate.playerId} candidate={candidate} rank={starters.length + index + 1} showRecommendation={showRecommendation} />
-            ))}
-          </ul>
-        </>
-      ) : null}
-
-      {!insufficient && bench.length > 0 ? (
-        <>
-          <SectionTitle>Bench ({bench.length})</SectionTitle>
-          <ul className="space-y-2">
-            {bench.map((candidate, index) => (
-              <CandidateRow key={candidate.playerId} candidate={candidate} rank={starters.length + rotation.length + index + 1} showRecommendation={showRecommendation} />
-            ))}
-          </ul>
-        </>
-      ) : null}
-
-      {advice.notes.length > 0 ? (
-        <Card className="mt-4">
-          <p className="text-xs font-semibold uppercase tracking-[.12em] text-text-3">Notes</p>
-          <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-text-2">
-            {advice.notes.map((note) => (
-              <li key={note}>{note}</li>
-            ))}
-          </ul>
         </Card>
       ) : null}
 
-      <p className="mt-4 text-xs text-text-3">
-        Ranks are the advisor&apos;s, not a selection. Form is the last five games on the development engine&apos;s own
-        dimensions; matchup comes from the game plan&apos;s defensive assignments
-        {advice.squadPositionCoverage ? ` (${advice.squadPositionCoverage.usable}/${advice.squadPositionCoverage.total} squad players have a recorded position)` : ""}.
-      </p>
-      <p className="mt-2 text-xs">
-        <a href={`/coaching/${seasonClubId}/opponents/${opponentSeasonClubId}`} className="text-info underline">
-          Open the full game plan for {opponentName}
-        </a>
-      </p>
+      {advice.matchupState !== "OK" ? (
+        <Card className="border-line-strong">
+          <p className="text-sm font-semibold text-text-1">
+            {advice.matchupState === "DEGRADED" ? "Matchup is partially rated" : "Matchup cannot be rated"}
+          </p>
+          <p className="mt-1 text-sm text-text-2">
+            Form, availability and freshness are still measured. The opponent side is missing the position or height data the
+            matchup component needs.
+          </p>
+          <Link href={opponentSetupHref} className="mt-2 inline-block text-xs text-info underline">
+            Complete the {opponentName} squad setup
+          </Link>
+        </Card>
+      ) : null}
+
+      <div className="grid gap-4 lg:grid-cols-12">
+        {/* Recommended lineup */}
+        <div className="lg:col-span-5">
+          <SectionTitle>{trusted ? "Recommended lineup" : "Ranked squad"}</SectionTitle>
+          <ol className="space-y-2">
+            {candidates.map((candidate, index) => {
+              const selected = inspected?.playerId === candidate.playerId;
+              const fit = matchFitPercent(candidate);
+              return (
+                <li key={candidate.playerId} data-player={candidate.playerId}>
+                  <Link
+                    href={`?inspect=${candidate.playerId}`}
+                    className={`flex items-center justify-between gap-3 rounded-lg border p-3 transition ${
+                      selected ? "border-brand-400/60 bg-brand-400/[.06]" : "border-line bg-ink-800 hover:border-line-strong"
+                    }`}
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-ink-900 text-xs font-bold text-brand-300">
+                        {candidate.position ?? "—"}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-2 text-sm font-semibold text-text-1">
+                          <span className="text-text-3">{index + 1}.</span>
+                          <span className="truncate">{candidate.name}</span>
+                          {candidate.jerseyNumber != null ? <span className="text-xs font-normal text-text-3">#{candidate.jerseyNumber}</span> : null}
+                        </span>
+                        <span className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-3">
+                          <span>Form <Num>{candidate.formScore}</Num></span>
+                          <span>Fit {fit === null ? "N/A" : `${fit}%`}</span>
+                          <span>Fouls/36 {formatFoulsPer36(candidate)}</span>
+                        </span>
+                      </span>
+                    </span>
+                    <span className="shrink-0">{recommendationChip(candidate, trusted)}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+
+        {/* Evidence for the selected player */}
+        <div className="lg:col-span-7">
+          <SectionTitle>Why / why not</SectionTitle>
+          {inspected ? (
+            <Card>
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line pb-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-text-1">
+                    {inspected.jerseyNumber != null ? <span className="mr-1 text-text-3">#{inspected.jerseyNumber}</span> : null}
+                    {inspected.name}
+                  </h3>
+                  <p className="text-xs text-text-3">
+                    {inspected.position ?? "position unknown"} · <Num>{inspected.gamesPlayed}</Num> games in the window · overall{" "}
+                    <Num>{inspected.overallScore}</Num>
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {bandChip(inspected)}
+                  <ConfidenceChip confidence={inspected.formConfidence} />
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <StatBlock label="Rolling form" value={<><Num>{inspected.formScore}</Num><span className="text-xs text-text-3"> / 100</span></>} hint="last 5 games" />
+                <StatBlock label="Freshness" value={<><Num>{inspected.loadScore}</Num><span className="text-xs text-text-3"> / 100</span></>} hint="higher is fresher" />
+                <StatBlock label="Fouls / 36" value={formatFoulsPer36(inspected)} hint="lower is better" />
+                <StatBlock label="Match fit" value={matchFitPercent(inspected) === null ? "N/A" : `${matchFitPercent(inspected)}%`} hint="vs this opponent" />
+              </div>
+
+              <div className="mt-3 overflow-x-auto rounded-lg border border-line">
+                <table className="w-full text-left text-[11px]">
+                  <thead className="bg-ink-900/60 text-text-3">
+                    <tr>
+                      <th className="px-3 py-1.5 font-semibold">Evidence</th>
+                      <th className="px-3 py-1.5 font-semibold">Value</th>
+                      <th className="px-3 py-1.5 font-semibold">Percentile</th>
+                      <th className="px-3 py-1.5 font-semibold">Sample</th>
+                      <th className="px-3 py-1.5 font-semibold">Gate</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {inspected.evidence.map((row) => (
+                      <tr key={`${row.metric}-${row.baseline.kind}`}>
+                        <td className="px-3 py-1.5 text-text-2">{row.metric}</td>
+                        <td className="px-3 py-1.5 text-text-1">{row.playerValueLabel}</td>
+                        <td className="px-3 py-1.5 text-text-2">
+                          <Num>{row.percentile}</Num>th percentile <span className="text-text-3">? baseline: {row.baseline.label}</span>
+                        </td>
+                        <td className="px-3 py-1.5 text-text-3">{row.sample.label}</td>
+                        <td className="px-3 py-1.5 text-text-3">{row.gate}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="rounded-lg border border-success/25 bg-success/[.05] p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[.15em] text-success">Why start</p>
+                  <ul className="mt-1.5 space-y-1 text-xs text-text-2">
+                    {whyStart(inspected).map((reason) => (
+                      <li key={reason} className="flex gap-1.5"><span className="text-success">•</span><span>{reason}</span></li>
+                    ))}
+                    {whyStart(inspected).length === 0 ? <li className="text-text-3">No measured strength clears the evidence bar.</li> : null}
+                  </ul>
+                </div>
+                <div className="rounded-lg border border-danger/25 bg-danger/[.05] p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[.15em] text-danger">Risks &amp; limits</p>
+                  <ul className="mt-1.5 space-y-1 text-xs text-text-2">
+                    {whyBench(inspected).map((reason) => (
+                      <li key={reason} className="flex gap-1.5"><span className="text-danger">•</span><span>{reason}</span></li>
+                    ))}
+                    {whyBench(inspected).length === 0 ? <li className="text-text-3">Nothing measured argues against starting him.</li> : null}
+                  </ul>
+                </div>
+              </div>
+            </Card>
+          ) : (
+            <Card quiet>
+              <p className="text-sm text-text-2">No players on this squad yet.</p>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Workload matrix */}
+      <div>
+        <SectionTitle>Roster workload &amp; fatigue</SectionTitle>
+        <div className="overflow-x-auto rounded-lg border border-line">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-ink-900/60 text-text-3">
+              <tr>
+                <th className="px-3 py-2 font-semibold">Player</th>
+                <th className="px-3 py-2 font-semibold">Status</th>
+                <th className="px-3 py-2 font-semibold">Form (5g)</th>
+                <th className="px-3 py-2 font-semibold">Freshness</th>
+                <th className="px-3 py-2 font-semibold">Fatigue</th>
+                <th className="px-3 py-2 font-semibold">Fouls/36</th>
+                <th className="px-3 py-2 text-right font-semibold">Evidence</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {candidates.map((candidate) => (
+                <tr key={candidate.playerId} data-player={candidate.playerId} className="hover:bg-white/[.03]">
+                  <td className="px-3 py-2 text-text-1">
+                    {candidate.name} <span className="text-text-3">({candidate.position ?? "—"})</span>
+                  </td>
+                  <td className="px-3 py-2">{recommendationChip(candidate, trusted)}</td>
+                  <td className="px-3 py-2 text-warn"><Num>{candidate.formScore}</Num></td>
+                  <td className="px-3 py-2 text-text-2"><Num>{candidate.loadScore}</Num></td>
+                  <td className="px-3 py-2">{bandChip(candidate)}</td>
+                  <td className="px-3 py-2 text-text-2">{formatFoulsPer36(candidate)}</td>
+                  <td className="px-3 py-2 text-right">
+                    <Link href={`?inspect=${candidate.playerId}`} className="text-info underline-offset-2 hover:underline">
+                      Inspect
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {advice.notes.length > 0 ? (
+        <Card quiet>
+          <SectionTitle>How this was computed</SectionTitle>
+          <ul className="space-y-1 text-xs text-text-2">
+            {advice.notes.map((note) => (
+              <li key={note} className="flex gap-1.5"><span className="text-text-3">•</span><span>{note}</span></li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[10px] text-text-3">Window: last {shortDate.format(fixture.scheduledAt)} fixture, 5-game form, 14-day load.</p>
+        </Card>
+      ) : null}
     </div>
   );
 }

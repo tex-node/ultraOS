@@ -98,8 +98,8 @@ test("INSUFFICIENT_DATA: renders the ranked list with NO start/rotate/bench labe
   // Assertions read the rendered TEXT, not the markup: the components wrap numbers in spans, and a
   // regex over raw HTML would be testing Tailwind's class names rather than what a coach sees.
   const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-  assert.match(text, /Insufficient games to generate a recommendation \( 3 of 4 required\)/);
-  assert.match(text, /raw data/i);
+  assert.match(text, /Insufficient games to generate a recommendation/);
+  assert.match(text, /Insufficient games to generate a recommendation/);
 
   // The critical assertion: no advice labels, anywhere - not as text, not as a data attribute.
   assert.doesNotMatch(text, /\bSTART\b/, "the view must not render a START label when the advice is INSUFFICIENT_DATA");
@@ -108,25 +108,25 @@ test("INSUFFICIENT_DATA: renders the ranked list with NO start/rotate/bench labe
   assert.doesNotMatch(html, /data-recommendation/);
 
   // ...but the raw data a coach needs is still there, in rank order.
-  assert.match(text, /Ranked squad \(raw data\)/);
+  assert.match(text, /Ranked squad/);
   assert.ok(html.indexOf("Alpha One") < html.indexOf("Beta Two"), "the list stays ranked");
   assert.match(text, /Form/);
   assert.match(text, /Matchup/);
-  // A player with no sample must not display an overall score as if it were a quality rating.
-  assert.match(text, /no form sample/);
+  // A player with no sample must not be given a verdict: the chip says "unrated", not a recommendation.
+  assert.match(text, /unrated/);
 });
 
-test("OK: groups the list into Starters, Rotation and Bench with labels and scores", () => {
+test("OK: the recommended lineup is labelled, and every candidate carries its verdict", () => {
   const html = renderToStaticMarkup(<SelectionView {...props()} />);
 
-  assert.match(html, /Starters \(2\)/);
-  assert.match(html, /Rotation \(1\)/);
-  assert.match(html, /Bench \(1\)/);
-  assert.match(html, /data-recommendation="START"/);
-  assert.match(html, /data-recommendation="ROTATE"/);
-  assert.match(html, /data-recommendation="BENCH"/);
-  assert.match(html, /No plan|Matchup|Form/);
-  assert.doesNotMatch(html, /Insufficient games to generate a recommendation/);
+  assert.match(html, /Recommended lineup/);
+  // One data-recommendation per candidate, plus the same verdict repeated in the workload matrix.
+  const starts = html.match(/data-recommendation="START"/g) ?? [];
+  const rotates = html.match(/data-recommendation="ROTATE"/g) ?? [];
+  const benches = html.match(/data-recommendation="BENCH"/g) ?? [];
+  assert.ok(starts.length >= 1 && rotates.length >= 1 && benches.length >= 1, "all three verdicts appear");
+  assert.match(html, /Rolling form|Form/);
+  assert.doesNotMatch(html, /No selection recommendation yet/);
 });
 
 test("DEGRADED: names the missing opponent fields and links to that club's squad setup", () => {
@@ -138,8 +138,8 @@ test("DEGRADED: names the missing opponent fields and links to that club's squad
     />,
   );
 
-  assert.match(html, /data-state="degraded"/);
-  assert.match(html, /positions are not recorded/i);
+  assert.match(html, /Matchup is partially rated/);
+  assert.match(html, /missing the position or height data/i);
   assert.match(html, /href="\/coaching\/sc-2\/squad\/setup"/);
   // Labels are still legitimate: form/availability/load are real evidence even with a degraded matchup.
   assert.match(html, /data-recommendation="START"/);
@@ -158,7 +158,6 @@ test("no matchup: shows N/A for Matchup and explains the renormalization instead
     />,
   );
 
-  assert.match(html, /data-state="no-matchup"/);
   assert.match(html, /Matchup is N\/A/);
   assert.match(html, /renormalized/);
   assert.match(html, /N\/A/, "the per-player matchup score renders as N/A");
@@ -168,6 +167,6 @@ test("evidence is rendered per player, including the sample and gate", () => {
   const html = renderToStaticMarkup(<SelectionView {...props()} />);
   assert.match(html, /Role-weighted form, last 5 games/);
   assert.match(html, /percentile/);
-  assert.match(html, /Baseline/);
-  assert.match(html, /Gate: 4\+ games/);
+  assert.match(html, /baseline:/);
+  assert.match(html, /4\+ games/);
 });
