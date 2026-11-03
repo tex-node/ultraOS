@@ -5,7 +5,7 @@ import { homeForPersona, personasForRoles, type Persona } from "@/lib/workspace/
 // Which viewport is active for this request, resolved on the server from the session's roles plus the cookie the switcher
 // sets. A cookie that names a persona the user no longer holds is ignored, so losing a role immediately loses its tools -
 // the sidebar is not a client-side preference that outlives authorization.
-export const WORKSPACE_PERSONA_COOKIE = "workspace_persona";
+import { WORKSPACE_PERSONA_COOKIE } from "@/lib/workspace/persona-cookie";
 
 export async function getSessionRoles(): Promise<string[]> {
   const session = await auth();

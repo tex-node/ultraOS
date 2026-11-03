@@ -4,11 +4,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { homeForPersona, personasForRoles, type Persona } from "@/lib/workspace/nav";
 import { getSessionRoles } from "@/lib/workspace/session";
+import { WORKSPACE_PERSONA_COOKIE } from "@/lib/workspace/persona-cookie";
 
 // Persist the viewport the user chose. A cookie rather than a query parameter, because the choice should survive navigation -
 // a coach who opens the admin workspace once should not have to re-choose on every page load.
-export const WORKSPACE_PERSONA_COOKIE = "workspace_persona";
-
 export async function choosePersona(formData: FormData): Promise<void> {
   const wanted = formData.get("persona");
   const roles = await getSessionRoles();
