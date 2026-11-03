@@ -15016,3 +15016,73 @@ Each is one crop, one read, one transcription and one validation run - roughly t
 pipeline exists. The remaining seven are not blocked by code; they are blocked by the reading, and I will keep going in that
 order unless the league can supply the Genius Sports CSV/PDF export, which the project already ingests with **zero field
 differences across 32 games** and which would remove the transcription risk entirely.
+
+## 2026-11-03 - Streak v36: persona-scoped workspace navigation and the capture viewport
+
+### What the spec asked for, and what already existed
+
+Part of the requested architecture was already in place, which is worth saying plainly rather than rebuilding it: `PortalShell`
+was already serving `/public`, `/t/[org]/[competition]` and the vanity slugs, and `WorkspaceShell` already rendered a
+sidebar with a role-aware link filter. What was missing was the part that makes it a *persona* architecture rather than a
+filtered list, and the capture viewport did not exist at all.
+
+### What changed
+
+**1. The sidebar is now a viewport, not a list.** `src/lib/workspace/nav.ts` maps `UserRoleAssignment` roles to a persona
+(`admin | coach | scorer | scout | fan`) and each persona to its own sections:
+
+| persona | sees |
+| --- | --- |
+| admin | Live & Game Control · Coach hub · Manage · Tournament · Scouting · Commerce · System |
+| coach | Coach hub · Scouting |
+| scorer | Live & Game Control |
+| scout | Tournament · Scouting |
+| fan | nothing operational - by design |
+
+The union of a user's personas is what they can open; the sidebar shows **one at a time**. Eight unit tests pin the mapping,
+including the two failures the spec names: a coach must never see Commerce or System, a scorekeeper must never see
+administration.
+
+**2. A context switcher, resolved on the server.** `resolveViewport()` reads the session's roles plus a `workspace_persona`
+cookie and returns the active persona. A cookie that names a persona the user no longer holds is **ignored**, so losing a role
+loses its tools immediately - the viewport is not a client preference that outlives authorization. The switcher is a chip in
+the sidebar header: it names the current view and, for a person with several roles, offers the others; each choice redirects
+to that persona's home.
+
+**3. A distraction-free capture viewport: `/gameday/console/[fixtureId]`.** Bare layout, no navigation at all, two team
+columns with a 56 px `+1 / +2 / +3` pad, undo, pause/start/resume, and a single deliberate "Full console" link back. Scoring
+here is **team-level** (`playerId` empty on purpose): a courtside scorer keeping up with a fast break should not have to pick a
+name, and player attribution plus shot charts stay on the full console, which now links to capture mode.
+
+### Two build failures, both real
+
+The first deploy failed with `Export choosePersona doesn't exist in target module`. Cause: `persona-actions.ts` is a
+`"use server"` module, and those may export **only async functions** - I had also exported the cookie-name constant. The
+constant moved to `persona-cookie.ts`; the build then got past it and hit the second failure.
+
+The second was `SIGABRT` - V8 heap OOM in the Next build worker at the deploy script's hardcoded 4 GB, on a host with 8 GB
+free. `deploy.sh` now takes `BUILD_HEAP_MB` (default 6144); with 6 GB the build compiled in 2.2 min and the deploy completed.
+That is a knob the script should have had before this week, not after.
+
+### Verified
+
+```
+staging release 7ff3fed (built with the 6 GB heap)
+/gameday · /coaching · /admin   307 (login redirect - the anonymous answer)
+/t/neon-ultra/giesm-2026        200 (portal shell unchanged)
+e2e 7/7 · unit 1066 pass (8 new) · component pass · canonical-write ratchet 4/4
+```
+
+Production was **not** deployed: this is a navigation change a person should look at before it reaches customers, and staging
+is where to look.
+
+### What is not done yet, from the same spec
+
+- The **route groups** `(portal) / (workspace) / (capture)` are not physical directories. The shells exist and are applied -
+  `/public` and `/t/...` use PortalShell, capture has its own layout - but the App Router tree still has no group folders.
+  That is cosmetic for behaviour and mechanical to do; it is the next step if the folder names are wanted.
+- The **coach hub deep pages** (`/coaching/selection/[fixtureId]`, `/coaching/[seasonClubId]/opponents/[id]`,
+  `/coaching/[seasonClubId]/training`) already exist under season-club paths; the nav's new `/coaching/squad`,
+  `/coaching/selection`, `/coaching/opponents`, `/coaching/training` entries need those index routes created (today they would
+  404 from the sidebar). That is the next PR-sized piece, and it is the one that makes the coach persona real rather than
+  merely filtered.
