@@ -14805,3 +14805,84 @@ These belong to other services and are the owner's call, not mine: `/root/Powerv
 someone else's running service.
 
 **Headroom now:** 65 GB free, and one deploy cycle costs ~7 MB net, so this is months of deploys rather than days.
+
+## 2026-11-03 - Streak v34: the scoresheet intake for LBCL games 40-60, and the three things stopping the write
+
+### What the data actually is
+
+The fourteen screenshots cover **thirteen LBCL fixtures** (two are duplicates) from 17-25 October. The league's record for
+those games today is a **scoreline only**:
+
+```
+10-17 .. 10-25 · 13 fixtures · every one FINAL · PlayerStat rows: 0  (games from 02-04 Oct have 20-24 rows each)
+```
+
+So the request is real: there is a month of results without a box score behind them.
+
+### OCR is not the answer, and the repository already says so
+
+`documentation/OCR_SCORESHEET_INGESTION.md` measured the image path at **0 review-ready sheets out of 20 real captures** and
+pivoted to CSV/Excel. These are 720×1640 phone screenshots of Instagram posts, which is worse than the captures that were
+measured. Running tesseract over them would produce confident garbage.
+
+What does work is **crop → upscale → read**, and then check the reading against something the sheet prints more than once.
+A 4× crop of one table is comfortably legible; a whole page at 720 px is not.
+
+### The checksum rule, and why it earned its keep immediately
+
+Every FIBA sheet states the same facts three ways: the final score, the period scores, and the team totals row. A
+transcription that disagrees with those is wrong, however careful it looked. I wrote `scripts/lbcl-batch-validate.ts` to
+enforce exactly that - per-row `PTS = 2PM*2 + 3PM*3 + FTM`, `2PM+3PM = FGM`, `2PA+3PA = FGA`, made ≤ attempted, player sums
+vs printed team totals, and period sums vs the final score - and it caught **five** errors in my own first pass at Game 42:
+
+```
+OGR: turnovers sum 18 != printed 16          LFK: assists sum 17 != printed 13
+OGR: rebounds sum 28 != printed 33           LFK: fouls sum 12 != printed 13
+LFK: rebounds sum 35 != printed 40
+```
+
+All five were reading errors, and each has a definite cause: OKH #15's TO was 0 not 2; LEO #6 was 2-off-2 = 4 rebounds with
+0 assists, not 0 rebounds with 4 assists; LEO #7's DR was 3 not 5; and both teams print a "Team/Coach" rebound row
+(5 each) that belongs to nobody, which the validator now accounts for explicitly instead of calling it a mismatch.
+
+**Game 42 (Ogra Hoop Kings 49 - 61 Leo Kareem Foundation) now passes every check**, and the file is committed:
+`scripts/data/lbcl-2026-game42.json` - 23 player rows, periods 14-16 / 11-17 / 17-14 / 7-14, full shooting splits, rebounds,
+assists, turnovers, fouls, +/-, efficiency, and the advanced team block (paint points, fast-break points, bench points,
+biggest lead, PPP, time with lead).
+
+### Three blockers in the write path (this is where it stopped)
+
+I did not get the row into the database, and the reasons are code, not data:
+
+1. **Competition slug.** The batch named the tournament `lagos-basketball-community-league`; the existing competition's slug
+   is `lbcl`, so the importer tried to create a second competition and hit the `(organizationId, name)` unique constraint.
+   Fixed in the batch.
+2. **Period convention.** One attempt wrote periods as **cumulative** scores (`2:25-33`, `4:49-61`) where the stored
+   convention is **per-period** (the October games hold `2:15-6`). That attempt was reverted; the periods for that game are
+   empty again, as they were before.
+3. **Player identity.** The importer creates a `Player` for a name it does not recognise, and then collides with
+   `(seasonClubId, jerseyNumber)` because the October import already filled those numbers with its own spellings
+   ("Ibrahim Dal" at #0, "Nnerive Peter" at #10, "Obasana Sunday" with no number). I mapped all 14 mismatched names onto the
+   stored identities and it **still** creates - the matcher is not name-based, or not only name-based.
+
+The database is clean: `PlayerStat 0`, `TeamStat 0`, `GamePeriodScore 0` for that game, exactly as it was before the streak.
+
+### What is committed, and what is not
+
+```
+web/scripts/lbcl-batch-validate.ts            the checksum gate (the part that makes hand transcription safe)
+web/scripts/data/lbcl-2026-game42.json        Game 42, fully reconciled - ready to load once the matcher is fixed
+13 fixtures identified                        10-17 .. 10-25, each with its sheet and its printed totals
+```
+
+Not committed: rows for the other twelve games. Each needs the same crop-read-reconcile pass, and there is no point
+transcribing twelve more sheets into a pipeline that refuses to write one.
+
+### The next step, precisely
+
+Fix `external-stats-ingestion.ts` player resolution: before `player.create`, look the player up by
+`(seasonClubId, jerseyNumber)` **and** fall back to an athlete name match within the club (normalised: surname + first
+initial, since the sheet and the roster disagree on order and spelling), and only create when neither matches. That is a
+~20-line change with a test, after which the remaining twelve games are mechanical: crop, read, validate, ingest.
+
+I would rather hand over twelve sheets and one broken matcher than twelve unverified box scores.
