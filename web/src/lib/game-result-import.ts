@@ -193,7 +193,14 @@ export async function importGameResult(organizationId: string, input: GameResult
     });
     if (!fixture) return { fixtureId: input.fixtureId, status: "BLOCKED", reason: "Fixture not found.", homeMatches: [], awayMatches: [] };
     if (fixture.status === "FINAL" || fixture.game?.status === "FINAL") {
-      return { fixtureId: input.fixtureId, status: "BLOCKED", reason: "Fixture is already FINAL. Use the supersede workflow instead of importing again.", homeMatches: [], awayMatches: [] };
+      // A FINAL fixture is normally a re-import and must go through supersede. But an LBCL game can be marked FINAL from a
+      // results sheet days before anyone transcribes its box score - in that case this import is adding the FIRST
+      // statistics, not replacing any, and refusing it would mean the player data could never arrive. The distinction is
+      // whether statistics already exist, so that is what is checked.
+      const existingStats = fixture.game ? await tx.playerStat.count({ where: { gameId: fixture.game.id } }) : 0;
+      if (existingStats > 0) {
+        return { fixtureId: input.fixtureId, status: "BLOCKED", reason: "Fixture is already FINAL and already has statistics. Use the supersede workflow instead of importing again.", homeMatches: [], awayMatches: [] };
+      }
     }
     if (fixture.homeSeasonClub!.club.shortName.toUpperCase() !== input.homeShortName.toUpperCase()
       || fixture.awaySeasonClub!.club.shortName.toUpperCase() !== input.awayShortName.toUpperCase()) {
