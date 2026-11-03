@@ -14663,3 +14663,87 @@ in the runbook names the cause (signature mismatch, missing secret, or payload).
 **State:** production `d8e7abd`, `/api/v1/live` 200, webhook reachable and verifying, credentials and product ids in place, and
 the single open item unchanged — a successful charge (₦100 or the USD equivalent) followed by a refund, which should leave
 `ORG_UPGRADED_BY_BACHS` and then `ORG_DOWNGRADED_BY_BACHS` in the audit log. Everything on our side of that line is verified.
+
+## 2026-11-03 - Streak v33: the GIESM page now shows the flag race, and the venue walk-ups are in the system
+
+### What was actually wrong
+
+The flag-race results were **already published** in `Event.results` — all four categories, including both flag races. The
+problem was which page a reader lands on. `/giesm` was served by the registration experience, and that loader requires a
+`PUBLISHED` event with an `OPEN` public form:
+
+```
+loadPublicRegistration -> event.status = "PUBLISHED" && form.status = "OPEN" && publicEnabled
+GIESM event            -> COMPLETED   ·  form closesAt 2026-10-22
+/giesm                 -> 404        (9.7 KB error page, the day after the event finished)
+```
+
+So the one link the organiser hands out died exactly when the results became interesting. The results themselves were never
+missing: `/public/events/giesm-2026-13a3b800` and `/t/neon-ultra/giesm-2026` both rendered them — but nobody visits a locator
+hash and a tournament slug is not a brand URL.
+
+### What changed
+
+1. **`/giesm` is durable.** It serves registration while a form is accepting, otherwise the finished event's published
+   results, otherwise an honest "results not published yet" page. A real event no longer 404s at its own short link.
+2. **One results board, three surfaces.** `src/app/components/event-results-board.tsx` renders for `/giesm`,
+   `/public/events/<locator>` and `/t/<org>/<competition>`. Previously each page had its own copy of the same list, and only
+   one of them could have shown the extra facts.
+3. **The payload carries what a race needs.** `Event.results` placements gained optional `detail` (club/team), `bib`, `time`
+   and `note`; categories gained `gender`. All optional, so the old payloads still parse — and `buildResultsBoard()` groups
+   team standings from individual events, medals the top three, and orders by rank even when the payload lists them out of
+   order. **Nothing is invented:** a field that is absent renders as absent.
+
+Ten unit tests pin the shape, the grouping, the ordering, the medals, and the "absent stays absent" rule.
+
+### The intake
+
+The 17 male and 2 female flag-race athletes who were registered on paper at the venue are now in the system, in a new
+competition `GIESM 2026 Flag Race` (sport `flag-race`) with a `2026` season and one division per gender. The bib they were
+given at the venue is stored as `seed`, because `Entrant` has no bib column and seed is the entry-order integer the console
+already sorts by:
+
+```
+Male   #01 Wisdom Gambo        … #17 Houndealo Felix
+Female #01 Rita Dickson        #02 Sara Testimory
+19 entrants · 17 male · 2 female
+```
+
+`scripts/giesm-2026-flagrace-closeout.ts` does intake and enrichment together, dry-run by default, idempotent (a second run
+reports `created 0 · unchanged 19`).
+
+### Two data fixes the run exposed
+
+- **A name that appeared twice, spelled differently.** The published payload said "Sara Testimony"; the venue sheet and the
+  athlete record say "Sara Testimory". The bib therefore attached to nobody and the page said "Bib not recorded at intake"
+  for a person whose bib was on the sheet. The results now use the organiser's spelling, and the bib (02) attaches.
+- **A note that outlived its fact.** The first enrichment added "Bib not recorded at intake" to Sara; after the spelling fix
+  she had both a bib *and* that note, because the note was carried forward. The transformation now strips any previous note
+  before deciding, so a reason cannot outlive the thing it described.
+
+### What the page shows now
+
+```
+/giesm                                           200 · 28.5 KB
+  Team standings · Individual events · Gold medal
+  Houndealo Felix #17 · Ekechukwu Isaac #03 · Onugwu Obina (bib not recorded)
+  Rita Dickson #01 · Sara Testimory #02
+  "Finish times were not captured at the venue; positions are as officially confirmed."
+  "Only two athletes finished this race."
+/public/events/giesm-2026-13a3b800               200 · 35 KB   (same board)
+/t/neon-ultra/giesm-2026                         200 · 41 KB   (same board)
+```
+
+### Gates
+
+```
+unit 1059 (1058 pass, 1 pre-existing skip, +10 for the results board)
+component 26/26 · db 52/52 · e2e 7/7 · ratchet 4/4
+production ca8956f · staging ca8956f · both /api/v1/live 200
+production data: 19 entrants, 4 enriched categories, backups taken before each write
+```
+
+**Honest limitations, stated rather than papered over:** no finish times exist for either race, so none are shown — the page
+says so instead of implying a time. `Onugwu Obina` (male 3rd) is not on the intake sheet, so his bib is blank with a note.
+The female race had two finishers, which the category note records. And the disk is now **75%** (144 GB / 193 GB) after two
+full builds today — worth a look before the next deploy cycle.

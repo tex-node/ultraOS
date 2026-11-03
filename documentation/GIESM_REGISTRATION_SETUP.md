@@ -69,3 +69,33 @@ An operator with the admin role can then review submissions at `/registrations` 
 
 `Season.name` is the only thing to change for a new year: re-run with `--season "2027"` and the
 script adds a new season rather than duplicating the competition. The short link keeps working.
+
+## After the event: the same link shows the results (v33)
+
+`/giesm` used to be registration only, because the registration experience requires a `PUBLISHED` event with an `OPEN`
+public form. That made the brand link 404 the moment the event moved to `COMPLETED` — exactly when people want the podium.
+
+The page is now durable, in this order:
+
+1. **registration**, while a public form is accepting entries (unchanged behaviour);
+2. **the finished event's published results** — team standings by gender, individual flag-race podium with bibs, medals and
+   notes, from `Event.results` (see `src/lib/public/event-results.ts`);
+3. **"Results not published yet"** for a real event with nothing published, instead of a 404.
+
+The same `EventResultsBoard` renders `/giesm`, `/public/events/<locator>` and `/t/<org>/<competition>`, so the three surfaces
+cannot disagree about the same payload.
+
+### Publishing or correcting results
+
+`Event.results` is editorial JSON. The GIESM 2026 payload is maintained by:
+
+```bash
+cd web
+npx tsx scripts/giesm-2026-flagrace-closeout.ts --organization <orgId>            # dry run
+npx tsx scripts/giesm-2026-flagrace-closeout.ts --organization <orgId> --apply    # write
+```
+
+It is idempotent and does two things: it onboards the venue walk-ups as `INDIVIDUAL` flag-race entrants (bib stored as
+`seed`, one division per gender, competition `GIESM 2026 Flag Race`), and it enriches the published categories with the bibs
+it can substantiate plus an honest note about what the venue did not record (finish times). It never invents a time or a bib:
+a placement without one says so.
