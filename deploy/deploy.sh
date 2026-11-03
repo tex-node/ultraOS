@@ -247,7 +247,7 @@ ls -1dt "$RELEASES"/release-* 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm
 # that no longer accepts the filter - is a tidiness problem, not an outage, and it must never turn a green deploy red.
 BUILDER_BEFORE=$(docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null | awk -F'|' '/Build Cache/{print $2}') || true
 CACHE_KB=$(du -sk /opt/ultraos-staging/source/web/node_modules/.cache 2>/dev/null | cut -f1) || true
-echo "[deploy] hygiene (build cache: ${BUILDER_BEFORE:-unknown} · next cache: $(( ${CACHE_KB:-0} / 1024 )) MB)"
+echo "[deploy] hygiene (build cache: ${BUILDER_BEFORE:-unknown} Â· next cache: $(( ${CACHE_KB:-0} / 1024 )) MB)"
 # The web deploy does not run `docker build`, so this prune reclaims nothing for it; it is here because it is the same script
 # and the vision images are built on this host. Harmless when empty, useful after a vision rebuild.
 docker builder prune -f --filter "until=24h" > /dev/null 2>&1 || true
@@ -255,7 +255,7 @@ docker builder prune -f --filter "until=24h" > /dev/null 2>&1 || true
 # `.next/cache`, which must NOT be deleted), so removing it costs nothing now; if it ever grows, the next build pays 20-40 s
 # and this line is worth commenting out during a heavy development day.
 rm -rf /opt/ultraos-staging/source/web/node_modules/.cache 2>/dev/null || true
-# `*-build*` catches the whole class of scratch directories, not one streak's name (livekey-build, node22-check, …).
+# `*-build*` catches the whole class of scratch directories, not one streak's name (livekey-build, node22-check, â€¦).
 # `-mtime +1` is the real safety net: today's scratch is never touched.
 find /tmp -maxdepth 1 -type d -name "*-build*" -mtime +1 -exec rm -rf {} + 2>/dev/null || true
 # The pre-deploy dump directory had no retention at all: 22 dumps / 88 MB on 2026-10-28, growing ~1.1 MB per release
@@ -264,6 +264,37 @@ if [[ -f "$SRC/deploy/ops/prune-pre-deploy-dumps.sh" ]]; then
   bash "$SRC/deploy/ops/prune-pre-deploy-dumps.sh" 2>&1 | sed 's/^/  /' || true
 else
   bash /usr/local/sbin/prune-pre-deploy-dumps.sh 2>&1 | sed 's/^/  /' || true
+fi
+# Releases written by the pre-`release-` naming scheme (YYYYMMDD-HHMMSS) are invisible to the window above, because it only
+# lists `release-*`. They accumulated to 4.8 GB on 2026-11-03 (four directories, the oldest from July). Anything that is
+# not the live target is dead weight: the symlink is the only way a directory here is ever served.
+for LEGACY in "$RELEASES"/2*; do
+  [ -d "$LEGACY" ] || continue
+  [ "$LEGACY" = "$(readlink -f "$APP_ROOT/current" 2>/dev/null)" ] && continue
+  echo "  removing pre-release-format $(basename "$LEGACY")"
+  rm -rf "$LEGACY" 2>/dev/null || true
+done
+# npm's cache is shared by every npm project on this host. Cleaning it only when it is large keeps a deploy fast and is what
+# took 3.2 GB back on 2026-11-03; a small cache is worth keeping for the speed it buys.
+NPM_CACHE_KB=$(du -sk /root/.npm 2>/dev/null | cut -f1) || true
+if [[ "${NPM_CACHE_KB:-0}" -gt 1048576 ]]; then
+  echo "  npm cache: $(( NPM_CACHE_KB / 1024 )) MB - cleaning"
+  npm cache clean --force > /dev/null 2>&1 || true
+fi
+# The npx cache inside an app root belongs to that app alone (`npx tsx â€¦` during verification scripts).
+for APP_CACHE in "$APP_ROOT/.npm" /opt/ultraos-staging/.npm; do
+  CACHE_KB=$(du -sk "$APP_CACHE" 2>/dev/null | cut -f1) || true
+  if [[ "${CACHE_KB:-0}" -gt 524288 ]]; then
+    echo "  npx cache $APP_CACHE: $(( CACHE_KB / 1024 )) MB - removing"
+    rm -rf "$APP_CACHE" 2>/dev/null || true
+  fi
+done
+# journald grew to 1.7 GB by 2026-11-03 because nothing ever capped it; vacuum only when it is over the threshold so a normal
+# deploy does not churn the journal for no reason.
+JOURNAL=$(journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[KMGT]' | head -1) || true
+if journalctl --disk-usage 2>/dev/null | grep -qE '([2-9]|[1-9][0-9])(\.[0-9])?G|1\.[5-9]G'; then
+  echo "  journal: ${JOURNAL:-large} - vacuuming to 400M"
+  journalctl --vacuum-size=400M > /dev/null 2>&1 || true
 fi
 # Header plus the root filesystem only - visible over time, without cluttering the log with every mount.
 df -h / | awk 'NR==1 || /\//'

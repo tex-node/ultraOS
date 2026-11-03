@@ -14747,3 +14747,61 @@ production data: 19 entrants, 4 enriched categories, backups taken before each w
 says so instead of implying a time. `Onugwu Obina` (male 3rd) is not on the intake sheet, so his bib is blank with a note.
 The female race had two finishers, which the category note records. And the disk is now **75%** (144 GB / 193 GB) after two
 full builds today — worth a look before the next deploy cycle.
+
+## 2026-11-03 - Streak v33b: what was eating the disk, and 15 GB of it taken back
+
+Answering "are there build logs or files that can be deleted": yes, and mostly **not** logs. The transcripts were 488 KB. The
+space was in release directories, caches and system logs that nothing had ever capped.
+
+### The audit (before)
+
+```
+/dev/sda1  193G  144G used  50G free  75%
+/opt  61G   /root 30G   /var 23G
+  /opt/ultraleagueos  11G   releases 6.9G (5) · /opt/ultraleagueos/.npm 951M
+  /opt/ultraos-staging 12G  releases 11G (10!)  <- 5 releases PLUS five pre-release-format dirs from July/September
+  /root/.npm 3.2G           npm's shared cache
+  /var/log 2.7G             journal 1.7G, nothing ever vacuumed
+  /var/crash 349M           old crash dumps
+  /tmp 1.2G                 raivstream-output-*, v25-deploy, lockfix2, node22-dl
+docker: images 15.48 GB, but 0 B reclaimable by prune (every image is referenced)
+```
+
+### What was deleted (15 GB)
+
+| item | freed | why it is safe |
+| --- | --- | --- |
+| 3 production releases (kept current + one previous) | 4.2 GB | the `current` symlink is the only thing served; the previous release is the rollback |
+| 3 staging releases + 5 pre-release-format dirs | 6.6 GB | same, and the legacy-format directories were never targeted by the prune window |
+| `/opt/ultraleagueos/.npm` (npx cache) | 951 MB | rebuilt on demand |
+| npm's shared cache, cleaned when large | ~2 GB | rebuilt on demand |
+| journal vacuum to 400 MB | 1.2 GB | only the tail of the log is ever read; systemd keeps writing |
+| `/var/crash` dumps | 349 MB | post-mortems nobody opened |
+| stale `/tmp` work dirs (`raivstream-output-*`, v25-deploy, lockfix2, node22-dl, node-compile-cache) | ~500 MB | scratch from finished sessions |
+
+**Result: 144G → 128G used, 50G → 65G free, 75% → 67%.** Nothing serving traffic was touched: production and staging both
+answer 200, the vision `/health` is 200, and 29 containers are still running.
+
+Docker reclaimed **0 B**: `docker system df` reports 99% "reclaimable" but that is shared-layer arithmetic — every image is
+referenced by a container, so `prune` correctly refuses to remove them.
+
+### The recurrence, fixed at the source
+
+The deploy script's own hygiene block is what should have prevented this, so it now also:
+
+- removes **pre-release-format release directories** (`YYYYMMDD-HHMMSS`) — the window only ever listed `release-*`, which is
+  exactly how 4.8 GB of July directories survived;
+- cleans npm's cache **when it exceeds 1 GB**, and an app's own `.npm` above 512 MB (it was 951 MB);
+- vacuums the journal **when it exceeds ~1.5 GB** to 400 MB.
+
+Each fragment was exercised against a throwaway tree and against sample sizes before being installed, and the script passed
+`bash -n` both in the repo and at `/root/deploy.sh` (the previous copy is kept as `deploy.sh.bak-<ts>`).
+
+### Still on the host, deliberately not touched
+
+These belong to other services and are the owner's call, not mine: `/root/Powervend by Bainsbridge` 11 GB,
+`/root/raivstream-*` staging copies ~7 GB, `/root/supabase` 1.5 GB, `/opt/syncshowflow` 17 GB, `/opt/slink-supabase` 9.1 GB,
+`/opt/mt5-trade` 4 GB, `/opt/chart-analyzer` 2.5 GB, `/opt/mjenkinsapp` 2.2 GB. Deleting any of them is a decision about
+someone else's running service.
+
+**Headroom now:** 65 GB free, and one deploy cycle costs ~7 MB net, so this is months of deploys rather than days.
