@@ -128,9 +128,11 @@ build_routes() {
   else
     echo "/coaching/$club/players/$player|player plan|Focus areas"
   fi
-  # A selection page needs a fixture; include it only when one exists.
+  # A selection page needs a fixture; include it only when one exists. The assertion names the redesigned heading: the
+  # screen no longer groups candidates under a "Rotation" header (v37 replaced the grouped list with a recommended lineup,
+  # a workload matrix and a per-player evidence panel), so a smoke test looking for "Rotation" fails a healthy page.
   if [ -n "${fixture:-}" ]; then
-    echo "/coaching/selection/$fixture|selection|Rotation"
+    echo "/coaching/selection/$fixture|selection|Recommended lineup"
   fi
   return 0
 }
