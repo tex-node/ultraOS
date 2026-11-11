@@ -15188,3 +15188,69 @@ for previewing layout and behaviour, not for being a byte-identical copy of prod
 **Why the two databases differ at all, stated once:** staging was never seeded with the league's real results. Everything the
 flag-race work added - the intake, the podium, the enrichment - was applied to production first because that is where the
 competition happened. Mirroring it to staging is a deliberate convenience, not a requirement of the deployment.
+
+## 2026-11-11 - Streak v39: the app is now three shells, not one tree with conventions
+
+### What changed
+
+The `app/` directory was one flat tree in which every page was responsible for its own chrome: forty-seven pages imported
+`OperationsShell` and wrapped themselves in it by hand. The chrome was therefore a convention you had to remember, and the
+sidebar was a component every caller shared and nobody could vary.
+
+It is now three route groups. Route groups do not change URLs, so every address the platform has still resolves to the same
+page:
+
+```
+app/(portal)/      homepage, /t/..., /public, /login, /signup, /register, /embed, /api-docs, /giesm, vanity slugs
+app/(workspace)/   /admin, /coaching, /dashboard, /operations, /settings, /scoresheets, /players,
+                   /events, /fixtures, /vision, /imports
+app/(capture)/     /games/[id]/live, /games/[id]/stats, /gameday, /gameday/console, /gameday/checkin
+```
+
+`(workspace)/layout.tsx` is now the authorization boundary and the shell: it authenticates the request, redirects anonymous
+visitors to `/login`, and renders `WorkspaceShell` once. `(capture)/layout.tsx` is a black, chrome-free frame with no navigation
+and no animation; the only way out is an "Exit console" control that confirms before leaving. `(portal)/layout.tsx` is a
+deliberate pass-through: a tournament sub-site carries its own hero, live-status badge and tab strip, so a single portal shell
+in the layout would either duplicate that chrome or flatten it.
+
+**48 pages unwrapped, 61 shell elements removed.** They are content now; the segment owns the frame.
+
+### The mechanical part, kept as scripts
+
+Moving a hundred route files by hand is how a refactor acquires silent breakage, so the moves and the repairs are scripts:
+`web/scripts/ui/dual-shell-move.py` (git mv into the groups), `dual-shell-strip.py` (remove per-page shell wrappers, refusing
+anything it cannot transform safely), `dual-shell-fix-paths.py` (~30 imports that pointed at the old disk paths) and
+`dual-shell-fix-imports.py` (relative imports the capture move broke). The next move is a rerun, not a hand edit.
+
+### Verified
+
+```
+tsc --noEmit                      0 errors
+next build                        compiled; all 65 pages generated
+unit                              1066 pass, 1 skip
+component                         26/26
+canonical-write ratchet           4/4
+```
+
+### The staging deploy failed once, and it was my commit
+
+The first staging build failed at type-check:
+
+```
+./scripts/clicktest-f4-e2e.ts:3:29  Cannot find module '../src/app/public/events/actions'
+```
+
+Two script files referenced the pre-move paths by *relative* filesystem path, and I had committed the route moves without them.
+The build was right and the commit was incomplete; `5d0cc73` moved them too and the redeploy is running. I left this in the
+record because "the app type-checks" was true locally and false on the build, which is exactly the gap a staging deploy exists
+to find.
+
+### What is not done, from the brief
+
+- **The motion patterns are not implemented.** The brief named `#050` drawer, `#051` bottom sheet, `#056` toast, `#057` tabs,
+  `#053` dropdown, `#049` modal, `#052` accordion and `#059` toggle. Framer Motion is not installed and I did not add a
+  dependency, retime five shells and re-verify the e2e suite in the same pass as a structural refactor that touches every page.
+  The capture shell was deliberately left animation-free, which is the one motion decision that is finished.
+- **The multi-org context switcher** exists only as the persona switcher from v36: it switches the *viewport* a user sees, and
+  ignores a cookie naming a persona they no longer hold. Switching organization as well as role is a different piece of work.
+- **Coach hub polish** (prominent next-matchup card, accordion evidence, toggle for assignments) is untouched.
