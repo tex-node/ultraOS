@@ -27,6 +27,7 @@ import { startAutoSync } from "@/lib/offline/auto-sync";
 import { LocalScoringRepository } from "@/lib/offline/repositories/scoringRepository";
 import { captureScoreTap } from "@/lib/offline/score-capture";
 import type { RuleSnapshotForScoring } from "@/lib/ultra-scoring-engine";
+import { toast } from "@/app/components/ui/toaster";
 
 const BIG_BTN = "min-h-[56px] min-w-[56px] rounded-md px-4 font-display text-base font-bold active:scale-95 transition";
 
@@ -192,6 +193,7 @@ export function LiveScoreCapture({
             ? `${captured.basePointValue}Ã—${captured.multiplier} = ${captured.points} (Ultra Time)`
             : `${captured.points}`;
           setAck({ kind: "queued", message: `âœ“ Captured offline: +${scoring} â€” queued for sync` });
+    toast(`Offline: +${scoring} queued`, "warn");
         } catch (error) {
           setAck({
             kind: "error",

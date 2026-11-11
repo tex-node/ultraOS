@@ -2,6 +2,7 @@ import Link from "next/link";
 import { signOut } from "@/auth";
 import { PersonaSwitcher } from "@/app/components/persona-switcher";
 import { WorkspaceNav } from "@/app/components/ui/workspace-nav";
+import { WorkspaceDrawer } from "@/app/components/ui/workspace-drawer";
 import { WorkspaceBottomNav } from "@/app/components/ui/workspace-bottom-nav";
 import { resolveViewport } from "@/lib/workspace/session";
 import { sectionsForPersona, type NavSection } from "@/lib/workspace/nav";
@@ -86,7 +87,13 @@ export async function WorkspaceShell({
           </form>
         </div>
         <div className="min-w-0 flex-1">
-          <WorkspaceNav sections={visibleSections} />
+          {/* Below lg the nav is a drawer (motion-prompt #050); on desktop it stays in the sidebar. */}
+          <div className="px-5 pb-3 lg:hidden">
+            <WorkspaceDrawer sections={visibleSections} workspaceName={workspaceName} />
+          </div>
+          <div className="hidden lg:block">
+            <WorkspaceNav sections={visibleSections} />
+          </div>
         </div>
         <div className="mt-auto hidden px-5 py-4 lg:block">
           <Link href="/profile" className="block transition hover:opacity-80">

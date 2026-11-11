@@ -1,4 +1,5 @@
 import "./globals.css";
+import { Toaster } from "@/app/components/ui/toaster";
 import { auth } from "@/auth";
 import { ServiceWorkerRegistrar } from "./components/service-worker-registrar";
 import type { Metadata, Viewport } from "next";
@@ -59,6 +60,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <ServiceWorkerRegistrar />
         {children}
+              <Toaster />
       </body>
     </html>
   );

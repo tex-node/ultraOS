@@ -9,6 +9,7 @@ import {
   whyStart,
 } from "@/lib/coaching/selection-presentation";
 import { Card, ConfidenceChip, Num, SectionTitle } from "./ui";
+import { EvidenceAccordion } from "@/app/components/ui/evidence-accordion";
 
 // The Selection / Rotation Advisor (P15 I2-b; redesigned in v37).
 //
@@ -239,7 +240,7 @@ export function SelectionView({ seasonClubName, opponentName, fixture, advice, m
               </div>
 
               <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <div className="rounded-lg border border-success/25 bg-success/[.05] p-3">
+                <EvidenceAccordion title="Why start" tone="positive">
                   <p className="text-[10px] font-semibold uppercase tracking-[.15em] text-success">Why start</p>
                   <ul className="mt-1.5 space-y-1 text-xs text-text-2">
                     {whyStart(inspected).map((reason) => (
@@ -247,8 +248,8 @@ export function SelectionView({ seasonClubName, opponentName, fixture, advice, m
                     ))}
                     {whyStart(inspected).length === 0 ? <li className="text-text-3">No measured strength clears the evidence bar.</li> : null}
                   </ul>
-                </div>
-                <div className="rounded-lg border border-danger/25 bg-danger/[.05] p-3">
+                </EvidenceAccordion>
+                <EvidenceAccordion title="Risks & limits" tone="negative">
                   <p className="text-[10px] font-semibold uppercase tracking-[.15em] text-danger">Risks &amp; limits</p>
                   <ul className="mt-1.5 space-y-1 text-xs text-text-2">
                     {whyBench(inspected).map((reason) => (
@@ -256,7 +257,7 @@ export function SelectionView({ seasonClubName, opponentName, fixture, advice, m
                     ))}
                     {whyBench(inspected).length === 0 ? <li className="text-text-3">Nothing measured argues against starting him.</li> : null}
                   </ul>
-                </div>
+                </EvidenceAccordion>
               </div>
             </Card>
           ) : (
