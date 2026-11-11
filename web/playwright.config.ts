@@ -35,6 +35,8 @@ export default defineConfig({
         command: `npm run build && npx next start -p ${PORT}`,
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
-        timeout: 300_000,
+        // 300s was sized for CI machines; a cold `next build` on a developer laptop (type-check included) regularly takes
+        // longer, and the suite then fails with "Timed out waiting 300000ms from config.webServer" before a single test runs.
+        timeout: 900_000,
       },
 });

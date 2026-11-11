@@ -56,7 +56,9 @@
     "vision:analyze": "tsx scripts/vision-analyze.ts",
     "db:studio": "prisma studio",
     "db:backup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-database.ps1",
-    "db:restore": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/restore-database.ps1"
+    "db:restore": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/restore-database.ps1",
+    "test:e2e:local": "node scripts/e2e-local.mjs",
+    "test:e2e:local:fresh": "node scripts/e2e-local.mjs --fresh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1075.0",
