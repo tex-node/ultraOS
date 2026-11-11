@@ -4,7 +4,7 @@ import { PrismaClient } from "../src/generated/prisma/client";
 import { promoDiscountKobo } from "../src/lib/ticketing";
 import { upsertPublicTokenLocator } from "../src/lib/public-locators";
 import { PublicTokenLocatorType } from "../src/generated/prisma/enums";
-import { emailTicketQr } from "../src/app/public/tickets/actions";
+import { emailTicketQr } from "../src/app/(portal)/public/tickets/actions";
 
 const EVENT_ID = "seed-event-season-zero-launch";
 

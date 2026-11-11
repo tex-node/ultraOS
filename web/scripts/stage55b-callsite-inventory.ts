@@ -138,7 +138,7 @@ const BATCH7_PATHS = [
   "web/src/app/runbooks/page.tsx",
   "web/src/app/tasks/page.tsx",
   "web/src/app/standings/page.tsx",
-  "web/src/app/public/celebrations/actions.ts",
+  "web/src/app/(portal)/public/celebrations/actions.ts",
   "web/src/app/rehearsal/broadcast/[fixtureId]/page.tsx",
   "web/src/app/rehearsal/live/[fixtureId]/page.tsx",
   "web/src/lib/all-star-teams.ts",
@@ -182,11 +182,11 @@ async function main() {
         || relative.endsWith("web/src/app/fixtures/[id]/page.tsx")
         || relative.endsWith("web/src/app/fixtures/[id]/edit/page.tsx")
         || relative.endsWith("web/src/app/fixtures/new/page.tsx");
-      const gamedayPage = relative.endsWith("web/src/app/gameday/page.tsx")
-        || relative.endsWith("web/src/app/gameday/checkin/page.tsx");
-      const liveGamePage = relative.endsWith("web/src/app/games/[fixtureId]/live/page.tsx")
-        || relative.endsWith("web/src/app/games/[fixtureId]/stats/page.tsx")
-        || relative.endsWith("web/src/app/games/[fixtureId]/stats/reconciliation/page.tsx");
+      const gamedayPage = relative.endsWith("web/src/app/(capture)/gameday/page.tsx")
+        || relative.endsWith("web/src/app/(capture)/gameday/checkin/page.tsx");
+      const liveGamePage = relative.endsWith("web/src/app/(capture)/games/[fixtureId]/live/page.tsx")
+        || relative.endsWith("web/src/app/(capture)/games/[fixtureId]/stats/page.tsx")
+        || relative.endsWith("web/src/app/(capture)/games/[fixtureId]/stats/reconciliation/page.tsx");
       const draftCohortPath = relative.endsWith("web/src/lib/draft-cohort.ts")
         || relative.endsWith("web/src/app/draft-cohort/page.tsx")
         || relative.endsWith("web/src/app/draft-cohort/actions.ts");
@@ -329,15 +329,15 @@ async function main() {
                                 ? "EditFixture"
                                 : relative.endsWith("web/src/app/fixtures/new/page.tsx")
                                   ? "NewFixture"
-                                  : relative.endsWith("web/src/app/gameday/page.tsx")
+                                  : relative.endsWith("web/src/app/(capture)/gameday/page.tsx")
                                     ? "GameDayControlCenter"
-                                    : relative.endsWith("web/src/app/gameday/checkin/page.tsx")
+                                    : relative.endsWith("web/src/app/(capture)/gameday/checkin/page.tsx")
                                       ? "GameDayCheckIn"
-                                      : relative.endsWith("web/src/app/games/[fixtureId]/live/page.tsx")
+                                      : relative.endsWith("web/src/app/(capture)/games/[fixtureId]/live/page.tsx")
                                         ? "Live"
-                                        : relative.endsWith("web/src/app/games/[fixtureId]/stats/page.tsx")
+                                        : relative.endsWith("web/src/app/(capture)/games/[fixtureId]/stats/page.tsx")
                                           ? "StatisticianConsole"
-                                          : relative.endsWith("web/src/app/games/[fixtureId]/stats/reconciliation/page.tsx")
+                                          : relative.endsWith("web/src/app/(capture)/games/[fixtureId]/stats/reconciliation/page.tsx")
                                             ? "ReconciliationPage"
                         : "OperationsPage"),
         operation,

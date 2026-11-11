@@ -1,7 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { reserveZone } from "../src/app/public/events/actions";
-import { emailTicketQr } from "../src/app/public/tickets/actions";
+import { reserveZone } from "../src/app/(portal)/public/events/actions";
+import { emailTicketQr } from "../src/app/(portal)/public/tickets/actions";
 
 const EVENT_ID = "seed-event-season-zero-launch";
 const EVENT_PUBLIC_KEY = "seed-event-season-zero-launch";
