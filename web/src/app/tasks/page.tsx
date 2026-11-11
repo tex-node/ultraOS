@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { createOpsTask, updateOpsTaskStatus } from "@/app/operations/actions";
+import { createOpsTask, updateOpsTaskStatus } from "@/app/(workspace)/operations/actions";
 import { OpsItemStatus, OpsSeverity } from "@/generated/prisma/enums";
 import { hasPermission } from "@/lib/permissions";
 import { isOverdue } from "@/lib/operations";

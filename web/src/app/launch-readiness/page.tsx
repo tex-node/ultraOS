@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { createLaunchReadinessCheck, updateLaunchReadinessCheckStatus } from "@/app/operations/actions";
+import { createLaunchReadinessCheck, updateLaunchReadinessCheckStatus } from "@/app/(workspace)/operations/actions";
 import { LaunchBlockerPriority, OpsHealthStatus, OpsItemStatus } from "@/generated/prisma/enums";
 import { hasPermission } from "@/lib/permissions";
 import { seasonZeroReadinessReport } from "@/lib/season-zero-readiness";

@@ -1,5 +1,5 @@
 import { ImportType } from "@/generated/prisma/enums";
-import { ImportUploadPage } from "@/app/imports/import-upload-page";
+import { ImportUploadPage } from "@/app/(workspace)/imports/import-upload-page";
 
 export default function CoachImportPage() {
   return (

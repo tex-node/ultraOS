@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { RegistrationFormView } from "@/app/register/[organizationSlug]/[eventSlug]/registration-form";
+import { RegistrationFormView } from "@/app/(portal)/register/[organizationSlug]/[eventSlug]/registration-form";
 import { APP_NAME } from "@/lib/branding";
 import { loadPublicRegistration } from "@/lib/registration/service";
 import { parseSportConfig } from "@/lib/registration/sport-config";

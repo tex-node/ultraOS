@@ -1,5 +1,5 @@
 import Link from "next/link"; import { notFound } from "next/navigation";
-import { OperationsShell } from "@/app/components/operations-shell"; import { updatePlayer } from "@/app/players/actions"; import { PlayerForm } from "@/app/players/player-form"; import { requirePermissionWithOrganization } from "@/lib/authorization"; import { withOrganizationContext } from "@/lib/tenant-context";
+import { OperationsShell } from "@/app/components/operations-shell"; import { updatePlayer } from "@/app/(workspace)/players/actions"; import { PlayerForm } from "@/app/(workspace)/players/player-form"; import { requirePermissionWithOrganization } from "@/lib/authorization"; import { withOrganizationContext } from "@/lib/tenant-context";
 // Phase 1 Stage 5.5B: previously ran on requirePermission() alone (no organization) with the
 // bare, unscoped client - an Org B "player:manage" holder could view and edit Org A's player
 // registration. Scoped to the acting admin's own organization.

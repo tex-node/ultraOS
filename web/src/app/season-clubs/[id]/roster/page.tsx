@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { setPlayerJerseyNumber } from "@/app/players/actions";
+import { setPlayerJerseyNumber } from "@/app/(workspace)/players/actions";
 import { auth } from "@/auth";
 import { MissingOrganizationContextError, requireSession } from "@/lib/authorization";
 import { hasPermission } from "@/lib/permissions";

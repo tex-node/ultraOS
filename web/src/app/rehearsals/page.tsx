@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { createRehearsal } from "@/app/operations/actions";
+import { createRehearsal } from "@/app/(workspace)/operations/actions";
 import { hasPermission } from "@/lib/permissions";
 import { withOrganizationContext } from "@/lib/tenant-context";
 

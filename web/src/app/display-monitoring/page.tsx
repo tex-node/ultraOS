@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OperationsShell } from "@/app/components/operations-shell";
-import { upsertDisplayHeartbeat } from "@/app/operations/actions";
+import { upsertDisplayHeartbeat } from "@/app/(workspace)/operations/actions";
 import { DisplaySurface, OpsHealthStatus } from "@/generated/prisma/enums";
 import { hasPermission } from "@/lib/permissions";
 import { withOrganizationContext } from "@/lib/tenant-context";

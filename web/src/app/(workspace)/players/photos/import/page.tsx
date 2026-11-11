@@ -1,0 +1,27 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+
+import { PlayerPhotoImportForm } from "@/app/(workspace)/players/photos/import/photo-import-form";
+import { requirePermission } from "@/lib/authorization";
+
+export default async function PlayerPhotoImportPage() {
+  const rawSession = await auth();
+  if (!rawSession?.user) redirect("/login?callbackUrl=/players/photos/import");
+  const session = await requirePermission("media:upload");
+  return (
+    <>
+      <main className="mx-auto max-w-5xl px-6 py-10">
+        <Link className="text-sm text-text-2" href="/players">Back to players</Link>
+        <p className="mt-6 text-xs uppercase tracking-[.2em] text-brand-400">Player media</p>
+        <h1 className="mt-2 text-3xl font-semibold">Bulk player photo preview</h1>
+        <p className="mt-2 text-sm text-text-2">
+          Preview replacements before applying them. Existing player photos are not overwritten automatically.
+        </p>
+        <div className="mt-8">
+          <PlayerPhotoImportForm />
+        </div>
+      </main>
+    </>
+  );
+}
