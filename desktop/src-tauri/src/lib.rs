@@ -36,6 +36,17 @@ const DEFAULT_APP_URL: &str = "https://app.neonultra.ng";
 /// Origins the agent will answer for. Dev server included because the desktop shell is also used against `next dev`.
 const ALLOWED_ORIGINS: [&str; 2] = ["https://app.neonultra.ng", "http://localhost:3000"];
 
+/// The origin the agent should also trust: whatever the window is actually pointed at. Without this, pointing the shell at
+/// staging blocks the agent on our own CORS rule, and the failure looks like "the desktop app cannot see its agent".
+fn origin_of(url: &str) -> Option<String> {
+    let parts: Vec<&str> = url.splitn(4, '/').collect();
+    if parts.len() >= 3 && !parts[2].is_empty() {
+        Some(format!("{}//{}", parts[0], parts[2]))
+    } else {
+        None
+    }
+}
+
 const AGENT_PORT: u16 = 8012;
 const COOKIE_NAME: &str = "ultraos_agent";
 const DEAD_LETTER_THRESHOLD: i64 = 5;
@@ -404,7 +415,7 @@ async fn agent(State(state): State<AgentState>, headers: HeaderMap, body: axum::
 
 /// Start the agent. Failure to bind (port in use, usually a second instance) is reported on stderr rather than killing the app:
 /// the window still works, the page simply falls back to IndexedDB.
-fn spawn_agent(data_dir: PathBuf) -> Arc<std::sync::atomic::AtomicBool> {
+fn spawn_agent(data_dir: PathBuf, app_url: String) -> Arc<std::sync::atomic::AtomicBool> {
     let handshake_seen = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let flag_for_server = handshake_seen.clone();
 
@@ -427,7 +438,13 @@ fn spawn_agent(data_dir: PathBuf) -> Arc<std::sync::atomic::AtomicBool> {
             };
             println!("ultraos-agent: sqlite ready at {}", data_dir.join("ultraos").join("outbox.db").display());
 
-            let origins: Vec<HeaderValue> = ALLOWED_ORIGINS
+            let mut origin_strings: Vec<String> = ALLOWED_ORIGINS.iter().map(|origin| origin.to_string()).collect();
+            if let Some(origin) = origin_of(&app_url) {
+                if !origin_strings.contains(&origin) {
+                    origin_strings.push(origin);
+                }
+            }
+            let origins: Vec<HeaderValue> = origin_strings
                 .iter()
                 .filter_map(|origin| HeaderValue::from_str(origin).ok())
                 .collect();
@@ -474,7 +491,7 @@ pub fn run() {
             let app_url = app_url.clone();
             move |app| {
                 let data_dir = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("."));
-                let handshake_seen = spawn_agent(data_dir);
+                let handshake_seen = spawn_agent(data_dir, app_url.clone());
 
                 let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(app_url.parse()?))
                     .title("UltraOS Scoring")

@@ -73,3 +73,16 @@ enables `BACHS_MOCK=1`, and turns the coaching flag on so the multi-tenant spec 
 The harness prints a timing table, so the first question — "did the app fail, or did the build?" — is answered by looking at
 which step took the time. A 900-second failure with `Timed out waiting from config.webServer` is the old symptom of the homepage
 throwing; in this harness the server is started explicitly and probed at `/api/v1/live`, so that failure mode now names the step.
+
+## Known failure mode: Docker Desktop has stopped
+
+If `npm run test:e2e:local` fails on step `1/5 postgres` with:
+
+```
+unable to get image 'postgres:16-alpine': error during connect:
+Get "http://%2F%2F.%2Fpipe%2FdockerDesktopLinuxEngine/v1.51/images/postgres:16-alpine/json":
+open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.
+```
+
+Docker Desktop is not running. Start it and re-run. **The error message never mentions Docker** — it reads like a missing image or a
+broken compose file, which is why it costs half an hour the first time.

@@ -174,3 +174,36 @@ something a build pipeline runs.
 
 **Status: not yet run.** It needs a hand on the machine and a production fixture; every step above is the operator's, and the
 agent side of it is verified separately (the table above). Do not mark this green until the two SQL outputs match.
+
+## Acceptance run: attempted, not passed (2026-11-12)
+
+An attempt was made to drive the loop end to end through WebView2's DevTools protocol, pointed at **staging** (production was not
+used: there are no production SUPER_ADMIN credentials available to this agent, and scoring a real fixture is not something to do
+without them).
+
+What worked:
+
+```
+shell → staging via SSH tunnel    loaded http://127.0.0.1:4120/
+CDP attach                        Edg/157.0.4341.46, target = the app page
+sign-in as the e2e admin          session established inside the WebView2 profile
+capture console                   /games/<fixture>/live rendered, home score 1
+user agent                       "UltraOSDesktop/1.0 (UltraOS Scoring)" — the agent gate works
+agent reachable from the page     GET http://127.0.0.1:8012/handshake → 200
+```
+
+What did not: **five clicks on the console's "Goal" button produced no queue rows** — no `SAVE_OUTBOX` reached the agent and no
+confirmation appeared in the UI. The console records a score against a *player*, not a side, so a bare "Goal" click does not
+commit an event; the automation never selected a player, so nothing was ever enqueued. That is a limitation of the harness, not
+evidence about the app.
+
+Two findings worth keeping:
+
+1. **CDP's `Network.emulateNetworkConditions({offline:true})` is the wrong tool for this test.** It cuts loopback too, so the local
+   agent becomes unreachable and the queue stays empty for a reason that cannot happen at a venue. The honest simulation is
+   `navigator.onLine = false` plus aborting requests to the app origin, leaving `127.0.0.1:8012` alone.
+2. **`ULTRAOS_APP_URL` now also drives the agent's CORS allow-list** (`origin_of`), so pointing the shell at staging no longer
+   blocks it against our own rule.
+
+The acceptance section above stays **Status: not yet run**. It needs a human at the keyboard selecting a player and tapping
+through the real console; the agent-side half of the path is verified separately and does not depend on this test.
