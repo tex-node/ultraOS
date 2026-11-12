@@ -5,11 +5,12 @@
 //
 // SECURITY MODEL, in one paragraph. The page is a REMOTE origin. `withGlobalTauri` is false and no capability grants IPC to it,
 // so `window.__TAURI__` does not exist and the page cannot reach the filesystem or spawn anything. The privileged surface is the
-// agent on 127.0.0.1:8012 instead: a fixed allow-list of four actions, a bearer token delivered as an HttpOnly cookie (so page
-// JavaScript can never read it), and CORS pinned to the two origins we control. An XSS in the remote app can therefore make
-// requests, but only those four, and only from an origin the agent recognises.
+// agent on 127.0.0.1:8012: a fixed allow-list of actions, a bearer token delivered as an HttpOnly cookie (page JavaScript can
+// never read it), and CORS pinned to the two origins we control.
 //
-// The token is generated once per launch and never written to disk: `outbox.json` is the only persistent state todny.
+// STORAGE. SQLite in WAL mode, at <app data>/ultraos/outbox.db. WAL is not a detail: with the default rollback journal a crash
+// mid-write (battery, force-quit, Windows Update) rolls back the last transactions silently. A scorer can go half an hour
+// without syncing, so "the last five taps vanished" is a real failure mode rather than a theoretical one.
 
 use axum::{
     extract::State,
@@ -18,10 +19,11 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
@@ -36,11 +38,12 @@ const ALLOWED_ORIGINS: [&str; 2] = ["https://app.neonultra.ng", "http://localhos
 
 const AGENT_PORT: u16 = 8012;
 const COOKIE_NAME: &str = "ultraos_agent";
+const DEAD_LETTER_THRESHOLD: i64 = 5;
 
 #[derive(Clone)]
 struct AgentState {
     token: Arc<String>,
-    data_dir: Arc<PathBuf>,
+    db: Arc<Mutex<Connection>>,
     /// Set the moment the page completes its first handshake - the only reliable evidence that the remote app actually loaded.
     handshake_seen: Arc<std::sync::atomic::AtomicBool>,
 }
@@ -73,54 +76,261 @@ fn err(message: impl Into<String>) -> Json<AgentResponse> {
 fn cookie_token(headers: &HeaderMap) -> Option<String> {
     let raw = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
     raw.split(';').find_map(|pair| {
-        let mut parts = pair.trim().splitn(2, '=');
+        let mut parts = pair.splitn(2, '=');
         let name = parts.next()?;
         let value = parts.next()?;
         (name == COOKIE_NAME).then(|| value.to_string())
     })
 }
 
-fn outbox_path(state: &AgentState) -> PathBuf {
-    state.data_dir.join("outbox.json")
+/// Open the outbox database, creating the directory, the file and the schema if they do not exist yet.
+fn open_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> {
+    let directory = data_dir.join("ultraos");
+    std::fs::create_dir_all(&directory).ok();
+    let path = directory.join("outbox.db");
+    let connection = Connection::open(path)?;
+
+    // WAL + NORMAL: commits go to the write-ahead log, which survives a crash. This is what makes "the last tap is still there
+    // after the battery dies" true rather than hopeful.
+    connection.pragma_update(None, "journal_mode", "WAL")?;
+    connection.pragma_update(None, "synchronous", "NORMAL")?;
+    connection.busy_timeout(Duration::from_secs(5))?;
+
+    connection.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS outbox (
+          localId          INTEGER PRIMARY KEY AUTOINCREMENT,
+          entityType       TEXT NOT NULL,
+          entityId         TEXT NOT NULL,
+          operation        TEXT NOT NULL,
+          payload          TEXT NOT NULL,
+          clientUpdatedAt  TEXT NOT NULL,
+          idempotencyKey   TEXT UNIQUE NOT NULL,
+          deviceId         TEXT,
+          syncedAt         TEXT,
+          failureReason    TEXT,
+          attemptCount     INTEGER NOT NULL DEFAULT 0,
+          deadLetteredAt   TEXT,
+          lastManualRetryAt TEXT,
+          ledgerSourceHint TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_pending ON outbox(syncedAt, deadLetteredAt);
+        "#,
+    )?;
+    Ok(connection)
 }
 
-fn read_outbox(state: &AgentState) -> serde_json::Value {
-    match std::fs::read_to_string(outbox_path(state)) {
-        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!([])),
-        Err(_) => serde_json::json!([]),
-    }
+fn as_string(value: &serde_json::Value, key: &str) -> Option<String> {
+    value.get(key).and_then(|item| item.as_str()).map(str::to_string)
 }
 
-/// Append the incoming records to the outbox file. Append rather than replace: the page may call SAVE_OUTBOX per tap, and a
-/// replace would silently drop anything queued between calls.
-fn append_outbox(state: &AgentState, payload: &serde_json::Value) -> Result<usize, String> {
-    let incoming: Vec<serde_json::Value> = match payload {
+/// INSERT OR IGNORE: UNIQUE(idempotencyKey) is the retry-safety story. A duplicate POST - the page retrying after a timeout, or
+/// the browser mirror racing the agent - cannot double-write a tap.
+fn save_outbox(state: &AgentState, payload: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let records: Vec<serde_json::Value> = match payload {
         serde_json::Value::Array(items) => items.clone(),
         serde_json::Value::Object(_) => vec![payload.clone()],
         _ => return Err("payload must be an object or an array".into()),
     };
 
-    let mut existing = match read_outbox(state) {
-        serde_json::Value::Array(items) => items,
-        _ => Vec::new(),
-    };
-    let added = incoming.len();
-    existing.extend(incoming);
+    let connection = state.db.lock().map_err(|_| "database lock poisoned")?;
+    let mut saved = 0usize;
+    for record in &records {
+        let idempotency_key = as_string(record, "idempotencyKey").ok_or("record is missing idempotencyKey")?;
+        let entity_type = as_string(record, "entityType").ok_or("record is missing entityType")?;
+        let entity_id = as_string(record, "entityId").unwrap_or_default();
+        let operation = as_string(record, "operation").unwrap_or_default();
+        let client_updated_at = as_string(record, "clientUpdatedAt").unwrap_or_default();
+        let device_id = as_string(record, "deviceId");
+        let ledger_hint = as_string(record, "ledgerSourceHint");
+        let payload_json = serde_json::to_string(record.get("payload").unwrap_or(&serde_json::Value::Null))
+            .map_err(|error| error.to_string())?;
 
-    let path = outbox_path(state);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        let inserted = connection
+            .execute(
+                "INSERT OR IGNORE INTO outbox
+                   (entityType, entityId, operation, payload, clientUpdatedAt, idempotencyKey, deviceId, ledgerSourceHint)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![entity_type, entity_id, operation, payload_json, client_updated_at, idempotency_key, device_id, ledger_hint],
+            )
+            .map_err(|error| error.to_string())?;
+        saved += inserted;
     }
-    let text = serde_json::to_string_pretty(&serde_json::Value::Array(existing))
-        .map_err(|error| error.to_string())?;
-    // Write-then-rename so a crash mid-write cannot leave a half-written outbox - the one file that must survive a power cut.
-    let temporary = path.with_extension("json.tmp");
-    std::fs::write(&temporary, text).map_err(|error| error.to_string())?;
-    std::fs::rename(&temporary, &path).map_err(|error| error.to_string())?;
-    Ok(added)
+
+    let pending: i64 = connection
+        .query_row("SELECT COUNT(*) FROM outbox WHERE syncedAt IS NULL AND deadLetteredAt IS NULL", [], |row| row.get(0))
+        .unwrap_or(0);
+
+    Ok(serde_json::json!({ "received": records.len(), "saved": saved, "pending": pending }))
 }
 
-/// The offline page, served by the agent so the webview loads a normal document.
+fn read_outbox(state: &AgentState) -> Result<serde_json::Value, String> {
+    let connection = state.db.lock().map_err(|_| "database lock poisoned")?;
+    let mut statement = connection
+        .prepare(
+            "SELECT localId, entityType, entityId, operation, payload, clientUpdatedAt, idempotencyKey, deviceId,
+                    syncedAt, failureReason, attemptCount, deadLetteredAt, lastManualRetryAt, ledgerSourceHint
+             FROM outbox
+             WHERE syncedAt IS NULL AND deadLetteredAt IS NULL
+             ORDER BY clientUpdatedAt ASC",
+        )
+        .map_err(|error| error.to_string())?;
+
+    let rows = statement
+        .query_map([], |row| {
+            let payload_text: String = row.get(4)?;
+            let payload: serde_json::Value = serde_json::from_str(&payload_text).unwrap_or(serde_json::Value::Null);
+            Ok(serde_json::json!({
+                "localId": row.get::<_, i64>(0)?,
+                "entityType": row.get::<_, String>(1)?,
+                "entityId": row.get::<_, String>(2)?,
+                "operation": row.get::<_, String>(3)?,
+                "payload": payload,
+                "clientUpdatedAt": row.get::<_, String>(5)?,
+                "idempotencyKey": row.get::<_, String>(6)?,
+                "deviceId": row.get::<_, Option<String>>(7)?,
+                "syncedAt": row.get::<_, Option<String>>(8)?,
+                "failureReason": row.get::<_, Option<String>>(9)?,
+                "attemptCount": row.get::<_, i64>(10)?,
+                "deadLetteredAt": row.get::<_, Option<String>>(11)?,
+                "lastManualRetryAt": row.get::<_, Option<String>>(12)?,
+                "ledgerSourceHint": row.get::<_, Option<String>>(13)?,
+            }))
+        })
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+
+    Ok(serde_json::Value::Array(rows))
+}
+
+/// MARK_SYNCED takes per-key outcomes, never a whole batch. A batch of ten that sends nine and fails one must leave the failed
+/// key queued; a blanket CLEAR would drop all ten, including the eight that need nothing and the one that needs a retry.
+fn mark_synced(state: &AgentState, payload: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let keys: Vec<String> = payload
+        .get("idempotencyKeys")
+        .and_then(|value| value.as_array())
+        .ok_or("idempotencyKeys must be an array")?
+        .iter()
+        .filter_map(|value| value.as_str().map(str::to_string))
+        .collect();
+    let status = as_string(payload, "status").ok_or("status is required")?;
+    let failure_reason = as_string(payload, "failureReason");
+    let now = chrono_now();
+
+    let connection = state.db.lock().map_err(|_| "database lock poisoned")?;
+    let mut applied = 0usize;
+    let mut failed = 0usize;
+    let mut dead_lettered = 0usize;
+
+    for key in keys {
+        match status.as_str() {
+            "APPLIED" | "DUPLICATE" => {
+                applied += connection
+                    .execute(
+                        "UPDATE outbox SET syncedAt = ?1, failureReason = NULL WHERE idempotencyKey = ?2",
+                        params![now, key],
+                    )
+                    .map_err(|error| error.to_string())?;
+            }
+            "FAILED" | "CONFLICT" => {
+                connection
+                    .execute(
+                        "UPDATE outbox SET attemptCount = attemptCount + 1, failureReason = ?1,
+                                deadLetteredAt = CASE WHEN attemptCount + 1 >= ?2 THEN ?3 ELSE NULL END
+                         WHERE idempotencyKey = ?4",
+                        params![failure_reason, DEAD_LETTER_THRESHOLD, now, key],
+                    )
+                    .map_err(|error| error.to_string())?;
+                failed += 1;
+                let is_dead: Option<i64> = connection
+                    .query_row(
+                        "SELECT CASE WHEN deadLetteredAt IS NULL THEN 0 ELSE 1 END FROM outbox WHERE idempotencyKey = ?1",
+                        params![key],
+                        |row| row.get(0),
+                    )
+                    .optional()
+                    .map_err(|error| error.to_string())?;
+                if is_dead == Some(1) {
+                    dead_lettered += 1;
+                }
+            }
+            other => return Err(format!("unsupported status: {other}")),
+        }
+    }
+
+    Ok(serde_json::json!({ "applied": applied, "failed": failed, "deadLettered": dead_lettered }))
+}
+
+/// The manual retry: reset every dead-lettered record so the next drain attempts it again.
+fn retry_dead_lettered(state: &AgentState) -> Result<serde_json::Value, String> {
+    let connection = state.db.lock().map_err(|_| "database lock poisoned")?;
+    let changed = connection
+        .execute(
+            "UPDATE outbox
+             SET attemptCount = 0, deadLetteredAt = NULL, failureReason = NULL, lastManualRetryAt = ?1
+             WHERE deadLetteredAt IS NOT NULL",
+            params![chrono_now()],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(serde_json::json!({ "retried": changed }))
+}
+
+/// ISO-8601 UTC without pulling in chrono: SQLite stores text, and the page only ever compares these lexicographically.
+fn chrono_now() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = now.as_secs() as i64;
+    let days = secs / 86_400;
+    let time_of_day = secs % 86_400;
+    let (year, month, day) = civil_from_days(days);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        time_of_day / 3600,
+        (time_of_day % 3600) / 60,
+        time_of_day % 60
+    )
+}
+
+/// Howard Hinnant's days-to-civil conversion: no dependencies, correct for every date we care about.
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+/// The page shown when the hosted app cannot be reached. Served by the agent at /offline, not as a data: URL: WebView2 renders
+/// data: documents inconsistently, and a black rectangle is the failure this page exists to prevent.
+fn offline_fallback_html(app_url: &str) -> String {
+    format!(
+        r#"<!doctype html><html><head><meta charset="utf-8"><title>UltraOS Scoring</title>
+<style>
+  html, body {{ margin: 0; height: 100%; background: #050807; color: #e7efe9;
+                font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }}
+  body {{ display: flex; align-items: center; justify-content: center; }}
+  .card {{ max-width: 34rem; padding: 2.5rem; text-align: center; }}
+  h1 {{ font-size: 1.5rem; margin: 0 0 .75rem; }}
+  p {{ color: #9fb3a8; line-height: 1.6; margin: 0 0 1.25rem; }}
+  a.retry {{ display: inline-block; background: #00a05a; color: #04120c; font-weight: 600; text-decoration: none;
+             padding: .75rem 1.5rem; border-radius: .5rem; }}
+  code {{ background: #0d1712; padding: .15rem .4rem; border-radius: .25rem; font-size: .85em; }}
+</style></head><body><div class="card">
+  <h1>Unable to connect to UltraOS</h1>
+  <p>This laptop cannot reach <code>{app_url}</code>. Check the internet connection, then try again.</p>
+  <p>Anything already recorded on this machine is stored locally and will sync when the connection returns.</p>
+  <a class="retry" href="{app_url}">Retry</a>
+</div></body></html>"#
+    )
+}
+
 async fn offline_page() -> impl IntoResponse {
     let app_url = std::env::var("ULTRAOS_APP_URL").unwrap_or_else(|_| DEFAULT_APP_URL.to_string());
     (
@@ -131,9 +341,7 @@ async fn offline_page() -> impl IntoResponse {
 }
 
 async fn handshake(State(state): State<AgentState>) -> impl IntoResponse {
-    state
-        .handshake_seen
-        .store(true, std::sync::atomic::Ordering::SeqCst);
+    state.handshake_seen.store(true, std::sync::atomic::Ordering::SeqCst);
 
     // SameSite=None is required because the page's origin (app.neonultra.ng) and the agent (127.0.0.1) are cross-site; Secure is
     // required for SameSite=None, and Chromium treats 127.0.0.1 as a trustworthy origin so it accepts the cookie over http.
@@ -146,9 +354,7 @@ async fn handshake(State(state): State<AgentState>) -> impl IntoResponse {
 }
 
 async fn agent(State(state): State<AgentState>, headers: HeaderMap, body: axum::body::Bytes) -> impl IntoResponse {
-    // The token is checked BEFORE the body is parsed. With axum's Json extractor the parse happens first, so an unauthorised
-    // caller sending a malformed body got 400 instead of 401 - which tells them the route exists and is worth probing. Bytes are
-    // taken raw and parsed here, after the token, so the answer to "are you allowed" never depends on what you sent.
+    // The token is checked BEFORE the body is parsed, so the answer to "are you allowed" never depends on what was sent.
     match cookie_token(&headers) {
         Some(token) if token == *state.token => {}
         _ => return (StatusCode::UNAUTHORIZED, err("missing or invalid agent token")),
@@ -158,35 +364,41 @@ async fn agent(State(state): State<AgentState>, headers: HeaderMap, body: axum::
         Ok(request) => request,
         Err(error) => return (StatusCode::BAD_REQUEST, err(format!("invalid JSON body: {error}"))),
     };
-    let body = request;
 
-    // Every arm is an explicit (status, body) pair: axum needs one concrete return type for the handler, and a bare Json in one
-    // arm and a tuple in another does not unify.
-    match body.action.as_str() {
-        "PING" => (
-            StatusCode::OK,
-            ok(Some(serde_json::json!({
+    let result: Result<serde_json::Value, String> = match request.action.as_str() {
+        // PING reports the pragmas because `synchronous` is per-connection: another process reading the file can see WAL (stored
+        // in the header) but not the durability setting, so the agent has to answer for its own connection.
+        "PING" => {
+            let pragmas = state.db.lock().ok().and_then(|connection| {
+                let journal: String = connection.query_row("PRAGMA journal_mode", [], |row| row.get(0)).ok()?;
+                let synchronous: i64 = connection.query_row("PRAGMA synchronous", [], |row| row.get(0)).ok()?;
+                Some(serde_json::json!({ "journal_mode": journal, "synchronous": synchronous }))
+            });
+            Ok(serde_json::json!({
                 "status": "ok",
                 "version": env!("CARGO_PKG_VERSION"),
-                "store": "json",
-            }))),
-        ),
-        "SAVE_OUTBOX" => match append_outbox(&state, &body.payload) {
-            Ok(count) => (
-                StatusCode::OK,
-                ok(Some(serde_json::json!({
-                    "saved": count,
-                    "pending": read_outbox(&state).as_array().map(|items| items.len()).unwrap_or(0),
-                }))),
-            ),
-            Err(message) => (StatusCode::BAD_REQUEST, err(message)),
+                "store": "sqlite",
+                "pragmas": pragmas,
+            }))
+        }
+        "SAVE_OUTBOX" => save_outbox(&state, &request.payload),
+        "READ_OUTBOX" => read_outbox(&state),
+        "MARK_SYNCED" => mark_synced(&state, &request.payload),
+        "RETRY_DEAD_LETTERED" => retry_dead_lettered(&state),
+        // Kept as an admin escape hatch for local testing, never used by the app's production paths.
+        "CLEAR_OUTBOX" => match state.db.lock() {
+            Ok(connection) => match connection.execute("DELETE FROM outbox", []) {
+                Ok(deleted) => Ok(serde_json::json!({ "cleared": true, "deleted": deleted })),
+                Err(error) => Err(error.to_string()),
+            },
+            Err(_) => Err("database lock poisoned".to_string()),
         },
-        "READ_OUTBOX" => (StatusCode::OK, ok(Some(read_outbox(&state)))),
-        "CLEAR_OUTBOX" => match std::fs::write(outbox_path(&state), "[]") {
-            Ok(_) => (StatusCode::OK, ok(Some(serde_json::json!({ "cleared": true })))),
-            Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, err(error.to_string())),
-        },
-        other => (StatusCode::BAD_REQUEST, err(format!("unsupported action: {other}"))),
+        other => Err(format!("unsupported action: {other}")),
+    };
+
+    match result {
+        Ok(data) => (StatusCode::OK, ok(Some(data))),
+        Err(message) => (StatusCode::BAD_REQUEST, err(message)),
     }
 }
 
@@ -195,6 +407,7 @@ async fn agent(State(state): State<AgentState>, headers: HeaderMap, body: axum::
 fn spawn_agent(data_dir: PathBuf) -> Arc<std::sync::atomic::AtomicBool> {
     let handshake_seen = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let flag_for_server = handshake_seen.clone();
+
     std::thread::spawn(move || {
         let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
             Ok(runtime) => runtime,
@@ -205,6 +418,15 @@ fn spawn_agent(data_dir: PathBuf) -> Arc<std::sync::atomic::AtomicBool> {
         };
 
         runtime.block_on(async move {
+            let connection = match open_database(&data_dir) {
+                Ok(connection) => connection,
+                Err(error) => {
+                    eprintln!("ultraos-agent: cannot open outbox.db: {error}");
+                    return;
+                }
+            };
+            println!("ultraos-agent: sqlite ready at {}", data_dir.join("ultraos").join("outbox.db").display());
+
             let origins: Vec<HeaderValue> = ALLOWED_ORIGINS
                 .iter()
                 .filter_map(|origin| HeaderValue::from_str(origin).ok())
@@ -218,7 +440,7 @@ fn spawn_agent(data_dir: PathBuf) -> Arc<std::sync::atomic::AtomicBool> {
 
             let state = AgentState {
                 token: Arc::new(uuid::Uuid::new_v4().to_string()),
-                data_dir: Arc::new(data_dir),
+                db: Arc::new(Mutex::new(connection)),
                 handshake_seen: flag_for_server,
             };
 
@@ -244,32 +466,6 @@ fn spawn_agent(data_dir: PathBuf) -> Arc<std::sync::atomic::AtomicBool> {
     handshake_seen
 }
 
-/// The page shown when the hosted app cannot be reached. Without it the window is a white rectangle and the user has no idea
-/// whether the app is broken, their wifi is off, or the laptop is out of data.
-/// The page shown when the hosted app cannot be reached. Served by the agent at /offline, not as a data: URL: WebView2 renders
-/// data: documents inconsistently, and a blank window is the failure this page exists to prevent.
-fn offline_fallback_html(app_url: &str) -> String {
-    format!(
-        r#"<!doctype html><html><head><meta charset="utf-8"><title>UltraOS Scoring</title>
-<style>
-  html, body {{ margin: 0; height: 100%; background: #050807; color: #e7efe9;
-                font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }}
-  body {{ display: flex; align-items: center; justify-content: center; }}
-  .card {{ max-width: 34rem; padding: 2.5rem; text-align: center; }}
-  h1 {{ font-size: 1.5rem; margin: 0 0 .75rem; }}
-  p {{ color: #9fb3a8; line-height: 1.6; margin: 0 0 1.25rem; }}
-  a.retry {{ display: inline-block; background: #00a05a; color: #04120c; font-weight: 600; text-decoration: none;
-             padding: .75rem 1.5rem; border-radius: .5rem; }}
-  code {{ background: #0d1712; padding: .15rem .4rem; border-radius: .25rem; font-size: .85em; }}
-</style></head><body><div class="card">
-  <h1>Unable to connect to UltraOS</h1>
-  <p>This laptop cannot reach <code>{app_url}</code>. Check the internet connection, then try again.</p>
-  <p>Anything already recorded on this machine is stored locally and will sync when the connection returns.</p>
-  <a class="retry" href="{app_url}">Retry</a>
-</div></body></html>"#
-    )
-}
-
 pub fn run() {
     let app_url = std::env::var("ULTRAOS_APP_URL").unwrap_or_else(|_| DEFAULT_APP_URL.to_string());
 
@@ -277,10 +473,7 @@ pub fn run() {
         .setup({
             let app_url = app_url.clone();
             move |app| {
-                let data_dir = app
-                    .path()
-                    .app_data_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."));
+                let data_dir = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("."));
                 let handshake_seen = spawn_agent(data_dir);
 
                 let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(app_url.parse()?))
@@ -293,17 +486,14 @@ pub fn run() {
                     .user_agent("UltraOSDesktop/1.0 (UltraOS Scoring)")
                     .build()?;
 
-                // If the page has not finished loading shortly after launch, the site is unreachable (or the machine is
-                // offline). Navigate to the embedded fallback rather than leaving a white rectangle on screen.
-                let fallback = offline_fallback_html(&app_url);
+                // No handshake within 12s means the page never became the app (offline, DNS, captive portal, site down). Show the
+                // agent's own page rather than leaving WebView2's error document on screen.
                 let window_for_check = window.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_secs(12));
                     if handshake_seen.load(std::sync::atomic::Ordering::SeqCst) {
                         return;
                     }
-                    // No handshake after 12s: the page never became the app (offline, DNS failure, captive portal, or the site is
-                    // down). Showing WebView2's own error page leaves the user with no idea what to do about it.
                     println!("ultraos-shell: no handshake from the app; showing the offline page");
                     let offline_url = format!("http://127.0.0.1:{AGENT_PORT}/offline");
                     if let Ok(url) = offline_url.parse() {
@@ -314,12 +504,10 @@ pub fn run() {
                 Ok(())
             }
         })
-        .on_page_load(|window, payload| {
-            // A page load that never finishes is the failure we care about; log it so a support call has something to read.
+        .on_page_load(|_window, payload| {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                 println!("ultraos-shell: loaded {}", payload.url());
             }
-            let _ = window;
         })
         .run(tauri::generate_context!())
         .expect("error while running UltraOS Scoring");

@@ -14,7 +14,7 @@ const AGENT_ORIGIN = "http://127.0.0.1:8012";
 const DETECT_TTL_MS = 5_000;
 const DETECT_TIMEOUT_MS = 1_200;
 
-export type AgentAction = "PING" | "SAVE_OUTBOX" | "READ_OUTBOX" | "CLEAR_OUTBOX";
+export type AgentAction = "PING" | "SAVE_OUTBOX" | "READ_OUTBOX" | "MARK_SYNCED" | "RETRY_DEAD_LETTERED" | "CLEAR_OUTBOX";
 
 export type AgentResponse<T = unknown> =
   | { ok: true; data: T }
@@ -98,4 +98,37 @@ export async function callLocalAgent<T = unknown>(action: AgentAction, payload?:
 export function resetLocalAgentDetection() {
   cached = null;
   inFlight = null;
+}
+
+/**
+ * Pending records from the desktop's SQLite outbox, in the same shape as the IndexedDB rows.
+ *
+ * When the agent is authoritative this IS the queue; IndexedDB is only the mirror. `localId` is the SQLite rowid and deliberately
+ * not used as a Dexie key - callers address records by `idempotencyKey`.
+ */
+export async function readPendingFromAgent(): Promise<unknown[]> {
+  if (!(await detectLocalAgent())) return [];
+  const response = await callLocalAgent<unknown[]>("READ_OUTBOX");
+  return response.ok && Array.isArray(response.data) ? response.data : [];
+}
+
+/** Mark exact keys synced (APPLIED / DUPLICATE) or failed. Per key, never per batch. */
+export async function markSyncedOnAgent(
+  idempotencyKeys: string[],
+  status: "APPLIED" | "DUPLICATE" | "FAILED" | "CONFLICT",
+  failureReason?: string,
+): Promise<boolean> {
+  if (idempotencyKeys.length === 0) return true;
+  // No agent (plain browser, test): this must be a no-op, not a fetch to a port that is not listening. The component test that
+  // counts sync requests caught exactly that.
+  if (!(await detectLocalAgent())) return true;
+  const response = await callLocalAgent("MARK_SYNCED", { idempotencyKeys, status, failureReason });
+  return response.ok;
+}
+
+/** Reset every dead-lettered record so the next drain attempts it again. */
+export async function retryDeadLetteredOnAgent(): Promise<number> {
+  if (!(await detectLocalAgent())) return 0;
+  const response = await callLocalAgent<{ retried: number }>("RETRY_DEAD_LETTERED");
+  return response.ok ? (response.data?.retried ?? 0) : 0;
 }

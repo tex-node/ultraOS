@@ -1,6 +1,7 @@
 import { offlineDb, type OfflineScoringDatabase } from "./db";
 import type { OutboxEnqueueInput, OutboxRecord } from "./types";
 import type { OutboxRecord as WireOutboxRecord, SyncOutboxRecordResult } from "@/lib/sync/outbox-schema";
+import { detectLocalAgent, markSyncedOnAgent, readPendingFromAgent } from "./local-agent";
 
 export function generateIdempotencyKey(): string {
   return crypto.randomUUID();
@@ -65,6 +66,17 @@ export async function readPendingBatch(
   batchSize = 50,
   db: OfflineScoringDatabase = offlineDb,
 ): Promise<OutboxRecord[]> {
+  // Desktop: the agent owns the queue. Its rows carry the SQLite rowid in localId, so callers must address them by
+  // idempotencyKey - which drain() already does when it reads the server's per-key results.
+  if (await detectLocalAgent()) {
+    const fromAgent = (await readPendingFromAgent()) as OutboxRecord[];
+    if (fromAgent.length > 0) {
+      return fromAgent
+        .slice()
+        .sort((left, right) => left.clientUpdatedAt.localeCompare(right.clientUpdatedAt))
+        .slice(0, batchSize);
+    }
+  }
   const pending = await db.outbox.filter((record) => !record.syncedAt && !record.deadLetteredAt).sortBy("clientUpdatedAt");
   return pending.slice(0, batchSize);
 }
@@ -236,6 +248,36 @@ export async function drain(deviceId: string, options: DrainOptions = {}): Promi
 
     if (syncedLocalIds.length > 0) {
       await markSynced(syncedLocalIds, db);
+
+      // Desktop: the agent keeps a record until the SERVER confirms it, then the IndexedDB mirror is deleted so the next drain
+      // cannot re-send it. Matched by idempotencyKey, not localId - the agent's rows carry SQLite rowids.
+      const syncedKeys = batch
+        .filter((record) => syncedLocalIds.includes(record.localId!))
+        .map((record) => record.idempotencyKey);
+      await markSyncedOnAgent(syncedKeys, "APPLIED");
+
+      // Only the desktop deletes the mirror. In a plain browser the synced rows are kept on purpose: the badge reads the newest
+      // `syncedAt` to say "Synced · last sync 14:32", and deleting them would blank that history. When the agent owns the queue
+      // the mirror exists for nothing but crash recovery, so once the server has confirmed a key it goes.
+      if (syncedKeys.length > 0 && (await detectLocalAgent())) {
+        const syncedKeySet = new Set(syncedKeys);
+        const mirrors = await db.outbox.filter((record) => syncedKeySet.has(record.idempotencyKey)).toArray();
+        if (mirrors.length > 0) {
+          await db.outbox.bulkDelete(mirrors.map((record) => record.localId!));
+        }
+      }
+    }
+
+    // Failures are mirrored to the agent with their reason, but the IndexedDB copy stays. If the agent dies mid-game the browser
+    // path is the only thing left holding the record; deleting it here would be the exact data loss this design prevents.
+    for (const record of batch) {
+      if (syncedLocalIds.includes(record.localId!)) continue;
+      const result = resultByKey.get(record.idempotencyKey);
+      await markSyncedOnAgent(
+        [record.idempotencyKey],
+        result?.status === "CONFLICT" ? "CONFLICT" : "FAILED",
+        result ? JSON.stringify(result.detail ?? "FAILED") : "NO_RESULT_FROM_SERVER",
+      );
     }
 
     return { ok: true, attempted: batch.length, applied, duplicate, failed, conflict };

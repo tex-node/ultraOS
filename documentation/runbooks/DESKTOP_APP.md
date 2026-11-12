@@ -117,3 +117,60 @@ also why the earlier black screenshots were an artefact rather than a rendering 
 `detectLocalAgent()` returns early unless the user agent contains `UltraOSDesktop` (the shell sets it). Without that gate the badge
 fired a loopback request on every render, which the sync-status test counted as a sync attempt and failed - correctly. The gate is
 honest: a plain browser has no agent, so it should not knock on a port that will not answer.
+
+## SQLite outbox and agent-authoritative drain (Prompt 4)
+
+The agent now owns the queue. `outbox.json` is gone; the records live in SQLite at
+`%APPDATA%\ng.neonultra.scoring\ultraos\outbox.db`, opened with **WAL** and `synchronous=NORMAL`.
+
+| Action | Behaviour |
+| --- | --- |
+| `SAVE_OUTBOX` | `INSERT OR IGNORE` — `UNIQUE(idempotencyKey)` makes a duplicate POST a no-op |
+| `READ_OUTBOX` | pending rows only (`syncedAt IS NULL AND deadLetteredAt IS NULL`), ordered by `clientUpdatedAt` |
+| `MARK_SYNCED` | per key: `APPLIED`/`DUPLICATE` → `syncedAt`; `FAILED`/`CONFLICT` → `attemptCount+1`, dead-lettered at 5 |
+| `RETRY_DEAD_LETTERED` | resets every dead-lettered row (mirrors the browser's manual retry) |
+| `CLEAR_OUTBOX` | kept as an admin escape hatch for local testing; no production path calls it |
+
+### Verified against the real database file
+
+```
+pragmas (agent's connection)  {'journal_mode': 'wal', 'synchronous': 1}
+SAVE_OUTBOX x3 (2 unique)     {'received': 3, 'saved': 2, 'pending': 2}
+  sqlite                      ('k-1', 0, None) · ('k-2', 0, None)
+MARK_SYNCED k-1 APPLIED       {'applied': 1}
+  sqlite                      ('k-1', 1, 0, None) · ('k-2', 0, 0, None)
+READ_OUTBOX                   one record (k-2)
+MARK_SYNCED k-2 FAILED x5     ('k-2', 5, 'signature mismatch', 1) · pending: []
+RETRY_DEAD_LETTERED           {'retried': 1} → both rows reset, pending again
+unknown action                400 unsupported action
+```
+
+Note on `synchronous`: it is **per connection**. A second process opening the file can confirm WAL (stored in the header) but not
+the durability setting, so `PING` reports both pragmas from the agent's own connection.
+
+## Acceptance test — score offline, sync, verify (run by hand on Windows)
+
+This is the workflow the desktop app exists for. It talks to **production**, so it is a deliberate, supervised test rather than
+something a build pipeline runs.
+
+1. Launch the desktop app and sign in.
+2. Open a live fixture's scoring console.
+3. Disconnect the network (`ipconfig /release`, or turn wifi off).
+4. Score five events: 2PT, 3PT, FT, a substitution, a timeout.
+5. In PowerShell, check the local queue:
+
+   ```powershell
+   python -c "import sqlite3,os; db=os.path.join(os.environ['APPDATA'],'ng.neonultra.scoring','ultraos','outbox.db'); print(list(sqlite3.connect(db).execute('SELECT idempotencyKey, entityType, attemptCount, syncedAt FROM outbox')))"
+   ```
+
+   Expect five rows, `syncedAt` all `None`, `attemptCount` 0.
+6. Reconnect, wait for the badge to sync (or click it).
+7. Re-run the query. Expect five rows with `syncedAt` set.
+8. On the server, count the replayed events:
+
+   ```bash
+   sudo docker exec -i ultraos-postgres psql -U ultraos -d ultraleagueos -c "SELECT COUNT(*) FROM \"GameEvent\" WHERE \"gameId\" = '<game-id>';"
+   ```
+
+**Status: not yet run.** It needs a hand on the machine and a production fixture; every step above is the operator's, and the
+agent side of it is verified separately (the table above). Do not mark this green until the two SQL outputs match.

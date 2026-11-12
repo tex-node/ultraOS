@@ -70,7 +70,9 @@ export function SyncStatusBadge() {
   useEffect(() => {
     let cancelled = false;
     void detectLocalAgent().then((present) => {
-      if (!cancelled) setHasLocalAgent(present);
+      // Only ever flip to true. Setting `false` on every browser render would be a state change with no visible effect - and it
+      // re-renders the badge, which re-runs the auto-sync effect and drains twice (the dead-letter component test caught it).
+      if (!cancelled && present) setHasLocalAgent(true);
     });
     return () => {
       cancelled = true;
