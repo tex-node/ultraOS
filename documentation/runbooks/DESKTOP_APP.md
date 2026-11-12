@@ -207,3 +207,69 @@ Two findings worth keeping:
 
 The acceptance section above stays **Status: not yet run**. It needs a human at the keyboard selecting a player and tapping
 through the real console; the agent-side half of the path is verified separately and does not depend on this test.
+
+## The console's interaction model (what an automation must do)
+
+Read from `(capture)/games/[fixtureId]/live/page.tsx`, `live-score-capture.tsx`, `sport-capture-panel.tsx` and
+`lib/sports/capture-plan.ts`.
+
+### 1. What is on a football console
+
+- **Scoreline**: two `<p class="mt-1 text-5xl font-black sm:text-6xl">` (home first). This is the locator the scoring spec uses.
+- **Clock controls**: `Pause`, `Next period`, `Undo last event`, `Confirm final` — all `min-h-[56px]`.
+- **A per-team stat form**: `<select name="playerId" required>` plus six buttons (`REBOUND`, `ASSIST`, `STEAL`, `BLOCK`,
+  `TURNOVER`, `FOUL`) submitting `recordStatEvent`, a note field, and foul sub-selects.
+- **A "Sport capture · Football" catalog panel**: one form per team with `<select name="playerId">` (**not** required) and buttons
+  named by catalog key — `GOAL`, `OWN_GOAL`, `CORNER`, `OFFSIDE`, `FOUL`, `YELLOW_CARD`, `RED_CARD`, `SUBSTITUTION` — each a submit
+  button with `name="typeKey"`, plus an optional note input.
+- **No `+1 / +2 / +3`**: those come from `LiveScoreCapture`, which renders only when the sport has a scoring module
+  (`resolveScoringModule`) or is basketball.
+
+### 2. Does a Goal require a player first?
+
+No — neither path requires one:
+
+- The catalog `GOAL` submit has an optional player select, and calls **`recordSportEvent`**.
+- Basketball's `+1/+2/+3` default to `"Team score / unknown player"` and call **`recordScore`**.
+
+**But only `recordScore` has an offline branch.** That is why five clicks on a football "Goal" queued nothing: they take a path
+that has no queue at all. The acceptance test must run on a **basketball** fixture, where the scorer's own `+N` buttons exist.
+
+### 3. What kind of picker is it?
+
+A native `<select>` in both places — no Radix, no shadcn combobox, no modal:
+
+| Panel | Element |
+| --- | --- |
+| Scorer (`LiveScoreCapture`) | `<select id="player-{seaasonClubId}">`, first option `"Team score / unknown player"` |
+| Stat form | `<select name="playerId" required>` |
+| Catalog panel | `<select name="playerId">` |
+
+### 4. Selectors a Playwright script should use
+
+```ts
+// basketball: player is optional, so this is a realism step rather than a requirement
+await page.locator('select[id^="player-"]').first().selectOption({ index: 1 });
+await page.getByRole("button", { name: "+2", exact: true }).first().click();
+
+// football catalog (no offline queue - do not use for the acceptance test)
+const form = page.locator('h3:has-text("Sport capture")').locator("xpath=following::form[1]");
+await form.locator('select[name="playerId"]').selectOption({ index: 1 });
+await page.getByRole("button", { name: "Goal", exact: true }).first().click();
+```
+
+The script that implements this is `web/scripts/desktop-acceptance.mjs`; it drives the real window over CDP.
+
+### What the run proved, and why it stopped
+
+With the correct buttons the console's offline path fired:
+
+```
+offline: onLine=false
+taps: 5 × +2
+console feedback: "✓ Captured offline: +2 — queued for sync · 5 pending"
+```
+
+…and the agent's SQLite stayed empty, because **the page inside the shell is the deployed app**, and the deployed staging build
+predates the agent-aware outbox. The mirror lives in `enqueue()`, which that build does not have. The next step is therefore a
+staging deploy of this branch, then the same script: taps → rows in `outbox.db` → reconnect → sync → server rows.
