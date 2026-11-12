@@ -13,18 +13,7 @@
 
   "app": {
     "withGlobalTauri": false,
-    "windows": [
-      {
-        "title": "UltraOS Scoring",
-        "width": 1366,
-        "height": 900,
-        "minWidth": 1024,
-        "minHeight": 768,
-        "resizable": true,
-        "fullscreen": false,
-        "center": true
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }

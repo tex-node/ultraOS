@@ -68,3 +68,52 @@ more useful and less invasive.
 | 3 — local agent | Axum listener on `127.0.0.1:8012`, token + allow-list (`PING`, `SAVE_OUTBOX`, `READ_OUTBOX`, `CLEAR_OUTBOX`) | `curl` against the port with and without the token |
 | 4 — SQLite outbox | repository switches to the agent when `window.__ULTRAOS_DESKTOP__` is present | score offline → rows in the `.db` → sync → staging |
 | 5 — vision downloader | optional engine download, sidecar supervised on `127.0.0.1:8011` | download, then analyse a clip with the network off |
+
+## The local agent (Prompt 3)
+
+The shell now runs an HTTP agent on **127.0.0.1:8012**. It is the only privileged surface the page can reach, and it is deliberately
+small: four actions, a bearer token delivered as an `HttpOnly` cookie, and CORS pinned to the two origins we control.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /handshake` | sets `ultraos_agent=<uuid>` (`HttpOnly; SameSite=None; Secure`) and returns 200 |
+| `GET /offline` | the "cannot reach UltraOS" page, served by the agent (see below) |
+| `POST /api/local/agent` | `PING` · `SAVE_OUTBOX` · `READ_OUTBOX` · `CLEAR_OUTBOX` |
+
+`SAVE_OUTBOX` appends to `outbox.json` in the app data directory (write-then-rename, so a power cut cannot leave a half-written
+queue). Prompt 4 replaces the file with SQLite behind the same four actions.
+
+### Verified
+
+```
+handshake            200, token 36 chars, HttpOnly + SameSite=None + Secure
+no cookie, bad body  401  (the token is checked BEFORE the body is parsed, so a stranger learns nothing)
+PING                 200 {"status":"ok","version":"0.1.0","store":"json"}
+SAVE_OUTBOX          200 {"saved":2,"pending":2}
+READ_OUTBOX          200 [ …two records… ]
+CLEAR_OUTBOX         200 {"cleared":true} → READ returns []
+unknown action       400 unsupported action
+CORS allowed origin  access-control-allow-origin: https://app.neonultra.ng · allow-credentials: true
+CORS foreign origin  no allow-origin header → blocked
+```
+
+### The offline page is served, not embedded
+
+The first attempt navigated to a `data:text/html;base64,…` URL. WebView2 renders data: documents inconsistently and the window came
+up as a near-black rectangle - the exact failure the page exists to prevent. The agent now serves it at `/offline`, and the watchdog
+navigates there when the page has not completed a handshake within 12 seconds:
+
+```
+ultraos-shell: no handshake from the app; showing the offline page
+ultraos-shell: loaded http://127.0.0.1:8012/offline
+```
+
+That log line is the proof: WebView2 fires `PageLoadEvent::Finished` for the agent's page, so the window is showing it. Note that
+`capture-window.ps1` photographs it as black - `PrintWindow` cannot composite WebView2's GPU surface for that document, which is
+also why the earlier black screenshots were an artefact rather than a rendering bug.
+
+### Why the page only probes when it is inside the shell
+
+`detectLocalAgent()` returns early unless the user agent contains `UltraOSDesktop` (the shell sets it). Without that gate the badge
+fired a loopback request on every render, which the sync-status test counted as a sync attempt and failed - correctly. The gate is
+honest: a plain browser has no agent, so it should not knock on a port that will not answer.

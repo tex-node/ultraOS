@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { offlineDb } from "@/lib/offline/db";
 import { drain, retryDeadLetteredRecords } from "@/lib/offline/outbox";
 import { startAutoSync } from "@/lib/offline/auto-sync";
 import { getOrCreateDeviceId } from "@/lib/offline/device-id";
+import { detectLocalAgent } from "@/lib/offline/local-agent";
 
 // Browser-only browser-API subscriptions via useSyncExternalStore: no setState-in-effect, and a
 // correct server snapshot (true / not-yet-mounted) so SSR never touches navigator or Dexie.
@@ -63,6 +64,19 @@ export function SyncStatusBadge() {
   // Pending means "not yet synced and not dead-lettered" - matches outbox.ts's
   // readPendingBatch/pendingCount exactly, so this badge's count is always what the next drain()
   // would actually attempt, not a superset that includes records drain() has already given up on.
+  // Desktop agent: true when the Tauri shell's local agent answers the handshake. Purely informational - the outbox mirrors to
+  // it in enqueue(), and the web path is unchanged when it is absent.
+  const [hasLocalAgent, setHasLocalAgent] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void detectLocalAgent().then((present) => {
+      if (!cancelled) setHasLocalAgent(present);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const pending = useLiveQuery(
     () => (mounted ? offlineDb.outbox.filter((r) => !r.syncedAt && !r.deadLetteredAt).count() : 0),
     [mounted],
@@ -124,6 +138,7 @@ export function SyncStatusBadge() {
           ? "Synced"
           : "Online";
 
+  const agentSuffix = hasLocalAgent ? " Â· Local agent" : "";
   return (
     <button
       type="button"
@@ -147,7 +162,7 @@ export function SyncStatusBadge() {
         aria-hidden
         className={`h-2 w-2 rounded-full ${needsAttention ? "bg-red-400" : showWarning ? "bg-amber-400" : "bg-emerald-400"}`}
       />
-      {label}
+      {label}{agentSuffix}
     </button>
   );
 }

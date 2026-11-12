@@ -15,7 +15,20 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+axum = "0.7"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }
+tower-http = { version = "0.5", features = ["cors"] }
+uuid = { version = "1", features = ["v4"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
 
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+# The dev profile carries no debug info: this shell is 300 lines, and full DWARF inflated the link step by ~2 GB on a machine
+# that had 300 MB free. If you need a debugger, flip this locally - do not commit it.
+[profile.dev]
+debug = 0
+incremental = false

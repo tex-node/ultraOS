@@ -161,7 +161,9 @@ async function main() {
   // 5b. serve and test
   const server = spawn("npx", ["next", "start", "-p", String(PORT)], {
     cwd: web,
-    stdio: "ignore",
+    // inherit, not ignore: when a page throws server-side, the stack is the only thing that explains the error boundary the
+    // browser shows. Discarding it turns "Something went wrong" into a twenty-minute guess.
+    stdio: "inherit",
     shell: process.platform === "win32",
     env: process.env,
   });
@@ -183,7 +185,29 @@ async function main() {
       return result.status ?? 1;
     });
   } finally {
-    server.kill();
+    // `server.kill()` kills the shell on Windows and leaves the real `next start` alive, which then holds port 4173 and silently
+    // serves the PREVIOUS build to the next run. That is how a passing suite turned into "the console page renders 0 score
+    // elements": the test was talking to a stale server whose build predated the (capture) route group. Kill the whole tree.
+    if (server.pid) {
+      if (process.platform === "win32") {
+        spawnSync("taskkill", ["/pid", String(server.pid), "/T", "/F"], { stdio: "ignore" });
+      } else {
+        server.kill("SIGTERM");
+      }
+    }
+    // Belt and braces: if anything is still listening on the port, stop it, because the next run would inherit it.
+    try {
+      const stale = spawnSync("node", ["-e", `
+        const net = require("node:net");
+        const socket = net.connect({ port: ${PORT}, host: "127.0.0.1" });
+        socket.on("connect", () => { socket.destroy(); process.exit(0); });
+        socket.on("error", () => process.exit(1));
+        setTimeout(() => process.exit(1), 500);
+      `], { encoding: "utf8" });
+      if (stale.status === 0) process.stdout.write(`    warn: something still listens on ${PORT}\n`);
+    } catch {
+      // diagnostics only
+    }
   }
 
   const total = (Date.now() - started) / 60000;

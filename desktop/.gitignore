@@ -3,3 +3,8 @@ src-tauri/target/
 src-tauri/gen/schemas/
 window-capture.png
 icon-source.png
+out.txt
+err.txt
+agent-out.txt
+agent-err.txt
+fallback-test.ps1

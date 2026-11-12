@@ -23,7 +23,23 @@ export async function enqueue(
     attemptCount: 0,
     ledgerSourceHint: input.ledgerSourceHint,
   };
-  return db.outbox.add(record);
+  const localId = await db.outbox.add(record);
+
+  // Desktop mirror (documentation/architecture/DESKTOP_APP.md, Option B). When the Tauri shell's local agent is running, every
+  // queued record is also written to its durable store, so a browser profile cleared mid-match - or a WebView2 data wipe on
+  // update - cannot lose a game. The IndexedDB copy stays authoritative for the web path; this is the belt to that braces, not a
+  // replacement for it, and it is deliberately fire-and-forget: the tap must not wait on a local HTTP call to be recorded.
+  void (async () => {
+    try {
+      const { detectLocalAgent, callLocalAgent } = await import("./local-agent");
+      if (!(await detectLocalAgent())) return;
+      await callLocalAgent("SAVE_OUTBOX", [record]);
+    } catch {
+      // A missing or wedged agent must never surface as a scoring failure.
+    }
+  })();
+
+  return localId;
 }
 
 // A record failing this many times is treated as a permanent failure, not a transient one - a bad
