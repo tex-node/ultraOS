@@ -1,0 +1,11 @@
+{
+  "name": "ultraleagueos",
+  "private": true,
+  "description": "Convenience entry points. The application lives in web/ (Next.js) and the desktop shell in desktop/ (Tauri).",
+  "scripts": {
+    "desktop:dev": "npm --prefix desktop run dev",
+    "desktop:build": "npm --prefix desktop run build",
+    "desktop:check": "cargo check --manifest-path desktop/src-tauri/Cargo.toml",
+    "e2e:local": "npm --prefix web run test:e2e:local"
+  }
+}
