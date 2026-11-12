@@ -273,3 +273,42 @@ console feedback: "✓ Captured offline: +2 — queued for sync · 5 pending"
 …and the agent's SQLite stayed empty, because **the page inside the shell is the deployed app**, and the deployed staging build
 predates the agent-aware outbox. The mirror lives in `enqueue()`, which that build does not have. The next step is therefore a
 staging deploy of this branch, then the same script: taps → rows in `outbox.db` → reconnect → sync → server rows.
+
+### The acceptance run found a real auth bug, and it blocks the loop
+
+With the correct buttons the console's offline branch works:
+
+```
+console open · scores ["2","0"]
+offline: onLine=false
+taps: 5 × +2
+console feedback: "✓ Captured offline: +2 — queued for sync · 10 pending"
+```
+
+…and `outbox.db` stays **empty**, because the page's authenticated call to the agent never succeeds:
+
+```
+handshake            200
+stored cookie        domain=127.0.0.1  secure=false  sameSite=Lax  httpOnly=true
+PING from the page   401 {"ok":false,"error":"missing or invalid agent token"}
+```
+
+**The cookie is stored and still not sent.** A fetch from `http://127.0.0.1:4120` to `http://127.0.0.1:8012` is a different origin,
+and WebView2 does not attach the agent's cookie to it — SameSite=Lax did not help (tested after removing `Secure`, which had
+rejected it earlier over plain http). So `enqueue()`'s mirror is fire-and-forget into a 401, which is why nothing reaches SQLite.
+The offline fallback to IndexedDB is what kept the taps alive ("10 pending"), and that is the safety net doing its job.
+
+This is a design-level flaw in the agent's auth, not a test artefact: **`Set-Cookie` from a different port is not a usable
+credential for the page.** Prompt 5's downloader and vision sync depend on the same credential, so it must be fixed first.
+
+**Two fixes, in order of preference:**
+
+1. **Token in the handshake body, sent as a header.** `/handshake` returns `{ token }`; the page keeps it in a module variable
+   (never `localStorage`) and sends `X-UltraOS-Token` on the four allow-listed actions. It gives up `HttpOnly`, and the honest
+   trade is: an XSS could already *make* those four calls, so the marginal loss is reading the token — bound it to one launch and
+   one window. Everything else about the boundary is unchanged.
+2. **Same-origin path.** Serve the agent under the app's own origin (`/api/desktop/*` proxied to `127.0.0.1:8012`). Cookies again
+   become first-party, but the proxy has to exist on the server, which contradicts "the agent is local".
+
+Until one of these is implemented and re-verified, the acceptance section stays **Status: not yet run**, and Prompt 5 should not
+start: its downloader is the same authenticated call that just returned 401.

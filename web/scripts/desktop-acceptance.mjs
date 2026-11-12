@@ -64,7 +64,15 @@ try {
   await page.addInitScript(() => {
     Object.defineProperty(Navigator.prototype, "onLine", { get: () => false, configurable: true });
   });
-  await context.route(`${APP}/**`, (route) => route.abort());
+  // Abort only the requests that carry data to the server (server actions are POST fetches). Documents, scripts and styles are
+  // allowed through, otherwise the reload itself is blocked and the page shows the error boundary instead of the console.
+  await context.route(`${APP}/**`, (route) => {
+    const type = route.request().resourceType();
+    if (type === "document" || type === "script" || type === "stylesheet" || type === "font" || type === "image") {
+      return route.continue();
+    }
+    return route.abort();
+  });
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("p.text-5xl", { timeout: 30_000 });
   console.log(`offline: onLine=${await page.evaluate(() => navigator.onLine)}`);

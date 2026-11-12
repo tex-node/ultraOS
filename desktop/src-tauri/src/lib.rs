@@ -351,12 +351,25 @@ async fn offline_page() -> impl IntoResponse {
     )
 }
 
-async fn handshake(State(state): State<AgentState>) -> impl IntoResponse {
+async fn handshake(State(state): State<AgentState>, headers: HeaderMap) -> impl IntoResponse {
     state.handshake_seen.store(true, std::sync::atomic::Ordering::SeqCst);
 
-    // SameSite=None is required because the page's origin (app.neonultra.ng) and the agent (127.0.0.1) are cross-site; Secure is
-    // required for SameSite=None, and Chromium treats 127.0.0.1 as a trustworthy origin so it accepts the cookie over http.
-    let cookie = format!("{COOKIE_NAME}={}; HttpOnly; SameSite=None; Secure; Path=/; Max-Age=43200", state.token);
+    // Attributes follow the origin that is asking. A shell pointed at an http loopback origin (staging acceptance runs) needs a
+    // cookie the browser will actually store: SameSite=Lax, no Secure. The deployed pair (app.neonultra.ng -> 127.0.0.1) is
+    // cross-site and needs SameSite=None; Secure.
+    let origin = headers
+        .get(axum::http::header::ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let loopback = origin.starts_with("http://127.0.0.1") || origin.starts_with("http://localhost");
+    let attributes = if loopback {
+        "HttpOnly; SameSite=Lax; Path=/; Max-Age=43200"
+    } else {
+        "HttpOnly; SameSite=None; Secure; Path=/; Max-Age=43200"
+    };
+    let cookie = format!("{COOKIE_NAME}={}; {attributes}", state.token);
+
     let mut response = (StatusCode::OK, "agent ready").into_response();
     if let Ok(value) = HeaderValue::from_str(&cookie) {
         response.headers_mut().insert(axum::http::header::SET_COOKIE, value);
