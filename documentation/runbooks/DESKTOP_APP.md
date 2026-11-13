@@ -312,3 +312,32 @@ credential for the page.** Prompt 5's downloader and vision sync depend on the s
 
 Until one of these is implemented and re-verified, the acceptance section stays **Status: not yet run**, and Prompt 5 should not
 start: its downloader is the same authenticated call that just returned 401.
+
+### 2026-11-13 — header-token auth landed; acceptance still blocked
+
+The agent auth is now a signed proof and a bearer token (Prompt 4b). Verified end to end, without a browser:
+
+```
+valid proof → 200 · tampered signature → 401 · expired proof → 401
+agent call with token → 200 · without token → 401 · foreign token → 401
+token from a previous launch → 401   (the in-memory map is cleared on restart)
+```
+
+And from inside the running page, after fixing the CORS preflight (`X-UltraOS-Token` was not in `allow-headers`, so every agent call
+failed the preflight as "Failed to fetch"):
+
+```
+GET /api/desktop/agent-token  → 200
+POST 127.0.0.1:8012/handshake → 200, agentToken issued
+POST …/api/local/agent PING   → 200
+```
+
+**Still not passed.** The five offline taps were captured by the console ("Captured offline: +2 — queued for sync · 5 pending") and
+a `sqlite3` read of `outbox.db` showed five rows with `syncedAt` NULL — but the agent's own `READ_OUTBOX` reported **0 pending**,
+the same file showing five, so `drain()` returned before it ever called `/api/sync/outbox`. That discrepancy (two views of one file,
+or two instances of the agent) is unexplained and is the next thing to chase; nothing about it is a P&L claim, so it stays
+unresolved rather than papered over.
+
+Server-side row count was never reached, because the sync request was never sent.
+
+**Status: not yet run.** Prompt 5 should not start on this.

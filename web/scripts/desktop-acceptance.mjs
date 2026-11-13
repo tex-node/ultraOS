@@ -60,12 +60,8 @@ try {
     }
   }
 
-  // Offline: the app is unreachable, the agent is not.
-  await page.addInitScript(() => {
-    Object.defineProperty(Navigator.prototype, "onLine", { get: () => false, configurable: true });
-  });
-  // Abort only the requests that carry data to the server (server actions are POST fetches). Documents, scripts and styles are
-  // allowed through, otherwise the reload itself is blocked and the page shows the error boundary instead of the console.
+  // Offline, in place - no reload. Reloading while the app origin is blocked makes Next fetch an RSC payload it cannot get and
+  // the console is replaced by the error boundary ("Try again"); that is a property of the harness, not of the app.
   await context.route(`${APP}/**`, (route) => {
     const type = route.request().resourceType();
     if (type === "document" || type === "script" || type === "stylesheet" || type === "font" || type === "image") {
@@ -73,17 +69,36 @@ try {
     }
     return route.abort();
   });
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForSelector("p.text-5xl", { timeout: 30_000 });
+  await page.evaluate(() => {
+    Object.defineProperty(Navigator.prototype, "onLine", { get: () => false, configurable: true });
+    // The console tracks connectivity through a hook fed by the browser's online/offline events, not by polling
+    // navigator.onLine, so overriding the getter alone leaves it believing it is still online. Dispatch what it listens for.
+    window.dispatchEvent(new Event("offline"));
+  });
   console.log(`offline: onLine=${await page.evaluate(() => navigator.onLine)}`);
 
-  const plusTwo = page.getByRole("button", { name: "+2", exact: true }).first();
-  if (!(await plusTwo.count())) {
+  // The +2 control lives inside a dense grid and Playwright's actionability check times out on it (it is reachable in the DOM but
+  // the click never settles). Dispatch the click in the page instead - that still fires React's handler; only hit-testing is
+  // skipped, which is what the timeout was about.
+  const tapInfo = await page.evaluate(() =>
+    [...document.querySelectorAll("button")]
+      .filter((button) => /^\+2/.test((button.textContent ?? "").trim()))
+      .map((button) => ({ text: (button.textContent ?? "").trim(), disabled: button.disabled })),
+  );
+  console.log(`+2 controls: ${JSON.stringify(tapInfo)}`);
+  if (tapInfo.length === 0) {
     const names = await page.getByRole("button").allInnerTexts();
     throw new Error(`no +2 button · page offers: ${names.slice(0, 24).join(" / ")}`);
   }
+  if (tapInfo[0].disabled) throw new Error("the +2 control is disabled (game FINAL or a request is pending)");
+
   for (let index = 0; index < 5; index++) {
-    await plusTwo.click({ force: true });
+    await page.evaluate(() => {
+      const button = [...document.querySelectorAll("button")].find((candidate) =>
+        /^\+2/.test((candidate.textContent ?? "").trim()),
+      );
+      button?.click();
+    });
     await page.waitForTimeout(700);
   }
   console.log("taps: 5 × +2");
@@ -97,10 +112,12 @@ try {
   );
   console.log(`console feedback: ${JSON.stringify(acknowledgments)}`);
 
-  // Back online, then sync.
+  // Back online, then sync - again without a reload, so the console keeps its state.
   await context.unroute(`${APP}/**`);
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForSelector("p.text-5xl", { timeout: 30_000 });
+  await page.evaluate(() => {
+    Object.defineProperty(Navigator.prototype, "onLine", { get: () => true, configurable: true });
+    window.dispatchEvent(new Event("online"));
+  });
   console.log(`online: onLine=${await page.evaluate(() => navigator.onLine)}`);
 
   const badge = page.getByRole("button", { name: /pending|offline|synced|sync/i }).first();

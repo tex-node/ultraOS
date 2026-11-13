@@ -573,7 +573,13 @@ fn spawn_agent(data_dir: PathBuf, app_url: String) -> Arc<std::sync::atomic::Ato
             let cors = CorsLayer::new()
                 .allow_origin(AllowOrigin::list(origins))
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers([axum::http::header::CONTENT_TYPE])
+                // x-ultraos-token is a non-simple header, so the browser sends a preflight for every agent call. Without it
+                // listed here, the preflight fails and the page sees "Failed to fetch" - which is exactly what the acceptance run
+                // reported while the agent itself was healthy.
+                .allow_headers([
+                    axum::http::header::CONTENT_TYPE,
+                    axum::http::HeaderName::from_static("x-ultraos-token"),
+                ])
                 .allow_credentials(true);
 
             let state = AgentState {
