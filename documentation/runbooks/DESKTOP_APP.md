@@ -403,3 +403,10 @@ AGREE - both views see the row
 Only one `outbox.db` exists on disk. The earlier disagreement was a stale agent instance holding `8012` (a second launch whose
 window talked to the first process); after killing every listener and starting exactly one instance, the agent and the file agree.
 `PING` now reports `dbPath` so this question is one call, not an hour.
+
+### Rotating AGENT_SECRET
+
+It is shared between the server and every installed desktop build, so rotation is a **coordinated release**, not a maintenance
+window: rotate the web side first (installed apps fail their handshake and fall back to IndexedDB — scoring still works, the SQLite
+mirror and vision stop), then ship a rebuilt desktop app, then wait for users to install it. Anyone who does not update stays on the
+old secret and on IndexedDB. See `documentation/runbooks/ROTATE_SECRETS.md`.

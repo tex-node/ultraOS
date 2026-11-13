@@ -257,3 +257,17 @@ and re-release the desktop app.
 keep scoring); rotate the desktop first and the new app rejects the old server's proofs. There is no window where both are green
 unless the app is rebuilt and shipped in the same change. Because of that, treat this as a **coordinated release**, not a
 maintenance-window rotation.
+
+### Rotating AGENT_SECRET is a release, not a maintenance window
+
+The secret is shared: the web app signs proofs with it and every desktop build verifies with it. That makes rotation a sequenced
+rollout, not a 30-second change:
+
+1. **Rotate on the web side first.** Installed desktop apps immediately start failing `/handshake` (their copy of the secret no
+   longer matches). They degrade gracefully — handshake fails, `detectLocalAgent()` returns false, the outbox stays in IndexedDB and
+   **scoring still works**. The SQLite mirror and the vision sidecar are what stop.
+2. **Ship a rebuilt desktop app** with the new secret baked in (`AGENT_SECRET` at compile time).
+3. **Users install it.** Anyone who does not stays on the old secret and stays on IndexedDB until they update.
+
+There is no ordering where both old and new apps are green at once, so treat it as a **coordinated release**. If a rotation is done
+for security reasons, assume the old secret is compromised for as long as step 3 takes and say so in the release note.
