@@ -341,3 +341,65 @@ unresolved rather than papered over.
 Server-side row count was never reached, because the sync request was never sent.
 
 **Status: not yet run.** Prompt 5 should not start on this.
+
+### ACCEPTANCE PASS — 2026-11-13 — CDP automation
+
+Run in the desktop shell against **staging** (no production credentials were available to this agent, and a real fixture was not
+to be touched). The window was driven over WebView2's DevTools port, so the session, the agent token and the SQLite file are the
+ones a scorer would use.
+
+**Before reconnect** — five taps, network cut, `outbox.db`:
+
+```
+fae5cfb1-6000-4415-a0e9-65c52bab59c3 | GameEvent | 0 | NULL
+3e7047ee-91ec-43ea-8eac-f68444a62466 | GameEvent | 0 | NULL
+7635e04a-1035-4d1b-b90a-3b0a3b376fad | GameEvent | 0 | NULL
+b5504e09-e8e6-4e1e-a8e4-3102c619aa92 | GameEvent | 0 | NULL
+e367e429-13aa-4a15-a64b-18d051077848 | GameEvent | 0 | NULL
+```
+
+Console said: `✓ Captured offline: +2 — queued for sync · 5 pending`.
+
+**After clicking the sync badge** (`5 pending sync · Local agent`):
+
+```
+fae5cfb1-… | 0 | 2026-11-13T21:02:01Z
+3e7047ee-… | 0 | 2026-11-13T21:02:01Z
+7635e04a-… | 0 | 2026-11-13T21:02:01Z
+b5504e09-… | 0 | 2026-11-13T21:02:01Z
+e367e429-… | 0 | 2026-11-13T21:02:01Z
+unsynced remaining: 0
+```
+
+**On the server** (`game e2e_bball_4632f45b`, staging):
+
+```
+GameEvent rows: 31           -- 26 from earlier test runs, 5 at 21:01:59–21:02:00 from this run
+SCORE · 2 pts · 2026-11-13 21:02:00.302
+SCORE · 2 pts · 2026-11-13 21:01:59.726
+SCORE · 2 pts · 2026-11-13 21:01:59.511
+SCORE · 2 pts · 2026-11-13 21:01:59.332
+SCORE · 2 pts · 2026-11-13 21:01:59.122
+```
+
+The three outcomes match: five rows queued, five synced, five events with the sync's own timestamps.
+
+**One limitation this run exposed, and it is real.** The mirror needs an agent token, and a token is only obtainable from
+`/api/desktop/agent-token` **while the server is reachable**. If a scorer loads the console and the network is already down before
+the first tap, no token exists, so that first batch is written to IndexedDB only (the safety net) and never mirrored. Once one
+handshake has happened — the console is normally opened while online — the token persists and slides on use, and taps mirror
+normally. The follow-up is to handshake when the capture console mounts; that is not yet deployed or verified.
+
+**Two-view diagnostic (clean restart), recorded here because it was the open question:**
+
+```
+PING: store=sqlite · dbPath=C:\Users\XPS\AppData\Roaming\ng.neonultra.scoring\ultraos\outbox.db
+SAVE_OUTBOX: {"pending":1,"received":1,"saved":1}
+READ_OUTBOX (agent): 1 row · diag-1 present: true
+file query: diag-1 | NULL
+AGREE - both views see the row
+```
+
+Only one `outbox.db` exists on disk. The earlier disagreement was a stale agent instance holding `8012` (a second launch whose
+window talked to the first process); after killing every listener and starting exactly one instance, the agent and the file agree.
+`PING` now reports `dbPath` so this question is one call, not an hour.

@@ -1,19 +1,19 @@
 /**
- * Desktop acceptance run, driven through WebView2's DevTools protocol.
+ * Desktop acceptance run — the whole loop, in one script.
  *
- * The shell is launched with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223`, so Playwright attaches to the
- * real window: same session, same cookies, same agent.
+ *   console (basketball) → offline taps → SQLite rows (syncedAt NULL) → reconnect → sync from the stats page (where the badge
+ *   lives) → SQLite rows (syncedAt set)
  *
- * WHY BASKETBALL AND NOT FOOTBALL. The offline queue only covers the scorer's own scoring path (`recordScore`, rendered by
- * LiveScoreCapture as +1/+2/+3 with a player select). A football "Goal" button belongs to the catalog panel and submits
- * `recordSportEvent` — a different action with no offline branch, which is why five clicks on it queued nothing.
+ * The window is the real shell: Playwright attaches over WebView2's DevTools port, so the page, the session, the agent token and
+ * the SQLite file are the ones a scorer would use.
  *
- * WHY NOT `Network.emulateNetworkConditions({offline:true})`. It cuts loopback too, so the local agent becomes unreachable — a
- * state that cannot happen at a venue. The accurate simulation is `navigator.onLine = false` (what the console keys on) plus
- * aborting requests to the app origin, leaving 127.0.0.1:8012 alone.
+ * Offline is simulated the faithful way: `navigator.onLine = false` plus an `offline` event (the console keys on the event, not the
+ * property) and aborted data requests, leaving the loopback agent reachable — which is what a venue laptop actually experiences.
  *
  * Run: node scripts/desktop-acceptance.mjs <basketballFixtureId>
  */
+import { execFileSync } from "node:child_process";
+import path from "node:path";
 import { chromium } from "playwright";
 
 const FIXTURE = process.argv[2];
@@ -22,12 +22,23 @@ if (!FIXTURE) throw new Error("usage: node scripts/desktop-acceptance.mjs <baske
 const APP = "http://127.0.0.1:4120";
 const EMAIL = "e2e-admin@ultraleagueos.test";
 const PASSWORD = "E2E-test-password-2026";
+const DB = path.join(process.env.APPDATA, "ng.neonultra.scoring", "ultraos", "outbox.db");
+const PYTHON = "C:\\Users\\XPS\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe";
+
+function sql(query) {
+  const script = [
+    "import sqlite3, sys",
+    "rows = list(sqlite3.connect(sys.argv[1]).execute(sys.argv[2]))",
+    "print('\\n'.join(' | '.join('NULL' if v is None else str(v) for v in row) for row in rows) or '(no rows)')",
+  ].join("\n");
+  return execFileSync(PYTHON, ["-c", script, DB, query], { encoding: "utf8" }).trim();
+}
 
 const browser = await chromium.connectOverCDP("http://127.0.0.1:9223");
 const context = browser.contexts()[0];
-const page = context.pages().find((candidate) => candidate.url().includes("127.0.0.1:4120")) ?? context.pages()[0];
+const page = context.pages()[0];
 
-async function signIn() {
+try {
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
   if (await page.locator('input[name="email"]').count()) {
     await page.locator('input[name="email"]').fill(EMAIL);
@@ -36,61 +47,28 @@ async function signIn() {
     await page.waitForSelector('input[name="password"]', { state: "detached", timeout: 40_000 });
     console.log("signed in");
   }
-}
 
-async function openConsole() {
   await page.goto(`${APP}/games/${FIXTURE}/live`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector("p.text-5xl", { timeout: 30_000 });
-  const scores = await page.locator("p.text-5xl").allInnerTexts();
-  console.log(`console open · scores ${JSON.stringify(scores)}`);
-}
+  console.log(`console open · scores ${JSON.stringify(await page.locator("p.text-5xl").allInnerTexts())}`);
 
-try {
-  await signIn();
-  await openConsole();
-
-  // The scorer's own panel: a per-team player select plus +1/+2/+3. Selecting a player is optional (the first option is "Team
-  // score / unknown player"), but a real scorer picks one, so the test does too.
   const playerSelect = page.locator('select[id^="player-"]').first();
-  if (await playerSelect.count()) {
-    const options = await playerSelect.locator("option").count();
-    if (options > 1) {
-      await playerSelect.selectOption({ index: 1 });
-      console.log(`player selected: ${await playerSelect.locator("option").nth(1).innerText()}`);
-    }
+  if ((await playerSelect.count()) && (await playerSelect.locator("option").count()) > 1) {
+    await playerSelect.selectOption({ index: 1 });
   }
 
-  // Offline, in place - no reload. Reloading while the app origin is blocked makes Next fetch an RSC payload it cannot get and
-  // the console is replaced by the error boundary ("Try again"); that is a property of the harness, not of the app.
+  console.log(`before taps (file): ${sql("SELECT count(*), sum(syncedAt IS NULL) FROM outbox")}`);
+
+  // Offline: data requests to the app are cut, the agent stays reachable.
   await context.route(`${APP}/**`, (route) => {
     const type = route.request().resourceType();
-    if (type === "document" || type === "script" || type === "stylesheet" || type === "font" || type === "image") {
-      return route.continue();
-    }
+    if (["document", "script", "stylesheet", "font", "image"].includes(type)) return route.continue();
     return route.abort();
   });
   await page.evaluate(() => {
     Object.defineProperty(Navigator.prototype, "onLine", { get: () => false, configurable: true });
-    // The console tracks connectivity through a hook fed by the browser's online/offline events, not by polling
-    // navigator.onLine, so overriding the getter alone leaves it believing it is still online. Dispatch what it listens for.
     window.dispatchEvent(new Event("offline"));
   });
-  console.log(`offline: onLine=${await page.evaluate(() => navigator.onLine)}`);
-
-  // The +2 control lives inside a dense grid and Playwright's actionability check times out on it (it is reachable in the DOM but
-  // the click never settles). Dispatch the click in the page instead - that still fires React's handler; only hit-testing is
-  // skipped, which is what the timeout was about.
-  const tapInfo = await page.evaluate(() =>
-    [...document.querySelectorAll("button")]
-      .filter((button) => /^\+2/.test((button.textContent ?? "").trim()))
-      .map((button) => ({ text: (button.textContent ?? "").trim(), disabled: button.disabled })),
-  );
-  console.log(`+2 controls: ${JSON.stringify(tapInfo)}`);
-  if (tapInfo.length === 0) {
-    const names = await page.getByRole("button").allInnerTexts();
-    throw new Error(`no +2 button · page offers: ${names.slice(0, 24).join(" / ")}`);
-  }
-  if (tapInfo[0].disabled) throw new Error("the +2 control is disabled (game FINAL or a request is pending)");
 
   for (let index = 0; index < 5; index++) {
     await page.evaluate(() => {
@@ -101,33 +79,40 @@ try {
     });
     await page.waitForTimeout(700);
   }
-  console.log("taps: 5 × +2");
   await page.waitForTimeout(2_500);
 
-  const acknowledgments = await page.evaluate(() =>
+  const feedback = await page.evaluate(() =>
     Array.from(document.querySelectorAll("p"))
       .map((element) => element.textContent?.trim() ?? "")
-      .filter((text) => /offline|captur|queued|sync/i.test(text))
-      .slice(0, 4),
+      .filter((text) => /offline|captur|queued/i.test(text))
+      .slice(0, 3),
   );
-  console.log(`console feedback: ${JSON.stringify(acknowledgments)}`);
+  console.log(`console feedback: ${JSON.stringify(feedback)}`);
+  console.log("after taps (file, expect 5 rows with syncedAt NULL):");
+  console.log(sql("SELECT idempotencyKey, entityType, attemptCount, syncedAt FROM outbox ORDER BY localId"));
 
-  // Back online, then sync - again without a reload, so the console keeps its state.
+  // Reconnect and sync from the stats page, which is the only page that renders the sync badge.
   await context.unroute(`${APP}/**`);
+  await page.goto(`${APP}/games/${FIXTURE}/stats`, { waitUntil: "domcontentloaded" });
   await page.evaluate(() => {
     Object.defineProperty(Navigator.prototype, "onLine", { get: () => true, configurable: true });
     window.dispatchEvent(new Event("online"));
   });
-  console.log(`online: onLine=${await page.evaluate(() => navigator.onLine)}`);
+  await page.waitForTimeout(2_000);
+  const clicked = await page.evaluate(() => {
+    const button = [...document.querySelectorAll("button")].find((candidate) =>
+      /local agent|online|pending|synced/i.test(candidate.textContent ?? ""),
+    );
+    button?.click();
+    return button ? (button.textContent ?? "").trim() : "no badge";
+  });
+  console.log(`sync: clicked "${clicked}"`);
+  await page.waitForTimeout(15_000);
 
-  const badge = page.getByRole("button", { name: /pending|offline|synced|sync/i }).first();
-  if (await badge.count()) {
-    await badge.click({ force: true }).catch(() => {});
-    console.log("clicked the sync badge");
-  } else {
-    console.log("no sync badge within reach");
-  }
-  await page.waitForTimeout(10_000);
+  console.log("after sync (expect syncedAt set):");
+  console.log(sql("SELECT idempotencyKey, attemptCount, syncedAt FROM outbox ORDER BY localId"));
+  const remaining = sql("SELECT count(*) FROM outbox WHERE syncedAt IS NULL");
+  console.log(`unsynced remaining: ${remaining}`);
 } finally {
   await browser.close();
 }

@@ -67,6 +67,9 @@ struct AgentSession {
 #[derive(Clone)]
 struct AgentState {
     db: Arc<Mutex<Connection>>,
+    /// Absolute path of the database this agent is actually using. Reported by PING: when a diagnostic disagrees with a file on
+    /// disk, the first question is "the same file?", and guessing costs more than a field.
+    db_path: Arc<String>,
     sessions: Arc<Mutex<HashMap<String, AgentSession>>>,
     /// Set the moment the page completes its first handshake - the only reliable evidence that the remote app actually loaded.
     handshake_seen: Arc<std::sync::atomic::AtomicBool>,
@@ -511,6 +514,7 @@ async fn agent(State(state): State<AgentState>, headers: HeaderMap, body: axum::
                 "version": env!("CARGO_PKG_VERSION"),
                 "store": "sqlite",
                 "pragmas": pragmas,
+                "dbPath": *state.db_path,
             }))
         }
         "SAVE_OUTBOX" => save_outbox(&state, &request.payload),
@@ -584,6 +588,13 @@ fn spawn_agent(data_dir: PathBuf, app_url: String) -> Arc<std::sync::atomic::Ato
 
             let state = AgentState {
                 db: Arc::new(Mutex::new(connection)),
+                db_path: Arc::new(
+                    data_dir
+                        .join("ultraos")
+                        .join("outbox.db")
+                        .to_string_lossy()
+                        .to_string(),
+                ),
                 sessions: Arc::new(Mutex::new(HashMap::new())),
                 handshake_seen: flag_for_server,
             };
