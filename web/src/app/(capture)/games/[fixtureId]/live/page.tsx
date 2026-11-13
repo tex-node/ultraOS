@@ -53,6 +53,7 @@ import { LiveScoreCapture } from "./live-score-capture";
 import { CaptureConnectivity } from "@/app/components/ui/capture-connectivity";
 import { isOfflineScoringEnabled } from "@/lib/offline/feature-flag";
 import { ExitConsole } from "@/app/components/capture/exit-console";
+import { LocalAgentStatus } from "@/app/components/local-agent-status";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -218,6 +219,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
     <>
       <ExitConsole />
       <main className="mx-auto max-w-7xl px-4 pb-8 sm:px-6">
+      <LocalAgentStatus />
         <div className="flex justify-between py-3">
           <Link href={`/fixtures/${fixtureId}`} className="text-sm text-text-2">Back to fixture</Link>
           <div className="flex gap-4">

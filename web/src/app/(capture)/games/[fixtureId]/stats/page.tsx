@@ -22,6 +22,7 @@ import { isUltraTime, periodLabel } from "@/lib/game-rules";
 import { verifyTeamMinutes, formatMinutes, type SubstitutionWithClock } from "@/lib/lineup-stints";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { ExitConsole } from "@/app/components/capture/exit-console";
+import { LocalAgentStatus } from "@/app/components/local-agent-status";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -60,6 +61,7 @@ export default async function StatisticianConsole({
       <>
         <ExitConsole />
         <main className="mx-auto max-w-3xl px-4 py-8">
+      <LocalAgentStatus />
           <p className="text-text-2">This game hasn&apos;t started yet on the scorer console. Statistics capture opens once the scorer starts the game.</p>
           <Link href={`/games/${fixtureId}/live`} className="mt-3 inline-block text-sm text-brand-400">Open scorer console</Link>
         </main>
