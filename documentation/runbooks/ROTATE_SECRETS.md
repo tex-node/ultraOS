@@ -242,3 +242,18 @@ A rotation is not done when the service restarts; it is done when everything tha
 - `SHARED_VPS_RISK.md` — what else is on the host, so a rotation window can be sized against it.
 - `LAUNCH_READY.md` §4/§5 — disk emergencies and restores, which interact with the backup unit in §2.6.
 - `session.md` 2026-10-28 — the incident that produced this document.
+
+| `AGENT_SECRET` | both env files, **and the desktop build** (`AGENT_SECRET` at compile time in `desktop/src-tauri`) | 30 s + a desktop release | every issued agent token is invalidated; the desktop app re-handshakes on next use. The web app keeps signing proofs the old app can no longer verify, so **rotating without rebuilding the desktop app locks every installed copy out of its agent** — the desktop falls back to IndexedDB, scoring still works, only the SQLite mirror stops. |
+## AGENT_SECRET (desktop agent proofs)
+
+Signs the short-lived proof that lets the desktop app's page obtain an agent token (`/api/desktop/agent-token` → agent
+`/handshake`). It is a **shared** secret: the server signs with it and the desktop binary verifies with it, so it exists in both
+env files and in the desktop build.
+
+**Rotate with:** `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`, write it to both env files, rebuild
+and re-release the desktop app.
+
+**Order matters.** Rotate the web side first and installed desktop apps stop verifying proofs (they fall back to IndexedDB and
+keep scoring); rotate the desktop first and the new app rejects the old server's proofs. There is no window where both are green
+unless the app is rebuilt and shipped in the same change. Because of that, treat this as a **coordinated release**, not a
+maintenance-window rotation.

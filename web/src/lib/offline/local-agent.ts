@@ -2,70 +2,110 @@
 
 // Detection and transport for the desktop local agent (documentation/architecture/DESKTOP_APP.md, Option B).
 //
-// The agent runs inside the Tauri shell on 127.0.0.1:8012. The page cannot read its token: the token arrives as an HttpOnly
-// cookie set by /handshake, and every call is made with `credentials: "include"` so the browser attaches it. That is the whole
-// point - an XSS in this origin can make requests, but it cannot steal the credential, and the allow-list bounds what a request
-// can do.
+// AUTH, AND WHY IT IS A HEADER AND NOT A COOKIE. The first design had the agent set an HttpOnly cookie and the page send it back.
+// The acceptance run proved that cannot work: a `Set-Cookie` from 127.0.0.1:8012 is stored but never attached to a fetch from the
+// app's origin (handshake 200, every authenticated call 401). The flow is now:
 //
-// Detection is cached for a few seconds because it runs on render paths: without the cache every badge render would fire a
-// request at a port that, in a browser, is simply closed.
+//   1. GET /api/desktop/agent-token      — session-authenticated, returns a short-lived HMAC-signed proof
+//   2. POST 127.0.0.1:8012/handshake     — the agent verifies the proof and returns a bearer token
+//   3. every call sends `X-UltraOS-Token: <token>`
+//
+// The token is held in a module variable and nowhere else: not localStorage, not sessionStorage, not a cookie. An app restart
+// clears the agent's in-memory map, so a token from a previous launch stops working even if it were captured.
+//
+// Detection is cached for a few seconds because it runs on render paths, and it only ever runs inside the shell - a plain browser
+// (and the test suite) must never make a loopback request that cannot be answered.
 
 const AGENT_ORIGIN = "http://127.0.0.1:8012";
+const TOKEN_ENDPOINT = "/api/desktop/agent-token";
 const DETECT_TTL_MS = 5_000;
-const DETECT_TIMEOUT_MS = 1_200;
+const DETECT_TIMEOUT_MS = 2_500;
 
-export type AgentAction = "PING" | "SAVE_OUTBOX" | "READ_OUTBOX" | "MARK_SYNCED" | "RETRY_DEAD_LETTERED" | "CLEAR_OUTBOX";
+export type AgentAction =
+  | "PING"
+  | "SAVE_OUTBOX"
+  | "READ_OUTBOX"
+  | "MARK_SYNCED"
+  | "RETRY_DEAD_LETTERED"
+  | "CLEAR_OUTBOX";
 
-export type AgentResponse<T = unknown> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
+export type AgentResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: string };
 
+let agentToken: string | null = null;
 let cached: { at: number; present: boolean } | null = null;
 let inFlight: Promise<boolean> | null = null;
 
 /**
  * Is this page running inside the UltraOS desktop shell?
  *
- * The shell sets a marker in its user agent (`UltraOSDesktop/…`, see desktop/src-tauri/src/lib.rs). A plain browser never probes
- * a loopback port that will not answer - and neither does the component test suite, which asserts that no request leaves the
- * badge until the user asks for a sync.
+ * The shell sets a marker in its user agent (`UltraOSDesktop/…`, see desktop/src-tauri/src/lib.rs). A plain browser never probes a
+ * loopback port that will not answer - and neither does the component test suite, which asserts that no request leaves the badge
+ * until the user asks for a sync.
  */
 export function looksLikeDesktopShell(): boolean {
   if (typeof navigator === "undefined") return false;
   return /UltraOSDesktop/i.test(navigator.userAgent);
 }
 
+async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DETECT_TIMEOUT_MS);
+  try {
+    return await run(controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Fetch a fresh proof from the server and exchange it for an agent token. Returns false if either step fails. */
+async function handshake(): Promise<boolean> {
+  try {
+    const proofResponse = await withTimeout((signal) =>
+      fetch(TOKEN_ENDPOINT, { credentials: "include", cache: "no-store", signal }),
+    );
+    if (!proofResponse.ok) return false;
+
+    const { proof } = (await proofResponse.json()) as { proof?: string };
+    if (!proof) return false;
+
+    const handshakeResponse = await withTimeout((signal) =>
+      fetch(`${AGENT_ORIGIN}/handshake`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proof }),
+        signal,
+      }),
+    );
+    if (!handshakeResponse.ok) return false;
+
+    const body = (await handshakeResponse.json()) as { ok?: boolean; data?: { agentToken?: string } };
+    const token = body.data?.agentToken;
+    if (!token) return false;
+
+    agentToken = token;
+    return true;
+  } catch {
+    agentToken = null;
+    return false;
+  }
+}
+
 /**
- * Is the desktop agent reachable? Safe to call from anywhere client-side; returns false on the server, in a plain browser, and
- * in tests - the loopback probe only happens inside the shell.
+ * Is the desktop agent reachable and authenticated? Safe to call from anywhere client-side; returns false on the server, in a
+ * plain browser, and in tests - the loopback probe only happens inside the shell.
  */
 export async function detectLocalAgent(force = false): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (!looksLikeDesktopShell()) return false;
+  if (agentToken) return true;
   if (!force && cached && Date.now() - cached.at < DETECT_TTL_MS) return cached.present;
   if (inFlight) return inFlight;
 
   inFlight = (async () => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), DETECT_TIMEOUT_MS);
-    try {
-      const response = await fetch(`${AGENT_ORIGIN}/handshake`, {
-        method: "GET",
-        credentials: "include",
-        signal: controller.signal,
-        // A plain browser has no agent; failing fast matters more than a retry.
-        cache: "no-store",
-      });
-      const present = response.ok;
-      cached = { at: Date.now(), present };
-      return present;
-    } catch {
-      cached = { at: Date.now(), present: false };
-      return false;
-    } finally {
-      clearTimeout(timer);
-      inFlight = null;
-    }
+    const present = await handshake();
+    cached = { at: Date.now(), present };
+    inFlight = null;
+    return present;
   })();
 
   return inFlight;
@@ -73,19 +113,31 @@ export async function detectLocalAgent(force = false): Promise<boolean> {
 
 /** Call one allow-listed agent action. Throws only on transport failure; protocol errors come back as `{ ok: false }`. */
 export async function callLocalAgent<T = unknown>(action: AgentAction, payload?: unknown): Promise<AgentResponse<T>> {
-  try {
-    const response = await fetch(`${AGENT_ORIGIN}/api/local/agent`, {
+  const send = async (token: string | null) =>
+    fetch(`${AGENT_ORIGIN}/api/local/agent`, {
       method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { "X-UltraOS-Token": token } : {}),
+      },
       body: JSON.stringify({ action, payload: payload ?? null }),
     });
-    if (response.status === 401) {
-      // The token expired (12h) or the agent restarted; re-handshake once and let the caller retry.
-      cached = null;
-      await detectLocalAgent(true);
-      return { ok: false, error: "agent token expired" };
+
+  try {
+    if (!agentToken) {
+      const present = await detectLocalAgent();
+      if (!present) return { ok: false, error: "agent unavailable" };
     }
+
+    let response = await send(agentToken);
+    if (response.status === 401) {
+      // The token expired or the app restarted (its in-memory map is gone). One re-handshake and one retry, then give up.
+      agentToken = null;
+      cached = null;
+      if (!(await handshake())) return { ok: false, error: "agent handshake failed" };
+      response = await send(agentToken);
+    }
+
     const body = (await response.json()) as { ok: boolean; data?: T; error?: string };
     return body.ok ? { ok: true, data: body.data as T } : { ok: false, error: body.error ?? "agent error" };
   } catch (error) {
@@ -94,10 +146,11 @@ export async function callLocalAgent<T = unknown>(action: AgentAction, payload?:
   }
 }
 
-/** Test seam: forget the cached detection result. */
+/** Test seam: forget the cached detection result and the token. */
 export function resetLocalAgentDetection() {
   cached = null;
   inFlight = null;
+  agentToken = null;
 }
 
 /**
@@ -119,8 +172,7 @@ export async function markSyncedOnAgent(
   failureReason?: string,
 ): Promise<boolean> {
   if (idempotencyKeys.length === 0) return true;
-  // No agent (plain browser, test): this must be a no-op, not a fetch to a port that is not listening. The component test that
-  // counts sync requests caught exactly that.
+  // No agent (plain browser, test): this must be a no-op, not a fetch to a port that is not listening.
   if (!(await detectLocalAgent())) return true;
   const response = await callLocalAgent("MARK_SYNCED", { idempotencyKeys, status, failureReason });
   return response.ok;

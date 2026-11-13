@@ -19,7 +19,10 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use hmac::{Hmac, Mac};
 use rusqlite::{params, Connection, OptionalExtension};
+use sha2::Sha256;
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
@@ -48,13 +51,23 @@ fn origin_of(url: &str) -> Option<String> {
 }
 
 const AGENT_PORT: u16 = 8012;
-const COOKIE_NAME: &str = "ultraos_agent";
+/// How long an issued agent token stays valid without being used. Refreshed on every authenticated call, so an active session
+/// never expires mid-match, while an abandoned window stops working five minutes after its last call.
+const AGENT_TOKEN_TTL_SECONDS: i64 = 300;
 const DEAD_LETTER_THRESHOLD: i64 = 5;
+
+/// One handshake, one window. Keyed by the token the agent issued, never by anything the page supplies.
+#[derive(Clone)]
+struct AgentSession {
+    user_id: String,
+    org_id: Option<String>,
+    expires_at: i64,
+}
 
 #[derive(Clone)]
 struct AgentState {
-    token: Arc<String>,
     db: Arc<Mutex<Connection>>,
+    sessions: Arc<Mutex<HashMap<String, AgentSession>>>,
     /// Set the moment the page completes its first handshake - the only reliable evidence that the remote app actually loaded.
     handshake_seen: Arc<std::sync::atomic::AtomicBool>,
 }
@@ -83,16 +96,60 @@ fn err(message: impl Into<String>) -> Json<AgentResponse> {
     Json(AgentResponse { ok: false, error: Some(message.into()), data: None })
 }
 
-/// Read one cookie value out of the request headers without pulling in a cookie crate for a single name.
-fn cookie_token(headers: &HeaderMap) -> Option<String> {
-    let raw = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
-    raw.split(';').find_map(|pair| {
-        let mut parts = pair.splitn(2, '=');
-        let name = parts.next()?;
-        let value = parts.next()?;
-        (name == COOKIE_NAME).then(|| value.to_string())
-    })
+/// The shared secret behind the proof. Runtime env first (tests and acceptance runs set it), then the value baked in at build
+/// time. Rotating it invalidates every proof and therefore every future handshake - see ROTATE_SECRETS.md.
+fn agent_secret() -> String {
+    std::env::var("AGENT_SECRET")
+        .ok()
+        .or_else(|| option_env!("AGENT_SECRET").map(str::to_string))
+        .unwrap_or_else(|| "development-only-agent-secret".to_string())
 }
+
+fn epoch_seconds() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Verify `<payload>.<signature>`: base64url both halves, recompute HMAC-SHA256 over the payload, compare in constant time,
+/// then check the expiry. Returns the parsed payload on success.
+fn verify_proof(proof: &str) -> Result<serde_json::Value, String> {
+    use base64::Engine as _;
+    let decoder = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+
+    let (body, signature) = proof.split_once('.').ok_or("proof must be <payload>.<signature>")?;
+    let provided = decoder.decode(signature).map_err(|_| "signature is not base64url")?;
+
+    let mut mac = Hmac::<Sha256>::new_from_slice(agent_secret().as_bytes()).map_err(|_| "bad secret")?;
+    mac.update(body.as_bytes());
+    let expected = mac.finalize().into_bytes();
+    if expected.len() != provided.len() || !constant_time_eq(&expected, &provided) {
+        return Err("signature mismatch".into());
+    }
+
+    let payload_bytes = decoder.decode(body).map_err(|_| "payload is not base64url")?;
+    let payload: serde_json::Value =
+        serde_json::from_slice(&payload_bytes).map_err(|_| "payload is not JSON")?;
+
+    let exp = payload.get("exp").and_then(|value| value.as_i64()).ok_or("payload has no exp")?;
+    if exp <= epoch_seconds() {
+        return Err("proof expired".into());
+    }
+    Ok(payload)
+}
+
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut difference = 0u8;
+    for (a, b) in left.iter().zip(right.iter()) {
+        difference |= a ^ b;
+    }
+    difference == 0
+}
+
 
 /// Open the outbox database, creating the directory, the file and the schema if they do not exist yet.
 fn open_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> {
@@ -351,38 +408,89 @@ async fn offline_page() -> impl IntoResponse {
     )
 }
 
-async fn handshake(State(state): State<AgentState>, headers: HeaderMap) -> impl IntoResponse {
+async fn handshake(
+    State(state): State<AgentState>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
     state.handshake_seen.store(true, std::sync::atomic::Ordering::SeqCst);
 
-    // Attributes follow the origin that is asking. A shell pointed at an http loopback origin (staging acceptance runs) needs a
-    // cookie the browser will actually store: SameSite=Lax, no Secure. The deployed pair (app.neonultra.ng -> 127.0.0.1) is
-    // cross-site and needs SameSite=None; Secure.
-    let origin = headers
-        .get(axum::http::header::ORIGIN)
+    let proof = match body.get("proof").and_then(|value| value.as_str()) {
+        Some(proof) => proof.to_string(),
+        None => return (StatusCode::BAD_REQUEST, err("handshake requires a proof")),
+    };
+
+    let payload = match verify_proof(&proof) {
+        Ok(payload) => payload,
+        Err(message) => return (StatusCode::UNAUTHORIZED, err(message)),
+    };
+
+    let token = payload
+        .get("agentToken")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+        .to_string();
+    if token.is_empty() {
+        return (StatusCode::UNAUTHORIZED, err("proof has no agentToken"));
+    }
+
+    let session = AgentSession {
+        user_id: payload.get("userId").and_then(|value| value.as_str()).unwrap_or("").to_string(),
+        org_id: payload.get("orgId").and_then(|value| value.as_str()).map(str::to_string),
+        expires_at: epoch_seconds() + AGENT_TOKEN_TTL_SECONDS,
+    };
+
+    match state.sessions.lock() {
+        Ok(mut sessions) => {
+            sessions.insert(token.clone(), session.clone());
+        }
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, err("session store unavailable")),
+    }
+
+    println!(
+        "ultraos-agent: handshake accepted for user {} (org {})",
+        session.user_id,
+        session.org_id.clone().unwrap_or_else(|| "none".into())
+    );
+    (
+        StatusCode::OK,
+        ok(Some(serde_json::json!({
+            "agentToken": token,
+            "userId": session.user_id,
+            "orgId": session.org_id,
+            "expiresIn": AGENT_TOKEN_TTL_SECONDS,
+        }))),
+    )
+}
+
+
+async fn agent(State(state): State<AgentState>, headers: HeaderMap, body: axum::body::Bytes) -> impl IntoResponse {
+    // The bearer token is checked BEFORE the body is parsed, so the answer to "are you allowed" never depends on what was sent.
+    // Looked up in the in-memory map, which an app restart clears: a token from a previous launch is simply unknown here.
+    let presented = headers
+        .get("x-ultraos-token")
         .and_then(|value| value.to_str().ok())
         .unwrap_or("")
         .to_string();
-    let loopback = origin.starts_with("http://127.0.0.1") || origin.starts_with("http://localhost");
-    let attributes = if loopback {
-        "HttpOnly; SameSite=Lax; Path=/; Max-Age=43200"
-    } else {
-        "HttpOnly; SameSite=None; Secure; Path=/; Max-Age=43200"
+
+    let session = {
+        let mut sessions = match state.sessions.lock() {
+            Ok(sessions) => sessions,
+            Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, err("session store unavailable")),
+        };
+        match sessions.get_mut(&presented) {
+            Some(session) if session.expires_at > epoch_seconds() => {
+                // Sliding expiry: a scorer mid-game never loses the agent, an abandoned window does.
+                session.expires_at = epoch_seconds() + AGENT_TOKEN_TTL_SECONDS;
+                session.clone()
+            }
+            Some(_) => {
+                sessions.remove(&presented);
+                return (StatusCode::UNAUTHORIZED, err("agent token expired"));
+            }
+            None => return (StatusCode::UNAUTHORIZED, err("missing or invalid agent token")),
+        }
     };
-    let cookie = format!("{COOKIE_NAME}={}; {attributes}", state.token);
-
-    let mut response = (StatusCode::OK, "agent ready").into_response();
-    if let Ok(value) = HeaderValue::from_str(&cookie) {
-        response.headers_mut().insert(axum::http::header::SET_COOKIE, value);
-    }
-    response
-}
-
-async fn agent(State(state): State<AgentState>, headers: HeaderMap, body: axum::body::Bytes) -> impl IntoResponse {
-    // The token is checked BEFORE the body is parsed, so the answer to "are you allowed" never depends on what was sent.
-    match cookie_token(&headers) {
-        Some(token) if token == *state.token => {}
-        _ => return (StatusCode::UNAUTHORIZED, err("missing or invalid agent token")),
-    }
+    let _session = session;
 
     let request: AgentRequest = match serde_json::from_slice(&body) {
         Ok(request) => request,
@@ -469,13 +577,13 @@ fn spawn_agent(data_dir: PathBuf, app_url: String) -> Arc<std::sync::atomic::Ato
                 .allow_credentials(true);
 
             let state = AgentState {
-                token: Arc::new(uuid::Uuid::new_v4().to_string()),
                 db: Arc::new(Mutex::new(connection)),
+                sessions: Arc::new(Mutex::new(HashMap::new())),
                 handshake_seen: flag_for_server,
             };
 
             let app = Router::new()
-                .route("/handshake", get(handshake))
+                .route("/handshake", post(handshake))
                 .route("/offline", get(offline_page))
                 .route("/api/local/agent", post(agent))
                 .layer(cors)
