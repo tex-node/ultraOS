@@ -410,3 +410,55 @@ It is shared between the server and every installed desktop build, so rotation i
 window: rotate the web side first (installed apps fail their handshake and fall back to IndexedDB — scoring still works, the SQLite
 mirror and vision stop), then ship a rebuilt desktop app, then wait for users to install it. Anyone who does not update stays on the
 old secret and on IndexedDB. See `documentation/runbooks/ROTATE_SECRETS.md`.
+
+## Mount-time handshake (Prompt 5a) — verified 2026-11-13
+
+Staging on `2c9c8e4` (mount handshake + banner). Opened the capture console in the desktop shell and recorded what the page emits on
+mount:
+
+```
+GET http://127.0.0.1:4120/api/desktop/agent-token
+POST http://127.0.0.1:8012/handshake
+banner: not shown
+```
+
+Because the handshake now happens at mount, the token exists before the network can drop — the gap the acceptance run exposed
+("first batch after going offline with no handshake is mirrored to IndexedDB only") is closed for the normal workflow. When the
+agent is genuinely unreachable, the console shows:
+
+> Local agent unreachable. Scoring will use browser storage. Refresh when online.
+
+That banner is silent in a plain browser, which has no agent by design.
+
+`npm run test:e2e:local` after the change: **PASS · 7/7 · 5.6 min**.
+
+## Vision sidecar (Prompt 5c) — blocked, and why
+
+Three of the prompt's prerequisites do not exist in this workspace, and none of them can be manufactured honestly:
+
+1. **No engine artifact.** There is no PyInstaller bundle, no YOLOv8 weights, and no `ultraos-vision.exe` anywhere; there is also
+   no R2 bucket or signed URL to stream ~800 MB from. A downloader written against `https://<r2-bucket>/...` would compile and
+   then 404. The size claim ("~800 MB") would therefore be an assertion, not a measurement.
+2. **No local inference to run.** Even with a binary, the sidecar's contract (`/health`, `/analyze`, observation shape) is
+   unspecified in the repo, so "health-check 8011" would be verifying a process I invented rather than the one that ships.
+3. **Observations cannot be inserted as specified.** `VisionObservation` requires `analysisRunId` and `gameVideoId`, both foreign
+   keys to rows created by the existing upload pipeline (`GameVideo`, `VisionAnalysisRun`). An agent cannot invent them, and an
+   agent-side `vision_observations` table that invents them would write rows the server must reject.
+
+There is a fourth issue worth naming before anyone writes the code: **the agent token is currently a random UUID**, issued by the
+server inside the proof but not verifiable *by* the server afterwards. `SYNC_VISION_OBSERVATIONS` needs the server to read `orgId`
+out of the token, which means the token itself must be a signed blob (`{userId, orgId, exp}` under `AGENT_SECRET`) — not an opaque
+UUID. That change touches the auth path that just passed acceptance, so it should be its own change with its own re-run.
+
+**What can be built and verified without the engine**, in this order:
+
+1. **Signed agent token** (server + agent), so `/api/vision/sync` can verify `orgId` without trusting the request body. This is the
+   security-critical piece, and it is testable today: tampered token → 401, expired → 401, valid → scoped insert.
+2. **`/api/vision/sync`** with the org taken from the token, `ON CONFLICT DO NOTHING` on `id`, and a contract test that a body
+   claiming a different `organizationId` is ignored.
+3. **`VISION_STATUS` + `vision_observations`** in the agent (no download, no spawn): the table and the sync action can be exercised
+   end to end by inserting a row locally and syncing it against an existing `analysisRunId`/`gameVideoId` obtained from staging.
+4. **Downloader and sidecar supervisor** last, once a real artifact and URL exist; verify with the actual bytes, and report the
+   measured size rather than the estimated one.
+
+Doing 4 first would put an unverifiable 800 MB claim at the front of the report and an unmeasured installer size at the back.
