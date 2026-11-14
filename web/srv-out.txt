@@ -1,0 +1,4 @@
+▲ Next.js 16.2.9
+- Local:         http://localhost:4173
+- Network:       http://169.254.83.107:4173
+✓ Ready in 433ms

@@ -150,3 +150,17 @@ gap for the pilot; not a defect to hide, and it is the first thing a real distri
 **Known quirk in the published binary**: `/health` reports `weights_loaded: false` because that field checks the current working
 directory rather than `sys._MEIPASS`. Inference is unaffected — the bundled engine returned 87 observations on the same clip — and the
 fix (`model_path()`) belongs in the next build, which also needs re-uploading and re-pinning.
+
+## Prompt 5c-iv status (2026-11-14)
+
+| piece | state |
+| --- | --- |
+| `vision_observations` table + 3 actions | **done and verified** (save/read/mark/idempotent/dead-letter) |
+| `drainVisionObservations()` | done, wired to the same trigger; **not exercised end to end** |
+| `/api/vision/register` | created; not called by anything yet |
+| panel states A/B/D | built |
+| panel state C upload | **not built** — needs a native file picker bridge |
+| full loop to the VPS review page | **not run** |
+
+**DoD status: not met.** The queue, the sync contract and the install/start UI are real; the file-selection bridge is the last
+mechanical gap before a coach can process a video, and the review-page confirm path is unexercised.

@@ -27,7 +27,14 @@ export type AgentAction =
   | "READ_OUTBOX"
   | "MARK_SYNCED"
   | "RETRY_DEAD_LETTERED"
-  | "CLEAR_OUTBOX";
+  | "CLEAR_OUTBOX"
+  | "SAVE_VISION_OBSERVATIONS"
+  | "READ_VISION_OBSERVATIONS"
+  | "MARK_VISION_SYNCED"
+  | "VISION_STATUS"
+  | "DOWNLOAD_VISION_ENGINE"
+  | "START_VISION_SIDECAR"
+  | "STOP_VISION_SIDECAR";
 
 export type AgentResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -183,4 +190,72 @@ export async function retryDeadLetteredOnAgent(): Promise<number> {
   if (!(await detectLocalAgent())) return 0;
   const response = await callLocalAgent<{ retried: number }>("RETRY_DEAD_LETTERED");
   return response.ok ? (response.data?.retried ?? 0) : 0;
+}
+
+
+// --- vision (Prompt 5c-iv) ---------------------------------------------------------------------------------------------------
+// The queue lives in the agent's SQLite beside the scoring outbox, with the same retry rules. These wrappers stay thin on purpose:
+// what to send and what to mark belongs to drainVisionObservations, not to the transport.
+
+export type VisionEngineStatus = {
+  installed: boolean;
+  running: boolean;
+  version: string | null;
+  downloading: boolean;
+  downloadedBytes: number;
+  totalBytes: number;
+  error: string | null;
+};
+
+export async function visionStatus(): Promise<VisionEngineStatus | null> {
+  if (!(await detectLocalAgent())) return null;
+  const response = await callLocalAgent<VisionEngineStatus>("VISION_STATUS");
+  return response.ok ? (response.data ?? null) : null;
+}
+
+export async function downloadVisionEngine(): Promise<boolean> {
+  return (await callLocalAgent("DOWNLOAD_VISION_ENGINE")).ok;
+}
+
+export async function startVisionSidecar(): Promise<boolean> {
+  return (await callLocalAgent("START_VISION_SIDECAR")).ok;
+}
+
+export async function stopVisionSidecar(): Promise<boolean> {
+  return (await callLocalAgent("STOP_VISION_SIDECAR")).ok;
+}
+
+export type QueuedVisionObservation = {
+  id: string;
+  gameVideoId: string;
+  analysisRunId: string;
+  observation: Record<string, unknown>;
+  attemptCount: number;
+};
+
+export async function saveVisionObservations(input: {
+  gameVideoId: string;
+  analysisRunId: string;
+  observations: Record<string, unknown>[];
+}): Promise<{ saved: number; pending: number } | null> {
+  if (!(await detectLocalAgent())) return null;
+  const response = await callLocalAgent<{ saved: number; pending: number }>("SAVE_VISION_OBSERVATIONS", input);
+  return response.ok ? (response.data ?? null) : null;
+}
+
+export async function readVisionObservations(): Promise<QueuedVisionObservation[]> {
+  if (!(await detectLocalAgent())) return [];
+  const response = await callLocalAgent<QueuedVisionObservation[]>("READ_VISION_OBSERVATIONS");
+  return response.ok && Array.isArray(response.data) ? response.data : [];
+}
+
+export async function markVisionSynced(
+  ids: string[],
+  status: "APPLIED" | "DUPLICATE" | "FAILED",
+  reason?: string,
+): Promise<boolean> {
+  if (ids.length === 0) return true;
+  if (!(await detectLocalAgent())) return true;
+  const response = await callLocalAgent("MARK_VISION_SYNCED", { ids, status, reason });
+  return response.ok;
 }

@@ -15444,3 +15444,56 @@ Detection **and** persistence are now both proven: the same 87 observations the 
 `(workspace)/vision/upload/page.tsx` is **unchanged**. There is no install card, no progress bar, no "Start" button, no
 `vision_observations` table and no observation-sync UI. The agent actions and the server route exist and are verified with curl; the
 screen that calls them does not. Prompt 5c-iv, or the next slice.
+
+## v36 Prompt 5c-iv — queue, sync loop, panel (2026-11-14)
+
+### Vision observation queue — verified
+
+```
+SAVE 3        {"received":3,"saved":3,"pending":3}
+READ          3 pending
+MARK 1 APPLIED {"applied":1} → READ 2 pending
+re-SAVE 3     {"received":3,"saved":0,"pending":2}   ← idempotent on observation id; 3 rows total
+5 × FAILED    queue-obs-2 | attemptCount 5 | deadLettered 1 | pending 1
+```
+
+Same retry rules as the scoring outbox, in a second table in the same database.
+
+### Sync loop
+
+`drainVisionObservations()` groups queued rows by `(gameVideoId, analysisRunId)` — the endpoint scopes its insert to that pair — and
+marks APPLIED/DUPLICATE as synced, FAILED as an attempt (dead-lettered at five by the agent). A whole-batch rejection marks every id
+in the batch, because none of them landed.
+
+### `/api/vision/register` — created
+
+Did not exist. It runs inside `withOrganizationContext`, checks the fixture is visible under RLS, and creates
+`MediaAsset → GameVideo → VisionModel → VisionAnalysisRun`, returning `{ gameVideoId, analysisRunId, uploadUrl: null }`.
+
+**mediaAssetId decision**: rather than add a `GAME_VIDEO_LOCAL` enum value — a schema change and a migration for a placeholder — the
+row reuses `purpose: GAME_VIDEO` with `objectKey: "local://<uuid>"` and `publicUrl: null`. Nothing fetches a local video; the scheme is
+the flag that there is nothing to fetch.
+
+### The panel
+
+`local-vision-panel.tsx` renders only inside the shell (`looksLikeDesktopShell()`), otherwise nothing and the server flow below is
+untouched. States:
+
+- **A (not installed)** — "Process video locally" · "Install the UltraOS Vision Engine (~250 MB). Takes 10-15 minutes on venue wifi.
+  Videos are processed on this device and only the results are synced." · button "Install Vision Engine".
+- **Download** — progress bar with `{MB} / {MB}` and percent, from the agent's camelCase status.
+- **B (installed, stopped)** — "Vision Engine installed" · button "Start Vision Engine".
+- **C (running)** — "Vision Engine running locally" · plus the honest note below.
+- **D (toast)** — "Windows will show a security warning on first run. Click "More info" → "Run anyway". This is because the app is
+  unsigned; the download is verified by SHA256."
+
+### State C is incomplete, on purpose
+
+A browser cannot hand a local file *path* to a process: `input[type=file]` yields a Blob. "Upload and process" therefore needs the agent
+to open a native file dialog and stream the file to 8011 itself. That bridge is not built, and the panel says so instead of offering a
+button that would do nothing. **The full loop (install → start → upload → observe → sync → confirm) was not run end to end**, and the
+vision review page's Confirm/Reject audit path was not exercised.
+
+### Gates
+
+`tsc` 0 · unit 1072 pass / 0 fail · component 26 / 26.

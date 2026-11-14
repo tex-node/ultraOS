@@ -6,6 +6,7 @@ import { hasPermission } from "@/lib/permissions";
 import { MissingOrganizationContextError } from "@/lib/authorization";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { VisionUploadForm } from "./upload-form";
+import { LocalVisionPanel } from "./local-vision-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,8 @@ export default async function VisionUploadPage() {
   return (
     <>
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+        {/* Desktop-only: renders nothing in a browser, where the server-side flow below is the only path. */}
+        <LocalVisionPanel />
         <div className="flex items-baseline justify-between gap-3">
           <h1 className="text-2xl font-bold">Upload game video</h1>
           <Link href="/vision/videos" className="text-sm text-info underline">
