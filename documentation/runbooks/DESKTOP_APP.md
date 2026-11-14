@@ -516,3 +516,45 @@ Reading it against `services/vision/app/main.py` exposed a real divergence: the 
 **stateless inference worker** (`{videoPath, …}` → observations, no DB). The packaged sidecar cannot be a thin wrapper around it; the
 inference core has to be extracted into a new entrypoint. That is 5c-ii's real cost, and it is larger than "build a PyInstaller
 bundle".
+
+### 5c-ii-a — `/api/vision/sync` accept + idempotency: PASS
+
+Smallest valid chain created in the test database (`MediaAsset → GameVideo → VisionModel → VisionAnalysisRun`), token minted the
+same way the desktop agent mints it, three synthetic observations posted twice:
+
+```
+fixture: org=cmwcltijm… gameVideo=cmwg361p6… run=cmwg361ql… model=cmwg361q7…
+POST once:  200 {"accepted":3,"rejected":0,"duplicates":0,"rejectedReasons":[]}
+POST again: 200 {"accepted":0,"rejected":0,"duplicates":3,"rejectedReasons":["DUPLICATE_ID"]}
+VisionObservation rows: 3 (of 3 submitted)
+fixture cleaned up
+PASS — accept + idempotency
+```
+
+**A contract change came out of running it.** The first implementation returned `rejected: 3` on replay, which reads as a failure
+for what is actually a healthy idempotent replay. Duplicates now have their own field: `{accepted, rejected, duplicates}` — so a
+caller can tell "already applied" from "refused". `rejected` stays 0 unless a row is genuinely refused.
+
+Run against the **local e2e database and a locally built server**, not staging: the route is not deployed yet, and creating vision
+rows on staging for a fixture test would need the same cleanup for no extra coverage. Staging verification happens with the next
+deploy.
+
+### 5c-ii-b and 5c-ii-c — blocked on the machine, with numbers
+
+| requirement | state |
+| --- | --- |
+| `torch`, `ultralytics`, `opencv-python` | **not installed** in either Python on this host |
+| `PyInstaller` | not installed |
+| model weights (`*.pt` / `*.onnx`) | **none in the repo** |
+| free disk | **3.1 GB** (a CPU torch install plus a one-file PyTorch bundle needs roughly 5–8 GB during the build) |
+| R2 credentials / bucket | not available to this agent |
+
+And one finding that changes the shape of 5c-ii-b: **`YOLOAnalyzer` is not stateless today.** `app/core/analyzer.py` imports
+`app.core.config` and `app.core.db.connection`, and writes `VisionTrack` / `VisionObservation` rows as it detects. The extraction is
+therefore a *separation* — detection out of persistence — not a move of existing code. Its regression test ("sidecar and dispatcher
+produce identical observations") requires both to run against the same clip, which needs torch, weights, and a database: none of
+which this host has in a state that fits in 3.1 GB.
+
+Recommendation before 5c-ii-b starts: free disk (the `C:\Users\XPS\apex-court-target` cargo cache is 8.4 GB and regenerable — that
+is the operator's call, not mine), then install CPU-only torch and pin the weights URL, then do the split behind a test that runs
+the detector on a 5-second synthetic clip and compares the observation list with the persisted rows.

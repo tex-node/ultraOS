@@ -100,11 +100,17 @@ export async function POST(request: Request) {
       // skipDuplicates is `ON CONFLICT DO NOTHING`: replaying the same batch is safe and reports zero accepted.
       const inserted = await tx.visionObservation.createMany({ data: rows, skipDuplicates: true });
       const accepted = inserted.count;
-      if (accepted < rows.length) rejectedReasons.push("DUPLICATE_ID");
+
+      // A duplicate is neither accepted nor rejected - it is already there, which is the point of an idempotent endpoint. Counting
+      // it as "rejected" would make a healthy replay look like a failure, so it gets its own field: the caller can tell "your batch
+      // was already applied" from "part of your batch was refused".
+      const duplicates = rows.length - accepted;
+      if (duplicates > 0) rejectedReasons.push("DUPLICATE_ID");
 
       return NextResponse.json({
         accepted,
-        rejected: rows.length - accepted,
+        rejected: 0,
+        duplicates,
         rejectedReasons,
       });
     });
