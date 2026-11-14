@@ -106,3 +106,15 @@ dispatcher** that talks to Postgres and returns a run id, while the desktop need
 and returns observations. Those are different programs. Building the desktop bundle means either extracting the inference core
 (`app/core/analyzer.py`) into a new entrypoint, or running the current service in a mode where it has no database — the first is the
 honest option, and it is part of 5c-ii's cost.
+
+## Implementation status (2026-11-14)
+
+| piece | state |
+| --- | --- |
+| `app/analyzer/` pure detection | implemented, static isolation test green |
+| `app/core/analyzer.py` wrapper | delegation only; persistence untouched (see git diff) |
+| `app/sidecar_main.py` | implemented; contract test green |
+| parity sidecar vs dispatcher | **UNVERIFIED** — requires torch + weights + DB |
+| `.exe` bundle | not built (Prompt 5c-ii-c) |
+
+Pinned weights: `weights/yolov8n.pt`, SHA256 `f59b3d833e2ff32e194b5bb8e08d211dc7c5bdf144b90d2c8412c47ccfc83b36`.

@@ -15,6 +15,7 @@ import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+from app.analyzer import Analyzer as DetectionAnalyzer
 from app.core.config import get_settings
 from app.core.db import connection
 
@@ -102,67 +103,25 @@ class YOLOAnalyzer(Analyzer):
         self.max_observations = max_observations
         self._model = None
 
-    def _load(self):
-        # Lazy, so the service can still start (and the stub still work) when torch is absent.
-        from ultralytics import YOLO
-
-        if self._model is None:
-            self._model = YOLO("yolov8n.pt")
-        return self._model
-
     def detect(self, path: str) -> tuple[list[Detection], dict]:
-        import cv2
-
-        model = self._load()
-        capture = cv2.VideoCapture(path)
-        if not capture.isOpened():
-            raise ValueError(f"cannot open video: {path}")
-        fps = capture.get(cv2.CAP_PROP_FPS) or 30.0
-        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-
-        detections: list[Detection] = []
-        frames_with_person = 0
-        index = 0
-        try:
-            while True:
-                ok, frame = capture.read()
-                if not ok:
-                    break
-                # persist=True carries tracker state between frames, which is what turns per-frame boxes
-                # into stable track ids.
-                results = model.track(frame, persist=True, classes=[0], conf=self.confidence, verbose=False)
-                boxes = results[0].boxes if results else None
-                if boxes is not None and len(boxes) > 0:
-                    frames_with_person += 1
-                    xywhn = boxes.xywhn.cpu().numpy()
-                    confidences = boxes.conf.cpu().numpy()
-                    ids = boxes.id.cpu().numpy() if boxes.id is not None else [None] * len(xywhn)
-                    for (cx, cy, w, h), score, track_id in zip(xywhn, confidences, ids):
-                        if len(detections) >= self.max_observations:
-                            break
-                        detections.append(
-                            Detection(
-                                frame_index=index,
-                                video_time_ms=int(index * 1000 / fps),
-                                track_id=int(track_id) if track_id is not None else None,
-                                confidence=float(score),
-                                box=(float(cx - w / 2), float(cy - h / 2), float(w), float(h)),
-                            )
-                        )
-                index += 1
-        finally:
-            capture.release()
-
-        return detections, {
-            "fps": fps,
-            "width": width,
-            "height": height,
-            "frameCount": frame_count or index,
-            "framesRead": index,
-            "framesWithPerson": frames_with_person,
-        }
+        """Detection lives in `app.analyzer` (no database imports). This wrapper keeps the dataclass the persistence code expects."""
+        pure = DetectionAnalyzer(
+            video_path=path,
+            confidence=self.confidence,
+            max_observations=self.max_observations,
+        )
+        detections, meta = pure.detect()
+        converted = [
+            Detection(
+                frame_index=item.frame_index,
+                video_time_ms=item.video_time_ms,
+                track_id=item.track_id,
+                confidence=item.confidence,
+                box=item.box,
+            )
+            for item in detections
+        ]
+        return converted, meta
 
     def analyze(self, game_video_id: str, analysis_run_id: str) -> AnalysisResult:
         path = video_path_for(game_video_id)

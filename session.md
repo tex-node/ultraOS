@@ -15298,3 +15298,40 @@ The persona switcher changes *viewport*, not *tenant*: it sets a cookie naming w
 the session would have to carry assignments across every active org, a cookie would pick one, and every query in the request
 would have to scope through it. That touches tenancy, which is the one part of this system where a mistake is a data leak rather
 than a broken page. It deserves its own streak with its own test, not the tail of a motion pass.
+
+## v36 Prompt 5c-ii-b — analyzer separation (2026-11-14)
+
+**Disk**: cargo cache `C:\Users\XPS\apex-court-target` deleted (7.98 GB reclaimed). Free space **3.45 GB → 10.64 GB**.
+
+**Weights**: `services/vision/weights/yolov8n.pt`, 6,549,796 bytes, SHA256
+`f59b3d833e2ff32e194b5bb8e08d211dc7c5bdf144b90d2c8412c47ccfc83b36`, pinned in `services/vision/weights.sha256`.
+
+### The separation
+
+- `services/vision/app/analyzer/__init__.py` — pure detection. No import of `app.core.db`, `prisma`, `psycopg`, `celery` or `redis`.
+  `Analyzer(video_path, calibration=None, weights_path=None).run() -> list[dict]` in the server's `VisionObservationInput` shape.
+  Weights path from the constructor or `VISION_WEIGHTS_PATH`.
+- `services/vision/app/core/analyzer.py` — persistence wrapper. `YOLOAnalyzer.detect()` now delegates to the pure analyzer and converts
+  the result; `analyze()`, `write()`, `_organization_for()` and the RLS `SECURITY DEFINER` lookup are **unchanged**.
+- `services/vision/app/sidecar_main.py` — FastAPI on 8011: `/health`, `/analyze`, `/cancel`, no DB.
+- `services/vision/requirements-sidecar.txt` — pinned, no DB/Celery/Redis/boto3.
+
+**A regression was caught and reverted during the work**: the first attempt rewrote `write()` and dropped `status`, `createdAt`, the
+rounding, `conn.commit()` and the SECURITY DEFINER lookup. The file was restored from git and patched in place instead — the diff is
+now 19 insertions / 60 deletions, all of them the delegation.
+
+### Tests — 8 passed
+
+```
+tests/test_analyzer_isolation.py   2 passed   (AST walk of app/analyzer/__init__.py; no DB imports)
+tests/test_sidecar_contract.py     4 passed   (/health shape, /analyze observations, in-band errors, DB made unimportable)
+tests/test_core_wrapper.py         2 passed   (delegation with a fake backend; persistence still in the wrapper)
+```
+
+### UNVERIFIED — parity harness
+
+`services/vision/tests/parity_analyzer_vs_dispatcher.py` is written and **has never been run**. It needs torch, ultralytics, opencv,
+the pinned weights and a database with fixture rows: none of those exist on this machine. Running it is 5c-ii-c.
+
+Likewise **not run**: a real dispatcher analysis. `app.core.analyzer` imports cleanly and the delegation is unit-tested with a fake
+backend, but producing rows requires actual inference, i.e. torch.

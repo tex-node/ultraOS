@@ -1,0 +1,14 @@
+# Runtime dependencies for the desktop vision sidecar (app/sidecar_main.py).
+#
+# Deliberately excludes the server's own deps: no Celery, no Redis, no boto3, no Postgres driver. The sidecar is a compute node that
+# takes a path and returns observations; anything that could reach a network or a database does not belong in the bundle.
+#
+# Versions are pinned. `torch` and `torchvision` are matched to each other and to the CPU wheel index, which is why the build script
+# installs them from https://download.pytorch.org/whl/cpu rather than PyPI.
+torch==2.5.1
+torchvision==0.20.1
+ultralytics==8.3.0
+opencv-python==4.10.0.84
+fastapi==0.115.6
+uvicorn==0.34.0
+pydantic==2.10.4
