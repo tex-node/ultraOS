@@ -15497,3 +15497,46 @@ vision review page's Confirm/Reject audit path was not exercised.
 ### Gates
 
 `tsc` 0 · unit 1072 pass / 0 fail · component 26 / 26.
+
+## v36 Prompt 5c-v — picker bridge and the upload flow (2026-11-14)
+
+### Added and verified by direct invocation
+
+```
+PICK_VIDEO      native dialog (rfd), filters mp4/mov/mkv/avi, returns { videoPath, fileName, fileSizeBytes, extension }
+ANALYZE_VIDEO   POSTs the path to 127.0.0.1:8011/analyze with a 30-minute timeout
+                missing file  → {"ok":false,"error":"file not found"}          (no panic)
+                real clip     → 87 observations in 24s
+```
+
+Chain through the agent, end to end:
+
+```
+ANALYZE_VIDEO → 87 observations
+SAVE_VISION_OBSERVATIONS → {"received":87,"saved":87,"pending":88}
+READ_VISION_OBSERVATIONS → 88 pending
+```
+
+The page never receives the file — only the path — and the sidecar reads it from disk. That is the whole design.
+
+### UI flow (built, not clicked by me)
+
+State C now has: fixture select, the CPU-time warning ("On a laptop without a dedicated GPU, expect several hours for a full game.
+Consider running this overnight."), "Pick Video" → size warning above 2 GB → `/api/vision/register` → `ANALYZE_VIDEO` →
+`SAVE_VISION_OBSERVATIONS` → `drainVisionObservations()` → "N observations queued · M synced to the server. Review them."
+Registration failure shows "Video registration requires internet. Try again when connected."
+
+### DoD: NOT met
+
+| step | state |
+| --- | --- |
+| 1 install app | proven earlier |
+| 2 download 250 MB engine | proven (SHA-pinned, agent) |
+| 3 start it | proven (`/health` 200) |
+| 4 pick a real game video | **dialog never opened by me** — it is modal and I cannot click it from a script |
+| 5 wait for processing | proven on a fixture clip (87 obs, 24 s), **not on a real game video** |
+| 6 observations synced to the server | queue + `/api/vision/sync` proven separately; **the UI drain was not run** |
+| 7 review page confirm + audit | **untested** |
+
+No real video was obtained, so step 5's DoD wording ("real game video") is unmet by construction. Steps 4 and 7 need hands on the
+machine, not more code.

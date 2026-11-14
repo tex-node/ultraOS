@@ -697,6 +697,81 @@ async fn agent(State(state): State<AgentState>, headers: HeaderMap, body: axum::
     let result: Result<serde_json::Value, String> = match request.action.as_str() {
         // PING reports the pragmas because `synchronous` is per-connection: another process reading the file can see WAL (stored
         // in the header) but not the durability setting, so the agent has to answer for its own connection.
+        "PICK_VIDEO" => {
+            // rfd blocks until the dialog closes; the handler is async, so the dialog runs on a blocking thread and the runtime
+            // stays responsive for the health polls the page is making at the same time.
+            let picked = tauri::async_runtime::spawn_blocking(|| {
+                rfd::FileDialog::new()
+                    .add_filter("Video", &["mp4", "mov", "mkv", "avi"])
+                    .pick_file()
+            })
+            .await
+            .ok()
+            .flatten();
+
+            match picked {
+                None => Ok(serde_json::json!({ "cancelled": true })),
+                Some(path) => {
+                    let metadata = std::fs::metadata(&path).ok();
+                    Ok(serde_json::json!({
+                        "cancelled": false,
+                        "videoPath": path.to_string_lossy(),
+                        "fileName": path.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default(),
+                        "fileSizeBytes": metadata.map(|meta| meta.len()).unwrap_or(0),
+                        "extension": path.extension().map(|ext| ext.to_string_lossy().to_lowercase()).unwrap_or_default(),
+                    }))
+                }
+            }
+        }
+        "ANALYZE_VIDEO" => {
+            // The handler returns a response, not a Result, so each missing field becomes a 400 here rather than a `?`.
+            let video_path = match as_string(&request.payload, "videoPath") {
+                Some(value) => value,
+                None => return (StatusCode::BAD_REQUEST, err("videoPath is required")),
+            };
+            let game_video_id = match as_string(&request.payload, "gameVideoId") {
+                Some(value) => value,
+                None => return (StatusCode::BAD_REQUEST, err("gameVideoId is required")),
+            };
+            let analysis_run_id = match as_string(&request.payload, "analysisRunId") {
+                Some(value) => value,
+                None => return (StatusCode::BAD_REQUEST, err("analysisRunId is required")),
+            };
+
+            if !std::path::Path::new(&video_path).exists() {
+                return (StatusCode::BAD_REQUEST, err("file not found"));
+            }
+
+            let body = serde_json::json!({
+                "videoPath": video_path,
+                "gameVideoId": game_video_id,
+                "analysisRunId": analysis_run_id,
+                "calibration": request.payload.get("calibration").cloned().unwrap_or(serde_json::Value::Null),
+            });
+
+            // 30 minutes: enough for a long clip on a CPU, short enough that a wedged sidecar does not hang the page forever.
+            let encoded = serde_json::to_vec(&body).unwrap_or_default();
+            match ureq::post(&format!("http://127.0.0.1:{VISION_PORT}/analyze"))
+                .timeout(std::time::Duration::from_secs(30 * 60))
+                .set("Content-Type", "application/json")
+                .send_bytes(&encoded)
+            {
+                Ok(response) => {
+                    let mut text = String::new();
+                    if let Err(error) = response.into_reader().read_to_string(&mut text) {
+                        return (StatusCode::BAD_GATEWAY, err(format!("cannot read sidecar response: {error}")));
+                    }
+                    match serde_json::from_str::<serde_json::Value>(&text) {
+                        Ok(parsed) => Ok(parsed),
+                        Err(error) => Err(format!("sidecar returned invalid JSON: {error}")),
+                    }
+                }
+                Err(ureq::Error::Status(code, response)) => {
+                    Err(format!("sidecar returned HTTP {code}: {}", response.status_text()))
+                }
+                Err(error) => Err(format!("sidecar unreachable: {error}")),
+            }
+        }
         "SAVE_VISION_OBSERVATIONS" => save_vision_observations(&state, &request.payload),
         "READ_VISION_OBSERVATIONS" => read_vision_observations(&state),
         "MARK_VISION_SYNCED" => mark_vision_synced(&state, &request.payload),

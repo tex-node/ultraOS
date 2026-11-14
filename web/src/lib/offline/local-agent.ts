@@ -34,7 +34,9 @@ export type AgentAction =
   | "VISION_STATUS"
   | "DOWNLOAD_VISION_ENGINE"
   | "START_VISION_SIDECAR"
-  | "STOP_VISION_SIDECAR";
+  | "STOP_VISION_SIDECAR"
+  | "PICK_VIDEO"
+  | "ANALYZE_VIDEO";
 
 export type AgentResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -258,4 +260,29 @@ export async function markVisionSynced(
   if (!(await detectLocalAgent())) return true;
   const response = await callLocalAgent("MARK_VISION_SYNCED", { ids, status, reason });
   return response.ok;
+}
+
+
+/** Ask the agent to open the native file dialog. The file never passes through this page - only its path comes back. */
+export async function pickVideo(): Promise<
+  { cancelled: true } | { cancelled: false; videoPath: string; fileName: string; fileSizeBytes: number; extension: string }
+> {
+  const response = await callLocalAgent<
+    { cancelled: true } | { cancelled: false; videoPath: string; fileName: string; fileSizeBytes: number; extension: string }
+  >("PICK_VIDEO");
+  if (!response.ok) return { cancelled: true };
+  return response.data;
+}
+
+/** Run the sidecar over a local file. Blocking on the agent side for as long as inference takes. */
+export async function analyzeVideo(input: {
+  videoPath: string;
+  gameVideoId: string;
+  analysisRunId: string;
+}): Promise<{ observations: Record<string, unknown>[]; error: string | null } | null> {
+  const response = await callLocalAgent<{ observations: Record<string, unknown>[]; error: string | null }>(
+    "ANALYZE_VIDEO",
+    input,
+  );
+  return response.ok ? (response.data ?? null) : { observations: [], error: response.error };
 }
