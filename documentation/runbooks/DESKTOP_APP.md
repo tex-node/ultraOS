@@ -462,3 +462,57 @@ UUID. That change touches the auth path that just passed acceptance, so it shoul
    measured size rather than the estimated one.
 
 Doing 4 first would put an unverifiable 800 MB claim at the front of the report and an unmeasured installer size at the back.
+
+## Prompt 5c-i — signed agent token and the vision sync contract (2026-11-14)
+
+### The token is now signed, and the server can read the org from it
+
+The handshake mints `base64url({userId, orgId, uuid, iat, exp}) + "." + base64url(HMAC-SHA256)` under `AGENT_SECRET`, instead of
+handing back an opaque UUID. The in-memory map stays as the first gate, so a restart still kills every outstanding token even
+though a signature would remain valid for 24 hours.
+
+```
+valid proof → 200 · handshake returns a signed blob ✓
+tampered proof signature → 401 · expired proof → 401
+agent call with token → 200 · tampered signed token → 401
+agent call without token → 401 · foreign token → 401
+```
+
+### Acceptance test re-run after the auth change
+
+```
+after taps (file):  5 rows, syncedAt NULL
+after sync:         5 rows, syncedAt 2026-11-14T04:50:43Z · unsynced remaining: 0
+server:             31 → 36 GameEvent rows · five SCORE · 2 pts at 04:50:37–04:50:39
+```
+
+### `/api/vision/sync` refuses everything it should
+
+```
+no token → 401                       {"error":"missing agent token"}
+tampered token → 401                 {"error":"invalid agent token"}
+expired token → 401                  {"error":"invalid agent token"}
+body org ≠ token org → 400           {"error":"organizationId does not match the agent token"}
+unknown references in-org → 404      {"error":"gameVideoId or analysisRunId not found in this organization"}
+missing references → 400             {"error":"gameVideoId and analysisRunId are required"}
+```
+
+The org comes from the token; a body that disagrees is **rejected**, not silently scoped. References are looked up inside
+`withOrganizationContext`, so a foreign-org id is invisible and returns 404 rather than confirming it exists.
+
+**Not yet proven:** a real accepted insert and its idempotency (`accepted: 1` then `accepted: 0`). Producing that needs a
+`MediaAsset → GameVideo → VisionModel → VisionAnalysisRun` chain, which is a deeper fixture than this prompt's budget; the code path
+uses `createMany({ skipDuplicates: true })`, but "the code says ON CONFLICT DO NOTHING" is not the same as watching it return zero.
+That test is the first item of 5c-ii.
+
+### Sidecar contract: `documentation/architecture/VISION_SIDECAR_CONTRACT.md`
+
+It documents `/health`, `/analyze`, `/cancel`, the loopback-only boundary, and the constraint that shapes everything: a video must be
+**registered server-side first** (it needs `gameVideoId` and `analysisRunId`), so the desktop flow is *not* fully offline. If the
+network is down at registration, the file must be queued for later — not processed and then failed at sync.
+
+Reading it against `services/vision/app/main.py` exposed a real divergence: the existing service is a **server-side job dispatcher**
+(`{game_video_id, organization_id, requested_by_id}` → `{run_id, status}`, with database access), while the desktop needs a
+**stateless inference worker** (`{videoPath, …}` → observations, no DB). The packaged sidecar cannot be a thin wrapper around it; the
+inference core has to be extracted into a new entrypoint. That is 5c-ii's real cost, and it is larger than "build a PyInstaller
+bundle".

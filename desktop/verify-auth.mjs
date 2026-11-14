@@ -27,7 +27,7 @@ async function post(path, body, headers = {}) {
     body: JSON.stringify(body),
   });
   const text = await response.text();
-  return { status: response.status, body: text.slice(0, 160) };
+  return { status: response.status, body: text };
 }
 
 async function handshake(proof) {
@@ -46,6 +46,11 @@ const valid = mint();
 const ok = await handshake(valid.proof);
 record("valid proof → 200", 200, ok.status);
 
+// The agent mints its own signed token now (Prompt 5c-i), so the uuid inside the proof is no longer what it hands back. The
+// authenticated call has to use the token from the response body - using the proof's uuid was the out-of-date assertion here.
+const issued = JSON.parse(ok.body)?.data?.agentToken;
+record("handshake returns a signed blob", true, typeof issued === "string" && issued.includes("."));
+
 // 2. tampered signature
 const tampered = `${valid.proof.slice(0, -4)}AAAA`;
 record("tampered signature → 401", 401, (await handshake(tampered)).status);
@@ -58,7 +63,14 @@ record("expired proof → 401", 401, (await handshake(expired.proof)).status);
 record(
   "agent call with token → 200",
   200,
-  (await post("/api/local/agent", { action: "PING" }, { "X-UltraOS-Token": valid.agentToken })).status,
+  (await post("/api/local/agent", { action: "PING" }, { "X-UltraOS-Token": issued })).status,
+);
+
+// 4b. a tampered signed token must not be accepted
+record(
+  "tampered signed token → 401",
+  401,
+  (await post("/api/local/agent", { action: "PING" }, { "X-UltraOS-Token": `${issued?.slice(0, -4)}AAAA` })).status,
 );
 
 // 5. no token
