@@ -11,6 +11,7 @@ the VPS dispatcher (which then persists them) and by the sidecar (which returns 
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 
 # The model file the bundle ships. Configurable because the sidecar carries its own copy and the VPS keeps one in its image: a
@@ -20,10 +21,23 @@ DEFAULT_MODEL_KEY = "yolov8n-person"
 
 
 def model_path(explicit: str | None = None) -> str:
-    """Where the weights live: explicit arg, then VISION_WEIGHTS_PATH, then the plain filename (ultralytics' own lookup)."""
+    """Where the weights live.
+
+    Order: explicit arg, then VISION_WEIGHTS_PATH, then - when frozen - the file PyInstaller extracted next to the exe (onefile
+    unpacks datas into ``sys._MEIPASS``), then the plain filename for the VPS container, which runs from the service directory.
+
+    The frozen branch is not a nicety: without it the bundled exe looks for ``yolov8n.pt`` in the *caller's* working directory, does not
+    find it, and lets ultralytics download a model at first inference - which is neither the pinned file nor available offline.
+    """
     if explicit:
         return explicit
-    return os.environ.get("VISION_WEIGHTS_PATH", DEFAULT_MODEL_FILENAME)
+    configured = os.environ.get("VISION_WEIGHTS_PATH")
+    if configured:
+        return configured
+    bundle_dir = getattr(sys, "_MEIPASS", None)
+    if bundle_dir:
+        return os.path.join(bundle_dir, DEFAULT_MODEL_FILENAME)
+    return DEFAULT_MODEL_FILENAME
 
 
 @dataclass

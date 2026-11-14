@@ -15335,3 +15335,62 @@ the pinned weights and a database with fixture rows: none of those exist on this
 
 Likewise **not run**: a real dispatcher analysis. `app.core.analyzer` imports cleanly and the delegation is unit-tested with a fake
 backend, but producing rows requires actual inference, i.e. torch.
+
+## v36 Prompt 5c-ii-c — the bundle exists (2026-11-14)
+
+### Dependencies
+
+`.venv-sidecar` created; `requirements-sidecar.txt` installed from the CPU wheel index (plus `lap`, `pydantic-settings`, `psycopg`
+for the dispatcher comparison, and `pyinstaller==6.11.1`). Installed: torch 2.5.1+cpu, torchvision 0.20.1+cpu, ultralytics 8.3.0,
+opencv 4.10.0. Venv: 1.67 GB.
+
+### Parity: PASS
+
+Clip: `bus.jpg` (three people) panned across the frame → 30-frame 15fps mp4, because the pure synthetic rectangle produced zero
+detections and would have made parity trivially true.
+
+```
+sidecar: 87 | dispatcher: 87
+PARITY OK
+```
+
+Same 87 observations, same track ids, same rounded boxes and confidences, from the extracted analyzer and from the wrapper that
+delegates to it.
+
+### Build: PASS
+
+```
+built:  C:\UltraLeagueOS\services\vision\dist\ultraos-vision-engine.exe
+size:   261,157,478 bytes (249.1 MB)
+sha256: 193d2a8f3a84c7a5d9e5d5181ca9cd9f819e0f727cf1277176aa9449632ca5ba
+```
+
+243 MB, not 800 MB and not 1.5 GB — recorded, not estimated.
+
+Two packaging bugs were found and fixed while verifying, both invisible until the exe ran:
+
+1. **No `__main__` block.** The first bundle started and exited immediately with no output: `sidecar_main.py` defined the app but never
+   bound a port. `uvicorn.run(app, host="127.0.0.1", port=8011)` added.
+2. **scipy's compiled extensions.** The second bundle answered `/health` but `/analyze` returned
+   `ImportError: The scipy install you are using seems to be broken` — PyInstaller did not collect scipy's binaries. Fixed with
+   `collect_all("scipy")`; the bundle grew 235.5 MB → 249.1 MB.
+3. **Weights not found when frozen.** `model_path()` resolved `yolov8n.pt` against the caller's working directory, so from a clean
+   folder ultralytics would have downloaded a model at first inference — not the pinned file, and not offline. It now prefers
+   `sys._MEIPASS`.
+
+### Run verified from a clean folder
+
+```
+> C:\Temp\ultraos-test\ultraos-vision-engine.exe
+  Uvicorn running on http://127.0.0.1:8011
+
+GET /health   {"status":"ok","model":"yolov8n-person","version":"unknown","uptime_seconds":0,"weights_loaded":true}
+POST /analyze 200 in 19.5s · observations 87 · error: none
+              first: track 1 · conf 0.869 · 0 ms
+```
+
+`version` is `"unknown"` because the clean folder has no git checkout; the build script should bake `ULTRAOS_BUILD_SHA` in. That is a
+one-line fix for the next build, and the field is honest in the meantime.
+
+**Not proven:** the dispatcher's *persistence* path (rows written to `VisionTrack`/`VisionObservation`). Detection parity is proven;
+writing rows needs the vision database, which this machine does not have. The code is unchanged from the pre-refactor version.

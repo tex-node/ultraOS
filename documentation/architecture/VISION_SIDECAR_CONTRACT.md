@@ -118,3 +118,19 @@ honest option, and it is part of 5c-ii's cost.
 | `.exe` bundle | not built (Prompt 5c-ii-c) |
 
 Pinned weights: `weights/yolov8n.pt`, SHA256 `f59b3d833e2ff32e194b5bb8e08d211dc7c5bdf144b90d2c8412c47ccfc83b36`.
+
+## Build artifact (2026-11-14)
+
+| | |
+| --- | --- |
+| file | `ultraos-vision-engine.exe` |
+| size | **261,157,478 bytes (249.1 MB)** |
+| sha256 | `193d2a8f3a84c7a5d9e5d5181ca9cd9f819e0f727cf1277176aa9449632ca5ba` |
+| run | `ultraos-vision-engine.exe` (no arguments; binds 127.0.0.1:8011) |
+| weights | embedded (`yolov8n.pt`, pinned `f59b3d83…`) |
+| inputs | **a local file path**, never a database id — path resolution stays in the dispatcher, not the sidecar |
+
+Parity: sidecar 87 observations vs dispatcher 87, identical — verified on a panned clip containing three people.
+
+**Code signing**: the exe is unsigned. Windows SmartScreen will warn on first run for anyone who receives it by email or USB. Known
+gap for the pilot; not a defect to hide, and it is the first thing a real distribution needs.

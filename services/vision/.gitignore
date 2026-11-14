@@ -1,10 +1,6 @@
-# B0 (P14 / Workstream B): AI vision inference service.
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-.env
-.pytest_cache/
-.mypy_cache/
-celerybeat-schedule
-*.egg-info/
+﻿.venv-sidecar/
+build/
+dist/
+weights/yolov8n.pt
+*.spec.bak
+synthetic.mp4

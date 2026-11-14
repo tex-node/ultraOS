@@ -89,3 +89,14 @@ def cancel(_request: CancelRequest) -> CancelResponse:
     # Inference is synchronous and single-request; there is nothing in flight to interrupt. Reporting `false` is the truthful
     # answer, and the agent treats it as "not cancelled" rather than assuming success.
     return CancelResponse(cancelled=False)
+
+def main() -> None:
+    """Bind loopback only. The agent is the sole client, and a sidecar listening on 0.0.0.0 would be an inference service for the
+    whole venue network."""
+    import uvicorn
+
+    uvicorn.run(app, host="127.0.0.1", port=8011, log_level="info")
+
+
+if __name__ == "__main__":
+    main()
