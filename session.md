@@ -15394,3 +15394,53 @@ one-line fix for the next build, and the field is honest in the meantime.
 
 **Not proven:** the dispatcher's *persistence* path (rows written to `VisionTrack`/`VisionObservation`). Detection parity is proven;
 writing rows needs the vision database, which this machine does not have. The code is unchanged from the pre-refactor version.
+
+## v36 Prompt 5c-iii — downloader and supervisor (2026-11-14)
+
+### The hosted artifact
+
+```
+HEAD  https://pub-e130aa56d5b242f68e0574ce9e065d59.r2.dev/apps/ultraos-vision-engine.exe
+      200 · content-length 261,157,478 · application/octet-stream
+download on this workstation: 6.7 min (0.62 MB/s) · sha256 matches the pin
+```
+
+The pinned size and hash are in the agent as constants: `VISION_ENGINE_BYTES`, `VISION_ENGINE_SHA256`. A download that does not match
+either is deleted, not installed.
+
+### Agent actions — verified end to end
+
+```
+VISION_STATUS   {"downloadedBytes":0,"downloading":false,"error":null,"installed":false,"running":false,"totalBytes":261157478}
+DOWNLOAD        → 23% (56.8 MB) · 46% (113.8) · 66% (165.1) · 87% (217.5) · 100% (249.1)
+                installed=true in 1.0 min · sha256 verified · engine.exe on disk
+START           running=true · GET 127.0.0.1:8011/health → 200 {"status":"ok","model":"yolov8n-person"}
+VISION_STATUS   {"installed":true,"running":true,"downloadedBytes":261157478,...}
+STOP            {"stopped":true}
+```
+
+Two Windows-specific failures were found by running it, not by reading it:
+
+1. **`Access is denied (os error 5)` on install.** Renaming over `engine.exe` fails while the binary is running — and an engine
+   orphaned by a previous agent restart locks it just as firmly as our own child does. The download now stops the child, then
+   `taskkill /IM engine.exe /F /T`, waits, and only then replaces the file. START does the same, because a stale engine holding 8011
+   would otherwise make every new start fail its health check.
+2. **Progress rendered as NaN.** The status struct serialised `downloaded_bytes`; the page reads `downloadedBytes`. Now
+   `#[serde(rename_all = "camelCase")]`.
+
+### Dispatcher persistence — gap closed
+
+`YOLOAnalyzer().analyze(gameVideoId, analysisRunId)` against the local e2e Postgres, on the panned clip:
+
+```
+observation_count: 87
+VisionObservation rows: 87 · VisionTrack rows: 3 · status PENDING · conf 0.841 at t=0
+```
+
+Detection **and** persistence are now both proven: the same 87 observations the sidecar returned over HTTP landed as rows.
+
+### Not built: the vision tab
+
+`(workspace)/vision/upload/page.tsx` is **unchanged**. There is no install card, no progress bar, no "Start" button, no
+`vision_observations` table and no observation-sync UI. The agent actions and the server route exist and are verified with curl; the
+screen that calls them does not. Prompt 5c-iv, or the next slice.

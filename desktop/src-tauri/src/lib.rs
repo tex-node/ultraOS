@@ -23,6 +23,9 @@ use hmac::{Hmac, Mac};
 use rusqlite::{params, Connection, OptionalExtension};
 use sha2::Sha256;
 use std::collections::HashMap;
+use std::io::{Read, Write};
+use std::process::{Child, Command};
+use std::sync::atomic::{AtomicBool, Ordering};
 use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
@@ -55,6 +58,13 @@ const AGENT_PORT: u16 = 8012;
 /// never expires mid-match, while an abandoned window stops working five minutes after its last call.
 const AGENT_TOKEN_TTL_SECONDS: i64 = 300;
 
+/// The published sidecar. Pinned by hash: the downloader installs this bytes-for-bytes or nothing.
+const VISION_ENGINE_URL: &str =
+    "https://pub-e130aa56d5b242f68e0574ce9e065d59.r2.dev/apps/ultraos-vision-engine.exe";
+const VISION_ENGINE_SHA256: &str = "193d2a8f3a84c7a5d9e5d5181ca9cd9f819e0f727cf1277176aa9449632ca5ba";
+const VISION_ENGINE_BYTES: u64 = 261_157_478;
+const VISION_PORT: u16 = 8011;
+
 /// Lifetime of the token the agent mints for itself. Longer than the proof because it is what the page keeps, and because a match
 /// can outlast a five-minute window; the in-memory map is what bounds it to one launch.
 const AGENT_TOKEN_LIFETIME_SECONDS: i64 = 86_400;
@@ -68,6 +78,20 @@ struct AgentSession {
     expires_at: i64,
 }
 
+/// Everything the vision tab needs to render. One struct, because the page polls one action.
+#[derive(Clone, Default, serde::Serialize)]
+// camelCase on the wire: the page reads downloadedBytes/totalBytes, and snake_case rendered the progress bar as "NaN".
+#[serde(rename_all = "camelCase")]
+struct VisionState {
+    installed: bool,
+    running: bool,
+    version: Option<String>,
+    downloading: bool,
+    downloaded_bytes: u64,
+    total_bytes: u64,
+    error: Option<String>,
+}
+
 #[derive(Clone)]
 struct AgentState {
     db: Arc<Mutex<Connection>>,
@@ -75,6 +99,9 @@ struct AgentState {
     /// disk, the first question is "the same file?", and guessing costs more than a field.
     db_path: Arc<String>,
     sessions: Arc<Mutex<HashMap<String, AgentSession>>>,
+    vision: Arc<Mutex<VisionState>>,
+    vision_child: Arc<Mutex<Option<Child>>>,
+    vision_dir: Arc<std::path::PathBuf>,
     /// Set the moment the page completes its first handshake - the only reliable evidence that the remote app actually loaded.
     handshake_seen: Arc<std::sync::atomic::AtomicBool>,
 }
@@ -533,6 +560,205 @@ async fn agent(State(state): State<AgentState>, headers: HeaderMap, body: axum::
     let result: Result<serde_json::Value, String> = match request.action.as_str() {
         // PING reports the pragmas because `synchronous` is per-connection: another process reading the file can see WAL (stored
         // in the header) but not the durability setting, so the agent has to answer for its own connection.
+        "VISION_STATUS" => {
+            let mut status = match state.vision.lock() {
+                Ok(status) => status.clone(),
+                Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, err("vision state unavailable")),
+            };
+            // The process can die on its own; trust the process table over our memory of starting it.
+            if status.running {
+                let healthy = ureq::get(&format!("http://127.0.0.1:{VISION_PORT}/health"))
+                    .timeout(std::time::Duration::from_millis(800))
+                    .call()
+                    .is_ok();
+                if !healthy {
+                    status.running = false;
+                }
+            }
+            Ok(serde_json::to_value(status).unwrap_or_default())
+        }
+        "DOWNLOAD_VISION_ENGINE" => {
+            // Installing over a running engine fails on Windows with "Access is denied (os error 5)" - the executable is locked by
+            // its own process, and an engine orphaned by a previous agent restart holds the file just as firmly. The child handle
+            // only covers the process this agent started, so kill by image name as well; failure is fine (nothing to kill).
+            let _ = Command::new("taskkill")
+                .args(["/IM", "engine.exe", "/F", "/T"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            // Installing over a running engine fails on Windows with "Access is denied (os error 5)" - the executable is locked by
+            // its own process. Stop it first; the page can start it again when the download finishes.
+            if let Ok(mut child) = state.vision_child.lock() {
+                if let Some(mut running) = child.take() {
+                    let _ = running.kill();
+                    let _ = running.wait();
+                    std::thread::sleep(std::time::Duration::from_millis(600));
+                }
+            }
+            {
+                let mut status = match state.vision.lock() {
+                    Ok(status) => status,
+                    Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, err("vision state unavailable")),
+                };
+                status.running = false;
+                if status.downloading {
+                    return (StatusCode::CONFLICT, err("a download is already running"));
+                }
+                status.downloading = true;
+                status.error = None;
+                status.downloaded_bytes = 0;
+                status.total_bytes = VISION_ENGINE_BYTES;
+            }
+
+            let vision = state.vision.clone();
+            let directory = state.vision_dir.clone();
+            std::thread::spawn(move || {
+                let finish = |vision: &Arc<Mutex<VisionState>>, result: Result<(), String>| {
+                    if let Ok(mut status) = vision.lock() {
+                        status.downloading = false;
+                        match result {
+                            Ok(()) => {
+                                status.installed = true;
+                                status.error = None;
+                            }
+                            Err(message) => status.error = Some(message),
+                        }
+                    }
+                };
+
+                let outcome = (|| -> Result<(), String> {
+                    std::fs::create_dir_all(directory.as_path()).map_err(|error| error.to_string())?;
+                    let target = directory.join("engine.exe");
+                    let partial = directory.join("engine.exe.part");
+
+                    let response = ureq::get(VISION_ENGINE_URL)
+                        .call()
+                        .map_err(|error| format!("download failed: {error}"))?;
+                    let mut reader = response.into_reader();
+                    let mut file = std::fs::File::create(&partial).map_err(|error| error.to_string())?;
+
+                    use sha2::{Digest, Sha256};
+                    let mut hasher = Sha256::new();
+                    let mut buffer = vec![0u8; 256 * 1024];
+                    let mut written: u64 = 0;
+                    loop {
+                        let read = reader.read(&mut buffer).map_err(|error| error.to_string())?;
+                        if read == 0 {
+                            break;
+                        }
+                        hasher.update(&buffer[..read]);
+                        file.write_all(&buffer[..read]).map_err(|error| error.to_string())?;
+                        written += read as u64;
+                        if let Ok(mut status) = vision.lock() {
+                            status.downloaded_bytes = written;
+                        }
+                    }
+                    file.flush().map_err(|error| error.to_string())?;
+                    drop(file);
+
+                    let digest = hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+                    if digest != VISION_ENGINE_SHA256 {
+                        let _ = std::fs::remove_file(&partial);
+                        return Err(format!("sha256 mismatch: expected {VISION_ENGINE_SHA256}, got {digest}"));
+                    }
+                    if written != VISION_ENGINE_BYTES {
+                        let _ = std::fs::remove_file(&partial);
+                        return Err(format!("size mismatch: expected {VISION_ENGINE_BYTES}, got {written}"));
+                    }
+
+                    // Replace rather than rename-over: on Windows rename fails when the destination exists and is locked.
+                    if target.exists() {
+                        std::fs::remove_file(&target).map_err(|error| {
+                            format!("cannot replace the installed engine ({error}); stop the vision engine and retry")
+                        })?;
+                    }
+                    std::fs::rename(&partial, &target).map_err(|error| error.to_string())?;
+                    println!("ultraos-agent: vision engine installed at {}", target.display());
+                    Ok(())
+                })();
+
+                finish(&vision, outcome);
+            });
+
+            Ok(serde_json::json!({ "started": true, "totalBytes": VISION_ENGINE_BYTES }))
+        }
+        "START_VISION_SIDECAR" => {
+            let exe = state.vision_dir.join("engine.exe");
+            if !exe.exists() {
+                return (StatusCode::BAD_REQUEST, err("vision engine is not installed"));
+            }
+            let _ = Command::new("taskkill")
+                .args(["/IM", "engine.exe", "/F", "/T"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            {
+                let mut child = match state.vision_child.lock() { Ok(child) => child, Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, err("child state unavailable")) };
+                if child.is_some() {
+                    return (StatusCode::CONFLICT, err("vision sidecar already started"));
+                }
+                let spawned = Command::new(&exe)
+                    .current_dir(state.vision_dir.as_path())
+                    .spawn();
+                let spawned = match spawned {
+                    Ok(spawned) => spawned,
+                    Err(error) => return (StatusCode::BAD_REQUEST, err(format!("cannot start sidecar: {error}"))),
+                };
+                *child = Some(spawned);
+            }
+
+            // Health-check for up to 30s, then kill: a sidecar that starts but never answers is worse than one that fails loudly.
+            let mut healthy = false;
+            for _ in 0..30 {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                if ureq::get(&format!("http://127.0.0.1:{VISION_PORT}/health"))
+                    .timeout(std::time::Duration::from_millis(900))
+                    .call()
+                    .is_ok()
+                {
+                    healthy = true;
+                    break;
+                }
+            }
+
+            if !healthy {
+                if let Ok(mut child) = state.vision_child.lock() {
+                    if let Some(mut running) = child.take() {
+                        let _ = running.kill();
+                    }
+                }
+                if let Ok(mut status) = state.vision.lock() {
+                    status.running = false;
+                    status.error = Some("sidecar did not answer /health within 30s".into());
+                }
+                return (StatusCode::BAD_REQUEST, err("sidecar did not answer /health within 30s"));
+            }
+
+            if let Ok(mut status) = state.vision.lock() {
+                status.running = true;
+                status.version = Some(env!("CARGO_PKG_VERSION").to_string());
+            }
+            Ok(serde_json::json!({ "running": true }))
+        }
+        "STOP_VISION_SIDECAR" => {
+            let stopped = {
+                let mut child = match state.vision_child.lock() { Ok(child) => child, Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, err("child state unavailable")) };
+                match child.take() {
+                    Some(mut running) => {
+                        let _ = running.kill();
+                        let _ = running.wait();
+                        true
+                    }
+                    None => false,
+                }
+            };
+            if let Ok(mut status) = state.vision.lock() {
+                status.running = false;
+            }
+            Ok(serde_json::json!({ "stopped": stopped }))
+        }
         "PING" => {
             let pragmas = state.db.lock().ok().and_then(|connection| {
                 let journal: String = connection.query_row("PRAGMA journal_mode", [], |row| row.get(0)).ok()?;
@@ -626,6 +852,12 @@ fn spawn_agent(data_dir: PathBuf, app_url: String) -> Arc<std::sync::atomic::Ato
                         .to_string(),
                 ),
                 sessions: Arc::new(Mutex::new(HashMap::new())),
+                vision: Arc::new(Mutex::new(VisionState {
+                    total_bytes: VISION_ENGINE_BYTES,
+                    ..VisionState::default()
+                })),
+                vision_child: Arc::new(Mutex::new(None)),
+                vision_dir: Arc::new(data_dir.join("vision")),
                 handshake_seen: flag_for_server,
             };
 

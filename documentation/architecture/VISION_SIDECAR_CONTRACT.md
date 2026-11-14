@@ -134,3 +134,19 @@ Parity: sidecar 87 observations vs dispatcher 87, identical — verified on a pa
 
 **Code signing**: the exe is unsigned. Windows SmartScreen will warn on first run for anyone who receives it by email or USB. Known
 gap for the pilot; not a defect to hide, and it is the first thing a real distribution needs.
+
+## Prompt 5c-iii status (2026-11-14)
+
+| piece | state |
+| --- | --- |
+| hosted engine | 261,157,478 bytes · sha256 `193d2a8f…` · HEAD 200 verified |
+| `DOWNLOAD_VISION_ENGINE` | verified: progress, hash pin, 1.0 min on this link |
+| `START/STOP_VISION_SIDECAR` | verified: health 200, status flips |
+| `VISION_STATUS` | verified, camelCase |
+| dispatcher persistence | verified: 87 observations + 3 tracks in the local DB |
+| vision tab UI | **not built** |
+| observation sync UI | **not built** |
+
+**Known quirk in the published binary**: `/health` reports `weights_loaded: false` because that field checks the current working
+directory rather than `sys._MEIPASS`. Inference is unaffected — the bundled engine returned 87 observations on the same clip — and the
+fix (`model_path()`) belongs in the next build, which also needs re-uploading and re-pinning.

@@ -26,6 +26,7 @@ base64 = "0.22"
 rusqlite = { version = "0.31", features = ["bundled"] }
 hmac = "0.12"
 sha2 = "0.10"
+ureq = { version = "2", features = ["tls"] }
 
 [features]
 default = ["custom-protocol"]

@@ -558,3 +558,13 @@ which this host has in a state that fits in 3.1 GB.
 Recommendation before 5c-ii-b starts: free disk (the `C:\Users\XPS\apex-court-target` cargo cache is 8.4 GB and regenerable — that
 is the operator's call, not mine), then install CPU-only torch and pin the weights URL, then do the split behind a test that runs
 the detector on a 5-second synthetic clip and compares the observation list with the persisted rows.
+cd C:\UltraLeagueOS; @'
+
+## Windows SmartScreen on first run (accepted risk, pilot)
+
+`ultraos-vision-engine.exe` is **unsigned**. On first run Windows shows "Windows protected your PC":
+
+> More info → **Run anyway**
+
+This is expected, not a malfunction, and the coach should be told before they double-click rather than during a support call. Signing
+the binary is the correct long-term fix and is out of scope for the pilot.
