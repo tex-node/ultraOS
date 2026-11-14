@@ -15540,3 +15540,38 @@ Registration failure shows "Video registration requires internet. Try again when
 
 No real video was obtained, so step 5's DoD wording ("real game video") is unmet by construction. Steps 4 and 7 need hands on the
 machine, not more code.
+
+## Why the desktop app "did not run" (2026-11-15)
+
+The screenshot was the **vision engine**, not the app: `uvicorn on 127.0.0.1:8011` with `GET / → 404`. The sidecar serves `/health`,
+`/analyze` and `/cancel` only; opening it in a browser is a 404 by design. The desktop application is a different process and a
+different window.
+
+The real fault was production being three days behind:
+
+```
+production release   c070e24 (2026-11-11)   ← before any desktop work
+GET /api/desktop/agent-token → 404
+shell log            loaded https://app.neonultra.ng/ · no handshake · showing the offline page
+```
+
+The shell's 12-second watchdog treated "no handshake" as "site unreachable", so a perfectly good login screen was replaced with
+"Unable to connect" — which reads as "the app did not run".
+
+Two fixes:
+
+1. **Production deployed** to `431dcaa` (no migrations pending). Public endpoints 200, `smoke-test.sh` against
+   `https://app.neonultra.ng` reports **SMOKE OK**, and `/api/desktop/agent-token` now answers **401** (session required) instead of
+   404. The deploy script's own smoke step reported `SMOKE FAILED (1)` mid-switch and printed a rollback command; re-running the same
+   test after the switch passed. That is a race in the deploy script's smoke timing, not a broken release — worth fixing so a green
+   deploy never prints "roll back now".
+2. **Liveness is now "the app origin answered", not "the page completed a handshake".** The watchdog fires only when no document from
+   the app origin finished loading. A login screen, or any page that does not mount a capture console, keeps the window.
+
+Verified: with production on 431dcaa the shell logs `loaded https://app.neonultra.ng/` and **does not** show the offline page.
+
+### What is still missing for a coach
+
+There is no installer yet. `desktop/src-tauri` builds a debug binary at `C:\Users\XPS\apex-court-target\debug\ultraos-desktop.exe`
+(note: `CARGO_TARGET_DIR` is set globally on this machine), and `tauri build` has never been run, so there is no `.msi`/`.exe`
+installer to hand to the organizer. That is the last distribution step, and it is packaging, not code.

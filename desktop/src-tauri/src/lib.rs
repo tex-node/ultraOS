@@ -65,6 +65,10 @@ const VISION_ENGINE_SHA256: &str = "193d2a8f3a84c7a5d9e5d5181ca9cd9f819e0f727cf1
 const VISION_ENGINE_BYTES: u64 = 261_157_478;
 const VISION_PORT: u16 = 8011;
 
+/// Set when a document from the app origin finishes loading. See the comment on the watchdog: a handshake is not required to prove
+/// the app is alive, and requiring one shows "cannot connect" to a working login screen.
+static APP_ORIGIN_LOADED: AtomicBool = AtomicBool::new(false);
+
 /// Lifetime of the token the agent mints for itself. Longer than the proof because it is what the page keeps, and because a match
 /// can outlast a five-minute window; the in-memory map is what bounds it to one launch.
 const AGENT_TOKEN_LIFETIME_SECONDS: i64 = 86_400;
@@ -1123,7 +1127,9 @@ pub fn run() {
                 let window_for_check = window.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_secs(12));
-                    if handshake_seen.load(std::sync::atomic::Ordering::SeqCst) {
+                    if handshake_seen.load(std::sync::atomic::Ordering::SeqCst)
+                        || APP_ORIGIN_LOADED.load(std::sync::atomic::Ordering::SeqCst)
+                    {
                         return;
                     }
                     println!("ultraos-shell: no handshake from the app; showing the offline page");
@@ -1138,7 +1144,15 @@ pub fn run() {
         })
         .on_page_load(|_window, payload| {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
-                println!("ultraos-shell: loaded {}", payload.url());
+                let url = payload.url();
+                println!("ultraos-shell: loaded {url}");
+                // Any document from the app origin counts as liveness, whether or not the page has signed in or mounted a console.
+                let expected = std::env::var("ULTRAOS_APP_URL").unwrap_or_else(|_| DEFAULT_APP_URL.to_string());
+                if let (Some(scheme_host), Some(expected_host)) = (origin_of(url.as_str()), origin_of(&expected)) {
+                    if scheme_host == expected_host {
+                        APP_ORIGIN_LOADED.store(true, std::sync::atomic::Ordering::SeqCst);
+                    }
+                }
             }
         })
         .run(tauri::generate_context!())

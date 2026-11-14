@@ -568,3 +568,13 @@ cd C:\UltraLeagueOS; @'
 
 This is expected, not a malfunction, and the coach should be told before they double-click rather than during a support call. Signing
 the binary is the correct long-term fix and is out of scope for the pilot.
+
+## Production release (2026-11-15)
+
+`app.neonultra.ng` is on `431dcaa`. Smoke against the public URL: **SMOKE OK** (club hub, training week, athlete passport,
+passport provenance, scoresheets queue, player plan, selection — all PASS, 0 errors since start). `/api/desktop/agent-token`
+returns 401 without a session, which is the desktop handshake route existing.
+
+**Known deploy-script race**: the automated smoke step inside `deploy-with-log.sh` reported `SMOKE FAILED (1)` and printed a rollback
+command while the release was still switching; the identical test passed a minute later. A green deploy should not tell the operator
+to roll back — the smoke step needs a settle/retry.
