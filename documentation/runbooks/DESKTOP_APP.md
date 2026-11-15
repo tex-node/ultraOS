@@ -597,7 +597,7 @@ window would collide with it.
 silent install (/S)    exit 0 in 4.6s
 install dir            %LOCALAPPDATA%\UltraOS Scoring\ultraos-desktop.exe (12.7 MB)
 Start menu shortcut    "UltraOS Scoring" present
-launch                 ultaraos-agent on 8012 · loaded https://app.neonultra.ng/ · no offline page
+launch                 ultraos-agent on 8012 · loaded https://app.neonultra.ng/ · no offline page
 ```
 
 **Not uploaded.** The DoD is not fully verified (steps 4-7 need a production login and a real video), and the prompt is explicit:
