@@ -10,6 +10,7 @@ the VPS dispatcher (which then persists them) and by the sidecar (which returns 
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from dataclasses import dataclass
 # The model file the bundle ships. Configurable because the sidecar carries its own copy and the VPS keeps one in its image: a
 # hardcoded name would work in exactly one of those two places.
 DEFAULT_MODEL_FILENAME = "yolov8n.pt"
+logger = logging.getLogger(__name__)
 DEFAULT_MODEL_KEY = "yolov8n-person"
 
 
@@ -118,14 +120,37 @@ class Analyzer:
         height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
         frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
 
+        # Sampling and visibility. A 2-minute 640x360 clip sat in PROCESSING for hours with no log line after "run queued", which is
+        # indistinguishable from a hang. Stride > 1 processes every Nth frame; videoTimeMs stays derived from the frame index, so a
+        # skipped frame never shifts an observation against the game clock.
+        stride = max(1, int(os.environ.get("VISION_FRAME_STRIDE", "1")))
+        progress_every = max(1, int(os.environ.get("VISION_PROGRESS_EVERY", "250")))
+        max_frames = int(os.environ.get("VISION_MAX_FRAMES", "0"))  # 0 = no cap
+
         detections: list[Detection] = []
         frames_with_person = 0
         index = 0
+        processed = 0
         try:
             while True:
                 ok, frame = capture.read()
                 if not ok:
                     break
+                if max_frames and index >= max_frames:
+                    logger.info("frame cap reached at %s frames (VISION_MAX_FRAMES)", index)
+                    break
+                if index % stride != 0:
+                    index += 1
+                    continue
+                processed += 1
+                if processed % progress_every == 0:
+                    logger.info(
+                        "progress: frame %s/%s · %s detection(s) · stride %s",
+                        index,
+                        frame_count or "?",
+                        len(detections),
+                        stride,
+                    )
                 # persist=True carries tracker state between frames, which is what turns per-frame boxes into stable track ids.
                 results = model.track(frame, persist=True, classes=[0], conf=self.confidence, verbose=False)
                 boxes = results[0].boxes if results else None
