@@ -614,3 +614,27 @@ hours for a full game. Consider running this overnight."
 The review page can confirm an observation on a locally-processed video; generating a `HIGHLIGHT_CLIP` from it cannot work, because
 the VPS has no file — the video only exists on the coach's laptop. For the pilot the recommendation is to skip clip generation for
 `local://` assets and show the observation without a clip. The audit record is what proves the workflow.
+
+## Why a production video had no way to be processed (2026-11-15)
+
+Three separate causes, found in this order:
+
+1. **No trigger in the UI.** The upload flow POSTs the worker once, best-effort. If that call fails the video stays
+   `READY_FOR_ANALYSIS` forever — nothing retries and the page had no button. Added: "Analyse video" / "Re-run analysis" per row,
+   calling the same worker contract, surfacing the worker's error inline. (Committed, not yet deployed.)
+2. **The vision stack is pointed at staging.** The running container's `DATABASE_URL` is
+   `…/ultraos_staging@172.17.0.1:5433` and its media mount is `/opt/ultraos-staging/shared/media`. Production writes GameVideo rows to
+   `…/ultraleagueos@127.0.0.1:55411`. So the video the web app registered **does not exist** as far as the worker is concerned:
+   `POST /analyze` returns 500 `VisionAnalysisRun_gameVideoId_fkey`.
+3. **The compose project cannot be restarted as-is.** It requires `VISION_ENV_FILE` and `VISION_MEDIA_DIR` from the caller's shell
+   (`${VISION_MEDIA_DIR:?…}`), and its `.env` beside the compose file is not the env file in use. Any future restart needs those two
+   values exported or the stack will not come up.
+
+Decision needed before this works for production videos:
+
+- **A — repoint the stack at production** (`DATABASE_URL` → `…:55411/ultraleagueos`, `VISION_MEDIA_DIR` → `/opt/ultraleagueos/shared/media`).
+  Staging vision stops working; the stack becomes production-only.
+- **B — run a second vision stack for production** (own containers, own env file, ports 8011/8020). Staging keeps working; more memory
+  on a 193 GB box that is already 73% full.
+- **C — desktop-only for production videos**: the local engine processes a file from the coach's laptop and syncs observations via the
+  agent. No server vision at all, and the 5c flow already exists for it.
