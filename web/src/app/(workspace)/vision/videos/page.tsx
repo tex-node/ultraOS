@@ -2,7 +2,14 @@ import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/
 
 import { getVisionDashboardData, listCourtSpecifications } from "@/lib/vision/vision-loader";
 import { withOrganizationContext } from "@/lib/tenant-context";
-import { createDraftCourtSpecAction, updateDraftCourtSpecAction, markCourtSpecOfficialAction, setAttackingDirectionAction } from "./actions";
+import {
+  createDraftCourtSpecAction,
+  updateDraftCourtSpecAction,
+  markCourtSpecOfficialAction,
+  setAttackingDirectionAction,
+  startVisionAnalysisAction,
+} from "./actions";
+import { StartAnalysisButton } from "./start-analysis-button";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -45,6 +52,7 @@ export default async function VisionVideos() {
                     Ingest: <span className="font-bold text-warn">{v.ingestStatus}</span>
                     {v.codec ? ` · ${v.codec}` : ""}{v.durationSeconds ? ` · ${Math.round(v.durationSeconds / 60)}min` : ""}
                   </p>
+                  <StartAnalysisButton gameVideoId={v.id} ingestStatus={v.ingestStatus} onStart={startVisionAnalysisAction} />
                 </div>
               ))}
             </div>

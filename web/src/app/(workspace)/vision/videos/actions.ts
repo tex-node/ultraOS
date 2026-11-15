@@ -50,3 +50,43 @@ export async function setAttackingDirectionAction(gameId: string, formData: Form
   await setGameAttackingDirection(organizationId, gameId, side, session.user.id);
   revalidatePath("/vision/videos");
 }
+
+
+// Start or retry analysis for a registered video.
+//
+// The upload path fires the same request once and then forgets it. Anything that goes wrong there - worker restarting, a timeout, a
+// redeploy mid-upload - leaves the video at READY_FOR_ANALYSIS forever, because nothing retries and nothing in the UI can ask. This is
+// that ask. Failures are returned to the caller, not swallowed: an operator who clicks "Analyse" and sees nothing happen will conclude
+// the feature is broken, which is what happened.
+export async function startVisionAnalysisAction(gameVideoId: string) {
+  const { session, organizationId } = await requirePermissionWithOrganization("vision:manage");
+
+  const worker = (process.env.VISION_WORKER_URL ?? "http://127.0.0.1:8010").replace(/\/$/, "");
+  const token = process.env.VISION_WORKER_TOKEN ?? "";
+
+  try {
+    const response = await fetch(`${worker}/analyze`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        game_video_id: gameVideoId,
+        organization_id: organizationId,
+        requested_by_id: session.user.id,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 200);
+      return { ok: false as const, error: `worker refused the request (${response.status}): ${detail}` };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    return { ok: false as const, error: `cannot reach the vision worker: ${message}` };
+  }
+
+  revalidatePath("/vision/videos");
+  return { ok: true as const };
+}
