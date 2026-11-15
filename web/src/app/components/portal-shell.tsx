@@ -6,6 +6,9 @@ import { PortalBottomNav } from "@/app/components/ui/portal-bottom-nav";
 // Fan portal shell (product roadmap F1, restyled D1). Guest-safe by construction: every
 // link here is a public route, and this shell never imports anything from the organizer
 // workspace.
+// Staff roles see a link into the organizer workspace; fans and guests do not, because /dashboard is not theirs.
+const STAFF_ROLES = ["SUPER_ADMIN", "LEAGUE_OPERATOR", "TOURNAMENT_DIRECTOR", "TEAM_MANAGER", "COACH", "SCORER", "STATISTICIAN"];
+
 const discoverLinks = [
   { href: "/public/events", label: "Events" },
   { href: "/public/clubs", label: "Clubs" },
@@ -51,6 +54,14 @@ export async function PortalShell({ children }: { children: React.ReactNode }) {
             </Link>
             {session?.user ? (
               <>
+                {(session.user.roles ?? []).some((role) => STAFF_ROLES.includes(role)) ? (
+                  <Link
+                    href="/dashboard"
+                    className="shrink-0 rounded-md border border-brand-400/40 px-3 py-1.5 text-xs font-semibold text-brand-300 transition hover:bg-brand-400/10"
+                  >
+                    ← Workspace
+                  </Link>
+                ) : null}
                 <Link href="/account" className="shrink-0 text-brand-400 transition hover:text-brand-300">
                   My Account
                 </Link>
