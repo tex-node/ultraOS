@@ -638,3 +638,41 @@ Decision needed before this works for production videos:
   on a 193 GB box that is already 73% full.
 - **C — desktop-only for production videos**: the local engine processes a file from the coach's laptop and syncs observations via the
   agent. No server vision at all, and the 5c flow already exists for it.
+
+## Vision processing was impossible on production, for three reasons (2026-11-15)
+
+An operator uploaded a two-minute clip, saw `READY_FOR_ANALYSIS`, and found no way to process it. Three separate causes:
+
+1. **No trigger in the UI.** The upload path POSTs the worker once, best-effort; if that call fails the video waits forever, and the
+   video list had no button. Added "Analyse video" / "Re-run analysis" per row, calling the same worker contract and showing the worker
+   error inline. *(Committed, not yet deployed.)*
+2. **The vision stack was pointed at staging.** The running container had
+   `DATABASE_URL=…/ultraos_staging@172.17.0.1:5433` and mounted `/opt/ultraos-staging/shared/media`, while production writes
+   `GameVideo` to `…/ultraleagueos` on `127.0.0.1:55411`. `POST /analyze` therefore died on
+   `VisionAnalysisRun_gameVideoId_fkey`. Repointed to production (`ultraos-postgres:5432`, media `/opt/ultraleagueos/shared/media`).
+3. **Three plumbing traps on the way**, each of which looked like a different bug:
+   - `?schema=public` is a Prisma-only query parameter; psycopg rejects the URL outright ("invalid URI query parameter").
+   - `ultraos-postgres` publishes only `127.0.0.1:55411`, so `172.17.0.1:55411` is refused from another network. The vision containers
+     are now attached to `ops_default` and resolve it by name — **and `docker compose up -d` recreates containers, dropping that
+     attachment**, so it must be re-applied after any recreate.
+   - `docker compose restart` does **not** re-read `env_file`; only `up -d` (recreate) picks up a changed `DATABASE_URL`.
+
+### State after the fix
+
+```
+POST /analyze → 200 {"run_id":"4a826210-…","status":"QUEUED"}
+celery task received · "vision run queued" · worker at 183–381% CPU
+```
+
+### Bug found while verifying: two runs per request
+
+`/analyze` creates a `VisionAnalysisRun` and returns its id, then enqueues `analyze_video`, which **creates a second run** and drives
+that one. The first row stays `QUEUED` forever:
+
+```
+4a826210-… | QUEUED     | 0 obs   ← the one the API returned to the caller
+a9002bb5-… | PROCESSING | 0 obs   ← the one the worker is actually running
+```
+
+The UI polls the run id it was given, so it will show "queued" while the work happens under a different id. Fix: the task should adopt
+the run id it is given, not create another.
