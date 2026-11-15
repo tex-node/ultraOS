@@ -68,6 +68,16 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
+    // AI Vision (G.21). Admin-only: the review pages confirm observations, which is a league-operator responsibility.
+    label: "AI Vision",
+    personas: ["admin"],
+    links: [
+      { href: "/vision", label: "Vision dashboard" },
+      { href: "/vision/upload", label: "Process video locally" },
+      { href: "/vision/videos", label: "Video & court setup" },
+    ],
+  },
+  {
     label: "Coach hub",
     personas: ["coach", "admin"],
     links: [

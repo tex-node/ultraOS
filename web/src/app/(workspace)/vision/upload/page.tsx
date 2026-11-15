@@ -1,9 +1,6 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
 
-import { auth } from "@/auth";
-import { hasPermission } from "@/lib/permissions";
-import { MissingOrganizationContextError } from "@/lib/authorization";
+import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/lib/authorization";
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { VisionUploadForm } from "./upload-form";
 import { LocalVisionPanel } from "./local-vision-panel";
@@ -16,9 +13,8 @@ export const dynamic = "force-dynamic";
 // operator with a phone recording could not get footage into the system, so the review queue and the analysis
 // pipeline had nothing to work on.
 export default async function VisionUploadPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login?callbackUrl=/vision/upload");
-  if (!hasPermission(session.user.roles, "vision:manage")) notFound();
+  // Redirect rather than 404: a signed-in user without vision:manage should be told they lack access, not that the page is missing.
+  const session = await requirePermissionOrRedirect("vision:manage", "/vision/upload");
   if (!session.user.organizationId) throw new MissingOrganizationContextError();
 
   const fixtures = await withOrganizationContext(session.user.organizationId, (tx) =>
