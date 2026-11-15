@@ -676,3 +676,25 @@ a9002bb5-… | PROCESSING | 0 obs   ← the one the worker is actually running
 
 The UI polls the run id it was given, so it will show "queued" while the work happens under a different id. Fix: the task should adopt
 the run id it is given, not create another.
+
+## Vision worker rebuild — three deployment traps, and the state right now (2026-11-15)
+
+Chasing "a 2-minute clip has been PROCESSING for hours" turned into a rebuild of the vision image, and the rebuild exposed three
+problems that had nothing to do with inference:
+
+1. **The detection loop is not where I first patched it.** `app/core/analyzer.py` delegates to `app/analyzer/` since the 5c-ii-b split;
+   the stride/progress patch applied to `core/analyzer.py` therefore changed nothing. The loop lives in `app/analyzer/__init__.py`.
+2. **A cached `COPY app ./app` layer shipped an image without the new package.** The built image contained only
+   `api core workers main.py` while the source tree had `analyzer/` and `sidecar_main.py`. Bumping a build stamp on `app/__init__.py`
+   forced the layer to rebuild.
+3. **`redis==5.2.1` is incompatible with the current kombu.** The rebuilt worker dies at startup with
+   `VersionMismatch: Redis transport requires redis-py versions 6.1.0 or later`. The two-week-old image only worked because its kombu
+   was older. Pin bumped to `6.1.0`.
+
+**State at the time of writing**: the worker container is **down** (VersionMismatch) while the image rebuilds — vision processing is
+offline until that finishes. `POST /analyze` still returns a run id (the API is up), but nothing consumes the queue.
+
+Committed: frame stride + progress logging, single-run adoption (`analyze_video(run_id=…)`), redis pin.
+
+Once the rebuild lands: recreate, re-attach `ops_default`, trigger a run, and confirm observations land — with stride 5, 3,600 frames
+become 720 inferences.
