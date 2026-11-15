@@ -49,6 +49,8 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
             game_video_id=request.game_video_id,
             organization_id=request.organization_id,
             requested_by_id=request.requested_by_id,
+            # The task adopts this run instead of creating a second one, so the id returned to the caller is the one that moves.
+            run_id=run_id,
         )
     except Exception:  # noqa: BLE001 - broker may be down; the run row + beat poller recover it
         pass

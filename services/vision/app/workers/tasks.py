@@ -38,14 +38,23 @@ def poll_ready_videos(limit: int = 20) -> int:
 
 
 @celery_app.task(name="app.workers.tasks.analyze_video", bind=True)
-def analyze_video(self, game_video_id: str, organization_id: str, requested_by_id: str) -> str:
+def analyze_video(
+    self,
+    game_video_id: str,
+    organization_id: str,
+    requested_by_id: str,
+    run_id: str | None = None,
+) -> str:
     settings = get_settings()
     analyzer = get_analyzer(settings.vision_analyzer)
     # Record the analyzer that actually runs, so the run row can never claim "stub" for real inference.
     model_key = getattr(analyzer, "key", STUB_MODEL_KEY) or STUB_MODEL_KEY
     model_version = getattr(analyzer, "version", STUB_MODEL_VERSION) or STUB_MODEL_VERSION
     model_id = ensure_model(organization_id, model_key, model_version)
-    run_id = create_run(game_video_id, organization_id, requested_by_id, model_id)
+    # Adopt the run the API already created and handed back to the caller. Creating a second one left the caller polling a row that
+    # could never advance; only the poller (which has no run yet) reaches the create branch.
+    if run_id is None:
+        run_id = create_run(game_video_id, organization_id, requested_by_id, model_id)
     mark_processing(organization_id, run_id)
     try:
         result = analyzer.analyze(game_video_id, run_id)

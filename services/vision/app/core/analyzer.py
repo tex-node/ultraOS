@@ -11,6 +11,7 @@ for a synthetic orange circle, it is the expected one — see documentation/visi
 from __future__ import annotations
 
 import json
+import logging
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -18,6 +19,8 @@ from dataclasses import dataclass, field
 from app.analyzer import Analyzer as DetectionAnalyzer
 from app.core.config import get_settings
 from app.core.db import connection
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
