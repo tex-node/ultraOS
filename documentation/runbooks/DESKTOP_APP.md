@@ -578,3 +578,39 @@ returns 401 without a session, which is the desktop handshake route existing.
 **Known deploy-script race**: the automated smoke step inside `deploy-with-log.sh` reported `SMOKE FAILED (1)` and printed a rollback
 command while the release was still switching; the identical test passed a minute later. A green deploy should not tell the operator
 to roll back — the smoke step needs a settle/retry.
+
+## Installer (2026-11-15)
+
+```
+path   C:\Users\XPS\apex-court-target\release\bundle\nsis\UltraOS Scoring_1.0.0_x64-setup.exe
+size   3,589,732 bytes (3.42 MB)
+sha256 (recorded after a passing DoD - see below)
+```
+
+NSIS only, `installMode: currentUser`: no admin prompt, so a coach on a venue laptop can install it. The window is still declared in
+Rust (`app.windows: []`), because it needs the `UltraOSDesktop` user-agent marker that gates the agent handshake — a config-declared
+window would collide with it.
+
+**Installed and launched, verified:**
+
+```
+silent install (/S)    exit 0 in 4.6s
+install dir            %LOCALAPPDATA%\UltraOS Scoring\ultraos-desktop.exe (12.7 MB)
+Start menu shortcut    "UltraOS Scoring" present
+launch                 ultaraos-agent on 8012 · loaded https://app.neonultra.ng/ · no offline page
+```
+
+**Not uploaded.** The DoD is not fully verified (steps 4-7 need a production login and a real video), and the prompt is explicit:
+do not upload until the seven steps pass.
+
+### Processing-time expectation, for the coach
+
+CPU-only build. A 30-minute 1080p game at 30fps is ~54,000 frames; YOLOv8n on a CPU runs at roughly 2-5 fps, so expect **3-8 hours**
+for a full game and considerably less for a clip. The vision panel already says: "On a laptop without a dedicated GPU, expect several
+hours for a full game. Consider running this overnight."
+
+### `local://` highlights (decision for 5c-vi)
+
+The review page can confirm an observation on a locally-processed video; generating a `HIGHLIGHT_CLIP` from it cannot work, because
+the VPS has no file — the video only exists on the coach's laptop. For the pilot the recommendation is to skip clip generation for
+`local://` assets and show the observation without a clip. The audit record is what proves the workflow.

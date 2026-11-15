@@ -200,6 +200,33 @@ systemctl restart "$SERVICE"
 sleep 4
 echo "[deploy] service: $(systemctl is-active "$SERVICE")"
 
+# Health gate before the smoke test.
+#
+# A restart means the new process is still compiling routes, warming caches and (for this app) resolving the tenant for the
+# homepage. Running the smoke assertions immediately after `sleep 4` raced that window: a production deploy printed
+# "SMOKE FAILED (1) - roll back now" while the release was fine, and the same test passed a minute later. Poll the health
+# endpoint first, and only assert once it answers.
+PORT_FOR_HEALTH="$(systemctl cat "$SERVICE" | sed -n 's/.*--port \([0-9]*\).*/\1/p' | head -1)"
+HEALTH_URL="http://127.0.0.1:${PORT_FOR_HEALTH:-3000}/api/v1/live"
+HEALTH_OK=0
+for _ in $(seq 1 30); do
+  if curl -fsS -o /dev/null -m 3 "$HEALTH_URL" 2>/dev/null; then HEALTH_OK=1; break; fi
+  sleep 1
+done
+if [[ "$HEALTH_OK" -ne 1 ]]; then
+  {
+    echo ""
+    echo "##########################################################################"
+    echo "# DEPLOY FAILED THE HEALTH GATE - the service did not answer $HEALTH_URL within 30s."
+    echo "# Roll back now:"
+    echo "#   ln -sfn $PREV $APP_ROOT/current && systemctl restart $SERVICE"
+    echo "# (previous release: ${PREV:-none})"
+    echo "##########################################################################"
+  } >&2
+  exit 5
+fi
+echo "[deploy] health: ok ($HEALTH_URL)"
+
 # Install the smoke test from the deployed ref (the release only contains web/, so the script cannot
 # live inside it) and run it. A release that boots but serves nothing must fail the deploy.
 if [[ -f "$SRC/deploy/ops/smoke-test.sh" ]]; then

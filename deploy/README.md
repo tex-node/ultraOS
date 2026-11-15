@@ -169,3 +169,22 @@ Rules:
 
 The check is `NODE_ENV`-independent on purpose: `next start` sets `NODE_ENV=production` on staging too, so the detection
 uses `APP_ENV`, then a loopback `AUTH_URL`/`NEXTAUTH_URL`, then `NODE_ENV` as the last resort.
+### The health gate comes before the smoke test (2026-11-15)
+
+The 2026-11-15 production deploy printed:
+
+```
+SMOKE FAILED (1)
+# DEPLOY FAILED THE SMOKE TEST - the new release is live but is not serving.
+# Roll back now: ln -sfn …/release-c070e24-… current && systemctl restart ultraos-web.service
+```
+
+The release was **fine**. Re-running the same smoke test a minute later against the same release printed `SMOKE OK` on every route.
+The smoke step ran four seconds after `systemctl restart`, while the new process was still warming.
+
+That instruction is more dangerous than no instruction: an operator who follows it reverts a good deploy and then has to work out why
+the "broken" release passed its own test moments later.
+
+`deploy.sh` now polls `http://127.0.0.1:<port>/api/v1/live` for up to 30 seconds after the restart, and only then runs the smoke
+assertions. If the gate itself times out, the message says so — "the service did not answer within 30s" — which is a different claim
+from "the routes are broken", and the rollback line is printed only in that case.

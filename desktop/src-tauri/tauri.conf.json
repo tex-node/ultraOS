@@ -1,16 +1,14 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "UltraOS Scoring",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "ng.neonultra.scoring",
-
   "build": {
     "frontendDist": "https://app.neonultra.ng",
     "devUrl": "https://app.neonultra.ng",
     "beforeDevCommand": "",
     "beforeBuildCommand": ""
   },
-
   "app": {
     "withGlobalTauri": false,
     "windows": [],
@@ -18,17 +16,29 @@
       "csp": null
     }
   },
-
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper" }
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      }
     },
     "shortDescription": "UltraOS Scoring",
     "longDescription": "Courtside scoring for Ultra League OS. A desktop shell around the hosted app so a scorer can work on a venue laptop without a browser tab."
   },
-
   "plugins": {}
 }

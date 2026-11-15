@@ -19,10 +19,12 @@ DAY="$(date +%d)"
 push() { # $1 local dir  $2 include glob  $3 remote db name
   local dir="$1" glob="$2" db="$3"
   [ -d "$dir" ] || return 0
-  rclone --config "$CONF" copy "$dir" "r2crypt:${HOST}/${db}/daily/" \
+  # Top-level prefixes so R2 lifecycle needs only 2 rules (no wildcards):
+  #   daily/<host>/<db>/  and  monthly/<host>/<db>/
+  rclone --config "$CONF" copy "$dir" "r2crypt:daily/${HOST}/${db}/" \
     --include "$glob" --retries 3 --low-level-retries 5
   if [ "$DAY" = "01" ]; then
-    rclone --config "$CONF" copy "$dir" "r2crypt:${HOST}/${db}/monthly/" \
+    rclone --config "$CONF" copy "$dir" "r2crypt:monthly/${HOST}/${db}/" \
       --include "$glob" --retries 3 --low-level-retries 5
   fi
 }
