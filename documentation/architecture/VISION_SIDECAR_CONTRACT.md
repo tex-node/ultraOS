@@ -164,3 +164,22 @@ fix (`model_path()`) belongs in the next build, which also needs re-uploading an
 
 **DoD status: not met.** The queue, the sync contract and the install/start UI are real; the file-selection bridge is the last
 mechanical gap before a coach can process a video, and the review-page confirm path is unexercised.
+
+## VPS worker vs desktop sidecar — measured, not assumed (2026-11-15)
+
+```
+yolov8n · predict() · 640x360 · this host
+20 calls in 1,223.4 s  →  0.016 fps  (≈61 s per inference)
+host: 6 cores, load average 34, also running Supabase, Postgres, Kong, Studio and the web app
+```
+
+**The VPS worker caps at 300 frames (10 s of 30 fps video) by default, and even that takes roughly an hour on this host. Full-game
+processing is a desktop-only feature.** The VPS worker is for pipeline tests and small clips; it is not a production inference
+service, and it will not process a 30-minute game — not in 30 minutes, not in a day.
+
+The desktop sidecar runs on the coach's laptop: 8–16 cores, no contention, and a GPU in the machines that have one. It is the
+supported place to process video. The VPS path exists so someone can try the pipeline without installing anything; for real work it
+needs a GPU (v37).
+
+Guardrails currently set on the VPS worker: `VISION_FRAME_STRIDE=5`, `VISION_PROGRESS_EVERY=100`, `VISION_MAX_FRAMES=300`. The
+frame cap is there so a queued run cannot occupy the worker indefinitely, not because 300 frames is a useful analysis.

@@ -698,3 +698,47 @@ Committed: frame stride + progress logging, single-run adoption (`analyze_video(
 
 Once the rebuild lands: recreate, re-attach `ops_default`, trigger a run, and confirm observations land — with stride 5, 3,600 frames
 become 720 inferences.
+
+## The measured number, and what it decides (2026-11-15)
+
+```
+yolov8n · 640x360 synthetic · predict()
+20 calls in 1,223.4 s → 0.016 fps (≈61 s per inference)
+
+host: 6 cores · load average 34.30 / 29.47 / 26.20
+containers on the same box: supabase (db, kong, meta, studio), powervend (kong, meta, studio), the web app, postgres
+```
+
+That is not "slow". At 61 seconds per frame, a **300-frame cap with stride 5 (60 inferences) is still about an hour**, and the
+uncapped 3,600-frame clip is measured in days. The earlier 70-minute run was not hung; it was exactly this.
+
+The VPS worker is therefore **not viable for CPU vision at all** on this host, at any clip length that matters. It stays useful for
+`/health`, queue mechanics, and proving the pipeline end to end with tiny inputs — not for processing a game, and not for a highlight.
+
+**Where processing actually belongs:**
+
+| | desktop sidecar | VPS worker |
+| --- | --- | --- |
+| hardware | coach's laptop, 8–16 cores at 3.5–4.5 GHz, nothing else running | shared 6-core host already running ~30 load units of Supabase, Postgres and the web app |
+| measured | not yet benchmarked on this machine | **0.016 fps** — ~61 s per inference |
+| viable for | full games (hours without a GPU) and highlights | pipeline tests only |
+| ships in | the 249 MB sidecar the coach installs | this deployment |
+
+The desktop is the right place for video, and always was. The VPS path was a convenience for people who would not install anything;
+the honest replacement for that convenience is a GPU (v37), not more tuning here.
+
+### Config now set
+
+```
+VISION_FRAME_STRIDE=5      # every 5th frame
+VISION_PROGRESS_EVERY=100  # log every 100 processed frames
+VISION_MAX_FRAMES=300      # 10 s at 30 fps — a highlight, not a game
+```
+
+The cap is a guardrail against a queue that never drains, not a way to make the VPS usable.
+
+### The other bug found while cancelling
+
+`vision-beat` was re-queueing the video every few minutes through `poll_ready_videos`, so each cancellation simply produced another
+run — the video had accumulated **eight** runs. The beat container is now stopped. Any future "cancel" needs it stopped first, or the
+run comes back.
