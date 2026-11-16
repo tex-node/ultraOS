@@ -758,3 +758,19 @@ click.
 **The desktop app is required for AI Vision processing.** The VPS worker is for 10-second test clips only and takes roughly an hour per
 clip on shared hardware (measured: 0.016 fps). On a modern laptop, expect 3–6 hours to process a full 30-minute game — run it
 overnight. GPU acceleration is v37.
+
+## Fal activation: build the image before setting the endpoint (2026-11-16)
+
+The committed Fal code is currently `docker cp`-ed into the running worker; the image is stale. That makes the obvious activation order
+wrong:
+
+```
+WRONG: env edit → docker compose up -d (recreate) → test      # recreate restores the stale image, fal_tasks vanishes
+RIGHT: docker compose build worker → docker compose up -d → env edit → recreate → test
+```
+
+`docker compose up -d` recreates a container from its image, so any `docker cp` change is lost — that is exactly how an earlier
+`ModuleNotFoundError: app.core.fal_client` appeared after a restart. Build first, then configure, then test.
+
+Also still true and easy to forget: `vision-beat` must stay **stopped** (it re-queues every READY_FOR_ANALYSIS video), and the vision
+containers must be re-attached to `ops_default` after any recreate or they cannot resolve `ultraos-postgres`.
