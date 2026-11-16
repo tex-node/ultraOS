@@ -39,6 +39,21 @@ echo "deploy → $ENVIRONMENT · log → $LOG"
 # shell that had sourced STAGING's web.env (which sets NODE_ENV=production) invoked the PRODUCTION deploy, `npm ci`
 # then omitted devDependencies, and `next build` died on the dev-only @serwist/turbopack. A deploy must not depend on
 # what happened to be exported in the terminal that started it.
+# ---------------------------------------------------------------------------------------------------
+# SYNCING THE DEPLOY SCRIPT. /root/deploy.sh used to be a hand-copied snapshot; it was three weeks stale
+# while the repository's copy carried the health-gate and smoke fixes, so every deploy ran the old logic
+# and printed a false rollback. Copy from THIS checkout every time: the script that runs is the script
+# that was committed, and a stale copy cannot come back without someone deleting this block.
+# ---------------------------------------------------------------------------------------------------
+COMMITTED_DEPLOY="$REPO_ROOT/deploy/deploy.sh"
+if [[ ! -f "$COMMITTED_DEPLOY" ]]; then
+  echo "deploy: $COMMITTED_DEPLOY is missing - refusing to run a stale /root/deploy.sh" >&2
+  exit 6
+fi
+cp "$COMMITTED_DEPLOY" /root/deploy.sh
+chmod +x /root/deploy.sh
+echo "deploy: synced /root/deploy.sh from $COMMITTED_DEPLOY ($(sha256sum /root/deploy.sh | cut -c1-12))"
+
 env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/root TERM=dumb \
   bash /root/deploy.sh \
   --app-root "$APP_ROOT" \

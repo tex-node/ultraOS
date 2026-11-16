@@ -1,3 +1,4 @@
+# deploy-script stamp: 20261116T211044 (verifies the wrapper ships the committed copy)
 #!/usr/bin/env bash
 # Git-based deploy for UltraLeagueOS.
 #
