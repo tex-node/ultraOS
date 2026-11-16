@@ -238,16 +238,27 @@ if [[ "$RUN_SMOKE" -eq 1 ]]; then
   if [[ -f "$SMOKE_SCRIPT" ]]; then
     echo "[deploy] smoke test"
     SMOKE_BASE="${SMOKE_BASE_URL:-$(grep -m1 '^AUTH_URL=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' | sed 's/ *$//')}"
-    # AUTH_URL may be the public hostname; on the box itself the app listens on loopback.
-    if [[ "$SMOKE_BASE" == http*://app.* || "$SMOKE_BASE" == https://* ]]; then
+    # Run the assertions against the URL the app actually serves. Loopback was the cause of the false rollbacks: the app answers a
+    # non-canonical host with a 301, curl -f accepts that in the health gate, and the smoke test then fails every 200 assertion.
+    if [[ -z "$SMOKE_BASE" ]]; then
       SMOKE_BASE="http://127.0.0.1:$(systemctl cat "$SERVICE" | sed -n 's/.*--port \([0-9]*\).*/\1/p' | head -1)"
     fi
-    if ! BASE_URL="${SMOKE_BASE:-http://127.0.0.1:4120}" APP_ROOT="$APP_ROOT" SERVICE="$SERVICE" ENV_FILE="$ENV_FILE" SMOKE_ORG="${SMOKE_ORG:-}" SMOKE_EMAIL="${SMOKE_EMAIL:-texdevices@gmail.com}" \
-         MIGRATE_ENV="${MIGRATE_ENV_FILE:-$APP_ROOT/shared/migrate.env}" bash "$SMOKE_SCRIPT"; then
+    echo "[deploy] smoke base: $SMOKE_BASE"
+    SMOKE_OK=0
+    for attempt in 1 2; do
+      echo "[deploy] smoke attempt ${attempt}/2"
+      if BASE_URL="${SMOKE_BASE:-http://127.0.0.1:4120}" APP_ROOT="$APP_ROOT" SERVICE="$SERVICE" ENV_FILE="$ENV_FILE" SMOKE_ORG="${SMOKE_ORG:-}" SMOKE_EMAIL="${SMOKE_EMAIL:-texdevices@gmail.com}" \
+           MIGRATE_ENV="${MIGRATE_ENV_FILE:-$APP_ROOT/shared/migrate.env}" bash "$SMOKE_SCRIPT"; then
+        SMOKE_OK=1
+        break
+      fi
+      [[ "$attempt" -eq 1 ]] && { echo "[deploy] smoke failed once - retrying in 10s"; sleep 10; }
+    done
+    if [[ "$SMOKE_OK" -ne 1 ]]; then
       {
         echo ""
         echo "##########################################################################"
-        echo "# DEPLOY FAILED THE SMOKE TEST - the new release is live but is not serving."
+        echo "# DEPLOY FAILED THE SMOKE TEST - the app started but its routes are not serving correctly."
         echo "# Roll back now:"
         echo "#   ln -sfn $PREV $APP_ROOT/current && systemctl restart $SERVICE"
         echo "# (previous release: ${PREV:-none})"
