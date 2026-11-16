@@ -76,3 +76,23 @@ python -m pytest -q
   empty until B2).
 - No video segment fetching (the storage adapter's `download_segment` raises until B2).
 - No auth on `/analyze` (B1 adds the service-account credential scoped to `Vision*` tables).
+
+
+## Cloud GPU inference (Fal)
+
+`FAL_KEY` must be a Fal API key with **fal.run write permission** — get one at <https://fal.ai/dashboard/keys>. The key is not committed;
+it lives in `/opt/ultraos-vision/vision.env` on the host.
+
+**Deploying our own app needs serverless access, which the account must request first:**
+<https://fal.ai/dashboard/serverless-get-started>. Until Fal grants it, `fal deploy` fails with
+`Insufficient permissions`. Nothing in this repository can work around that.
+
+Once access is granted:
+
+```bash
+cd services/vision/fal_app
+export FAL_KEY=...
+fal deploy handler.py::UltraOSVision --app-name ultraos-vision
+```
+
+The app bundles `app/analyzer/` (the same detection code the desktop sidecar runs) and returns observations in the existing shape.

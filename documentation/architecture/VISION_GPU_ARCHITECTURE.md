@@ -71,3 +71,26 @@ wall-clock time for our clip length on their hardware. The estimate above is ari
 
 `vision-beat` stays **disabled** on the VPS. Re-enabling it re-queues every `READY_FOR_ANALYSIS` video on a timer, which is how eight
 runs accumulated for one clip. The poller was written for a worker that could keep up; on this host it cannot.
+
+
+## What was measured (2026-11-16), and what blocked us
+
+| claim | reality |
+| --- | --- |
+| "Fal hosts YOLOv8" | **False.** `fal-ai/yolov8`, `yolov8n`, `yolo`, `yolo-world`, `object-detection`, `person-detection`, `grounding-dino` all return 404 `Application "…" not found`. The catalogue (`GET api.fal.ai/v1/models`) surfaces image/video generation models for "yolo", "detection" and "segment" — no hosted person detector. |
+| our key works | **True.** `FAL_KEY` (72 chars, from `cred/Ultrafal_env.txt`) authenticates against the API; `fal-ai/florence-2-large` accepted a queue submission (200 `IN_QUEUE`), which is how the 404s were distinguished from auth failures. |
+| we can deploy our own app | **Blocked.** `fal deploy handler.py::UltraOSVision` fails with `Insufficient permissions: Please visit https://fal.ai/dashboard/serverless-get-started to request access.` That is an account gate, not a code defect. |
+
+Our app is written and in the repository: `services/vision/fal_app/handler.py` (class `UltraOSVision`, `GPU-L4`, `max_concurrency=1`,
+bundling `app/analyzer`), plus pinned `requirements.txt`. The moment access is granted it is one command:
+
+```bash
+cd services/vision/fal_app && fal deploy handler.py::UltraOSVision --app-name ultraos-vision
+```
+
+Then `app/core/fal_client.py` needs its `FAL_VISION_MODEL` pointed at the returned endpoint. Nothing else changes: persistence, the sync
+contract and the review UI already expect the shape this handler returns.
+
+**Deliberately rejected**: Florence-2 and other hosted foundation models. Different observation shape (one schema change ripples through
+desktop sync, VPS persistence, review UI and highlight generation), per-call pricing that breaks the ~$0.27/game estimate, and detection
+quality tuned for stills rather than multi-object tracking.
