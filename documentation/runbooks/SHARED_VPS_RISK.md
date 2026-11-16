@@ -94,3 +94,12 @@ win that day was `/tmp`: **4.3 GB of build scratch** from earlier verification r
 | data path | database and media are local (fast) | the DB connection and the media mount cross the network; media should become R2-only |
 | operations | one host, one deploy path | a second host, a second deploy path, a queue that must tolerate the split |
 | verdict | **acceptable now** with the three layers | worth doing when rendering is continuous or a second league's volume lands |
+
+## Vision on the shared VPS (2026-11-16)
+
+**Do not re-enable `vision-beat`.** It re-queues every `READY_FOR_ANALYSIS` video on a timer; on a host measuring 0.016 fps that is an
+infinite backlog and a saturated machine. One clip accumulated eight runs from this. Video processing is desktop-only, or through the
+GPU API in v37.
+
+The `vision-api` and `vision-worker` containers stay up so `/health`, the queue and the sync contract remain testable; `vision-beat`
+is stopped and must stay stopped.

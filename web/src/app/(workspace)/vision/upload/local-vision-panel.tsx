@@ -123,7 +123,29 @@ export function LocalVisionPanel({ fixtures }: { fixtures: { id: string; label: 
     });
   }, [fixtureId]);
 
-  if (phase === "browser" || phase === "unknown" || phase === "checking") return null;
+  if (phase === "browser") {
+    // Browser: no local engine, and the cloud path is a test harness. Say so, and point at the thing that works.
+    return (
+      <section className="rounded-lg border border-line bg-ink-800 p-5">
+        <h2 className="font-semibold">AI Vision processing requires the Desktop App</h2>
+        <p className="mt-2 text-sm text-text-2">
+          Uploading a full game to the cloud takes days. The desktop app processes video locally on your machine (5-10x faster).
+        </p>
+        <a
+          className="mt-4 inline-block rounded-lg bg-brand-400 px-4 py-2 text-sm font-semibold text-ink-900"
+          href="https://pub-e130aa56d5b242f68e0574ce9e065d59.r2.dev/apps/UltraOS-Scoring-1.0.0-x64-setup.exe"
+        >
+          Download UltraOS Scoring (3.42 MB)
+        </a>
+        <p className="mt-2 text-xs text-text-3">
+          Windows will show a security warning on first run — the installer is unsigned. Click &quot;More info&quot; → &quot;Run
+          anyway&quot;.
+        </p>
+      </section>
+    );
+  }
+
+  if (phase === "unknown" || phase === "checking") return null;
 
   const percent =
     status && status.totalBytes > 0 ? Math.min(100, Math.round((status.downloadedBytes / status.totalBytes) * 100)) : 0;

@@ -4,6 +4,7 @@ import { MissingOrganizationContextError, requirePermissionOrRedirect } from "@/
 import { withOrganizationContext } from "@/lib/tenant-context";
 import { VisionUploadForm } from "./upload-form";
 import { LocalVisionPanel } from "./local-vision-panel";
+import { CloudHarness } from "./cloud-harness";
 
 export const dynamic = "force-dynamic";
 
@@ -55,12 +56,14 @@ export default async function VisionUploadPage() {
           Register footage for analysis. Nothing here claims a result: the file is stored and a GameVideo row is created;
           the vision worker analyses it later and an operator reviews every observation.
         </p>
-        <VisionUploadForm
+        <CloudHarness>
+          <VisionUploadForm
           fixtures={fixtures.map((fixture) => ({
             id: fixture.id,
             label: `${fixture.homeSeasonClub?.club.name ?? fixture.homeEntrant?.name ?? "?"} v ${fixture.awaySeasonClub?.club.name ?? fixture.awayEntrant?.name ?? "?"} · ${fixture.status} · ${fixture.scheduledAt.toISOString().slice(0, 10)}${fixture._count.gameVideos > 0 ? ` · ${fixture._count.gameVideos} video(s)` : ""}`,
           }))}
         />
+        </CloudHarness>
       </main>
     </>
   );

@@ -183,3 +183,18 @@ needs a GPU (v37).
 
 Guardrails currently set on the VPS worker: `VISION_FRAME_STRIDE=5`, `VISION_PROGRESS_EVERY=100`, `VISION_MAX_FRAMES=300`. The
 frame cap is there so a queued run cannot occupy the worker indefinitely, not because 300 frames is a useful analysis.
+
+## Do not re-enable the vision-beat poller on the VPS (2026-11-16)
+
+`vision-beat` calls `poll_ready_videos` on a timer and enqueues a new `analyze_video` for every `READY_FOR_ANALYSIS` video it finds.
+On this host that is catastrophic in two ways:
+
+1. **Infinite backlog.** Every tick re-queues the same videos. One clip accumulated **eight** `VisionAnalysisRun` rows because each
+   cancellation was followed by another enqueue.
+2. **The host saturates.** Measured inference is **0.016 fps** (≈61 s per frame) at 6 cores and load average 34; each queued run holds
+   the worker indefinitely.
+
+The poller is written for a worker that can keep up. Ours cannot, and no tuning closes a 600× gap. Video processing is desktop-only
+today, or via the GPU API design in `documentation/architecture/VISION_GPU_ARCHITECTURE.md` (v37).
+
+If a future worker is fast enough, re-enable beat **and** add a concurrency limit and a per-video cooldown first.

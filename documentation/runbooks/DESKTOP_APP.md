@@ -742,3 +742,19 @@ The cap is a guardrail against a queue that never drains, not a way to make the 
 `vision-beat` was re-queueing the video every few minutes through `poll_ready_videos`, so each cancellation simply produced another
 run — the video had accumulated **eight** runs. The beat container is now stopped. Any future "cancel" needs it stopped first, or the
 run comes back.
+
+## Desktop distribution — published (2026-11-16)
+
+```
+url     https://pub-e130aa56d5b242f68e0574ce9e065d59.r2.dev/apps/UltraOS-Scoring-1.0.0-x64-setup.exe
+size    3,588,522 bytes (3.42 MB)
+sha256  024213d9d170d008cc2a71e9a85c2e944f65754d503286f0b4addd36ca3e0a5e
+HEAD    200 · application/x-msdownload · content-length 3,588,522
+```
+
+The installer is unsigned: Windows SmartScreen appears on first run — **More info → Run anyway**. The download page says so before the
+click.
+
+**The desktop app is required for AI Vision processing.** The VPS worker is for 10-second test clips only and takes roughly an hour per
+clip on shared hardware (measured: 0.016 fps). On a modern laptop, expect 3–6 hours to process a full 30-minute game — run it
+overnight. GPU acceleration is v37.
