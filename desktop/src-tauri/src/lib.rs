@@ -37,7 +37,9 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 
 /// Where the window points. Overridable so the offline-fallback path can be exercised without unplugging anything:
 /// `ULTRAOS_APP_URL=http://127.0.0.1:9/ cargo run` reproduces "the site is unreachable" in one command.
-const DEFAULT_APP_URL: &str = "https://app.neonultra.ng";
+// Open into the organizer workspace, not the fan portal. The public homepage has its own top nav and no sidebar, so launching there
+// made the app look like a browser tab with no admin area; /dashboard redirects an unauthenticated user to login and returns there.
+const DEFAULT_APP_URL: &str = "https://app.neonultra.ng/dashboard";
 
 /// Origins the agent will answer for. Dev server included because the desktop shell is also used against `next dev`.
 const ALLOWED_ORIGINS: [&str; 2] = ["https://app.neonultra.ng", "http://localhost:3000"];
