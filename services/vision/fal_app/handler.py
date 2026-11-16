@@ -65,6 +65,11 @@ class UltraOSVision(fal.App):
     def run(self, request: VisionInput) -> VisionOutput:
         from app.analyzer import Analyzer
 
+        # pydantic rejects a missing video_url before this runs; an empty string is still possible, and a silent 2 GB download attempt to
+        # nowhere is a worse failure than a clear message.
+        if not request.video_url.strip():
+            raise ValueError("video_url is empty; refusing to run")
+
         with tempfile.TemporaryDirectory() as workdir:
             path = os.path.join(workdir, "clip.mp4")
             size = _download(request.video_url, path)
