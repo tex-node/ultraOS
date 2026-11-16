@@ -94,3 +94,32 @@ contract and the review UI already expect the shape this handler returns.
 **Deliberately rejected**: Florence-2 and other hosted foundation models. Different observation shape (one schema change ripples through
 desktop sync, VPS persistence, review UI and highlight generation), per-call pricing that breaks the ~$0.27/game estimate, and detection
 quality tuned for stills rather than multi-object tracking.
+
+## Cost Model (To Be Measured)
+
+The **$0.27 per game** figure in this document is an **estimate**, not a measurement:
+
+- it assumes roughly 540 GPU-seconds per game at ~$0.0005/GPU-second;
+- it assumes ~100 fps decode-and-detect on an L4/A10G for the nano model at 640px;
+- **nothing has been billed yet.** No Fal job has ever run, because deploying our own app is gated behind
+  <https://fal.ai/dashboard/serverless-get-started>.
+
+The first real number comes from the 10-second test clip (`…/vision-tests/fal-test-clip.mp4`, 39.7 MB, 120 s of 640x360 @ 30 fps):
+
+1. deploy, then submit through `app.scripts.test_fal_vision`;
+2. record submit→complete wall clock and the observation count;
+3. record the GPU-seconds and cost from the Fal dashboard for that job;
+4. **only then** scale to a full game.
+
+**Tier decision rule**: if the measured cost per clip is more than **3×** the estimate above, revisit the GPU tier (L4 vs A10G) before
+quoting anything. The nano model is compute-bound at 640px, so moving up to an A100 would raise cost without lowering latency.
+
+**Full-game extrapolation is a scaling of a measured per-clip cost, not a promise.** A 30-minute game is 30 clips of 120 s, so it is
+linear only if per-job overhead (container start, download) stays small relative to inference. That is another thing the first
+measurement will show.
+
+### Before promising cost to LBCL or any partner
+
+- [ ] measured on the 10-second clip (GPU-seconds and cost from the dashboard)
+- [ ] extrapolated to 30 minutes with the measured per-clip figure, overhead included
+- [ ] confirmed against the Fal dashboard invoice, not the estimate table

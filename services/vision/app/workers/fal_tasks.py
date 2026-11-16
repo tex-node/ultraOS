@@ -122,33 +122,39 @@ def presigned_video_url(game_video_id: str, ttl_seconds: int = 7200) -> str:
 
 
 def persist_observations(organization_id: str, run_id: str, rows: list[dict]) -> int:
-    """Same insert shape the desktop sync uses, so RLS and the review UI behave identically."""
-    if not rows:
-        return 0
-    written = 0
+    """Same insert shape the desktop sync uses, so RLS and the review UI behave identically.
+
+    Returns the number of observations **for the run**, not the number inserted by this call. The dry run caught why: a replay inserts
+    nothing (correct), and returning that 0 marked a completed run as `observationCount: 0`, which is a lie the review UI would show.
+    Counting is idempotent by construction.
+    """
+    if rows:
+        with connection(organization_id) as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT "gameVideoId" FROM "VisionAnalysisRun" WHERE id = %s', (run_id,))
+                game_video_id = cur.fetchone()[0]
+                for row in rows:
+                    cur.execute(
+                        """
+                        INSERT INTO "VisionObservation" (id, "organizationId", "analysisRunId", "gameVideoId",
+                                                          "videoTimeMs", "observationType", "boundingBox", "confidence")
+                        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+                        ON CONFLICT (id) DO NOTHING
+                        """,
+                        (
+                            row["id"],
+                            organization_id,
+                            run_id,
+                            game_video_id,
+                            row["videoTimeMs"],
+                            row["observationType"],
+                            __import__("json").dumps(row["boundingBox"]),
+                            row["confidence"],
+                        ),
+                    )
+            conn.commit()
+
     with connection(organization_id) as conn:
         with conn.cursor() as cur:
-            cur.execute('SELECT "gameVideoId" FROM "VisionAnalysisRun" WHERE id = %s', (run_id,))
-            game_video_id = cur.fetchone()[0]
-            for row in rows:
-                cur.execute(
-                    """
-                    INSERT INTO "VisionObservation" (id, "organizationId", "analysisRunId", "gameVideoId",
-                                                      "videoTimeMs", "observationType", "boundingBox", "confidence")
-                    VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s)
-                    ON CONFLICT (id) DO NOTHING
-                    """,
-                    (
-                        row["id"],
-                        organization_id,
-                        run_id,
-                        game_video_id,
-                        row["videoTimeMs"],
-                        row["observationType"],
-                        __import__("json").dumps(row["boundingBox"]),
-                        row["confidence"],
-                    ),
-                )
-                written += cur.rowcount
-        conn.commit()
-    return written
+            cur.execute('SELECT count(*) FROM "VisionObservation" WHERE "analysisRunId" = %s', (run_id,))
+            return int(cur.fetchone()[0])
